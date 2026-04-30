@@ -1,0 +1,29 @@
+{
+  "description": "Straightforward album with safe file and folder normalization.",
+  "tracks": [
+    {
+      "relative_path": "Wrong Artist/Album Name/track-one.flac",
+      "tags": {
+        "artist": "Artist",
+        "albumartist": "Artist",
+        "album": "Album",
+        "title": "Song One",
+        "tracknumber": "1",
+        "date": "1999-01-01",
+        "genre": "Rock"
+      }
+    },
+    {
+      "relative_path": "Wrong Artist/Album Name/track-two.flac",
+      "tags": {
+        "artist": "Artist",
+        "albumartist": "Artist",
+        "album": "Album",
+        "title": "Song Two",
+        "tracknumber": "2",
+        "date": "1999",
+        "genre": "Rock"
+      }
+    }
+  ]
+}

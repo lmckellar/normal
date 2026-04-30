@@ -1,0 +1,491 @@
+from __future__ import annotations
+
+import json
+import shutil
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any
+
+from mutagen import MutagenError
+from mutagen.flac import FLAC, FLACNoHeaderError
+from mutagen.id3 import ID3NoHeaderError
+
+from normal.models import ProposedChange
+
+
+MOVIE_SIDECAR_EXTENSIONS = {
+    ".nfo",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".srt",
+    ".sub",
+    ".idx",
+    ".ass",
+    ".ssa",
+    ".vtt",
+    ".txt",
+    ".xml",
+}
+
+
+@dataclass(slots=True)
+class ApplyResult:
+    item_id: str
+    change_type: str
+    status: str
+    path: str | None = None
+    message: str = ""
+
+
+@dataclass(slots=True)
+class ApplyReport:
+    source_root: str
+    plan_path: str
+    target_root: str
+    mode: str
+    applied: list[ApplyResult] = field(default_factory=list)
+    skipped: list[ApplyResult] = field(default_factory=list)
+    failed: list[ApplyResult] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def load_plan(plan_path: Path) -> dict[str, Any]:
+    return json.loads(plan_path.read_text(encoding="utf-8"))
+
+
+def apply_plan(
+    source_root: Path,
+    plan_path: Path,
+    target_root: Path | None,
+    in_place: bool,
+    report_filename: str = "normal-apply-report.json",
+) -> ApplyReport:
+    payload = load_plan(plan_path)
+    planned_source = Path(payload["source_root"]).resolve()
+    if planned_source != source_root.resolve():
+        raise ValueError(
+            f"plan source_root does not match --source: {planned_source} != {source_root.resolve()}"
+        )
+
+    destination_root = source_root.resolve() if in_place else prepare_target_root(source_root, target_root)
+    report = ApplyReport(
+        source_root=str(source_root.resolve()),
+        plan_path=str(plan_path.resolve()),
+        target_root=str(destination_root),
+        mode="in_place" if in_place else "target",
+    )
+
+    proposed_changes = [ProposedChange(**change_data) for change_data in payload.get("proposed_changes", [])]
+
+    for change in [c for c in proposed_changes if c.change_type != "folder_rename"]:
+        if change.confidence != "safe":
+            report.skipped.append(
+                ApplyResult(
+                    item_id=change.item_id,
+                    change_type=change.change_type,
+                    status="skipped",
+                    path=change.path,
+                    message="Skipped review change.",
+                )
+            )
+            continue
+
+        try:
+            result = apply_change(source_root, destination_root, change)
+        except Exception as exc:
+            report.failed.append(
+                ApplyResult(
+                    item_id=change.item_id,
+                    change_type=change.change_type,
+                    status="failed",
+                    path=change.path,
+                    message=str(exc),
+                )
+            )
+            continue
+
+        collection = report.applied if result.status == "applied" else report.skipped
+        collection.append(result)
+
+    for change in sorted(
+        [c for c in proposed_changes if c.change_type == "folder_rename"],
+        key=lambda c: len(Path(c.current_value).parts),
+        reverse=True,
+    ):
+        if change.confidence != "safe":
+            report.skipped.append(
+                ApplyResult(
+                    item_id=change.item_id,
+                    change_type=change.change_type,
+                    status="skipped",
+                    path=change.path,
+                    message="Skipped review change.",
+                )
+            )
+            continue
+
+        try:
+            result = apply_change(source_root, destination_root, change)
+        except Exception as exc:
+            report.failed.append(
+                ApplyResult(
+                    item_id=change.item_id,
+                    change_type=change.change_type,
+                    status="failed",
+                    path=change.path,
+                    message=str(exc),
+                )
+            )
+            continue
+
+        collection = report.applied if result.status == "applied" else report.skipped
+        collection.append(result)
+
+    write_apply_report(destination_root, report, report_filename=report_filename)
+    return report
+
+
+def prepare_target_root(source_root: Path, target_root: Path | None) -> Path:
+    if target_root is None:
+        raise ValueError("target_root is required when not applying in place")
+
+    destination_root = target_root.expanduser().resolve()
+    if destination_root.exists():
+        existing_entries = list(destination_root.iterdir())
+        if existing_entries:
+            raise FileExistsError(f"target directory is not empty: {destination_root}")
+    else:
+        destination_root.mkdir(parents=True, exist_ok=True)
+
+    copy_source_tree(source_root.resolve(), destination_root)
+    return destination_root
+
+
+def copy_source_tree(source_root: Path, destination_root: Path) -> None:
+    for source_path in sorted(source_root.rglob("*")):
+        relative_path = source_path.relative_to(source_root)
+        destination_path = destination_root / relative_path
+        if source_path.is_dir():
+            destination_path.mkdir(parents=True, exist_ok=True)
+            continue
+        if destination_path.exists():
+            raise FileExistsError(f"refusing to overwrite existing file in target: {destination_path}")
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, destination_path)
+
+
+def apply_change(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+    if change.path is None:
+        raise ValueError("proposed change is missing path")
+
+    source_path = Path(change.path).resolve()
+    relative_path = source_path.relative_to(source_root.resolve())
+    destination_path = destination_root / relative_path
+
+    if not destination_path.exists():
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_path),
+            message="Destination path is missing.",
+        )
+
+    if change.change_type == "file_rename":
+        return apply_file_rename(destination_path, change)
+    if change.change_type == "file_move":
+        return apply_file_move(destination_path, destination_root, change)
+    if change.change_type == "tag_edit":
+        return apply_tag_edit(destination_path, change)
+    if change.change_type == "folder_rename":
+        return apply_folder_rename(source_root, destination_root, change)
+    return ApplyResult(
+        item_id=change.item_id,
+        change_type=change.change_type,
+        status="skipped",
+        path=str(destination_path),
+        message="Unsupported change type.",
+    )
+
+
+def apply_file_rename(destination_path: Path, change: ProposedChange) -> ApplyResult:
+    if destination_path.name != change.current_value:
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_path),
+            message="Filename drifted from the plan current_value.",
+        )
+
+    renamed_path = destination_path.with_name(change.proposed_value)
+    if renamed_path.exists():
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(renamed_path),
+            message="Rename target already exists.",
+        )
+
+    destination_path.rename(renamed_path)
+    sidecar_count = move_matching_sidecars(destination_path, renamed_path)
+    return ApplyResult(
+        item_id=change.item_id,
+        change_type=change.change_type,
+        status="applied",
+        path=str(renamed_path),
+        message=f"File renamed{format_sidecar_count(sidecar_count)}.",
+    )
+
+
+def apply_file_move(destination_path: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+    if destination_path.name != change.current_value:
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_path),
+            message="Filename drifted from the plan current_value.",
+        )
+
+    moved_path = destination_root / change.proposed_value
+    if moved_path.exists():
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(moved_path),
+            message="Move target already exists.",
+        )
+
+    moved_path.parent.mkdir(parents=True, exist_ok=True)
+    destination_path.rename(moved_path)
+    sidecar_count = move_matching_sidecars(destination_path, moved_path)
+    return ApplyResult(
+        item_id=change.item_id,
+        change_type=change.change_type,
+        status="applied",
+        path=str(moved_path),
+        message=f"File moved{format_sidecar_count(sidecar_count)}.",
+    )
+
+
+def move_matching_sidecars(old_media_path: Path, new_media_path: Path) -> int:
+    moved_count = 0
+    for sidecar in discover_matching_sidecars(old_media_path):
+        target = new_media_path.parent / renamed_sidecar_name(sidecar.name, old_media_path.stem, new_media_path.stem)
+        if target.exists():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.rename(target)
+        moved_count += 1
+    return moved_count
+
+
+def discover_matching_sidecars(media_path: Path) -> list[Path]:
+    if not media_path.parent.exists():
+        return []
+    old_stem = media_path.stem
+    sidecars: list[Path] = []
+    for entry in sorted(media_path.parent.iterdir()):
+        if entry == media_path or not entry.is_file():
+            continue
+        if entry.suffix.lower() not in MOVIE_SIDECAR_EXTENSIONS:
+            continue
+        if is_matching_sidecar_stem(entry.stem, old_stem):
+            sidecars.append(entry)
+    return sidecars
+
+
+def is_matching_sidecar_stem(sidecar_stem: str, media_stem: str) -> bool:
+    return (
+        sidecar_stem == media_stem
+        or sidecar_stem.startswith(media_stem + "-")
+        or sidecar_stem.startswith(media_stem + ".")
+    )
+
+
+def renamed_sidecar_name(sidecar_name: str, old_stem: str, new_stem: str) -> str:
+    if sidecar_name.startswith(old_stem):
+        return new_stem + sidecar_name[len(old_stem) :]
+    return sidecar_name
+
+
+def format_sidecar_count(count: int) -> str:
+    if count == 0:
+        return ""
+    return f" with {count} sidecar{'s' if count != 1 else ''}"
+
+
+def apply_tag_edit(destination_path: Path, change: ProposedChange) -> ApplyResult:
+    field = change.item_id.rsplit(":", 1)[-1]
+    try:
+        audio = FLAC(destination_path)
+    except (FLACNoHeaderError, ID3NoHeaderError, MutagenError, OSError) as exc:
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_path),
+            message=f"Tag edit skipped because FLAC metadata could not be opened: {exc}",
+        )
+
+    current_value = ""
+    existing = audio.get(field, [])
+    if existing:
+        current_value = str(existing[0])
+    if current_value != change.current_value:
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_path),
+            message="Tag value drifted from the plan current_value.",
+        )
+
+    audio[field] = [change.proposed_value]
+    audio.save()
+    return ApplyResult(
+        item_id=change.item_id,
+        change_type=change.change_type,
+        status="applied",
+        path=str(destination_path),
+        message=f"Updated tag: {field}",
+    )
+
+
+def apply_folder_rename(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+    if change.path is None:
+        raise ValueError("folder rename is missing path")
+
+    source_dir = Path(change.path).resolve()
+    relative_current = source_dir.relative_to(source_root.resolve())
+    destination_dir = destination_root / relative_current
+    if not destination_dir.exists():
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_dir),
+            message="Folder path is missing.",
+        )
+
+    if str(relative_current) != change.current_value:
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_dir),
+            message="Folder path drifted from the plan current_value.",
+        )
+
+    target_dir = destination_root / change.proposed_value
+    if target_dir.exists():
+        if target_dir.samefile(destination_dir):
+            return ApplyResult(
+                item_id=change.item_id,
+                change_type=change.change_type,
+                status="skipped",
+                path=str(target_dir),
+                message="Folder already matches proposed path.",
+            )
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(target_dir),
+            message="Folder rename target already exists.",
+        )
+
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+    destination_dir.rename(target_dir)
+    move_wrapper_sidecars_after_collapse(destination_root, relative_current, target_dir, destination_dir.parent)
+    prune_empty_parents(destination_root, destination_dir.parent)
+    return ApplyResult(
+        item_id=change.item_id,
+        change_type=change.change_type,
+        status="applied",
+        path=str(target_dir),
+        message="Folder renamed.",
+    )
+
+
+def move_wrapper_sidecars_after_collapse(
+    destination_root: Path,
+    relative_current: Path,
+    target_dir: Path,
+    old_parent: Path,
+) -> None:
+    current_parts = relative_current.parts
+    target_relative = target_dir.relative_to(destination_root)
+    target_parts = target_relative.parts
+    is_collapse = (
+        len(current_parts) >= 2
+        and len(target_parts) == len(current_parts) - 1
+        and target_parts[:-1] == current_parts[:-2]
+    )
+    if not is_collapse:
+        return
+
+    for entry in sorted(old_parent.iterdir()):
+        if entry.is_dir():
+            return
+        target = target_dir / entry.name
+        if target.exists():
+            continue
+        entry.rename(target)
+
+
+def prune_empty_parents(destination_root: Path, start: Path) -> None:
+    current = start
+    root = destination_root.resolve()
+    while current.resolve() != root:
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        current = current.parent
+
+
+def apply_changes_in_place(source_root: Path, changes: list[ProposedChange]) -> ApplyReport:
+    root = source_root.resolve()
+    report = ApplyReport(
+        source_root=str(root),
+        plan_path="",
+        target_root=str(root),
+        mode="in_place",
+    )
+    non_folder = [c for c in changes if c.change_type != "folder_rename"]
+    folder_changes = sorted(
+        [c for c in changes if c.change_type == "folder_rename"],
+        key=lambda c: len(Path(c.current_value).parts),
+        reverse=True,
+    )
+    for change in non_folder + folder_changes:
+        try:
+            result = apply_change(root, root, change)
+        except Exception as exc:
+            report.failed.append(ApplyResult(
+                item_id=change.item_id,
+                change_type=change.change_type,
+                status="failed",
+                path=change.path,
+                message=str(exc),
+            ))
+            continue
+        if result.status == "applied":
+            report.applied.append(result)
+        else:
+            report.skipped.append(result)
+    return report
+
+
+def write_apply_report(destination_root: Path, report: ApplyReport, report_filename: str = "normal-apply-report.json") -> Path:
+    report_path = destination_root / report_filename
+    report_path.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
+    return report_path

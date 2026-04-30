@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# Logs
+*.log
+
+# Output artifacts — reports, plans, exports generated at runtime
+/*.json
+/*.csv
+/*.xlsx
+
+# Tool directories
+.claude/
+.playwright-mcp/
