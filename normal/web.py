@@ -242,6 +242,7 @@ INDEX_HTML = """<!doctype html>
       padding: 13px 16px;
       font-size: 14px;
       font-weight: 700;
+      color: var(--ink);
       cursor: pointer;
       transition: transform 120ms ease, opacity 120ms ease;
     }
@@ -262,6 +263,7 @@ INDEX_HTML = """<!doctype html>
       background: var(--btn-nav);
       padding: 8px 12px;
       font-size: 13px;
+      color: var(--ink);
       cursor: pointer;
     }
     .page-button.active, .filter-button.active {
@@ -671,6 +673,12 @@ INDEX_HTML = """<!doctype html>
       font-size: 12px;
       color: var(--muted);
       margin-bottom: 10px;
+    }
+    .profile-card-band {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      margin: -4px 0 10px;
     }
     .profile-card-bar {
       height: 6px;
@@ -3504,6 +3512,22 @@ INDEX_HTML = """<!doctype html>
       return label.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     }
 
+    function movieProfileBitrateBand(label) {
+      const bands = {
+        sd_low_quality: '720p / SD source',
+        weak_1080p: '1080p video: < 4,500 kbps',
+        minimum_acceptable_1080p: '1080p video: 4,500-5,999 kbps',
+        compressed_1080p: '1080p video: 6,000-15,999 kbps',
+        '1080p_uhd': '1080p video: >= 16,000 kbps',
+        weak_4k: '4K video: < 6,000 kbps',
+        compressed_4k: '4K video: 6,000-11,999 kbps',
+        '4k_uhd': '4K video: 12,000-23,999 kbps',
+        '4k_remux': '4K video: >= 24,000 kbps',
+        unclassified: 'No usable bitrate / resolution'
+      };
+      return bands[label] || '';
+    }
+
     function buildMovieTable(items) {
       const rows = items.map(item => {
         const videoBitrate = item.facts.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
@@ -3783,12 +3807,14 @@ INDEX_HTML = """<!doctype html>
       const tierCardsHtml = tierCards.map(([label, count, options]) => {
         const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
         const barWidth = (count / dashboardMaxCount) * 100;
+        const bitrateBand = options ? '' : movieProfileBitrateBand(label);
         return `
           <div class="profile-card">
             <div class="profile-card-group">${escapeHtml(options?.group || tierGroup(label))}</div>
             <div class="profile-card-name">${escapeHtml(options?.name || humanProfileLabel(label))}</div>
             <div class="profile-card-count">${count.toLocaleString()}</div>
             <div class="profile-card-pct">${escapeHtml(options?.pctLabel || `${pct}% of library`)}</div>
+            ${bitrateBand ? `<div class="profile-card-band">${escapeHtml(bitrateBand)}</div>` : ''}
             <div class="profile-card-bar"><span style="width:${barWidth}%"></span></div>
           </div>
         `;

@@ -178,6 +178,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("Deleted, Waiting Replacement", INDEX_HTML)
         self.assertIn("!replacementQueueItemForPath(payload, item.path)", INDEX_HTML)
         self.assertIn("button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }", INDEX_HTML)
+        self.assertIn("color: var(--ink);", INDEX_HTML.split("button {", 1)[1].split("}", 1)[0])
+        self.assertIn("color: var(--ink);", INDEX_HTML.split(".page-button, .filter-button {", 1)[1].split("}", 1)[0])
         self.assertNotIn("cursor: progress", INDEX_HTML)
         self.assertIn("const source = sourceInput.value.trim() || queue?.source_root || ''", INDEX_HTML)
         self.assertIn("Choose a source directory before deleting replacement media.", INDEX_HTML)
@@ -207,6 +209,10 @@ class WebTests(unittest.TestCase):
         self.assertIn("if (label === '1080p_uhd') return '1080p UHD';", INDEX_HTML)
         self.assertIn("'1080p_uhd'", INDEX_HTML)
         self.assertNotIn("'1080p_remux'", INDEX_HTML)
+        self.assertIn("function movieProfileBitrateBand(label)", INDEX_HTML)
+        self.assertIn("1080p video: 4,500-5,999 kbps", INDEX_HTML)
+        self.assertIn("4K video: 12,000-23,999 kbps", INDEX_HTML)
+        self.assertIn("profile-card-band", INDEX_HTML)
         self.assertLess(INDEX_HTML.index("function humanProfileLabel"), INDEX_HTML.index("function buildMovieQualityTable"))
         library_section = INDEX_HTML.split("function renderMovieLibrary(payload) {", 1)[1].split(
             "function renderMovieQuality(payload) {",

@@ -114,7 +114,9 @@ The Library Switcher in the top right selects the active lane. The source path i
 **Music pages**
 - Dashboard View — format mix, fidelity profile, artwork readiness
 - Normalize Music Files & Folders — interactive plan review and apply
+- Delete Weak Encodes — weak track triage with replacement queue tracking
 - Repair Artwork for Jellyfin — album artist browser with candidate preview and approve/write
+- Music Recommendation Engine — placeholder for future discovery tools
 
 **Movie pages**
 - Dashboard View — quality tier distribution, bitrate histograms, resolution breakdown

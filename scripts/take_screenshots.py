@@ -9,7 +9,7 @@ from pathlib import Path
 from playwright.sync_api import Page, sync_playwright
 
 BASE_URL = "http://localhost:8765"
-OUT_DIR = Path(__file__).resolve().parent.parent / "docs" / "screenshots"
+OUT_DIR = Path(__file__).resolve().parent.parent / "docs" / "assets"
 
 MUSIC_SOURCE = Path("/mnt/media_storage/Music")
 MOVIES_SOURCE = Path("/mnt/media_storage/Movies")

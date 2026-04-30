@@ -2,7 +2,7 @@
 
 The movie lane handles the two main problems with a pirated library: inconsistent naming and uneven encode quality.
 
-![Movies dashboard](screenshots/movies_dashboard_default.png)
+![Movies dashboard](assets/movies_dashboard_default.png)
 
 ## Dashboard
 
@@ -10,13 +10,13 @@ A library-wide view of encode quality — resolution breakdown, quality tier dis
 
 Theme examples:
 
-![Movies dashboard, Win95 theme](screenshots/movies_dashboard_win95.png)
+![Movies dashboard, Win95 theme](assets/movies_dashboard_win95.png)
 
-![Movies dashboard, dark theme](screenshots/movies_dashboard_dark.png)
+![Movies dashboard, dark theme](assets/movies_dashboard_dark.png)
 
-![Movies dashboard, matrix theme](screenshots/movies_dashboard_matrix.png)
+![Movies dashboard, matrix theme](assets/movies_dashboard_matrix.png)
 
-![Movies dashboard, sand theme](screenshots/movies_dashboard_sand.png)
+![Movies dashboard, sand theme](assets/movies_dashboard_sand.png)
 
 ## Normalize names
 
