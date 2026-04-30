@@ -9,7 +9,8 @@ Two lanes:
 
 No cloud. No transcoding. No destructive defaults.
 
-![normal web UI](docs/screenshot.png)
+<img width="1440" height="900" alt="movies_dashboard_default" src="https://github.com/user-attachments/assets/fb2abd09-7704-4748-acb7-f3dd4c1b7ade" />
+
 
 ## Get started
 
