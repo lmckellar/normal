@@ -162,11 +162,20 @@ INDEX_HTML = """<!doctype html>
       --danger: #8a3341;
       --warn: #8a5b00;
       --shadow: rgba(31, 29, 26, 0.08);
+      --font-body: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+      --radius: 22px;
+      --input-bg: #fffdf8;
+      --btn-secondary: #efe3d4;
+      --btn-nav: #fbf5ea;
+      --th-bg: #f7f0e3;
+      --surface: rgba(255,255,255,0.55);
+      --bar-track: #ebdfce;
+      --accent-glow: rgba(15,92,77,0.08);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+      font-family: var(--font-body);
       color: var(--ink);
       background:
         radial-gradient(circle at top left, rgba(200,106,45,0.12), transparent 28%),
@@ -181,7 +190,7 @@ INDEX_HTML = """<!doctype html>
     .card {
       background: color-mix(in srgb, var(--panel) 92%, white);
       border: 1px solid var(--line);
-      border-radius: 22px;
+      border-radius: var(--radius);
       box-shadow: 0 18px 48px var(--shadow);
     }
     .masthead {
@@ -197,7 +206,7 @@ INDEX_HTML = """<!doctype html>
       font-size: 12px;
       font-weight: 700;
       color: var(--accent);
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
     h1 {
       margin: 0 0 10px;
@@ -223,7 +232,7 @@ INDEX_HTML = """<!doctype html>
       border-radius: 14px;
       padding: 14px 16px;
       font-size: 15px;
-      background: #fffdf8;
+      background: var(--input-bg);
       color: var(--ink);
       font-family: ui-monospace, Menlo, Consolas, monospace;
     }
@@ -239,7 +248,7 @@ INDEX_HTML = """<!doctype html>
     button:hover { transform: translateY(-1px); }
     button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
     .primary { background: var(--accent); color: white; }
-    .secondary { background: #efe3d4; color: var(--ink); }
+    .secondary { background: var(--btn-secondary); color: var(--ink); }
     .danger { background: var(--danger); color: white; }
     .page-nav {
       display: flex;
@@ -250,7 +259,7 @@ INDEX_HTML = """<!doctype html>
     .page-button, .filter-button {
       border: 1px solid var(--line);
       border-radius: 999px;
-      background: #fbf5ea;
+      background: var(--btn-nav);
       padding: 8px 12px;
       font-size: 13px;
       cursor: pointer;
@@ -461,20 +470,20 @@ INDEX_HTML = """<!doctype html>
     th, td {
       text-align: left;
       padding: 12px 14px;
-      border-bottom: 1px solid rgba(215,203,184,0.55);
+      border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
       vertical-align: top;
       font-size: 13px;
     }
     th {
       position: sticky;
       top: 0;
-      background: #f7f0e3;
+      background: var(--th-bg);
       color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       font-size: 12px;
     }
-    tr:hover td { background: rgba(15,92,77,0.05); }
+    tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
     th.sortable-th { cursor: pointer; user-select: none; }
     th.sortable-th:hover { color: var(--ink); }
     .sort-ind { margin-left: 3px; opacity: 0.35; }
@@ -527,11 +536,11 @@ INDEX_HTML = """<!doctype html>
     }
     .finding {
       border: 1px solid var(--line);
-      background: rgba(255,255,255,0.55);
+      background: var(--surface);
     }
     .empty {
       border: 1px dashed var(--line);
-      background: rgba(255,255,255,0.42);
+      background: var(--surface);
       color: var(--muted);
     }
     .finding h3 {
@@ -546,7 +555,7 @@ INDEX_HTML = """<!doctype html>
     .queue-list {
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: rgba(255,255,255,0.55);
+      background: var(--surface);
       max-height: 340px;
       overflow: auto;
     }
@@ -555,7 +564,7 @@ INDEX_HTML = """<!doctype html>
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 10px;
       padding: 9px 10px;
-      border-bottom: 1px solid rgba(215,203,184,0.55);
+      border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
       align-items: start;
     }
     .queue-list-row:last-child { border-bottom: 0; }
@@ -586,7 +595,7 @@ INDEX_HTML = """<!doctype html>
       height: 10px;
       border-radius: 999px;
       overflow: hidden;
-      background: #ebdfce;
+      background: var(--bar-track);
     }
     .bar > span {
       display: block;
@@ -602,7 +611,7 @@ INDEX_HTML = """<!doctype html>
       padding: 16px;
       border-radius: 18px;
       border: 1px dashed var(--line);
-      background: rgba(255,255,255,0.42);
+      background: var(--surface);
     }
     .dash-stats {
       display: flex;
@@ -636,7 +645,7 @@ INDEX_HTML = """<!doctype html>
     .profile-card {
       border: 1px solid var(--line);
       border-radius: 18px;
-      background: rgba(255,255,255,0.55);
+      background: var(--surface);
       padding: 16px;
     }
     .profile-card-group {
@@ -667,7 +676,7 @@ INDEX_HTML = """<!doctype html>
       height: 6px;
       border-radius: 999px;
       overflow: hidden;
-      background: #ebdfce;
+      background: var(--bar-track);
     }
     .profile-card-bar > span {
       display: block;
@@ -723,19 +732,19 @@ INDEX_HTML = """<!doctype html>
       border-radius: 8px;
       padding: 10px 12px;
       color: var(--muted);
-      background: rgba(255,255,255,0.44);
+      background: var(--surface);
       font-size: 13px;
       margin: 10px 0 12px;
     }
     .artwork-drop-zone.dragover {
       border-color: var(--accent);
-      background: rgba(15,92,77,0.08);
+      background: var(--accent-glow);
       color: var(--ink);
     }
     .artist-tile {
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: rgba(255,255,255,0.6);
+      background: var(--surface);
       overflow: hidden;
       cursor: pointer;
       min-width: 0;
@@ -748,7 +757,7 @@ INDEX_HTML = """<!doctype html>
     .artist-art {
       aspect-ratio: 1 / 1;
       width: 100%;
-      background: #eee6d8;
+      background: var(--bar-track);
       display: grid;
       place-items: center;
       overflow: hidden;
@@ -790,6 +799,42 @@ INDEX_HTML = """<!doctype html>
     @media (max-width: 1100px) {
       .masthead, .layout { grid-template-columns: 1fr; }
     }
+    .theme-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--line);
+      flex-wrap: wrap;
+    }
+    .theme-picker-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .theme-btn {
+      background: none;
+      border: 1px solid var(--line);
+      border-radius: calc(var(--radius) * 0.4);
+      padding: 4px 10px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      margin: 2px;
+      font-family: var(--font-body);
+    }
+    .theme-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+    .theme-btn:hover:not(.active) {
+      border-color: var(--muted);
+      color: var(--ink);
+    }
   </style>
 </head>
 <body>
@@ -821,6 +866,10 @@ INDEX_HTML = """<!doctype html>
         </div>
       </div>
       <div class="card mast-side">
+        <div class="theme-picker">
+          <div class="theme-picker-label">Theme</div>
+          <div id="themeBtns"></div>
+        </div>
         <div class="eyebrow">Library Switcher</div>
         <div class="library-switcher" id="libraryRoots"></div>
       </div>
@@ -884,7 +933,7 @@ INDEX_HTML = """<!doctype html>
           { id: 'normalize', label: 'Normalize Movie Files & Folders', action: 'plan', endpoint: '/api/movies/normalize' },
           { id: 'quality', label: 'Delete Weak Encodes', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'junk', label: 'Delete Junk Videos', action: 'scan', endpoint: '/api/movies/junk' },
-          { id: 'promo', label: 'Delete Junk Misc', action: 'scan', endpoint: '/api/movies/promo-docs' }
+          { id: 'promo', label: 'Delete Junk Sidecar & Spam Files', action: 'scan', endpoint: '/api/movies/promo-docs' }
         ]
       }
     };
@@ -1303,6 +1352,199 @@ INDEX_HTML = """<!doctype html>
       if (detectedLane !== state.lane) setLane(detectedLane);
     });
 
+    const THEMES = {
+      default: {
+        label: 'Default',
+        css: `
+          :root {
+            --bg: #f2f2f7;
+            --panel: #ffffff;
+            --panel-2: #f9f9fb;
+            --ink: #1c1c1e;
+            --muted: #8e8e93;
+            --line: #e5e5ea;
+            --accent: #007aff;
+            --accent-2: #5856d6;
+            --music: #5856d6;
+            --movies: #007aff;
+            --danger: #ff3b30;
+            --warn: #ff9500;
+            --shadow: rgba(0,0,0,0.08);
+            --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+            --radius: 12px;
+            --input-bg: #ffffff;
+            --btn-secondary: #e9e9ed;
+            --btn-nav: #f2f2f7;
+            --th-bg: #f9f9fb;
+            --surface: rgba(255,255,255,0.85);
+            --bar-track: #e5e5ea;
+            --accent-glow: rgba(0,122,255,0.08);
+          }
+          body {
+            background: linear-gradient(180deg, #f2f2f7 0%, #e8e8ed 100%) !important;
+          }
+          .card {
+            box-shadow: 0 2px 12px var(--shadow), 0 1px 2px rgba(0,0,0,0.04) !important;
+          }
+          h1 { font-weight: 700; letter-spacing: -0.02em; }
+          h2 { font-weight: 600; letter-spacing: -0.01em; }
+          button { letter-spacing: -0.01em; }
+        `
+      },
+      win95: {
+        label: 'Win95',
+        css: `
+          :root {
+            --bg: #c0c0c0;
+            --panel: #c0c0c0;
+            --panel-2: #c0c0c0;
+            --ink: #000000;
+            --muted: #444444;
+            --line: #808080;
+            --accent: #000080;
+            --accent-2: #800000;
+            --music: #000080;
+            --movies: #000080;
+            --danger: #800000;
+            --warn: #808000;
+            --shadow: rgba(0,0,0,0.4);
+            --font-body: Tahoma, "MS Sans Serif", Arial, sans-serif;
+            --radius: 0px;
+            --input-bg: #ffffff;
+            --btn-secondary: #c0c0c0;
+            --btn-nav: #c0c0c0;
+            --th-bg: #c0c0c0;
+            --surface: #c0c0c0;
+            --bar-track: #808080;
+            --accent-glow: rgba(0,0,128,0.08);
+          }
+          body { background: #c0c0c0 !important; }
+          .card {
+            border: 2px solid !important;
+            border-color: #ffffff #808080 #808080 #ffffff !important;
+            box-shadow: 1px 1px 0 #000 !important;
+          }
+          button {
+            border: 2px solid !important;
+            border-color: #ffffff #808080 #808080 #ffffff !important;
+            background: #c0c0c0 !important;
+            box-shadow: none !important;
+          }
+          button:active {
+            border-color: #808080 #ffffff #ffffff #808080 !important;
+          }
+          .eyebrow {
+            background: linear-gradient(to right, #000080, #1084d0);
+            color: #ffffff;
+            margin: -12px -12px 12px -12px;
+            padding: 3px 6px;
+            font-size: 11px;
+            letter-spacing: 0.05em;
+          }
+          .mast-side { padding: 12px; }
+        `
+      },
+      dark: {
+        label: 'Dark',
+        css: `
+          :root {
+            --bg: #121212;
+            --panel: #181818;
+            --panel-2: #282828;
+            --ink: #ffffff;
+            --muted: #b3b3b3;
+            --line: #282828;
+            --accent: #1db954;
+            --accent-2: #1ed760;
+            --music: #1db954;
+            --movies: #1db954;
+            --danger: #e91429;
+            --warn: #e38b28;
+            --shadow: rgba(0,0,0,0.5);
+            --font-body: "DM Sans", Inter, "Helvetica Neue", Arial, sans-serif;
+            --radius: 8px;
+            --input-bg: #282828;
+            --btn-secondary: #282828;
+            --btn-nav: #1a1a1a;
+            --th-bg: #181818;
+            --surface: rgba(255,255,255,0.05);
+            --bar-track: #333333;
+            --accent-glow: rgba(29,185,84,0.1);
+          }
+          body { background: #121212 !important; }
+          .card {
+            border-color: transparent !important;
+            box-shadow: none !important;
+          }
+          h1 { font-weight: 800; letter-spacing: -0.03em; }
+          h2 { font-weight: 700; letter-spacing: -0.02em; }
+        `
+      },
+      matrix: {
+        label: 'Matrix',
+        css: `
+          :root {
+            --bg: #000000;
+            --panel: #050f05;
+            --panel-2: #071007;
+            --ink: #00ff41;
+            --muted: #007a1f;
+            --line: #003a10;
+            --accent: #00ff41;
+            --accent-2: #00c832;
+            --music: #00ff41;
+            --movies: #00ff41;
+            --danger: #ff3a00;
+            --warn: #c8a000;
+            --shadow: rgba(0,255,65,0.08);
+            --font-body: "Courier New", Courier, monospace;
+            --radius: 2px;
+            --input-bg: #050f05;
+            --btn-secondary: #071007;
+            --btn-nav: #050f05;
+            --th-bg: #050f05;
+            --surface: rgba(0,255,65,0.04);
+            --bar-track: #003a10;
+            --accent-glow: rgba(0,255,65,0.08);
+          }
+          body { background: #000000 !important; }
+          .card {
+            border-color: #003a10 !important;
+            box-shadow: 0 0 24px rgba(0,255,65,0.07), inset 0 0 1px rgba(0,255,65,0.15) !important;
+          }
+          h1, h2, .eyebrow { text-shadow: 0 0 12px rgba(0,255,65,0.6); }
+          .page-button.active, .filter-button.active {
+            box-shadow: 0 0 8px rgba(0,255,65,0.4) !important;
+          }
+        `
+      },
+      sand: {
+        label: 'Sand',
+        css: ''
+      }
+    };
+
+    function applyTheme(id) {
+      const theme = THEMES[id] || THEMES['default'];
+      let el = document.getElementById('n-theme');
+      if (!el) { el = document.createElement('style'); el.id = 'n-theme'; document.head.appendChild(el); }
+      el.textContent = theme.css;
+      try { localStorage.setItem('n_theme', id); } catch {}
+      document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.theme === id));
+    }
+
+    function renderThemePicker() {
+      const container = document.getElementById('themeBtns');
+      if (!container) return;
+      container.innerHTML = Object.entries(THEMES).map(([id, t]) =>
+        `<button class="theme-btn" data-theme="${id}">${t.label}</button>`
+      ).join('');
+      container.querySelectorAll('.theme-btn').forEach(btn => btn.addEventListener('click', () => applyTheme(btn.dataset.theme)));
+    }
+
+    const _savedTheme = (() => { try { return localStorage.getItem('n_theme') || 'default'; } catch { return 'default'; } })();
+    applyTheme(_savedTheme);
+    renderThemePicker();
     setLane('movies');
     startActivityPolling();
 
@@ -1504,7 +1746,7 @@ INDEX_HTML = """<!doctype html>
         music_quality: 'Delete Weak Encodes',
         compatibility: 'Compatibility',
         junk: 'Delete Junk Videos',
-        promo: 'Delete Junk Misc',
+        promo: 'Delete Junk Sidecar & Spam Files',
         library: 'Dashboard'
       };
       mainTitle.textContent = `${CONFIG[lane].title} / ${titleMap[page]}`;
@@ -2192,7 +2434,7 @@ INDEX_HTML = """<!doctype html>
           <div style="margin-top:6px">${failed.map(f => `<div class="mono" style="font-size:0.82em;color:var(--danger);margin-bottom:2px">${escapeHtml(f.path || f.item_id)}: ${escapeHtml(f.message)}</div>`).join('')}</div>
         </details>` : '';
       return `
-        <div style="background:rgba(15,92,77,0.08);border:1px solid rgba(15,92,77,0.3);border-radius:12px;padding:14px 18px;margin-bottom:16px">
+        <div style="background:var(--accent-glow);border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);border-radius:12px;padding:14px 18px;margin-bottom:16px">
           <div style="font-weight:600;margin-bottom:6px">Apply complete</div>
           <div style="display:flex;gap:20px;flex-wrap:wrap">
             <span style="color:var(--accent)">&#10003; ${applied.length} applied</span>
@@ -2668,7 +2910,7 @@ INDEX_HTML = """<!doctype html>
         if (!item.width) return '';
         const isLow = item.file_size_bytes < LOW_SIZE || item.width < LOW_DIM || item.height < LOW_DIM;
         const label = item.width + '\xd7' + item.height;
-        const color = isLow ? '#c0392b' : '#27ae60';
+        const color = isLow ? 'var(--danger)' : 'var(--accent)';
         return `<span style="font-size:10px;font-weight:600;color:${color};letter-spacing:0.03em">${label}</span>`;
       }
 
@@ -3598,7 +3840,7 @@ INDEX_HTML = """<!doctype html>
         ['review', 'Review']
       ]);
       if (!payload) {
-        mainContent.innerHTML = `<div class="empty">Run Movies / ${state.page === 'promo' ? 'Delete Junk Misc' : 'Delete Junk Videos'} to build a review list.</div>`;
+        mainContent.innerHTML = `<div class="empty">Run Movies / ${state.page === 'promo' ? 'Delete Junk Sidecar & Spam Files' : 'Delete Junk Videos'} to build a review list.</div>`;
         return;
       }
       const rows = filteredMovieJunk(payload).map(item => {

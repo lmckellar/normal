@@ -121,6 +121,6 @@ The Library Switcher in the top right selects the active lane. The source path i
 - Normalize Movie Files & Folders — interactive rename plan review and apply
 - Delete Weak Encodes — quality triage with replacement queue tracking
 - Delete Junk Videos — checkbox select and confirm to delete
-- Delete Junk Misc — promo sidecar document cleanup
+- Delete Junk Sidecar & Spam Files — sidecar and spam file cleanup
 
 Scans can be stopped mid-run with the Stop button. Per-page ETA estimates are stored in localStorage and shown on subsequent runs.

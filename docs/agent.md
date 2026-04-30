@@ -126,8 +126,8 @@ All routes in `web.py`. Key families:
 | `/api/movies/profile` | GET | Movie quality profile |
 | `/api/movies/junk` | GET | Junk video scan |
 | `/api/movies/junk/delete` | POST | Delete selected junk files |
-| `/api/movies/misc-junk` | GET | Promo document scan |
-| `/api/movies/misc-junk/delete` | POST | Delete selected promo documents |
+| `/api/movies/misc-junk` | GET | Sidecar and spam file scan |
+| `/api/movies/misc-junk/delete` | POST | Delete selected sidecar and spam files |
 | `/api/movies/replacement-queue` | GET | Queue state for current source |
 | `/api/movies/delete-encodes` | POST | Delete selected weak encodes and update queue |
 | `/api/movies/catalogue` | GET | Inline catalogue scan for XLSX download |
@@ -155,5 +155,4 @@ These are deliberate choices, not gaps:
 - **Strict weak encode profiles.** Strict weak = `sd_low_quality`, `weak_1080p`, `weak_4k`, `unclassified`. `minimum_acceptable_1080p` and above are never shown as deletion candidates in the default view. Do not change this threshold without explicit instruction.
 - **Replacement queue is append-only from the tool.** Items move forward through states but are never silently removed. Auto-completion (`completed`) happens on future scans when a replacement appears.
 - **No cross-platform guarantees for v1.** Linux-first. Windows/macOS rough edges are known and deferred.
-- **Adult video register is not implemented.** It is spec'd in detail but intentionally kept isolated from the general movie pipeline if built.
 - **`--in-place` is always explicit.** Never infer in-place mutation from context; the flag must be present.

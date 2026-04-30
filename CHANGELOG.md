@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased] — v1.1
+
+### Both lanes
+- UI themes (light, dark, system default)
+- New onboarding documentation
+
 ## [0.1.0] — 2026-04-30
 
 Initial release.
@@ -28,6 +34,6 @@ Initial release.
 - Library Switcher for Movies / Music lane selection
 - Source path auto-detection from path segments
 - Music: Dashboard, Normalize, Repair Artwork for Jellyfin
-- Movies: Dashboard, Normalize, Delete Weak Encodes, Delete Junk Videos, Delete Junk Misc, Export Catalogue
+- Movies: Dashboard, Normalize, Delete Weak Encodes, Delete Junk Videos, Delete Junk Sidecar & Spam Files, Export Catalogue
 - Per-page ETA estimation persisted in localStorage
 - Abort support: Stop button cancels in-flight scans

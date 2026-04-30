@@ -9,15 +9,21 @@ Two lanes:
 
 No cloud. No transcoding. No destructive defaults.
 
-## Install
+![normal web UI](docs/screenshot.png)
 
-```bash
-pip install .
+## Get started
+
+Paste this into Claude Code CLI, Codex CLI, Gemini CLI, or any agent that can run shell commands:
+
+```
+Clone https://github.com/lmckellar/normal, install it with pip install -e . (Python 3.12+), install ffprobe via your system package manager if not present, verify with `normal --help`, then start the web UI pointed at my library.
 ```
 
-Requires Python 3.12+ and `ffprobe` (for movie commands). See [docs/install.md](docs/install.md).
+The agent will handle dependencies and get you to a running web UI.
 
-## Quick start
+**No agent?** See [docs/install.md](docs/install.md) for manual steps, then [docs/quickstart.md](docs/quickstart.md) for a full walkthrough.
+
+## CLI quick reference
 
 ```bash
 # Music: scan → plan → apply
@@ -34,10 +40,10 @@ normal movie-apply --source /path/to/movies --plan plan.json --target /path/to/o
 normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 ```
 
-See [docs/quickstart.md](docs/quickstart.md) for a full walkthrough of both lanes.
-
 ## Docs
 
+- [Movies](docs/movies.md)
+- [Music](docs/music.md)
 - [Install](docs/install.md)
 - [Quick start](docs/quickstart.md)
 - [CLI reference](docs/commands.md)

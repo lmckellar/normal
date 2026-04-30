@@ -1,6 +1,6 @@
 # Contributing
 
-`normal` is a solo-dev utility. External contributions are welcome but the bar is high — changes need to fit the existing design posture and not add complexity for its own sake.
+Contributions are welcome — happy to have them.
 
 ## Before opening a PR
 

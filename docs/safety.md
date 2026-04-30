@@ -42,7 +42,7 @@ All destructive web UI actions follow the same pattern:
 3. Each selected path is revalidated against the current source root before any unlink
 4. Only paths under the active source root are accepted; outside-root paths are rejected
 
-**Delete Junk Videos / Delete Junk Misc**: each file is revalidated as a junk candidate immediately before deletion. A file that no longer meets the junk criteria is skipped.
+**Delete Junk Videos / Delete Junk Sidecar & Spam Files**: each file is revalidated as a junk candidate immediately before deletion. A file that no longer meets the junk criteria is skipped.
 
 **Delete Weak Encodes**: selected files are queued in the Replacement Queue and immediately deleted in one confirmed step. Deleted items appear in the queue as `deleted, awaiting replacement` and are auto-completed when a better encode for the same title/year appears in a future scan.
 
