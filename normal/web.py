@@ -906,6 +906,7 @@ INDEX_HTML = """<!doctype html>
       qualitySort: { col: null, dir: 'asc' },
       musicQualitySort: { col: null, dir: 'asc' },
       deletedSort: { col: null, dir: 'asc' },
+      omdbRatings: new Map(),
       selectedJunkPaths: new Set(),
       selectedReplacementPaths: new Set(),
       selectedChangeIds: new Set(),
@@ -3662,28 +3663,61 @@ INDEX_HTML = """<!doctype html>
       const seqMap = new Map(byDeletion.map((item, i) => [item.group_id, i + 1]));
       const { col, dir } = state.deletedSort;
       const mult = dir === 'asc' ? 1 : -1;
+      const hasOmdb = !!(window.OMDB_KEY);
       const sorted = col ? [...grouped].sort((a, b) => {
         if (col === 'seq') return mult * ((seqMap.get(a.group_id) || 0) - (seqMap.get(b.group_id) || 0));
         if (col === 'title') return mult * (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
         if (col === 'year') return mult * ((a.year || 0) - (b.year || 0));
+        if (col === 'imdb') {
+          const ra = state.omdbRatings.get(`${a.title}|${a.year}`) ?? -1;
+          const rb = state.omdbRatings.get(`${b.title}|${b.year}`) ?? -1;
+          return mult * (ra - rb);
+        }
         return 0;
       }) : byDeletion;
       const cols = [['seq','#'],['title','Title'],['year','Year'],['count','Count']];
+      if (hasOmdb) cols.push(['imdb', 'IMDb']);
       const thead = cols.map(([c, label]) => {
         const active = state.deletedSort.col === c;
         const ind = active ? (state.deletedSort.dir === 'asc' ? '↑' : '↓') : '↕';
         return `<th class="deleted-sort-th sortable-th" data-sort-col="${c}">${label}<span class="sort-ind${active?' on':''}">${ind}</span></th>`;
       }).join('') + '<th>Status</th>';
-      const rows = sorted.map(item => `
-        <tr>
-          <td>${seqMap.get(item.group_id)}</td>
-          <td>${escapeHtml(item.title || '')}</td>
-          <td>${item.year ? escapeHtml(String(item.year)) : '<span class="subtle">—</span>'}</td>
-          <td>${item.count > 1 ? escapeHtml(String(item.count)) : '<span class="subtle">—</span>'}</td>
-          <td><span class="chip review">deleted</span></td>
-        </tr>
-      `).join('');
+      const rows = sorted.map(item => {
+        const ratingKey = `${item.title}|${item.year}`;
+        const rating = state.omdbRatings.get(ratingKey);
+        const ratingCell = hasOmdb ? `<td>${rating == null ? '<span class="subtle">…</span>' : rating > 0 ? rating.toFixed(1) : '<span class="subtle">—</span>'}</td>` : '';
+        return `
+          <tr>
+            <td>${seqMap.get(item.group_id)}</td>
+            <td>${escapeHtml(item.title || '')}</td>
+            <td>${item.year ? escapeHtml(String(item.year)) : '<span class="subtle">—</span>'}</td>
+            <td>${item.count > 1 ? escapeHtml(String(item.count)) : '<span class="subtle">—</span>'}</td>
+            ${ratingCell}
+            <td><span class="chip review">deleted</span></td>
+          </tr>
+        `;
+      }).join('');
+      if (hasOmdb) fetchMissingOmdbRatings(grouped);
       return `<div class="table-wrap"><table style="min-width:0"><thead><tr>${thead}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    async function fetchMissingOmdbRatings(items) {
+      const missing = items.filter(item => !state.omdbRatings.has(`${item.title}|${item.year}`));
+      if (!missing.length) return;
+      missing.forEach(item => state.omdbRatings.set(`${item.title}|${item.year}`, null));
+      await Promise.allSettled(missing.map(async item => {
+        const key = `${item.title}|${item.year}`;
+        const url = `https://www.omdbapi.com/?apikey=${encodeURIComponent(window.OMDB_KEY)}&t=${encodeURIComponent(item.title || '')}&y=${encodeURIComponent(String(item.year || ''))}`;
+        try {
+          const resp = await fetch(url);
+          const data = await resp.json();
+          const raw = data.imdbRating;
+          state.omdbRatings.set(key, raw && raw !== 'N/A' ? parseFloat(raw) : 0);
+        } catch {
+          state.omdbRatings.set(key, 0);
+        }
+      }));
+      renderReplacementQueueDetail(state.results.movies.profile);
     }
 
     function groupedDeletedQueueItems(items) {
@@ -4028,7 +4062,7 @@ INDEX_HTML = """<!doctype html>
           if (state.deletedSort.col === col) {
             state.deletedSort.dir = state.deletedSort.dir === 'asc' ? 'desc' : 'asc';
           } else {
-            state.deletedSort = { col, dir: 'asc' };
+            state.deletedSort = { col, dir: col === 'imdb' ? 'desc' : 'asc' };
           }
           renderReplacementQueueDetail(state.results.movies.profile);
         });
@@ -4428,15 +4462,15 @@ def save_library_roots(data: dict[str, Any]) -> None:
     temp_path.replace(path)
 
 
-def serve_web_ui(host: str, port: int, default_source: Path | None = None) -> None:
-    handler = build_handler(default_source=default_source)
+def serve_web_ui(host: str, port: int, default_source: Path | None = None, omdb_key: str | None = None) -> None:
+    handler = build_handler(default_source=default_source, omdb_key=omdb_key)
     server = ThreadingHTTPServer((host, port), handler)
     source_hint = f" default source {default_source}" if default_source else ""
     print(f"normal web UI listening on http://{host}:{port}/{source_hint}")
     server.serve_forever()
 
 
-def build_handler(default_source: Path | None = None):
+def build_handler(default_source: Path | None = None, omdb_key: str | None = None):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             if self.path.startswith("/api/activity"):
@@ -4459,7 +4493,7 @@ def build_handler(default_source: Path | None = None):
                 return
             html = INDEX_HTML.replace(
                 "</script>",
-                f"window.DEFAULT_SOURCE = {json.dumps(str(default_source) if default_source else '')};</script>",
+                f"window.DEFAULT_SOURCE = {json.dumps(str(default_source) if default_source else '')};\nwindow.OMDB_KEY = {json.dumps(omdb_key or '')};</script>",
                 1,
             )
             body = html.encode("utf-8")
