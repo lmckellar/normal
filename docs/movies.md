@@ -42,6 +42,8 @@ A full quality scan profiles every file against a bitrate/resolution ladder:
 
 The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue — when a better encode for the same title shows up in a future scan, it's automatically marked complete.
 
+The "Deleted, Waiting Replacement" list is sortable by title, year, and IMDb rating. IMDb ratings are fetched from [OMDb](https://www.omdbapi.com/) and require a free API key passed via `--omdb-key` or the `OMDB_KEY` environment variable. Without a key the column is hidden.
+
 ## Junk cleanup
 
 Two pages handle library noise:
