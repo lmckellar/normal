@@ -89,6 +89,9 @@ class WebTests(unittest.TestCase):
         self.assertIn("setInterval(refreshActivityState, 2000)", INDEX_HTML)
         self.assertIn("external ${process.command} detected", INDEX_HTML)
         self.assertIn("ffprobe active", INDEX_HTML)
+        self.assertIn("Drive activity: ffmpeg remux active", INDEX_HTML)
+        self.assertIn("formatEta(job.eta_seconds)", INDEX_HTML)
+        self.assertIn("formatByteSize(job.output_size_bytes)", INDEX_HTML)
 
     def test_activity_tracker_snapshots_active_probe_for_source(self) -> None:
         tracker = ActivityTracker()
@@ -102,6 +105,32 @@ class WebTests(unittest.TestCase):
             self.assertEqual(items[0]["kind"], "probe")
             self.assertEqual(items[0]["current_path"], str(movie.resolve()))
             self.assertEqual(tracker.snapshot(source), [])
+
+    def test_activity_tracker_snapshot_includes_progress_metadata(self) -> None:
+        tracker = ActivityTracker()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Movie.mkv"
+            temp_output = source / "Movie.tmp.mkv"
+            movie.write_text("movie", encoding="utf-8")
+            with tracker.track(source, "Movie audio fix", kind="remux", current_path=movie) as item_id:
+                tracker.update(
+                    item_id,
+                    status_text="ffmpeg remux active",
+                    progress_fraction=0.5,
+                    completed_seconds=60.0,
+                    total_seconds=120.0,
+                    eta_seconds=60.0,
+                    output_size_bytes=1000,
+                    output_path=temp_output,
+                    speed="2.0x",
+                )
+                items = tracker.snapshot(source)
+            self.assertEqual(items[0]["kind"], "remux")
+            self.assertEqual(items[0]["status_text"], "ffmpeg remux active")
+            self.assertEqual(items[0]["progress_fraction"], 0.5)
+            self.assertEqual(items[0]["eta_seconds"], 60.0)
+            self.assertEqual(items[0]["output_path"], str(temp_output.resolve()))
 
     def test_find_external_activity_matches_ffprobe_for_source(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -203,6 +232,13 @@ class WebTests(unittest.TestCase):
         self.assertIn("Wrong Default Language", INDEX_HTML)
         self.assertIn("Weak English Fallback", INDEX_HTML)
         self.assertIn("issue_family: issueFamily", INDEX_HTML)
+        self.assertIn("'/api/movies/audio-packaging/fix'", INDEX_HTML)
+        self.assertIn("Make English Default", INDEX_HTML)
+        self.assertIn("Make English Default + Delete Foreign Audio", INDEX_HTML)
+        self.assertIn("function fixSelectedAudioDefaults(options = {})", INDEX_HTML)
+        self.assertIn("drop_foreign_audio: dropForeignAudio", INDEX_HTML)
+        self.assertIn("function summarizeAudioFixResult(result, dropForeignAudio)", INDEX_HTML)
+        self.assertIn("English already default", INDEX_HTML)
 
     def test_movie_dashboard_has_replacement_queue_summary_without_detail_pane(self) -> None:
         self.assertIn("Deleted, Awaiting Replacement", INDEX_HTML)

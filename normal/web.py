@@ -11,6 +11,7 @@ import threading
 import time
 from collections import Counter
 from contextlib import contextmanager
+from dataclasses import asdict
 from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -19,6 +20,7 @@ from typing import Any, Callable, Iterator
 
 from PIL import Image
 
+from normal.movie_audio_fix import fix_english_audio_defaults
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_junk import (
     detect_movie_junk_document_reasons,
@@ -27,10 +29,11 @@ from normal.movie_junk import (
     scan_movie_promo_documents,
 )
 from normal.movie_plan import build_movie_plan
-from normal.movie_profile import build_histogram_payload, scan_movie_profiles
+from normal.movie_profile import build_histogram_payload, build_movie_profile_item, scan_movie_profiles
 from normal.music_profile import build_music_histogram_payload, scan_music_profiles
 from normal.movie_replacement_queue import (
     add_profile_items_to_queue,
+    clear_pending_queue_items,
     delete_replacement_queue_media,
     queue_for_source,
     reconcile_replacement_queue,
@@ -46,6 +49,7 @@ from normal.output import write_movie_register_xlsx
 from normal.apply import apply_changes_in_place
 from normal.models import ProposedChange
 from normal.plan import build_plan
+from normal.quality_review import AudioStreamFacts, MediaFacts
 from normal.artwork import (
     PROVENANCE_FILENAME,
     ArtworkGapItem,
@@ -71,6 +75,14 @@ class ActivityItem:
     kind: str
     started_at: float
     current_path: str | None = None
+    status_text: str | None = None
+    progress_fraction: float | None = None
+    completed_seconds: float | None = None
+    total_seconds: float | None = None
+    eta_seconds: float | None = None
+    output_size_bytes: int | None = None
+    output_path: str | None = None
+    speed: str | None = None
 
 
 class ActivityTracker:
@@ -118,6 +130,19 @@ class ActivityTracker:
             if item is not None:
                 item.current_path = str(current_path.resolve()) if current_path else None
 
+    def update(self, item_id: int, **changes: Any) -> None:
+        with self._lock:
+            item = self._items.get(item_id)
+            if item is None:
+                return
+            for key, value in changes.items():
+                if key == "current_path" and value is not None:
+                    setattr(item, key, str(Path(value).resolve()))
+                elif key == "output_path" and value is not None:
+                    setattr(item, key, str(Path(value).resolve()))
+                elif hasattr(item, key):
+                    setattr(item, key, value)
+
     def snapshot(self, source: Path) -> list[dict[str, Any]]:
         resolved_source = source.resolve()
         now = time.time()
@@ -131,11 +156,29 @@ class ActivityTracker:
                 "kind": item.kind,
                 "current_path": item.current_path,
                 "elapsed_seconds": round(now - item.started_at, 1),
+                "status_text": item.status_text,
+                "progress_fraction": item.progress_fraction,
+                "completed_seconds": item.completed_seconds,
+                "total_seconds": item.total_seconds,
+                "eta_seconds": item.eta_seconds,
+                "output_size_bytes": item.output_size_bytes,
+                "output_path": item.output_path,
+                "speed": item.speed,
             }
             for item in items
             if source_paths_overlap(Path(item.source), resolved_source)
             or (item.current_path is not None and path_is_under(Path(item.current_path), resolved_source))
         ]
+
+
+def media_facts_from_dict(payload: dict[str, Any]) -> MediaFacts:
+    audio_streams = []
+    for raw_stream in payload.get("audio_streams", []):
+        if isinstance(raw_stream, dict):
+            audio_streams.append(AudioStreamFacts(**raw_stream))
+    normalized = dict(payload)
+    normalized["audio_streams"] = audio_streams
+    return MediaFacts(**normalized)
 
 
 ACTIVITY_TRACKER = ActivityTracker()
@@ -1014,6 +1057,22 @@ INDEX_HTML = """<!doctype html>
       fill.className = 'status-fill' + (mode === 'running' ? ' running' : '');
     }
 
+    function formatEta(seconds) {
+      if (seconds == null || !Number.isFinite(seconds)) return 'eta unknown';
+      const rounded = Math.max(0, Math.round(seconds));
+      const mins = Math.floor(rounded / 60);
+      const secs = rounded % 60;
+      return mins ? `eta ${mins}m ${secs}s` : `eta ${secs}s`;
+    }
+
+    function formatByteSize(bytes) {
+      if (!bytes || !Number.isFinite(bytes)) return '';
+      if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`;
+      if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+      if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+      return `${Math.round(bytes / 1e3)} KB`;
+    }
+
     function setActivityState(payload, errorMessage = '') {
       activityBar.classList.remove('active', 'external');
       if (errorMessage) {
@@ -1041,6 +1100,21 @@ INDEX_HTML = """<!doctype html>
       if (app.length) {
         activityBar.classList.add('active');
         const job = app[0];
+        if (job.kind === 'remux') {
+          const name = (job.current_path || '').split('/').pop() || 'current file';
+          const percent = job.progress_fraction != null ? `${Math.round(job.progress_fraction * 100)}%` : 'working';
+          const size = formatByteSize(job.output_size_bytes);
+          const speed = job.speed ? ` at ${job.speed}` : '';
+          const pieces = [
+            `${percent}${speed}`,
+            `${Math.floor(job.elapsed_seconds || 0)}s elapsed`,
+            formatEta(job.eta_seconds),
+            size ? `${size} written` : ''
+          ].filter(Boolean);
+          activityTitle.textContent = 'Drive activity: ffmpeg remux active';
+          activityDetail.textContent = `${job.label} on ${name} · ${pieces.join(' · ')}`;
+          return;
+        }
         activityTitle.textContent = 'Drive activity: normal is running';
         activityDetail.textContent = `${job.label} (${Math.floor(job.elapsed_seconds || 0)}s)`;
         return;
@@ -3681,7 +3755,7 @@ INDEX_HTML = """<!doctype html>
           : 'wrong default language';
         const defaultStream = describeAudioStream(movieDefaultAudioStream(item));
         const englishStream = describeAudioStream(movieBestEnglishAudioStream(item));
-        const selectable = !!issueCode && !queueItem;
+        const selectable = !!issueCode;
         return `
           <tr>
             <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="replacement-select" data-path="${encodeURIComponent(path)}" ${checked}>` : ''}</td>
@@ -3701,6 +3775,8 @@ INDEX_HTML = """<!doctype html>
         ${queueSummary}
         <div class="junk-actions">
           <button class="secondary" id="toggleAllReplacementButton" ${selectableCount ? '' : 'disabled'}>${toggleLabel}</button>
+          <button class="primary" id="fixSelectedAudioButton" ${selectedCount ? '' : 'disabled'}>Make English Default</button>
+          <button class="primary" id="fixSelectedAudioAndDropForeignButton" ${selectedCount ? '' : 'disabled'}>Make English Default + Delete Foreign Audio</button>
           <button class="danger" id="deleteSelectedFilesButton" ${selectedCount ? '' : 'disabled'}>Delete Selected Files</button>
           <span class="subtle">${selectedCount} of ${selectableCount} selected</span>
         </div>
@@ -4171,6 +4247,9 @@ INDEX_HTML = """<!doctype html>
     }
 
     function selectableVisibleReplacementItems(payload, items) {
+      if (state.page === 'audio_packaging') {
+        return items.filter(item => item.path && movieMatchesActiveTriageFamily(item));
+      }
       return items.filter(item => item.path && movieMatchesActiveTriageFamily(item) && !replacementQueueItemForPath(payload, item.path));
     }
 
@@ -4209,6 +4288,10 @@ INDEX_HTML = """<!doctype html>
           renderReplacementQueueDetail(payload);
         });
       }
+      const fixButton = document.getElementById('fixSelectedAudioButton');
+      if (fixButton) fixButton.addEventListener('click', () => fixSelectedAudioDefaults());
+      const fixAndDropButton = document.getElementById('fixSelectedAudioAndDropForeignButton');
+      if (fixAndDropButton) fixAndDropButton.addEventListener('click', () => fixSelectedAudioDefaults({ dropForeignAudio: true }));
       const fileButton = document.getElementById('deleteSelectedFilesButton');
       if (fileButton) fileButton.addEventListener('click', () => deleteSelectedFiles());
       document.querySelectorAll('.sortable-th').forEach(th => {
@@ -4274,6 +4357,59 @@ INDEX_HTML = """<!doctype html>
       }
     }
 
+    function applyUpdatedMovieProfileItems(payload, updatedItems) {
+      if (!payload || !Array.isArray(payload.movies) || !Array.isArray(updatedItems) || !updatedItems.length) return;
+      const updates = new Map(updatedItems.filter(item => item?.path).map(item => [item.path, item]));
+      payload.movies = payload.movies.map(item => {
+        const updated = updates.get(item.path);
+        if (!updated) return item;
+        const existingPercentile = item?.profile?.percentile ?? 0;
+        return {
+          ...item,
+          ...updated,
+          profile: {
+            ...(updated.profile || {}),
+            percentile: existingPercentile
+          }
+        };
+      });
+    }
+
+    function humanAudioFixMessage(code) {
+      const labels = {
+        outside_source: 'outside source',
+        path_missing: 'path missing',
+        unsupported_container: 'unsupported container',
+        probe_failed: 'probe failed',
+        not_multi_audio: 'not multi-audio',
+        english_audio_missing: 'English audio missing',
+        english_audio_not_retained: 'English audio would not be retained',
+        already_default_english: 'English already default',
+        english_default_set: 'English set as default',
+        english_default_set_and_removed_foreign_audio: 'English set as default and tagged foreign audio removed',
+        english_default_set_no_foreign_audio_removed: 'English set as default; no tagged foreign audio removed',
+        ffmpeg_missing: 'ffmpeg missing'
+      };
+      if (!code) return 'unknown result';
+      if (labels[code]) return labels[code];
+      if (code.startsWith('probe_failed:')) return `probe failed: ${code.slice('probe_failed:'.length).trim()}`;
+      if (code.startsWith('fix_failed:')) return `fix failed: ${code.slice('fix_failed:'.length).trim()}`;
+      return code.replaceAll('_', ' ');
+    }
+
+    function summarizeAudioFixResult(result, dropForeignAudio) {
+      const fixed = result?.fixed?.length || 0;
+      const skipped = result?.skipped?.length || 0;
+      const verb = dropForeignAudio ? 'Fixed and pruned' : 'Fixed';
+      const parts = [`${verb} ${fixed} file${fixed === 1 ? '' : 's'}`];
+      if (skipped) {
+        const skipReasons = Array.from(new Set((result.skipped || []).map(item => humanAudioFixMessage(item.message)).filter(Boolean))).slice(0, 3);
+        parts.push(`skipped ${skipped}`);
+        if (skipReasons.length) parts.push(skipReasons.join('; '));
+      }
+      return parts.join('; ') + '.';
+    }
+
     async function deleteSelectedFiles() {
       const source = sourceInput.value.trim();
       const payload = state.results.movies.profile;
@@ -4281,22 +4417,29 @@ INDEX_HTML = """<!doctype html>
       if (!source || !payload) return;
       const items = (payload.movies || []).filter(item =>
         state.selectedReplacementPaths.has(item.path || '') &&
-        movieMatchesActiveTriageFamily(item) &&
-        !replacementQueueItemForPath(payload, item.path || '', issueFamily)
+        movieMatchesActiveTriageFamily(item)
       );
       if (!items.length) return;
       const message = `Permanently delete ${items.length} file${items.length === 1 ? '' : 's'}? This cannot be undone.`;
       if (!window.confirm(message)) return;
       setStatus(`Deleting ${items.length} file${items.length === 1 ? '' : 's'}…`, 'running');
       try {
-        const addResponse = await fetch('/api/movies/replacement-queue/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, mode: 'file', issue_family: issueFamily, items })
-        });
-        const addResult = await addResponse.json();
-        if (!addResponse.ok) throw new Error(addResult.error || 'Queue failed.');
-        const itemIds = (addResult.added || []).map(i => i.item_id).filter(Boolean);
+        const existingPendingIds = items.map(item => replacementQueueItemForPath(payload, item.path || '', issueFamily))
+          .filter(item => item && item.status === 'pending')
+          .map(item => item.item_id)
+          .filter(Boolean);
+        const newItems = items.filter(item => !replacementQueueItemForPath(payload, item.path || '', issueFamily));
+        let itemIds = [...existingPendingIds];
+        if (newItems.length) {
+          const addResponse = await fetch('/api/movies/replacement-queue/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ source, mode: 'file', issue_family: issueFamily, items: newItems })
+          });
+          const addResult = await addResponse.json();
+          if (!addResponse.ok) throw new Error(addResult.error || 'Queue failed.');
+          itemIds = itemIds.concat((addResult.added || []).map(i => i.item_id).filter(Boolean));
+        }
         if (!itemIds.length) { setStatus('Nothing to delete.', 'idle'); return; }
         const delResponse = await fetch('/api/movies/replacement-queue/delete', {
           method: 'POST',
@@ -4314,6 +4457,40 @@ INDEX_HTML = """<!doctype html>
         const folders = delResult.removed_folders?.length || 0;
         const cleanup = sidecars || folders ? `; cleaned ${sidecars} sidecar${sidecars === 1 ? '' : 's'}${folders ? ` and ${folders} folder${folders === 1 ? '' : 's'}` : ''}` : '';
         setStatus(`Deleted ${delResult.deleted.length} file${delResult.deleted.length === 1 ? '' : 's'}${cleanup}${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
+        rerenderActiveMovieTriagePage(state.results.movies.profile);
+      } catch (error) {
+        setStatus(error.message, 'error');
+      }
+    }
+
+    async function fixSelectedAudioDefaults(options = {}) {
+      const source = sourceInput.value.trim();
+      const payload = state.results.movies.profile;
+      const dropForeignAudio = !!options.dropForeignAudio;
+      if (!source || !payload) return;
+      const paths = selectableVisibleReplacementItems(payload, payload.movies || [])
+        .filter(item => state.selectedReplacementPaths.has(item.path || ''))
+        .map(item => item.path)
+        .filter(Boolean);
+      if (!paths.length) return;
+      const actionLabel = dropForeignAudio ? 'Repairing and pruning foreign audio' : 'Repairing';
+      setStatus(`${actionLabel} for ${paths.length} file${paths.length === 1 ? '' : 's'}…`, 'running');
+      try {
+        const response = await fetch('/api/movies/audio-packaging/fix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, paths, drop_foreign_audio: dropForeignAudio })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Audio fix failed.');
+        state.results.movies.replacementQueue = result.replacement_queue || state.results.movies.replacementQueue;
+        state.results.movies.replacementQueueSource = source;
+        if (state.results.movies.profile) {
+          state.results.movies.profile.replacement_queue = result.replacement_queue || state.results.movies.profile.replacement_queue;
+          applyUpdatedMovieProfileItems(state.results.movies.profile, result.updated_items || []);
+        }
+        state.selectedReplacementPaths.clear();
+        setStatus(summarizeAudioFixResult(result, dropForeignAudio), 'idle');
         rerenderActiveMovieTriagePage(state.results.movies.profile);
       } catch (error) {
         setStatus(error.message, 'error');
@@ -4730,6 +4907,9 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
                 if route == "/api/movies/replacement-queue/delete":
                     self.handle_movies_replacement_queue_delete(payload)
                     return
+                if route == "/api/movies/audio-packaging/fix":
+                    self.handle_movies_audio_packaging_fix(payload)
+                    return
                 if route == "/api/music/replacement-queue/list":
                     self.handle_music_replacement_queue_list(payload)
                     return
@@ -4923,6 +5103,39 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
             if not isinstance(item_ids, list):
                 raise ValueError("item_ids must be a list")
             self.respond_json(delete_replacement_queue_media(source, item_ids))
+
+        def handle_movies_audio_packaging_fix(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            paths = payload.get("paths")
+            if not isinstance(paths, list):
+                raise ValueError("paths must be a list")
+            drop_foreign_audio = bool(payload.get("drop_foreign_audio"))
+            label = "Movie audio fix: make English default + drop foreign audio" if drop_foreign_audio else "Movie audio fix: make English default"
+            with ACTIVITY_TRACKER.track(source, label, kind="remux") as activity_id:
+                result = fix_english_audio_defaults(
+                    source,
+                    [str(path) for path in paths],
+                    probe_media=tracked_probe(source, "ffprobe audio packaging fix"),
+                    drop_foreign_audio=drop_foreign_audio,
+                    progress_callback=lambda update: ACTIVITY_TRACKER.update(activity_id, **update),
+                )
+            fixed_paths = [str(item.get("path") or "") for item in result["fixed"]]
+            queue = (
+                clear_pending_queue_items(source, fixed_paths, issue_family="audio_packaging")
+                if fixed_paths
+                else queue_for_source(source, issue_family="audio_packaging")
+            )
+            updated_items = []
+            for item in result["fixed"]:
+                raw_facts = item.get("facts")
+                if not isinstance(raw_facts, dict):
+                    continue
+                movie_path = Path(str(item["path"]))
+                profiled = build_movie_profile_item(source, movie_path, media_facts_from_dict(raw_facts))
+                updated_items.append(asdict(profiled))
+            result["replacement_queue"] = queue
+            result["updated_items"] = updated_items
+            self.respond_json(result)
 
         def handle_music_normalize(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
