@@ -122,30 +122,33 @@ def scan_movie_profiles(
             continue
 
         facts.resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
-        label = classify_profile_label(facts)
-        diagnostics = detect_plex_diagnostics(movie_path, facts)
-        report.movies.append(
-            MovieProfileItem(
-                movie_id=movie_id_for(movie_path, source_root),
-                path=str(movie_path),
-                facts=facts,
-                runtime_minutes=round(facts.runtime_seconds / 60, 1) if facts.runtime_seconds else None,
-                profile=MovieProfile(
-                    label=label,
-                    rank=PROFILE_RANKS[label],
-                    percentile=0.0,
-                    anchor_distance=compute_anchor_distance(facts),
-                    diagnostics=diagnostics,
-                    risk_counts=build_risk_counts(diagnostics),
-                ),
-            )
-        )
+        report.movies.append(build_movie_profile_item(source_root, movie_path, facts))
         emit_progress(progress_callback, index, total, movie_path, started, "running")
 
     assign_percentiles(report.movies)
     report.movies.sort(key=lambda item: (total_risk_score(item.profile.diagnostics), item.profile.rank, item.path.lower()), reverse=True)
     emit_progress(progress_callback, total, total, None, started, "complete")
     return report
+
+
+def build_movie_profile_item(source_root: Path, movie_path: Path, facts: MediaFacts) -> MovieProfileItem:
+    facts.resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
+    label = classify_profile_label(facts)
+    diagnostics = detect_plex_diagnostics(movie_path, facts)
+    return MovieProfileItem(
+        movie_id=movie_id_for(movie_path, source_root),
+        path=str(movie_path),
+        facts=facts,
+        runtime_minutes=round(facts.runtime_seconds / 60, 1) if facts.runtime_seconds else None,
+        profile=MovieProfile(
+            label=label,
+            rank=PROFILE_RANKS[label],
+            percentile=0.0,
+            anchor_distance=compute_anchor_distance(facts),
+            diagnostics=diagnostics,
+            risk_counts=build_risk_counts(diagnostics),
+        ),
+    )
 
 
 def classify_profile_label(facts: MediaFacts) -> str:

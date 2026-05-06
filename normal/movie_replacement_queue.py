@@ -165,6 +165,37 @@ def queue_for_source(source_root: Path, state_path: Path | None = None, issue_fa
     }
 
 
+def clear_pending_queue_items(
+    source_root: Path,
+    paths: list[str],
+    issue_family: str,
+    state_path: Path | None = None,
+) -> dict[str, Any]:
+    source = str(source_root.resolve())
+    family = normalize_issue_family(issue_family)
+    target_paths = {str(Path(path).expanduser().resolve()) for path in paths}
+    payload = load_queue(state_path)
+    cleared: list[dict[str, Any]] = []
+    kept: list[dict[str, Any]] = []
+
+    for item in payload["items"]:
+        if (
+            item.get("source_root") == source
+            and item.get("issue_family") == family
+            and item.get("status") == "pending"
+            and str(item.get("original_path") or "") in target_paths
+        ):
+            cleared.append(item)
+            continue
+        kept.append(item)
+
+    payload["items"] = kept
+    save_queue(payload, state_path)
+    response = queue_for_source(source_root, state_path=state_path, issue_family=family)
+    response["cleared"] = cleared
+    return response
+
+
 def add_profile_items_to_queue(
     source_root: Path,
     raw_items: list[Any],

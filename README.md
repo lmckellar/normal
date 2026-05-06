@@ -5,7 +5,7 @@ Local workbench for taming pirated music and movie libraries.
 Two lanes:
 
 - **Music** — normalize FLAC tags, filenames, and folder structure; repair artist artwork for Jellyfin
-- **Movies** — normalize file and folder names; profile encode quality; triage weak encodes, multi-audio packaging mistakes, and junk for cleanup
+- **Movies** — normalize file and folder names; profile encode quality; triage weak encodes, repair or replace multi-audio packaging mistakes, and clean up junk
 
 No cloud. No transcoding. No destructive defaults.
 
@@ -60,6 +60,8 @@ For contributors and AI agents working in the codebase: [docs/agent.md](docs/age
 ## Known issue
 
 There is an open movie-scan / web UI issue around probe cancellation and observability. Under some currently unknown interaction pattern — likely involving scan cancellation, quick page changes, and rapidly starting another scan — an `ffprobe` process can keep running in the background after the UI thinks the scan is gone. In that state the leftover probe may also fail to appear in the Drive Activity indicator because the current `ps`-based visibility check does not catch every case.
+
+The movie audio-packaging page now supports in-place MKV remux actions for `Make English Default` and `Make English Default + Delete Foreign Audio`. The stricter delete-foreign-audio variant is currently untested on real libraries and should still be treated as a review path before first public push.
 
 ## License
 

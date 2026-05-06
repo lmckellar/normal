@@ -52,7 +52,9 @@ Some MKVs are muxed with the wrong main audio track: for example, Italian marked
 - flag the stronger case where the English fallback is materially weaker than the default track
 - show default-vs-English stream summaries so the queue is explainable before deletion
 
-This is still a replacement workflow, not an automatic remux workflow. The current action is to queue and delete bad copies so a cleaner replacement can be tracked.
+For MKVs, the page can now do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops audio streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers are left as review-only items. Replacement queue delete/replace is still available for genuinely bad releases.
+
+Current safety note: `Make English Default` has been exercised against real files. `Make English Default + Delete Foreign Audio` is implemented, but it is currently untested on real libraries and should still be treated as a cautious review-only workflow before first public push.
 
 ## Junk cleanup
 
@@ -78,7 +80,7 @@ normal movie-register --report scan.json --xlsx catalogue.xlsx
 | Dashboard | Quality overview — tiers, histograms, resolution breakdown |
 | Normalize | Review and apply rename plans |
 | Delete Weak Encodes | Triage and queue replacements |
-| Fix Multi-Audio Packaging | Triage and queue replacements for wrong-language / weak-English MKVs |
+| Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |
 | Delete Junk Videos | Remove samples and featurettes |
 | Delete Junk Sidecar & Spam Files | Remove sidecar and spam files |
 

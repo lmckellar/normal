@@ -6,6 +6,7 @@ from pathlib import Path
 
 from normal.movie_replacement_queue import (
     add_profile_items_to_queue,
+    clear_pending_queue_items,
     delete_replacement_queue_media,
     load_queue,
     reconcile_replacement_queue,
@@ -130,6 +131,31 @@ class MovieReplacementQueueTests(unittest.TestCase):
             self.assertEqual(len(result["items"]), 1)
             self.assertEqual(result["items"][0]["issue_family"], "audio_packaging")
             self.assertEqual(result["items"][0]["issue_code"], "default_non_english_audio_with_weak_english")
+
+    def test_clear_pending_audio_packaging_items_by_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            state = root / "queue.json"
+            source = root / "movies"
+            movie = source / "Audio Movie (2001)" / "Audio Movie (2001).mkv"
+            movie.parent.mkdir(parents=True)
+            movie.write_text("video", encoding="utf-8")
+
+            add_profile_items_to_queue(
+                source,
+                [audio_packaging_item(movie, "default_non_english_audio")],
+                issue_family="audio_packaging",
+                state_path=state,
+            )
+            result = clear_pending_queue_items(
+                source,
+                [str(movie)],
+                issue_family="audio_packaging",
+                state_path=state,
+            )
+
+            self.assertEqual(len(result["cleared"]), 1)
+            self.assertEqual(result["items"], [])
 
     def test_reconcile_completes_only_when_replacement_is_not_strict_weak(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
