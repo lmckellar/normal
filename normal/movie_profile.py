@@ -15,7 +15,7 @@ from normal.movie_scan import (
     movie_id_for,
     probe_media_facts,
 )
-from normal.quality_review import MediaFacts, classify_resolution
+from normal.quality_review import AudioStreamFacts, MediaFacts, classify_resolution
 
 
 ANCHOR_KBPS = {"1080p": 18000, "2160p": 45000}
@@ -263,6 +263,7 @@ def detect_plex_diagnostics(path: Path | str, facts: MediaFacts) -> list[Diagnos
                 remedy="Reset stream default flags so only one audio and one subtitle stream are default.",
             )
         )
+    findings.extend(detect_audio_language_selection_risks(facts))
     if facts.video_bitrate_kbps is None and facts.total_bitrate_kbps is None:
         findings.append(
             DiagnosticFinding(
@@ -379,6 +380,106 @@ def detect_plex_diagnostics(path: Path | str, facts: MediaFacts) -> list[Diagnos
 
 def has_compat_audio_track(audio_codecs: set[str]) -> bool:
     return any(codec in {"ac3", "aac", "eac3"} for codec in audio_codecs)
+
+
+def detect_audio_language_selection_risks(facts: MediaFacts) -> list[DiagnosticFinding]:
+    default_stream = choose_default_audio_stream(facts.audio_streams)
+    if default_stream is None:
+        return []
+
+    default_language = canonical_audio_language(default_stream.language)
+    if default_language is None or default_language == "english":
+        return []
+
+    english_streams = [stream for stream in facts.audio_streams if canonical_audio_language(stream.language) == "english"]
+    if not english_streams:
+        return []
+
+    best_english = max(english_streams, key=audio_stream_quality_key)
+    if english_stream_is_materially_weaker(default_stream, best_english):
+        return [
+            DiagnosticFinding(
+                code="default_non_english_audio_with_weak_english",
+                severity="review",
+                category="playback_risk",
+                summary=(
+                    f"Default audio is {display_audio_language(default_language)} while the best English track looks materially weaker, "
+                    "which matches a common multi-audio MKV packaging mistake."
+                ),
+                remedy=(
+                    "Review audio stream order and defaults, then remux so the intended English track is clearly preferred "
+                    "or replace the file with a release whose main English track is not the weak fallback."
+                ),
+            )
+        ]
+
+    return [
+        DiagnosticFinding(
+            code="default_non_english_audio",
+            severity="review",
+            category="playback_risk",
+            summary=(
+                f"Default audio is {display_audio_language(default_language)} even though an English track is present, "
+                "so clients may auto-pick the wrong language."
+            ),
+            remedy="Set the intended English stream as default or remux the file so stream flags match playback preference.",
+        )
+    ]
+
+
+def choose_default_audio_stream(streams: list[AudioStreamFacts]) -> AudioStreamFacts | None:
+    defaults = [stream for stream in streams if stream.is_default]
+    if defaults:
+        return defaults[0]
+    if streams:
+        return streams[0]
+    return None
+
+
+def audio_stream_quality_key(stream: AudioStreamFacts) -> tuple[int, int, int]:
+    return (
+        stream.channels or 0,
+        stream.bitrate_kbps or 0,
+        -(stream.index or 0),
+    )
+
+
+def english_stream_is_materially_weaker(default_stream: AudioStreamFacts, english_stream: AudioStreamFacts) -> bool:
+    default_channels = default_stream.channels or 0
+    english_channels = english_stream.channels or 0
+    if default_channels >= 6 and english_channels and english_channels <= 2:
+        return True
+    if default_channels > english_channels:
+        return True
+
+    default_bitrate = default_stream.bitrate_kbps or 0
+    english_bitrate = english_stream.bitrate_kbps or 0
+    if default_bitrate >= 192 and english_bitrate and english_bitrate <= int(default_bitrate * 0.7):
+        return True
+    if default_bitrate >= 256 and english_bitrate == 0:
+        return True
+    return False
+
+
+def canonical_audio_language(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().casefold()
+    if not normalized:
+        return None
+    aliases = {
+        "eng": "english",
+        "en": "english",
+        "english": "english",
+        "ita": "italian",
+        "it": "italian",
+        "italian": "italian",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def display_audio_language(value: str) -> str:
+    return value.capitalize()
 
 
 def is_attachment_heavy_anime_mux(path_text: str, facts: MediaFacts) -> bool:

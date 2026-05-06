@@ -9,7 +9,7 @@ import time
 from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
-from normal.quality_review import MediaFacts, QualityReview, score_quality_review
+from normal.quality_review import AudioStreamFacts, MediaFacts, QualityReview, score_quality_review
 
 
 VIDEO_EXTENSIONS = {
@@ -182,6 +182,7 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         if estimated > 0:
             video_bitrate_kbps = estimated
             video_bitrate_approximate = True
+    detailed_audio_streams = [audio_stream_facts_from_ffprobe_stream(stream) for stream in audio_streams]
 
     return MediaFacts(
         runtime_seconds=parse_seconds(format_payload.get("duration")),
@@ -212,6 +213,7 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         attachment_stream_count=len(attachment_streams),
         default_audio_streams=count_default_streams(audio_streams),
         default_subtitle_streams=count_default_streams(subtitle_streams),
+        audio_streams=detailed_audio_streams,
     )
 
 
@@ -255,6 +257,43 @@ def parse_stream_bitrate_kbps(stream: dict[str, Any]) -> int | None:
             bitrate = parse_bitrate_kbps(value)
             if bitrate is not None:
                 return bitrate
+    return None
+
+
+def audio_stream_facts_from_ffprobe_stream(stream: dict[str, Any]) -> AudioStreamFacts:
+    tags = stream.get("tags")
+    if not isinstance(tags, dict):
+        tags = {}
+    disposition = stream.get("disposition")
+    if not isinstance(disposition, dict):
+        disposition = {}
+    return AudioStreamFacts(
+        index=parse_int(stream.get("index")),
+        codec=stream.get("codec_name"),
+        bitrate_kbps=parse_stream_bitrate_kbps(stream),
+        channels=parse_int(stream.get("channels")),
+        language=normalize_language_tag(tags.get("language")),
+        title=first_text(tags.get("title"), tags.get("handler_name")),
+        is_default=bool(disposition.get("default")),
+    )
+
+
+def normalize_language_tag(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text.casefold()
+
+
+def first_text(*values: Any) -> str | None:
+    for value in values:
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
     return None
 
 

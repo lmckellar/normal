@@ -11,7 +11,7 @@ from normal.movie_profile import (
     looks_like_absolute_numbering,
     scan_movie_profiles,
 )
-from normal.quality_review import MediaFacts
+from normal.quality_review import AudioStreamFacts, MediaFacts
 
 
 class MovieProfileTests(unittest.TestCase):
@@ -90,6 +90,40 @@ class MovieProfileTests(unittest.TestCase):
         self.assertIn("anime_subtitle_attachment_risk", codes)
         self.assertIn("anime_absolute_numbering_risk", codes)
         self.assertIn("attachment_heavy_visibility_risk", codes)
+
+    def test_detect_plex_diagnostics_flags_default_non_english_audio_with_weak_english(self) -> None:
+        findings = detect_plex_diagnostics(
+            "Movie.mkv",
+            MediaFacts(
+                container="matroska",
+                audio_stream_count=2,
+                default_audio_streams=1,
+                audio_streams=[
+                    AudioStreamFacts(index=1, codec="ac3", bitrate_kbps=640, channels=6, language="ita", is_default=True),
+                    AudioStreamFacts(index=2, codec="aac", bitrate_kbps=128, channels=2, language="eng", is_default=False),
+                ],
+            ),
+        )
+
+        codes = {finding.code for finding in findings}
+        self.assertIn("default_non_english_audio_with_weak_english", codes)
+
+    def test_detect_plex_diagnostics_flags_default_non_english_audio_even_when_english_is_not_weaker(self) -> None:
+        findings = detect_plex_diagnostics(
+            "Movie.mkv",
+            MediaFacts(
+                container="matroska",
+                audio_stream_count=2,
+                default_audio_streams=1,
+                audio_streams=[
+                    AudioStreamFacts(index=1, codec="ac3", bitrate_kbps=640, channels=6, language="ita", is_default=True),
+                    AudioStreamFacts(index=2, codec="ac3", bitrate_kbps=640, channels=6, language="eng", is_default=False),
+                ],
+            ),
+        )
+
+        codes = {finding.code for finding in findings}
+        self.assertIn("default_non_english_audio", codes)
 
     def test_looks_like_absolute_numbering_accepts_plain_anime_episode_names(self) -> None:
         self.assertTrue(looks_like_absolute_numbering("Berserk 01.mkv"))

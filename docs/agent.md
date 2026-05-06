@@ -18,7 +18,7 @@ normal/
 ├── movie_profile.py             # Movie profile: quality ladder classification, heuristic findings
 ├── movie_inspect.py             # Movie inspect: single-file diagnostic
 ├── movie_junk.py                # Movie junk: sample/featurette/short detection
-├── movie_replacement_queue.py   # Replacement queue: persistent state for deleted weak encodes
+├── movie_replacement_queue.py   # Replacement queue: persistent state for movie triage families
 ├── music_profile.py             # Music profile: format/fidelity classification for dashboard
 ├── music_replacement_queue.py   # Music replacement queue (parallel structure to movie queue)
 ├── quality_review.py            # Quality review helpers
@@ -94,13 +94,16 @@ Replacement priority by decade:
 
 Per-file classification against the quality ladder. See `docs/commands.md` for the full ladder table. Heuristic finding categories: `playback_risk`, `indexing_visibility_risk`.
 
-Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_risk`, `multi_audio_anime_mux_risk`, `high_complexity_hevc_tv_risk`, `episodic_naming_parse_risk`, `anime_absolute_numbering_risk`, `attachment_heavy_visibility_risk`.
+Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_risk`, `multi_audio_anime_mux_risk`, `high_complexity_hevc_tv_risk`, `episodic_naming_parse_risk`, `anime_absolute_numbering_risk`, `attachment_heavy_visibility_risk`, `default_non_english_audio`, `default_non_english_audio_with_weak_english`.
 
 ### Replacement queue (JSON)
 
 Path: `~/.local/share/normal/movie-replacement-queue.json`
 
-Keyed by source directory. Each item: `path`, `title`, `year`, `status` (`pending` → `deleted` → `completed`), deletion metadata. Future profile scans auto-complete `deleted` items when a non-weak encode for the same title/year appears.
+Keyed by source directory. Each item also carries `issue_family`, `issue_code`, and `issue_label`.
+
+- `weak_encode` items complete when a future scan finds the same title/year and it is no longer a strict weak encode.
+- `audio_packaging` items complete when a future scan finds the same title/year and it no longer matches the queued audio-packaging issue family.
 
 ### Artwork provenance (JSON)
 
@@ -116,20 +119,21 @@ All routes in `web.py`. Key families:
 |---|---|---|
 | `/api/music/scan` | GET | Full music scan |
 | `/api/music/apply` | POST | Apply selected music changes in-place |
-| `/api/music/profile` | GET | Music dashboard profile |
+| `/api/music/profile` | POST | Music dashboard profile / weak encode triage payload |
 | `/api/music/artwork` | GET | Artist artwork scan |
 | `/api/music/artwork/save` | POST | Write approved artwork for one artist |
 | `/api/music/artwork/write-selected` | POST | Bulk write selected Jellyfin-cache candidates |
 | `/api/music/artwork/sync-jellyfin` | POST | Copy library sidecars into Jellyfin metadata cache |
 | `/api/movies/scan` | GET | Movie quality scan |
 | `/api/movies/apply` | POST | Apply selected movie renames in-place |
-| `/api/movies/profile` | GET | Movie quality profile |
+| `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, and audio packaging triage |
 | `/api/movies/junk` | GET | Junk video scan |
 | `/api/movies/junk/delete` | POST | Delete selected junk files |
 | `/api/movies/misc-junk` | GET | Sidecar and spam file scan |
 | `/api/movies/misc-junk/delete` | POST | Delete selected sidecar and spam files |
-| `/api/movies/replacement-queue` | GET | Queue state for current source |
-| `/api/movies/delete-encodes` | POST | Delete selected weak encodes and update queue |
+| `/api/movies/replacement-queue/list` | POST | Queue state for current source, optionally filtered by issue family |
+| `/api/movies/replacement-queue/add` | POST | Add movie triage items to the queue |
+| `/api/movies/replacement-queue/delete` | POST | Delete queued movie triage items and mark them deleted |
 | `/api/movies/catalogue` | GET | Inline catalogue scan for XLSX download |
 
 ## Safety constraints
@@ -149,10 +153,12 @@ Hard rules — do not relax without explicit user instruction:
 These are deliberate choices, not gaps:
 
 - **Hardcoded preferences over UI controls (v1 posture).** Quality thresholds, replacement priority weights, normalization rules are in code. The adjustment path is repo/agent edits. This is the core v1 stance; v2 changes it.
+- **Movie triage now has separate lanes on one shared scan.** `Delete Weak Encodes` and `Fix Multi-Audio Packaging` are sibling workflows backed by the same `movie-profile` report and the same replacement queue substrate. Keep workflow/UI code shared where possible, but keep issue-family rules separate.
 - **`Movies > Plex Compatibility` is hidden in the v1 UI.** The heuristics live in `movie_profile.py`. The page is suppressed because the workflow isn't concrete enough. Do not re-expose it without a workflow design.
 - **Music normalization is FLAC-only.** MP3 appears in dashboard profile views but is not a normalization target in v1.
 - **No external web framework.** `web.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.
 - **Strict weak encode profiles.** Strict weak = `sd_low_quality`, `weak_1080p`, `weak_4k`, `unclassified`. `minimum_acceptable_1080p` and above are never shown as deletion candidates in the default view. Do not change this threshold without explicit instruction.
 - **Replacement queue is append-only from the tool.** Items move forward through states but are never silently removed. Auto-completion (`completed`) happens on future scans when a replacement appears.
+- **Probe cancellation is not fully hardened yet.** There is a known open issue where cancelling a movie scan and quickly starting another UI action can leave a background `ffprobe` running, and the activity indicator may miss it. Do not document cancellation as stronger than best-effort until that is fixed.
 - **No cross-platform guarantees for v1.** Linux-first. Windows/macOS rough edges are known and deferred.
 - **`--in-place` is always explicit.** Never infer in-place mutation from context; the flag must be present.

@@ -1,6 +1,6 @@
 # Movies
 
-The movie lane handles the two main problems with a pirated library: inconsistent naming and uneven encode quality.
+The movie lane handles three practical cleanup problems in a pirated library: inconsistent naming, uneven encode quality, and bad multi-audio packaging.
 
 ![Movies dashboard](assets/movies_dashboard_default.png)
 
@@ -44,6 +44,16 @@ The **Delete Weak Encodes** page lets you select weak files for deletion. Each d
 
 The "Deleted, Waiting Replacement" list is sortable by title, year, and IMDb rating. IMDb ratings are fetched from [OMDb](https://www.omdbapi.com/) and require a free API key passed via `--omdb-key` or the `OMDB_KEY` environment variable. Without a key the column is hidden.
 
+## Multi-audio packaging triage
+
+Some MKVs are muxed with the wrong main audio track: for example, Italian marked as default and a weaker English track left as the fallback. The **Fix Multi-Audio Packaging** page uses the same replacement-queue workflow as weak encode triage, but with different scan rules:
+
+- detect non-English default audio when English is present
+- flag the stronger case where the English fallback is materially weaker than the default track
+- show default-vs-English stream summaries so the queue is explainable before deletion
+
+This is still a replacement workflow, not an automatic remux workflow. The current action is to queue and delete bad copies so a cleaner replacement can be tracked.
+
 ## Junk cleanup
 
 Two pages handle library noise:
@@ -68,5 +78,10 @@ normal movie-register --report scan.json --xlsx catalogue.xlsx
 | Dashboard | Quality overview — tiers, histograms, resolution breakdown |
 | Normalize | Review and apply rename plans |
 | Delete Weak Encodes | Triage and queue replacements |
+| Fix Multi-Audio Packaging | Triage and queue replacements for wrong-language / weak-English MKVs |
 | Delete Junk Videos | Remove samples and featurettes |
 | Delete Junk Sidecar & Spam Files | Remove sidecar and spam files |
+
+## Known issue
+
+There is an open issue around movie probes not always unwinding cleanly when a scan is cancelled and another UI action starts immediately after. Exact reproduction conditions are still unknown. In some cases a background `ffprobe` keeps running and is not visible through the current Drive Activity `ps` check.

@@ -13,8 +13,13 @@ from normal.movie_plan import parse_movie_name
 from normal.movie_scan import VIDEO_EXTENSIONS
 
 
-QUEUE_VERSION = 1
+QUEUE_VERSION = 2
 STRICT_WEAK_LABELS = {"sd_low_quality", "weak_1080p", "weak_4k", "unclassified"}
+MOVIE_TRIAGE_FAMILIES = {"weak_encode", "audio_packaging"}
+AUDIO_PACKAGING_CODES = {
+    "default_non_english_audio_with_weak_english",
+    "default_non_english_audio",
+}
 SAFE_MOVIE_SIDECAR_EXTENSIONS = {
     ".ass",
     ".htm",
@@ -46,6 +51,9 @@ class ReplacementQueueItem:
     original_path: str
     original_folder_path: str
     mode: str
+    issue_family: str
+    issue_code: str | None
+    issue_label: str | None
     original_profile_label: str
     resolution_bucket: str | None
     video_bitrate_kbps: int | None
@@ -88,7 +96,7 @@ def load_queue(state_path: Path | None = None) -> dict[str, Any]:
             continue
         if item.get("status") == "pending" and item.get("deleted_at"):
             item = {**item, "status": "deleted"}
-        item = normalize_queue_item_identity(item)
+        item = normalize_queue_item(item)
         normalized_items.append(item)
     return {"version": QUEUE_VERSION, "items": normalized_items}
 
@@ -101,6 +109,14 @@ def save_queue(payload: dict[str, Any], state_path: Path | None = None) -> None:
         handle.write(data)
         temp_path = Path(handle.name)
     temp_path.replace(path)
+
+
+def normalize_queue_item(item: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(item)
+    normalized["issue_family"] = normalize_issue_family(normalized.get("issue_family"))
+    normalized["item_id"] = normalized_item_id(normalized)
+    normalized = normalize_queue_item_identity(normalized)
+    return normalized
 
 
 def normalize_queue_item_identity(item: dict[str, Any]) -> dict[str, Any]:
@@ -116,13 +132,36 @@ def normalize_queue_item_identity(item: dict[str, Any]) -> dict[str, Any]:
     return {**item, "title": parsed.title, "year": parsed.year, "title_key": key}
 
 
-def queue_for_source(source_root: Path, state_path: Path | None = None) -> dict[str, Any]:
+def normalized_item_id(item: dict[str, Any]) -> str:
+    source = str(item.get("source_root") or "")
+    key = str(item.get("title_key") or "")
+    year = int(item.get("year") or 0)
+    path = str(item.get("original_path") or "")
+    mode = str(item.get("mode") or "file")
+    family = normalize_issue_family(item.get("issue_family"))
+    return replacement_item_id(source, key, year, path, mode, family)
+
+
+def normalize_issue_family(value: Any) -> str:
+    family = str(value or "weak_encode").strip().casefold().replace("-", "_")
+    if family not in MOVIE_TRIAGE_FAMILIES:
+        raise ValueError(f"unsupported issue family: {family}")
+    return family
+
+
+def queue_for_source(source_root: Path, state_path: Path | None = None, issue_family: str | None = None) -> dict[str, Any]:
     source = str(source_root.resolve())
     payload = load_queue(state_path)
+    family = normalize_issue_family(issue_family) if issue_family is not None else None
     return {
         "source_root": source,
+        "issue_family": family,
         "generated_at": utc_now_iso(),
-        "items": [item for item in payload["items"] if item.get("source_root") == source],
+        "items": [
+            item
+            for item in payload["items"]
+            if item.get("source_root") == source and (family is None or item.get("issue_family") == family)
+        ],
     }
 
 
@@ -131,9 +170,11 @@ def add_profile_items_to_queue(
     raw_items: list[Any],
     mode: str = "file",
     state_path: Path | None = None,
+    issue_family: str = "weak_encode",
 ) -> dict[str, Any]:
     if mode not in {"file", "folder"}:
         raise ValueError("mode must be file or folder")
+    family = normalize_issue_family(issue_family)
 
     source = source_root.resolve()
     payload = load_queue(state_path)
@@ -146,8 +187,9 @@ def add_profile_items_to_queue(
             skipped.append({"reason": "invalid_item"})
             continue
         label = str((raw_item.get("profile") or {}).get("label") or "")
-        if not is_strict_weak_label(label):
-            skipped.append({"path": str(raw_item.get("path") or ""), "reason": "not_strict_weak"})
+        issue = queue_issue_for_raw_item(raw_item, family)
+        if issue is None:
+            skipped.append({"path": str(raw_item.get("path") or ""), "reason": skip_reason_for_issue_family(family)})
             continue
         path = Path(str(raw_item.get("path") or "")).expanduser().resolve()
         try:
@@ -160,7 +202,7 @@ def add_profile_items_to_queue(
             skipped.append({"path": str(path), "reason": "unparsed_identity"})
             continue
 
-        item = build_queue_item(source, path, raw_item, label, mode, parsed.title, parsed.year)
+        item = build_queue_item(source, path, raw_item, label, mode, parsed.title, parsed.year, family, issue)
         existing = existing_by_id.get(item.item_id)
         if existing is None:
             payload["items"].append(asdict(item))
@@ -174,7 +216,7 @@ def add_profile_items_to_queue(
             added.append(existing)
 
     save_queue(payload, state_path)
-    response = queue_for_source(source, state_path)
+    response = queue_for_source(source, state_path, family)
     response["added"] = added
     response["skipped"] = skipped
     return response
@@ -188,11 +230,13 @@ def build_queue_item(
     mode: str,
     title: str,
     year: int,
+    issue_family: str,
+    issue: dict[str, str | None],
 ) -> ReplacementQueueItem:
     facts = raw_item.get("facts") if isinstance(raw_item.get("facts"), dict) else {}
     folder = path.parent
     key = title_key(title)
-    item_id = replacement_item_id(str(source), key, year, str(path), mode)
+    item_id = replacement_item_id(str(source), key, year, str(path), mode, issue_family)
     return ReplacementQueueItem(
         item_id=item_id,
         source_root=str(source),
@@ -202,6 +246,9 @@ def build_queue_item(
         original_path=str(path),
         original_folder_path=str(folder),
         mode=mode,
+        issue_family=issue_family,
+        issue_code=issue.get("issue_code"),
+        issue_label=issue.get("issue_label"),
         original_profile_label=label,
         resolution_bucket=facts.get("resolution_bucket"),
         video_bitrate_kbps=facts.get("video_bitrate_kbps"),
@@ -210,8 +257,8 @@ def build_queue_item(
     )
 
 
-def replacement_item_id(source: str, key: str, year: int, path: str, mode: str) -> str:
-    digest = hashlib.sha1(f"{source}\0{key}\0{year}\0{path}\0{mode}".encode("utf-8")).hexdigest()
+def replacement_item_id(source: str, key: str, year: int, path: str, mode: str, issue_family: str) -> str:
+    digest = hashlib.sha1(f"{source}\0{key}\0{year}\0{path}\0{mode}\0{issue_family}".encode("utf-8")).hexdigest()
     return digest[:16]
 
 
@@ -222,14 +269,16 @@ def reconcile_replacement_queue(
 ) -> dict[str, Any]:
     source = source_root.resolve()
     payload = load_queue(state_path)
-    replacements = replacement_identities(source, raw_movies)
+    replacements_by_family: dict[str, dict[tuple[str, int], str]] = {}
     changed = False
     now = utc_now_iso()
 
     for item in payload["items"]:
         if item.get("source_root") != str(source) or item.get("status") not in {"pending", "deleted"}:
             continue
+        family = normalize_issue_family(item.get("issue_family"))
         identity = (item.get("title_key"), item.get("year"))
+        replacements = replacements_by_family.setdefault(family, replacement_identities(source, raw_movies, family))
         matched_path = replacements.get(identity)
         if matched_path is None:
             continue
@@ -243,13 +292,12 @@ def reconcile_replacement_queue(
     return queue_for_source(source, state_path)
 
 
-def replacement_identities(source: Path, raw_movies: list[Any]) -> dict[tuple[str, int], str]:
+def replacement_identities(source: Path, raw_movies: list[Any], issue_family: str) -> dict[tuple[str, int], str]:
     replacements: dict[tuple[str, int], str] = {}
     for raw_item in raw_movies:
         if not isinstance(raw_item, dict):
             continue
-        label = str((raw_item.get("profile") or {}).get("label") or "")
-        if is_strict_weak_label(label):
+        if queue_issue_for_raw_item(raw_item, issue_family) is not None:
             continue
         raw_path = raw_item.get("path")
         if not raw_path:
@@ -264,6 +312,36 @@ def replacement_identities(source: Path, raw_movies: list[Any]) -> dict[tuple[st
             continue
         replacements.setdefault((title_key(parsed.title), parsed.year), str(path))
     return replacements
+
+
+def queue_issue_for_raw_item(raw_item: dict[str, Any], issue_family: str) -> dict[str, str | None] | None:
+    if issue_family == "weak_encode":
+        label = str((raw_item.get("profile") or {}).get("label") or "")
+        if not is_strict_weak_label(label):
+            return None
+        return {"issue_code": label, "issue_label": label.replace("_", " ")}
+    if issue_family == "audio_packaging":
+        diagnostics = (raw_item.get("profile") or {}).get("diagnostics")
+        if not isinstance(diagnostics, list):
+            return None
+        for code in ("default_non_english_audio_with_weak_english", "default_non_english_audio"):
+            for diagnostic in diagnostics:
+                if not isinstance(diagnostic, dict) or diagnostic.get("code") != code:
+                    continue
+                return {
+                    "issue_code": code,
+                    "issue_label": str(diagnostic.get("summary") or code.replace("_", " ")),
+                }
+        return None
+    raise ValueError(f"unsupported issue family: {issue_family}")
+
+
+def skip_reason_for_issue_family(issue_family: str) -> str:
+    if issue_family == "weak_encode":
+        return "not_strict_weak"
+    if issue_family == "audio_packaging":
+        return "not_audio_packaging"
+    return "not_candidate"
 
 
 def delete_replacement_queue_media(

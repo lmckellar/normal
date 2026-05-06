@@ -141,6 +141,8 @@ class WebTests(unittest.TestCase):
 
     def test_movie_replacement_queue_is_wired_inside_weak_encodes(self) -> None:
         self.assertIn("Replacement Queue", INDEX_HTML)
+        self.assertIn("Replacement Queue · Weak Encode", INDEX_HTML)
+        self.assertIn("Replacement Queue · Audio Packaging", INDEX_HTML)
         self.assertIn("pending delete", INDEX_HTML)
         self.assertIn("deleted and waiting replacement", INDEX_HTML)
         self.assertIn("deleted, waiting replacement", INDEX_HTML)
@@ -161,7 +163,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("function groupedDeletedQueueItems", INDEX_HTML)
         self.assertIn("original_folder_path", INDEX_HTML)
         self.assertIn("['seq','#'],['title','Title'],['year','Year'],['count','Count']", INDEX_HTML)
-        self.assertIn("<th>Movie Title</th><th>Profile</th><th>Resolution</th><th>Video Bitrate</th><th>Action</th>", INDEX_HTML)
+        self.assertIn("<th>Movie Title</th><th>Issue</th><th>Resolution</th><th>Video Bitrate</th><th>Action</th>", INDEX_HTML)
         self.assertIn("attachReplacementQueueDetailHandlers();", INDEX_HTML)
         self.assertIn("function attachReplacementQueueDetailHandlers", INDEX_HTML)
         self.assertNotIn("buildReplacementQueueSection", INDEX_HTML)
@@ -170,7 +172,10 @@ class WebTests(unittest.TestCase):
         self.assertIn("'/api/movies/replacement-queue/add'", INDEX_HTML)
         self.assertIn("'/api/movies/replacement-queue/delete'", INDEX_HTML)
         self.assertIn("function buildMovieQualityTable", INDEX_HTML)
+        self.assertIn("function buildMovieAudioPackagingTable", INDEX_HTML)
         self.assertIn("function strictWeakMovies", INDEX_HTML)
+        self.assertIn("function audioPackagingMovies", INDEX_HTML)
+        self.assertIn("function activeMovieTriageFamily", INDEX_HTML)
         self.assertIn("function replacementQueueItemForPath", INDEX_HTML)
         self.assertIn("function replacementQueueStatusChip", INDEX_HTML)
         self.assertIn("<th>Status</th>", INDEX_HTML)
@@ -189,6 +194,15 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("['strict_weak', 'Strict Weak']", INDEX_HTML)
         self.assertNotIn("<th>Inspect</th>", INDEX_HTML)
         self.assertNotIn("inspect-movie", INDEX_HTML)
+
+    def test_movie_audio_packaging_page_is_wired(self) -> None:
+        self.assertIn("id: 'audio_packaging'", INDEX_HTML)
+        self.assertIn("label: 'Fix Multi-Audio Packaging'", INDEX_HTML)
+        self.assertIn("renderMovieAudioPackaging", INDEX_HTML)
+        self.assertIn("wrong default + weak English", INDEX_HTML)
+        self.assertIn("Wrong Default Language", INDEX_HTML)
+        self.assertIn("Weak English Fallback", INDEX_HTML)
+        self.assertIn("issue_family: issueFamily", INDEX_HTML)
 
     def test_movie_dashboard_has_replacement_queue_summary_without_detail_pane(self) -> None:
         self.assertIn("Deleted, Awaiting Replacement", INDEX_HTML)
