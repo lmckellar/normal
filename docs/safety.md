@@ -38,7 +38,7 @@ All destructive web UI actions follow the same pattern:
 
 **Delete Junk Videos / Delete Junk Sidecar & Spam Files**: selected files are revalidated as current junk candidates before unlink. A file that no longer meets the junk criteria is skipped.
 
-**Delete Weak Encodes / Fix Multi-Audio Packaging**: selected files are added to the movie Replacement Queue and then deleted after confirmation. Deleted items remain visible as `deleted, awaiting replacement` and can be auto-completed by a future scan when a replacement copy appears that no longer matches the queued issue family.
+**Delete Weak Encodes / Fix Multi-Audio Packaging**: selected files are added to the movie Replacement Queue and then deleted after confirmation. Deleted items remain visible as `deleted, awaiting replacement` and can be auto-completed by a future scan when a replacement copy appears that no longer matches the queued issue family. Deleted queue items can also be manually marked `deleted from queue` when they are no longer worth replacing; that action is queue-only and does not delete media.
 
 The CLI does not delete media. Deletion workflows are web-only and require checkbox selection plus confirmation.
 
@@ -51,7 +51,7 @@ Replacement queues are source-scoped and stored under `~/.local/share/normal/`:
 | Movies | `movie-replacement-queue.json` |
 | Music | `music-replacement-queue.json` |
 
-Queue items move forward through states such as `pending`, `deleted`, and `completed`. The tool does not silently remove queue history.
+Queue items move forward through states such as `pending`, `deleted`, `dismissed`, and `completed`. The tool does not silently remove queue history.
 
 ## Scan control
 

@@ -9,6 +9,8 @@
 ### Movie lane
 - Shared movie triage substrate with family-aware replacement queue state
 - New `Fix Multi-Audio Packaging` workflow for MKVs with wrong default language or weak English fallback tracks
+- Replacement queue history filters for `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`
+- Inline dismiss action for deleted queue rows that are not worth replacing
 
 ### Known issue
 - Movie scan cancellation is still best-effort. Under some unknown fast UI interaction pattern, a background `ffprobe` may survive cancellation and fail to appear in the Drive Activity indicator.

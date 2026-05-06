@@ -5,7 +5,7 @@ Local workbench for taming pirated music and movie libraries.
 Two lanes:
 
 - **Music** — normalize FLAC tags, filenames, and folder structure; repair artist artwork for Jellyfin
-- **Movies** — normalize file and folder names; profile encode quality; triage weak encodes, repair or replace multi-audio packaging mistakes, and clean up junk
+- **Movies** — normalize file and folder names; profile encode quality; compare normalized movies against installed service/prestige snapshots; triage weak encodes, repair or replace multi-audio packaging mistakes, and clean up junk
 
 No cloud. No transcoding. No destructive defaults.
 
@@ -56,6 +56,35 @@ For contributors and AI agents working in the codebase: [docs/agent.md](docs/age
 ## Design posture
 
 `normal` is a single-user local utility. Some preferences are intentionally hardcoded rather than surfaced as UI controls — the expected adjustment path is direct repo or agent edits. This is a deliberate v1 stance; see the roadmap for how this evolves toward v2.
+
+Movie replacement queue history now supports four hard filters in the web UI: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Items judged not worth replacing can be dismissed from queue history without deleting any media.
+
+## Comparison datasets
+
+The movie comparison dashboard is local-only in v1. It does not fetch live catalogues or require API keys.
+
+Install JSON snapshot files under:
+
+- `datasets/movie_comparison/` relative to the repo root, or
+- a custom root via `NORMAL_MOVIE_COMPARISON_DATASET_ROOT`
+
+Each file must contain source metadata plus an `entries` list:
+
+```json
+{
+  "dataset_id": "imdb_top_250",
+  "dataset_name": "IMDb Top 250",
+  "dataset_kind": "prestige",
+  "snapshot_date": "2026-05-01",
+  "freshness_label": "snapshot May 2026",
+  "entries": [
+    { "title": "Alien", "year": 1979 },
+    { "title": "Dune Part Two", "year": 2024, "release_date": "2024-03-01" }
+  ]
+}
+```
+
+Supported `dataset_kind` values are `service`, `prestige`, and `recent`.
 
 ## Known issue
 
