@@ -6,6 +6,13 @@
 - UI themes (light, dark, system default)
 - New onboarding documentation
 
+### Movie lane
+- Shared movie triage substrate with family-aware replacement queue state
+- New `Fix Multi-Audio Packaging` workflow for MKVs with wrong default language or weak English fallback tracks
+
+### Known issue
+- Movie scan cancellation is still best-effort. Under some unknown fast UI interaction pattern, a background `ffprobe` may survive cancellation and fail to appear in the Drive Activity indicator.
+
 ## [0.1.0] — 2026-04-30
 
 Initial release.
@@ -34,6 +41,6 @@ Initial release.
 - Library Switcher for Movies / Music lane selection
 - Source path auto-detection from path segments
 - Music: Dashboard, Normalize, Repair Artwork for Jellyfin
-- Movies: Dashboard, Normalize, Delete Weak Encodes, Delete Junk Videos, Delete Junk Sidecar & Spam Files, Export Catalogue
+- Movies: Dashboard, Normalize, Delete Weak Encodes, Fix Multi-Audio Packaging, Delete Junk Videos, Delete Junk Sidecar & Spam Files, Export Catalogue
 - Per-page ETA estimation persisted in localStorage
 - Abort support: Stop button cancels in-flight scans

@@ -158,6 +158,11 @@ Quality ladder (video bitrate, resolution-gated):
 | `4k_remux` | 2160p | ≥ 24,000 |
 | `unclassified` | any | unknown resolution or missing bitrate |
 
+The same `movie-profile` report also powers two separate web triage lanes:
+
+- `Delete Weak Encodes`
+- `Fix Multi-Audio Packaging`
+
 ---
 
 ### movie-inspect
@@ -245,3 +250,14 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 | `--port` | No | Port (default: `8765`) |
 | `--source` | No | Default source path pre-filled in the UI |
 | `--omdb-key` | No | OMDb API key for IMDb ratings in the replacement queue (falls back to `OMDB_KEY` env var) |
+
+Movie pages currently exposed in the web UI:
+
+- `Dashboard View`
+- `Normalize Movie Files & Folders`
+- `Delete Weak Encodes`
+- `Fix Multi-Audio Packaging`
+- `Delete Junk Videos`
+- `Delete Junk Sidecar & Spam Files`
+
+Known issue: some cancelled movie scans can leave a background `ffprobe` running if another UI action starts immediately after cancellation. The exact trigger is still unknown, and the Drive Activity `ps` check may miss the leftover probe.

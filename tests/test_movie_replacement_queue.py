@@ -24,6 +24,26 @@ def profile_item(path: Path, label: str, bitrate: int = 3000) -> dict:
     }
 
 
+def audio_packaging_item(path: Path, code: str) -> dict:
+    return {
+        "path": str(path),
+        "facts": {
+            "resolution_bucket": "1080p",
+            "video_bitrate_kbps": 7000,
+            "file_size_bytes": 1234,
+        },
+        "profile": {
+            "label": "compressed_1080p",
+            "diagnostics": [
+                {
+                    "code": code,
+                    "summary": "Default audio is Italian while English is the weaker fallback.",
+                }
+            ],
+        },
+    }
+
+
 class MovieReplacementQueueTests(unittest.TestCase):
     def test_adds_and_dedupes_strict_weak_items(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -40,6 +60,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             self.assertEqual(len(first["added"]), 1)
             self.assertEqual(len(second["items"]), 1)
             self.assertEqual(second["items"][0]["title"], "Bad Movie")
+            self.assertEqual(second["items"][0]["issue_family"], "weak_encode")
 
     def test_add_strips_zero_padded_collection_index_from_title(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -90,6 +111,26 @@ class MovieReplacementQueueTests(unittest.TestCase):
             self.assertEqual(result["items"], [])
             self.assertEqual({item["reason"] for item in result["skipped"]}, {"not_strict_weak", "unparsed_identity"})
 
+    def test_adds_audio_packaging_items_in_separate_family(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            state = root / "queue.json"
+            source = root / "movies"
+            movie = source / "Audio Movie (2001)" / "Audio Movie (2001).mkv"
+            movie.parent.mkdir(parents=True)
+            movie.write_text("video", encoding="utf-8")
+
+            result = add_profile_items_to_queue(
+                source,
+                [audio_packaging_item(movie, "default_non_english_audio_with_weak_english")],
+                issue_family="audio_packaging",
+                state_path=state,
+            )
+
+            self.assertEqual(len(result["items"]), 1)
+            self.assertEqual(result["items"][0]["issue_family"], "audio_packaging")
+            self.assertEqual(result["items"][0]["issue_code"], "default_non_english_audio_with_weak_english")
+
     def test_reconcile_completes_only_when_replacement_is_not_strict_weak(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -109,6 +150,38 @@ class MovieReplacementQueueTests(unittest.TestCase):
             self.assertEqual(still_pending["items"][0]["status"], "pending")
             self.assertEqual(completed["items"][0]["status"], "completed")
             self.assertEqual(completed["items"][0]["completed_by_path"], str(replacement.resolve()))
+
+    def test_audio_packaging_reconcile_completes_when_replacement_is_no_longer_flagged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            state = root / "queue.json"
+            source = root / "movies"
+            flagged = source / "Audio Movie (2001)" / "Audio Movie (2001).mkv"
+            replacement = source / "Audio Movie (2001) [Remux]" / "Audio Movie (2001) [Remux].mkv"
+            flagged.parent.mkdir(parents=True)
+            replacement.parent.mkdir()
+            flagged.write_text("video", encoding="utf-8")
+            replacement.write_text("video", encoding="utf-8")
+
+            add_profile_items_to_queue(
+                source,
+                [audio_packaging_item(flagged, "default_non_english_audio_with_weak_english")],
+                issue_family="audio_packaging",
+                state_path=state,
+            )
+            still_pending = reconcile_replacement_queue(
+                source,
+                [audio_packaging_item(replacement, "default_non_english_audio")],
+                state_path=state,
+            )
+            completed = reconcile_replacement_queue(
+                source,
+                [profile_item(replacement, "compressed_1080p", 7000)],
+                state_path=state,
+            )
+
+            self.assertEqual(still_pending["items"][0]["status"], "pending")
+            self.assertEqual(completed["items"][0]["status"], "completed")
 
     def test_delete_file_mode_and_folder_mode_are_source_scoped(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

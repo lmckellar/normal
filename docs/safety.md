@@ -38,7 +38,7 @@ All destructive web UI actions follow the same pattern:
 
 **Delete Junk Videos / Delete Junk Sidecar & Spam Files**: selected files are revalidated as current junk candidates before unlink. A file that no longer meets the junk criteria is skipped.
 
-**Delete Weak Encodes**: selected files are added to the Replacement Queue and then deleted after confirmation. Deleted items remain visible as `deleted, awaiting replacement` and can be auto-completed by a future scan when a better copy appears.
+**Delete Weak Encodes / Fix Multi-Audio Packaging**: selected files are added to the movie Replacement Queue and then deleted after confirmation. Deleted items remain visible as `deleted, awaiting replacement` and can be auto-completed by a future scan when a replacement copy appears that no longer matches the queued issue family.
 
 The CLI does not delete media. Deletion workflows are web-only and require checkbox selection plus confirmation.
 
@@ -64,6 +64,12 @@ The web UI uses a Stop/Run toggle for in-flight scans:
 
 Movie metadata probes run through `ffprobe` with a 30 second timeout per file. A timed-out probe becomes a reported warning/error for that file rather than hanging the whole scan indefinitely.
 
+Known open issue:
+
+- Under some not-yet-isolated UI interaction pattern, likely involving cancellation and quickly launching another movie workflow, a background `ffprobe` can survive after the web request is gone.
+- In that state the leftover probe is not guaranteed to appear in the Drive Activity indicator, even though activity discovery also uses `ps`.
+- Treat Stop as best-effort cancellation, not a strict guarantee that every in-flight probe has already exited.
+
 ## Observability
 
 The web UI includes a Drive Activity indicator so users can see whether work is active before assuming the app is frozen.
@@ -80,6 +86,7 @@ External process visibility is implemented with a Linux `ps` query scoped by sou
 - it does not terminate external processes
 - it does not inspect file contents
 - it may miss processes whose command line does not include the selected source path
+- it may miss leftover probes from the open cancellation/visibility issue above
 
 If the OS process check is unavailable or times out, the UI reports that process activity is unknown and continues operating.
 

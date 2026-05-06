@@ -44,6 +44,17 @@ class QualityReason:
 
 
 @dataclass(slots=True)
+class AudioStreamFacts:
+    index: int | None = None
+    codec: str | None = None
+    bitrate_kbps: int | None = None
+    channels: int | None = None
+    language: str | None = None
+    title: str | None = None
+    is_default: bool = False
+
+
+@dataclass(slots=True)
 class MediaFacts:
     runtime_seconds: int | None = None
     file_size_bytes: int | None = None
@@ -73,6 +84,7 @@ class MediaFacts:
     attachment_stream_count: int = 0
     default_audio_streams: int = 0
     default_subtitle_streams: int = 0
+    audio_streams: list[AudioStreamFacts] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -184,10 +196,25 @@ def score_quality_review(facts: MediaFacts, path: str | Path | None = None) -> Q
         audio_codec=facts.audio_codec,
         audio_bitrate_kbps=facts.audio_bitrate_kbps,
         audio_channels=facts.audio_channels,
+        audio_profile=facts.audio_profile,
         total_bitrate_kbps=facts.total_bitrate_kbps,
         name_resolution_hint=resolved_hint,
         resolution_bucket=resolution_bucket,
         video_bitrate_approximate=bitrate_is_approximate,
+        video_profile=facts.video_profile,
+        video_level=facts.video_level,
+        pixel_format=facts.pixel_format,
+        frame_rate=facts.frame_rate,
+        average_frame_rate=facts.average_frame_rate,
+        video_stream_count=facts.video_stream_count,
+        audio_stream_count=facts.audio_stream_count,
+        subtitle_stream_count=facts.subtitle_stream_count,
+        subtitle_codecs=list(facts.subtitle_codecs),
+        audio_codecs=list(facts.audio_codecs),
+        attachment_stream_count=facts.attachment_stream_count,
+        default_audio_streams=facts.default_audio_streams,
+        default_subtitle_streams=facts.default_subtitle_streams,
+        audio_streams=list(facts.audio_streams),
     )
 
     score = 0

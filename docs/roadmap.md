@@ -4,7 +4,7 @@
 
 Music lane: scan, plan, apply, artist deduplication, dashboard profile, artwork repair for Jellyfin, CSV export.
 
-Movie lane: normalize names, encode quality profiling, weak encode triage with replacement queue, junk video and sidecar & spam file cleanup, dashboard, XLSX catalogue export.
+Movie lane: normalize names, encode quality profiling, weak encode triage, multi-audio packaging triage, shared replacement queue workflow, junk video and sidecar & spam file cleanup, dashboard, XLSX catalogue export.
 
 Both lanes: local web UI, full CLI surface.
 
@@ -23,6 +23,7 @@ Features in no particular order. Priority will be shaped by usage patterns after
 - **Onboarding copy** — improve in-app onboarding text to better orient new users
 - **Configurable preference defaults** — quality thresholds, replacement priority weights, normalization rules are currently hardcoded; surface as documented config before adding UI controls
 - **Broader platform testing** — Linux-first for v1; Windows and macOS rough edges are known and deferred
+- **Probe lifecycle hardening** — isolate and fix the open issue where cancelled movie scans can leave background `ffprobe` processes that are not always visible through the current activity indicator
 
 ## v2 — standalone
 
