@@ -8,6 +8,7 @@ from normal.movie_replacement_queue import (
     add_profile_items_to_queue,
     clear_pending_queue_items,
     delete_replacement_queue_media,
+    dismiss_replacement_queue_items,
     load_queue,
     reconcile_replacement_queue,
 )
@@ -308,6 +309,50 @@ class MovieReplacementQueueTests(unittest.TestCase):
 
             self.assertEqual(completed["items"][0]["status"], "completed")
             self.assertEqual(completed["items"][0]["completed_by_path"], str(replacement.resolve()))
+
+    def test_deleted_items_can_be_dismissed_from_queue_without_touching_media(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            state = root / "queue.json"
+            source = root / "movies"
+            weak = source / "Bad Movie (2001)" / "Bad Movie (2001).mkv"
+            replacement = source / "Bad Movie (2001) [BluRay]" / "Bad Movie (2001) [BluRay].mkv"
+            weak.parent.mkdir(parents=True)
+            weak.write_text("video", encoding="utf-8")
+
+            queued = add_profile_items_to_queue(source, [profile_item(weak, "sd_low_quality")], state_path=state)
+            deleted = delete_replacement_queue_media(source, [queued["added"][0]["item_id"]], state_path=state)
+            dismissed = dismiss_replacement_queue_items(source, [deleted["items"][0]["item_id"]], state_path=state)
+
+            self.assertEqual(dismissed["items"][0]["status"], "dismissed")
+            self.assertIsNotNone(dismissed["items"][0]["dismissed_at"])
+
+            replacement.parent.mkdir()
+            replacement.write_text("video", encoding="utf-8")
+            reconciled = reconcile_replacement_queue(
+                source,
+                [profile_item(replacement, "compressed_1080p", 7000)],
+                state_path=state,
+            )
+
+            self.assertEqual(reconciled["items"][0]["status"], "dismissed")
+
+    def test_requeue_clears_dismissed_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            state = root / "queue.json"
+            source = root / "movies"
+            movie = source / "Bad Movie (2001)" / "Bad Movie (2001).mkv"
+            movie.parent.mkdir(parents=True)
+            movie.write_text("video", encoding="utf-8")
+
+            queued = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+            deleted = delete_replacement_queue_media(source, [queued["added"][0]["item_id"]], state_path=state)
+            dismiss_replacement_queue_items(source, [deleted["items"][0]["item_id"]], state_path=state)
+            requeued = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+
+            self.assertEqual(requeued["items"][0]["status"], "pending")
+            self.assertIsNone(requeued["items"][0]["dismissed_at"])
 
     def test_load_queue_migrates_deleted_pending_items(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -61,6 +61,7 @@ class ReplacementQueueItem:
     queued_at: str
     status: str = "pending"
     deleted_at: str | None = None
+    dismissed_at: str | None = None
     completed_at: str | None = None
     completed_by_path: str | None = None
 
@@ -242,6 +243,7 @@ def add_profile_items_to_queue(
         else:
             existing["status"] = "pending"
             existing["deleted_at"] = None
+            existing["dismissed_at"] = None
             existing["completed_at"] = None
             existing["completed_by_path"] = None
             added.append(existing)
@@ -432,6 +434,36 @@ def delete_replacement_queue_media(
     response["deleted"] = deleted
     response["cleaned_sidecars"] = cleaned_sidecars
     response["removed_folders"] = removed_folders
+    response["skipped"] = skipped
+    return response
+
+
+def dismiss_replacement_queue_items(
+    source_root: Path,
+    item_ids: list[Any],
+    state_path: Path | None = None,
+) -> dict[str, Any]:
+    source = source_root.resolve()
+    requested = {str(item_id) for item_id in item_ids}
+    payload = load_queue(state_path)
+    dismissed: list[dict[str, str]] = []
+    skipped: list[dict[str, str]] = []
+    now = utc_now_iso()
+
+    for item in payload["items"]:
+        item_id = str(item.get("item_id") or "")
+        if item_id not in requested or item.get("source_root") != str(source):
+            continue
+        if item.get("status") != "deleted":
+            skipped.append({"item_id": item_id, "reason": "not_deleted"})
+            continue
+        item["status"] = "dismissed"
+        item["dismissed_at"] = now
+        dismissed.append({"item_id": item_id, "path": str(item.get("original_path") or "")})
+
+    save_queue(payload, state_path)
+    response = queue_for_source(source, state_path)
+    response["dismissed"] = dismissed
     response["skipped"] = skipped
     return response
 

@@ -1,15 +1,21 @@
 from __future__ import annotations
 
 import tempfile
+import threading
 import unittest
+from http.server import ThreadingHTTPServer
+import json
 from pathlib import Path
 from subprocess import CompletedProcess
+from urllib.request import Request, urlopen
 from unittest.mock import patch
 
+from normal.quality_review import MediaFacts
 from normal.web import (
     INDEX_HTML,
     ActivityTracker,
     build_activity_payload,
+    build_handler,
     delete_movie_junk_files,
     find_external_activity,
     format_storage_size,
@@ -168,6 +174,17 @@ class WebTests(unittest.TestCase):
         self.assertIn("endpoint: '/api/movies/promo-docs'", INDEX_HTML)
         self.assertIn("'/api/movies/junk/delete'", INDEX_HTML)
 
+    def test_movie_comparison_dashboard_is_wired(self) -> None:
+        self.assertIn("id: 'comparison'", INDEX_HTML)
+        self.assertIn("label: 'Streaming Service Comparison Dashboard'", INDEX_HTML)
+        self.assertIn("endpoint: '/api/movies/comparison-dashboard'", INDEX_HTML)
+        self.assertIn("renderMovieComparison", INDEX_HTML)
+        self.assertIn("selectedComparisonDatasetIds: new Set()", INDEX_HTML)
+        self.assertIn("requestBody.selected_dataset_ids = Array.from(state.selectedComparisonDatasetIds);", INDEX_HTML)
+        self.assertIn("No comparison datasets are installed.", INDEX_HTML)
+        self.assertIn("IMDb Top 250", INDEX_HTML)
+        self.assertIn("snapshot date missing", INDEX_HTML)
+
     def test_movie_replacement_queue_is_wired_inside_weak_encodes(self) -> None:
         self.assertIn("Replacement Queue", INDEX_HTML)
         self.assertIn("Replacement Queue · Weak Encode", INDEX_HTML)
@@ -176,7 +193,12 @@ class WebTests(unittest.TestCase):
         self.assertIn("deleted and waiting replacement", INDEX_HTML)
         self.assertIn("deleted, waiting replacement", INDEX_HTML)
         self.assertIn("successfully replaced", INDEX_HTML)
-        self.assertIn("Successfully Replaced", INDEX_HTML)
+        self.assertIn("deleted from queue", INDEX_HTML)
+        self.assertIn("Replacement History", INDEX_HTML)
+        self.assertIn("Deleted, Awaiting Replacement", INDEX_HTML)
+        self.assertIn("Replaced", INDEX_HTML)
+        self.assertIn("Deleted From Queue", INDEX_HTML)
+        self.assertIn("All Items", INDEX_HTML)
         self.assertIn("queue-list", INDEX_HTML)
         self.assertIn("queue-list-row", INDEX_HTML)
         self.assertIn("Select All", INDEX_HTML)
@@ -189,7 +211,10 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("queueReplacementFoldersButton", INDEX_HTML)
         self.assertIn("renderReplacementQueueDetail", INDEX_HTML)
         self.assertIn("function buildPendingReplacementTable", INDEX_HTML)
-        self.assertIn("function groupedDeletedQueueItems", INDEX_HTML)
+        self.assertIn("function buildReplacementHistoryTable", INDEX_HTML)
+        self.assertIn("function groupedReplacementHistoryItems", INDEX_HTML)
+        self.assertIn("replacementHistoryFilter: 'deleted'", INDEX_HTML)
+        self.assertIn("replacementHistorySort: { col: null, dir: 'asc' }", INDEX_HTML)
         self.assertIn("original_folder_path", INDEX_HTML)
         self.assertIn("['seq','#'],['title','Title'],['year','Year'],['count','Count']", INDEX_HTML)
         self.assertIn("<th>Movie Title</th><th>Issue</th><th>Resolution</th><th>Video Bitrate</th><th>Action</th>", INDEX_HTML)
@@ -200,6 +225,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("'/api/movies/replacement-queue/list'", INDEX_HTML)
         self.assertIn("'/api/movies/replacement-queue/add'", INDEX_HTML)
         self.assertIn("'/api/movies/replacement-queue/delete'", INDEX_HTML)
+        self.assertIn("'/api/movies/replacement-queue/dismiss'", INDEX_HTML)
         self.assertIn("function buildMovieQualityTable", INDEX_HTML)
         self.assertIn("function buildMovieAudioPackagingTable", INDEX_HTML)
         self.assertIn("function strictWeakMovies", INDEX_HTML)
@@ -207,6 +233,10 @@ class WebTests(unittest.TestCase):
         self.assertIn("function activeMovieTriageFamily", INDEX_HTML)
         self.assertIn("function replacementQueueItemForPath", INDEX_HTML)
         self.assertIn("function replacementQueueStatusChip", INDEX_HTML)
+        self.assertIn("replacement-history-filter", INDEX_HTML)
+        self.assertIn("replacement-history-sort-th", INDEX_HTML)
+        self.assertIn("replacement-history-remove", INDEX_HTML)
+        self.assertIn("queue-inline-remove", INDEX_HTML)
         self.assertIn("<th>Status</th>", INDEX_HTML)
         self.assertIn("queued</span>", INDEX_HTML)
         self.assertIn("Deleted, Waiting Replacement", INDEX_HTML)
@@ -218,6 +248,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("const source = sourceInput.value.trim() || queue?.source_root || ''", INDEX_HTML)
         self.assertIn("Choose a source directory before deleting replacement media.", INDEX_HTML)
         self.assertIn("No pending replacement media is selected for deletion.", INDEX_HTML)
+        self.assertIn("Choose a source directory before removing items from the replacement queue.", INDEX_HTML)
+        self.assertIn("Remove from queue", INDEX_HTML)
         self.assertIn("['file','profile','resolution','video_bitrate','audio_bitrate','file_size']", INDEX_HTML)
         self.assertNotIn("Select strict weak", INDEX_HTML)
         self.assertNotIn("['strict_weak', 'Strict Weak']", INDEX_HTML)
@@ -277,6 +309,38 @@ class WebTests(unittest.TestCase):
         self.assertIn("function applySelectedMovieChanges", INDEX_HTML)
         self.assertIn("showMovieNormalizeTreeDetail", INDEX_HTML)
         self.assertIn("All Safe", INDEX_HTML)
+
+    def test_movie_comparison_api_returns_no_dataset_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "movies"
+            datasets = Path(tmpdir) / "datasets"
+            source.mkdir()
+            datasets.mkdir()
+            (source / "Alien.1979.1080p.mkv").write_text("video", encoding="utf-8")
+            handler = build_handler(default_source=source)
+            server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                with patch.dict("os.environ", {"NORMAL_MOVIE_COMPARISON_DATASET_ROOT": str(datasets)}), patch(
+                    "normal.web.tracked_probe",
+                    return_value=lambda _: MediaFacts(width=1920, height=1080, video_bitrate_kbps=6000),
+                ):
+                    request = Request(
+                        f"http://127.0.0.1:{server.server_port}/api/movies/comparison-dashboard",
+                        data=b"{}",
+                        headers={"Content-Type": "application/json"},
+                        method="POST",
+                    )
+                    with urlopen(request) as response:
+                        payload = json.load(response)
+                self.assertEqual(payload["available_datasets"], [])
+                warning_codes = {item["code"] for item in payload["warnings"]}
+                self.assertIn("no_comparison_datasets", warning_codes)
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=2)
 
     def test_music_artwork_page_is_album_artist_browser(self) -> None:
         self.assertIn("label: 'Repair Artwork for Jellyfin'", INDEX_HTML)

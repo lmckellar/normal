@@ -16,6 +16,8 @@ normal/
 ├── movie_scan.py                # Movie scan: ffprobe probing, quality scoring, triage
 ├── movie_plan.py                # Movie plan: title/year parsing, rename proposals
 ├── movie_profile.py             # Movie profile: quality ladder classification, heuristic findings
+├── movie_comparison.py          # Movie comparison: strict normalized matching vs local benchmark datasets
+├── movie_audio_fix.py           # Movie audio packaging repair: lossless MKV remux helpers
 ├── movie_inspect.py             # Movie inspect: single-file diagnostic
 ├── movie_junk.py                # Movie junk: sample/featurette/short detection
 ├── movie_replacement_queue.py   # Replacement queue: persistent state for movie triage families
@@ -37,6 +39,8 @@ docs/                            # User and agent documentation
 - **Music normalization pipeline**: `scan.py` → `plan.py` → `apply.py` → `output.py`
 - **Movie normalization pipeline**: `movie_plan.py` → `movie_apply` (in `commands.py`)
 - **Movie quality pipeline**: `movie_scan.py` → `movie_profile.py` → `movie_inspect.py` → `movie_junk.py`
+- **Movie comparison pipeline**: `movie_plan.py` + `movie_profile.py` → `movie_comparison.py`
+- **Movie audio packaging repair**: `movie_profile.py` → `movie_audio_fix.py`
 - **Web layer**: `web.py` — all HTTP routes in one file; stdlib `http.server`, no external framework
 - **Shared data contract**: `models.py` — `ProposedChange` is the core type crossing module boundaries
 - **Persistent state**: `movie_replacement_queue.py` writes to `~/.local/share/normal/movie-replacement-queue.json`
@@ -49,7 +53,7 @@ python3 -m normal <command> [flags]
 normal <command> [flags]         # after pip install
 
 # Tests
-python3 -m pytest tests/
+python3 -m unittest discover -s tests
 
 # Web server (local workstation note: use python3 -m normal, not python)
 python3 -m normal web --host 127.0.0.1 --port 8765 --source /path/to/library
@@ -96,6 +100,40 @@ Per-file classification against the quality ladder. See `docs/commands.md` for t
 
 Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_risk`, `multi_audio_anime_mux_risk`, `high_complexity_hevc_tv_risk`, `episodic_naming_parse_risk`, `anime_absolute_numbering_risk`, `attachment_heavy_visibility_risk`, `default_non_english_audio`, `default_non_english_audio_with_weak_english`.
 
+### Movie comparison report (JSON)
+
+Separate read-only payload for `Movies > Streaming Service Comparison Dashboard`.
+
+Top-level shape:
+
+- `source_root`, `dataset_root`, `generated_at`
+- `available_datasets`
+- `selected_dataset_ids`
+- `aggregates`
+- `service_datasets`
+- `prestige_datasets`
+- `recent_datasets`
+- `unmatched_local_titles`
+- `warnings`
+
+Strict comparison rules:
+
+- reuse existing local movie title/year parsing from `movie_plan.py`
+- include only titles whose parse confidence is `safe`
+- normalized title plus same year only
+- punctuation/case normalization only
+- no fuzzy matching in v1
+- duplicate local copies collapse to one title; strongest local profile is used for threshold summaries
+
+Dataset metadata contract:
+
+- `dataset_id`
+- `dataset_name`
+- `dataset_kind`: `service`, `prestige`, or `recent`
+- `snapshot_date`
+- `freshness_label`
+- `entries`: `{title, year, optional release_date}`
+
 ### Replacement queue (JSON)
 
 Path: `~/.local/share/normal/movie-replacement-queue.json`
@@ -117,24 +155,36 @@ All routes in `web.py`. Key families:
 
 | Route | Method | Description |
 |---|---|---|
-| `/api/music/scan` | GET | Full music scan |
+| `/api/activity?source=...` | GET | Current normal / ffprobe / ffmpeg activity for a source |
+| `/api/library-roots` | GET / POST | Load or save main and recent library roots |
+| `/api/source/scan-warning` | POST | Detect likely drive-root scans and return a confirmation warning payload |
 | `/api/music/apply` | POST | Apply selected music changes in-place |
 | `/api/music/profile` | POST | Music dashboard profile / weak encode triage payload |
-| `/api/music/artwork` | GET | Artist artwork scan |
-| `/api/music/artwork/save` | POST | Write approved artwork for one artist |
-| `/api/music/artwork/write-selected` | POST | Bulk write selected Jellyfin-cache candidates |
-| `/api/music/artwork/sync-jellyfin` | POST | Copy library sidecars into Jellyfin metadata cache |
-| `/api/movies/scan` | GET | Movie quality scan |
+| `/api/music/normalize` | POST | Build music normalize plan |
+| `/api/music/replacement-queue/list` | POST | Music replacement queue for current source |
+| `/api/music/replacement-queue/add` | POST | Add music profile items to queue |
+| `/api/music/replacement-queue/delete` | POST | Delete queued music items and mark them deleted |
+| `/api/music/artwork/scan` | POST | Artist artwork scan |
+| `/api/music/artwork/candidates` | POST | Candidate discovery for one artist |
+| `/api/music/artwork/image-search` | POST | Paginated image-search candidates for one artist |
+| `/api/music/artwork/apply` | POST | Apply approved artwork candidates |
+| `/api/music/artwork/backfill-jellyfin` | POST | Copy local artist sidecars into Jellyfin metadata cache |
+| `/api/music/artwork/promote` | POST | Promote a cached/approved artwork candidate |
+| `/api/music/artwork/image?...` | GET | Serve artwork preview image bytes |
 | `/api/movies/apply` | POST | Apply selected movie renames in-place |
 | `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, and audio packaging triage |
-| `/api/movies/junk` | GET | Junk video scan |
+| `/api/movies/comparison-dashboard` | POST | Strict comparison payload against installed service/prestige/recent datasets |
+| `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
+| `/api/movies/inspect` | POST | One-file movie diagnostic payload |
+| `/api/movies/normalize` | POST | Build movie normalize plan |
+| `/api/movies/junk` | POST | Junk video scan |
+| `/api/movies/promo-docs` | POST | Sidecar and spam-file scan |
 | `/api/movies/junk/delete` | POST | Delete selected junk files |
-| `/api/movies/misc-junk` | GET | Sidecar and spam file scan |
-| `/api/movies/misc-junk/delete` | POST | Delete selected sidecar and spam files |
 | `/api/movies/replacement-queue/list` | POST | Queue state for current source, optionally filtered by issue family |
 | `/api/movies/replacement-queue/add` | POST | Add movie triage items to the queue |
 | `/api/movies/replacement-queue/delete` | POST | Delete queued movie triage items and mark them deleted |
-| `/api/movies/catalogue` | GET | Inline catalogue scan for XLSX download |
+| `/api/movies/replacement-queue/dismiss` | POST | Mark deleted movie queue items as dismissed without touching media |
+| `/api/movies/audio-packaging/fix` | POST | Lossless MKV remux to fix English-default audio packaging when possible |
 
 ## Safety constraints
 
@@ -147,6 +197,7 @@ Hard rules — do not relax without explicit user instruction:
 5. Web UI delete routes validate each path against the current source root before unlinking; outside-root paths are rejected.
 6. Junk deletion revalidates each candidate as junk immediately before deletion.
 7. No remote metadata fetching — all data comes from local files only.
+8. Movie comparison datasets are local JSON snapshots only in v1. Do not add live fetches or API-key requirements without explicit instruction.
 
 ## Intentional design decisions
 
@@ -154,11 +205,14 @@ These are deliberate choices, not gaps:
 
 - **Hardcoded preferences over UI controls (v1 posture).** Quality thresholds, replacement priority weights, normalization rules are in code. The adjustment path is repo/agent edits. This is the core v1 stance; v2 changes it.
 - **Movie triage now has separate lanes on one shared scan.** `Delete Weak Encodes` and `Fix Multi-Audio Packaging` are sibling workflows backed by the same `movie-profile` report and the same replacement queue substrate. Keep workflow/UI code shared where possible, but keep issue-family rules separate.
+- **Movie comparison is a separate dashboard, not an extension of `movie-profile`.** Keep the comparison payload and route independent. Reuse normalization and profile logic underneath, but do not merge it into the existing dashboard contract.
+- **Comparison matching stays strict in v1.** Safe local parse only, normalized title plus same year, punctuation/case normalization only, no fuzzy matching.
+- **Comparison datasets are local snapshots.** Default root is `datasets/movie_comparison/`, overridable with `NORMAL_MOVIE_COMPARISON_DATASET_ROOT`. Freshness is descriptive metadata shown to the user, not inferred remotely.
 - **`Movies > Plex Compatibility` is hidden in the v1 UI.** The heuristics live in `movie_profile.py`. The page is suppressed because the workflow isn't concrete enough. Do not re-expose it without a workflow design.
 - **Music normalization is FLAC-only.** MP3 appears in dashboard profile views but is not a normalization target in v1.
 - **No external web framework.** `web.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.
 - **Strict weak encode profiles.** Strict weak = `sd_low_quality`, `weak_1080p`, `weak_4k`, `unclassified`. `minimum_acceptable_1080p` and above are never shown as deletion candidates in the default view. Do not change this threshold without explicit instruction.
-- **Replacement queue is append-only from the tool.** Items move forward through states but are never silently removed. Auto-completion (`completed`) happens on future scans when a replacement appears.
+- **Replacement queue keeps audit history.** Items move forward through states and are never silently removed. Auto-completion (`completed`) happens on future scans when a replacement appears. Manual dismissal (`dismissed`) is explicit queue state, not media deletion.
 - **Probe cancellation is not fully hardened yet.** There is a known open issue where cancelling a movie scan and quickly starting another UI action can leave a background `ffprobe` running, and the activity indicator may miss it. Do not document cancellation as stronger than best-effort until that is fixed.
 - **No cross-platform guarantees for v1.** Linux-first. Windows/macOS rough edges are known and deferred.
 - **`--in-place` is always explicit.** Never infer in-place mutation from context; the flag must be present.

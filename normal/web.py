@@ -21,6 +21,7 @@ from typing import Any, Callable, Iterator
 from PIL import Image
 
 from normal.movie_audio_fix import fix_english_audio_defaults
+from normal.movie_comparison import build_movie_comparison_report
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_junk import (
     detect_movie_junk_document_reasons,
@@ -35,6 +36,7 @@ from normal.movie_replacement_queue import (
     add_profile_items_to_queue,
     clear_pending_queue_items,
     delete_replacement_queue_media,
+    dismiss_replacement_queue_items,
     queue_for_source,
     reconcile_replacement_queue,
 )
@@ -565,6 +567,16 @@ INDEX_HTML = """<!doctype html>
     .chip.playback { background: rgba(15,92,77,0.12); color: var(--accent); border-color: rgba(15,92,77,0.2); }
     .chip.indexing { background: rgba(138,91,0,0.12); color: var(--warn); border-color: rgba(138,91,0,0.2); }
     .chip.meta { background: rgba(45,94,168,0.12); color: var(--music); border-color: rgba(45,94,168,0.2); }
+    .queue-inline-remove {
+      border: 0;
+      background: transparent;
+      color: var(--danger);
+      padding: 0 0 0 8px;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1;
+      vertical-align: middle;
+    }
     .mono {
       font-family: ui-monospace, Menlo, Consolas, monospace;
       word-break: break-all;
@@ -948,18 +960,20 @@ INDEX_HTML = """<!doctype html>
       filter: 'all',
       qualitySort: { col: null, dir: 'asc' },
       musicQualitySort: { col: null, dir: 'asc' },
-      deletedSort: { col: null, dir: 'asc' },
+      replacementHistoryFilter: 'deleted',
+      replacementHistorySort: { col: null, dir: 'asc' },
       omdbRatings: new Map(),
       selectedJunkPaths: new Set(),
       selectedReplacementPaths: new Set(),
       selectedChangeIds: new Set(),
       selectedArtistNames: new Set(),
+      selectedComparisonDatasetIds: new Set(),
       approvedArtworkCandidates: {},
       artworkCandidates: {},
       artworkImageSearchOffsets: {},
       results: {
         music: { profile: null, normalize: null, apply: null, artwork: null, replacementQueue: null, replacementQueueSource: '' },
-        movies: { profile: null, normalize: null, apply: null, junk: null, replacementQueue: null, replacementQueueSource: '' }
+        movies: { profile: null, normalize: null, apply: null, junk: null, comparison: null, replacementQueue: null, replacementQueueSource: '' }
       }
     };
 
@@ -982,6 +996,7 @@ INDEX_HTML = """<!doctype html>
         sourceLabel: '/path/to/movie or TV library',
         pages: [
           { id: 'library', label: 'Dashboard View', action: 'scan', endpoint: '/api/movies/profile' },
+          { id: 'comparison', label: 'Streaming Service Comparison Dashboard', action: 'scan', endpoint: '/api/movies/comparison-dashboard' },
           { id: 'normalize', label: 'Normalize Movie Files & Folders', action: 'plan', endpoint: '/api/movies/normalize' },
           { id: 'quality', label: 'Delete Weak Encodes', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'audio_packaging', label: 'Fix Multi-Audio Packaging', action: 'scan', endpoint: '/api/movies/profile' },
@@ -1652,7 +1667,8 @@ INDEX_HTML = """<!doctype html>
       state.filter = page === 'quality' ? 'strict_weak' : 'all';
       state.qualitySort = { col: null, dir: 'asc' };
       state.musicQualitySort = { col: null, dir: 'asc' };
-      state.deletedSort = { col: null, dir: 'asc' };
+      state.replacementHistoryFilter = 'deleted';
+      state.replacementHistorySort = { col: null, dir: 'asc' };
       renderPageNav();
       renderCurrentPage();
     }
@@ -1727,10 +1743,14 @@ INDEX_HTML = """<!doctype html>
       startScanTimer(_scanDurations[_durationKey]);
       refreshActivityState();
       try {
+        const requestBody = { source };
+        if (state.lane === 'movies' && state.page === 'comparison') {
+          requestBody.selected_dataset_ids = Array.from(state.selectedComparisonDatasetIds);
+        }
         const response = await fetch(pageConfig.endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source }),
+          body: JSON.stringify(requestBody),
           signal: _activeRunController.signal
         });
         const payload = await response.json();
@@ -1807,6 +1827,10 @@ INDEX_HTML = """<!doctype html>
           }
           state.selectedReplacementPaths.clear();
         }
+        if (page === 'comparison') {
+          state.results.movies.comparison = payload;
+          state.selectedComparisonDatasetIds = new Set(payload.selected_dataset_ids || []);
+        }
         if (page === 'normalize') {
           state.results.movies.normalize = payload;
           state.results.movies.apply = null;
@@ -1826,6 +1850,7 @@ INDEX_HTML = """<!doctype html>
         normalize: 'Normalize',
         artwork: 'Artwork',
         recommend: 'Recommend',
+        comparison: 'Streaming Service Comparison Dashboard',
         quality: 'Delete Weak Encodes',
         audio_packaging: 'Fix Multi-Audio Packaging',
         music_quality: 'Delete Weak Encodes',
@@ -1871,6 +1896,11 @@ INDEX_HTML = """<!doctype html>
       const profile = currentMovieProfileForSource();
       const normalize = state.results.movies.normalize;
       const junk = state.results.movies.junk;
+      const comparison = state.results.movies.comparison;
+      if (page === 'comparison') {
+        renderMovieComparison(comparison);
+        return;
+      }
       if (page === 'normalize') {
         renderMovieNormalize(normalize);
         return;
@@ -2003,7 +2033,7 @@ INDEX_HTML = """<!doctype html>
       const qDeleted = queueItems.filter(i => i.status === 'deleted').length;
       const qCompleted = queueItems.filter(i => i.status === 'completed').length;
       const qSource = sourceInput.value.trim() || queue?.source_root || '';
-      const queueSummary = (qPending || qDeleted || qCompleted) ? `
+      const queueSummary = (qPending || qDeleted || qCompleted || qDismissed) ? `
         <div class="finding">
           <h3>Replacement Queue</h3>
           <p>${qPending} pending delete · ${qDeleted} deleted and waiting replacement · ${qCompleted} successfully replaced</p>
@@ -2838,6 +2868,168 @@ INDEX_HTML = """<!doctype html>
       mainContent.innerHTML = buildMovieAudioPackagingTable(payload, items);
       renderReplacementQueueDetail(payload);
       attachMovieReplacementHandlers(payload, items);
+    }
+
+    function renderMovieComparison(payload) {
+      mainTagline.textContent = 'Read-only overlap against installed snapshot datasets. Matching is strict: normalized title plus same year, with non-normalized local files skipped.';
+      renderMetrics(buildMovieComparisonMetrics(payload));
+      renderBars(buildMovieComparisonBars(payload));
+      filterBar.innerHTML = '';
+      if (!payload) {
+        mainContent.innerHTML = '<div class="empty">Run Movies / Streaming Service Comparison Dashboard to compare normalized movies against installed datasets.</div>';
+        detailPanel.innerHTML = '<div class="empty">Install dataset JSON files first if you want benchmark coverage results.</div>';
+        return;
+      }
+      mainContent.innerHTML = buildMovieComparisonDashboard(payload);
+      detailPanel.innerHTML = buildMovieComparisonDetail(payload);
+      attachMovieComparisonHandlers(payload);
+    }
+
+    function buildMovieComparisonMetrics(payload) {
+      if (!payload?.aggregates) return [];
+      const metrics = payload.aggregates;
+      return [
+        { value: String(metrics.total_normalized_movies ?? 0), label: 'normalized movies' },
+        { value: String(metrics.service_union_overlap_count ?? 0), label: 'service union matches' },
+        { value: formatPercent(metrics.minimum_acceptable_or_better_pct_within_service_matches), label: 'minimum acceptable or better' },
+        { value: String(metrics.weak_matches_count ?? 0), label: 'weak matches' },
+      ];
+    }
+
+    function buildMovieComparisonBars(payload) {
+      if (!payload?.aggregates) return [];
+      const metrics = payload.aggregates;
+      return [
+        { label: 'service union coverage', value: formatPercent(metrics.service_union_overlap_pct), width: metrics.service_union_overlap_pct || 0 },
+        { label: 'recent releases (18m)', value: formatPercent(metrics.recent_releases_18m_pct), width: metrics.recent_releases_18m_pct || 0 },
+        { label: 'IMDb Top 250', value: formatPercent(metrics.imdb_top_250_coverage_pct), width: metrics.imdb_top_250_coverage_pct || 0 },
+      ];
+    }
+
+    function buildMovieComparisonDashboard(payload) {
+      const services = payload.service_datasets || [];
+      const prestige = payload.prestige_datasets || [];
+      const recent = payload.recent_datasets || [];
+      const metrics = payload.aggregates || {};
+      const datasets = payload.available_datasets || [];
+      const selected = new Set(payload.selected_dataset_ids || []);
+      const warnings = payload.warnings || [];
+      const serviceRows = services.map(report => `
+        <tr>
+          <td>${escapeHtml(report.metadata.dataset_name)}</td>
+          <td>${report.overlap_count}</td>
+          <td>${formatPercent(report.overlap_pct)}</td>
+          <td>${escapeHtml(datasetFreshnessLabel(report.metadata))}</td>
+        </tr>
+      `).join('');
+      const prestigeRows = prestige.map(report => `
+        <tr>
+          <td>${escapeHtml(report.metadata.dataset_name)}</td>
+          <td>${report.overlap_count}</td>
+          <td>${formatPercent(report.overlap_pct)}</td>
+          <td>${escapeHtml(datasetFreshnessLabel(report.metadata))}</td>
+        </tr>
+      `).join('');
+      return `
+        <section class="finding">
+          <h3>Installed Datasets</h3>
+          <p class="subtle">Comparisons are snapshot-based. Freshness labels and snapshot dates are shown directly from local dataset metadata.</p>
+          ${datasets.length ? `
+            <div class="filter-row">
+              ${(datasets).map(dataset => `
+                <label class="filter-button ${selected.has(dataset.dataset_id) ? 'active' : ''}" style="display:inline-flex;align-items:center;gap:8px">
+                  <input type="checkbox" class="comparison-dataset-toggle" data-dataset-id="${escapeHtml(dataset.dataset_id)}" ${selected.has(dataset.dataset_id) ? 'checked' : ''}>
+                  <span>${escapeHtml(dataset.dataset_name)}</span>
+                </label>
+              `).join('')}
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <button class="primary" id="runComparisonSelectionButton">Refresh Selection</button>
+              <span class="subtle">${selected.size} selected</span>
+            </div>
+          ` : '<div class="empty">No comparison datasets are installed.</div>'}
+        </section>
+        <section class="finding">
+          <h3>Streaming Overlap</h3>
+          <p>${metrics.service_union_overlap_count ?? 0} matches across the selected service union · ${formatPercent(metrics.service_union_overlap_pct)} of normalized local movies.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Service</th><th>Overlap Count</th><th>Overlap Percent</th><th>Freshness</th></tr></thead>
+              <tbody>${serviceRows || '<tr><td colspan="4" class="subtle">No service datasets selected.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </section>
+        <section class="finding">
+          <h3>Prestige Coverage</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>List</th><th>Overlap Count</th><th>Coverage Percent</th><th>Freshness</th></tr></thead>
+              <tbody>${prestigeRows || '<tr><td colspan="4" class="subtle">No prestige datasets selected.</td></tr>'}</tbody>
+            </table>
+          </div>
+        </section>
+        <section class="finding">
+          <h3>Recency + Quality Summary</h3>
+          <p>${metrics.recent_releases_18m_count ?? 0} recent releases in the last 18 months · ${formatPercent(metrics.recent_releases_18m_pct)} of normalized local movies.</p>
+          <p>${formatPercent(metrics.minimum_acceptable_or_better_pct_within_service_matches)} of service/prestige matches are at least minimum acceptable 1080p.</p>
+          <p>${metrics.weak_matches_count ?? 0} matched titles are weak or unclassified. ${metrics.skipped_non_normalized_movies ?? 0} local files were skipped because normalization confidence was too low.</p>
+          ${recent.length ? `<p class="subtle">Recent-release datasets: ${recent.map(report => escapeHtml(report.metadata.dataset_name)).join(', ')}</p>` : ''}
+          ${warnings.length ? `<div class="subtle">Warnings: ${warnings.map(item => escapeHtml(item.code)).join(', ')}</div>` : ''}
+        </section>
+      `;
+    }
+
+    function buildMovieComparisonDetail(payload) {
+      const warnings = payload.warnings || [];
+      const datasets = payload.available_datasets || [];
+      const unmatched = payload.unmatched_local_titles || [];
+      return `
+        <div class="finding">
+          <h3>Dataset Freshness</h3>
+          ${datasets.length ? datasets.map(dataset => `
+            <p><strong>${escapeHtml(dataset.dataset_name)}</strong><br><span class="subtle">${escapeHtml(dataset.dataset_kind)} · ${escapeHtml(datasetFreshnessLabel(dataset))}</span></p>
+          `).join('') : '<p class="subtle">No dataset metadata is available.</p>'}
+        </div>
+        <div class="finding">
+          <h3>Warnings</h3>
+          ${warnings.length ? warnings.slice(0, 12).map(item => `<p><span class="chip review">${escapeHtml(item.code)}</span> ${escapeHtml(item.message)}</p>`).join('') : '<p class="subtle">No warnings.</p>'}
+        </div>
+        <div class="finding">
+          <h3>Unmatched Local Titles</h3>
+          ${unmatched.length ? unmatched.slice(0, 12).map(item => `<p>${escapeHtml(item.title)} (${item.year}) <span class="subtle">${escapeHtml(item.strongest_profile_label)}</span></p>`).join('') : '<p class="subtle">Every normalized movie matched at least one selected dataset.</p>'}
+        </div>
+      `;
+    }
+
+    function attachMovieComparisonHandlers(payload) {
+      document.querySelectorAll('.comparison-dataset-toggle').forEach(input => {
+        input.addEventListener('change', () => {
+          const datasetId = input.dataset.datasetId;
+          if (!datasetId) return;
+          if (input.checked) state.selectedComparisonDatasetIds.add(datasetId);
+          else state.selectedComparisonDatasetIds.delete(datasetId);
+          mainContent.innerHTML = buildMovieComparisonDashboard({
+            ...payload,
+            selected_dataset_ids: Array.from(state.selectedComparisonDatasetIds),
+          });
+          attachMovieComparisonHandlers({
+            ...payload,
+            selected_dataset_ids: Array.from(state.selectedComparisonDatasetIds),
+          });
+        });
+      });
+      document.getElementById('runComparisonSelectionButton')?.addEventListener('click', () => runCurrentPage());
+    }
+
+    function datasetFreshnessLabel(dataset) {
+      const snapshot = dataset?.snapshot_date ? `snapshot ${dataset.snapshot_date}` : 'snapshot date missing';
+      const label = dataset?.freshness_label || 'freshness unknown';
+      return `${label} · ${snapshot}`;
+    }
+
+    function formatPercent(value) {
+      if (value == null || !Number.isFinite(value)) return 'n/a';
+      return `${value.toFixed(1)}%`;
     }
 
     function renderMovieCompatibility(payload) {
@@ -3680,12 +3872,13 @@ INDEX_HTML = """<!doctype html>
       const queueItems = movieQueueItemsForFamily(payload, 'weak_encode');
       const qPending = queueItems.filter(i => i.status === 'pending').length;
       const qDeleted = queueItems.filter(i => i.status === 'deleted').length;
+      const qDismissed = queueItems.filter(i => i.status === 'dismissed').length;
       const qCompleted = queueItems.filter(i => i.status === 'completed').length;
       const qSource = sourceInput.value.trim() || queue?.source_root || '';
-      const queueSummary = (qPending || qDeleted || qCompleted) ? `
+      const queueSummary = (qPending || qDeleted || qCompleted || qDismissed) ? `
         <div class="finding">
           <h3>Replacement Queue · Weak Encode</h3>
-          <p>${qPending} pending delete · ${qDeleted} deleted and waiting replacement · ${qCompleted} successfully replaced</p>
+          <p>${qPending} pending delete · ${qDeleted} deleted and waiting replacement · ${qCompleted} successfully replaced · ${qDismissed} deleted from queue</p>
           ${qSource ? `<p><strong>Directory:</strong> <span class="mono">${escapeHtml(qSource)}</span></p>` : ''}
         </div>
       ` : '';
@@ -3736,12 +3929,13 @@ INDEX_HTML = """<!doctype html>
       const queueItems = movieQueueItemsForFamily(payload, 'audio_packaging');
       const qPending = queueItems.filter(i => i.status === 'pending').length;
       const qDeleted = queueItems.filter(i => i.status === 'deleted').length;
+      const qDismissed = queueItems.filter(i => i.status === 'dismissed').length;
       const qCompleted = queueItems.filter(i => i.status === 'completed').length;
       const qSource = sourceInput.value.trim() || queue?.source_root || '';
       const queueSummary = (qPending || qDeleted || qCompleted) ? `
         <div class="finding">
           <h3>Replacement Queue · Audio Packaging</h3>
-          <p>${qPending} pending delete · ${qDeleted} deleted and waiting replacement · ${qCompleted} successfully replaced</p>
+          <p>${qPending} pending delete · ${qDeleted} deleted and waiting replacement · ${qCompleted} successfully replaced · ${qDismissed} deleted from queue</p>
           ${qSource ? `<p><strong>Directory:</strong> <span class="mono">${escapeHtml(qSource)}</span></p>` : ''}
         </div>
       ` : '';
@@ -3804,6 +3998,7 @@ INDEX_HTML = """<!doctype html>
       if (!item) return '<span class="subtle">—</span>';
       if (item.status === 'pending') return '<span class="chip meta">queued</span>';
       if (item.status === 'deleted') return '<span class="chip review">deleted, waiting replacement</span>';
+      if (item.status === 'dismissed') return '<span class="chip meta">deleted from queue</span>';
       if (item.status === 'completed') return '<span class="chip safe">replaced</span>';
       return '<span class="subtle">—</span>';
     }
@@ -3832,35 +4027,39 @@ INDEX_HTML = """<!doctype html>
       `;
     }
 
-    function buildDeletedQueueTable(items) {
-      const grouped = groupedDeletedQueueItems(items);
-      const byDeletion = [...grouped].sort((a, b) => (a.deleted_at || a.queued_at || '').localeCompare(b.deleted_at || b.queued_at || ''));
-      const seqMap = new Map(byDeletion.map((item, i) => [item.group_id, i + 1]));
-      const { col, dir } = state.deletedSort;
+    function buildReplacementHistoryTable(items) {
+      const grouped = groupedReplacementHistoryItems(items);
+      const baseline = replacementHistoryBaselineOrder(grouped);
+      const seqMap = new Map(baseline.map((item, i) => [item.group_id, i + 1]));
+      const { col, dir } = state.replacementHistorySort;
       const mult = dir === 'asc' ? 1 : -1;
       const hasOmdb = !!(window.OMDB_KEY);
       const sorted = col ? [...grouped].sort((a, b) => {
         if (col === 'seq') return mult * ((seqMap.get(a.group_id) || 0) - (seqMap.get(b.group_id) || 0));
         if (col === 'title') return mult * (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
         if (col === 'year') return mult * ((a.year || 0) - (b.year || 0));
+        if (col === 'count') return mult * ((a.count || 0) - (b.count || 0));
         if (col === 'imdb') {
           const ra = state.omdbRatings.get(`${a.title}|${a.year}`) ?? -1;
           const rb = state.omdbRatings.get(`${b.title}|${b.year}`) ?? -1;
           return mult * (ra - rb);
         }
         return 0;
-      }) : byDeletion;
+      }) : baseline;
       const cols = [['seq','#'],['title','Title'],['year','Year'],['count','Count']];
       if (hasOmdb) cols.push(['imdb', 'IMDb']);
       const thead = cols.map(([c, label]) => {
-        const active = state.deletedSort.col === c;
-        const ind = active ? (state.deletedSort.dir === 'asc' ? '↑' : '↓') : '↕';
-        return `<th class="deleted-sort-th sortable-th" data-sort-col="${c}">${label}<span class="sort-ind${active?' on':''}">${ind}</span></th>`;
+        const active = state.replacementHistorySort.col === c;
+        const ind = active ? (state.replacementHistorySort.dir === 'asc' ? '↑' : '↓') : '↕';
+        return `<th class="replacement-history-sort-th sortable-th" data-sort-col="${c}">${label}<span class="sort-ind${active?' on':''}">${ind}</span></th>`;
       }).join('') + '<th>Status</th>';
       const rows = sorted.map(item => {
         const ratingKey = `${item.title}|${item.year}`;
         const rating = state.omdbRatings.get(ratingKey);
         const ratingCell = hasOmdb ? `<td>${rating == null ? '<span class="subtle">…</span>' : rating > 0 ? rating.toFixed(1) : '<span class="subtle">—</span>'}</td>` : '';
+        const dismissButton = item.status === 'deleted'
+          ? `<button class="queue-inline-remove replacement-history-remove" data-item-ids="${escapeHtml(item.item_ids.join(','))}" title="Remove from queue">x</button>`
+          : '';
         return `
           <tr>
             <td>${seqMap.get(item.group_id)}</td>
@@ -3868,7 +4067,7 @@ INDEX_HTML = """<!doctype html>
             <td>${item.year ? escapeHtml(String(item.year)) : '<span class="subtle">—</span>'}</td>
             <td>${item.count > 1 ? escapeHtml(String(item.count)) : '<span class="subtle">—</span>'}</td>
             ${ratingCell}
-            <td><span class="chip review">deleted</span></td>
+            <td>${replacementHistoryStatusChip(item.status)}${dismissButton}</td>
           </tr>
         `;
       }).join('');
@@ -3895,7 +4094,7 @@ INDEX_HTML = """<!doctype html>
       renderReplacementQueueDetail(state.results.movies.profile);
     }
 
-    function groupedDeletedQueueItems(items) {
+    function groupedReplacementHistoryItems(items) {
       const groups = new Map();
       for (const item of items) {
         const folder = item.original_folder_path || '';
@@ -3903,17 +4102,54 @@ INDEX_HTML = """<!doctype html>
         const existing = groups.get(key);
         if (existing) {
           existing.count += 1;
+          existing.item_ids.push(String(item.item_id || ''));
           existing.deleted_at = minIso(existing.deleted_at, item.deleted_at);
+          existing.dismissed_at = maxIso(existing.dismissed_at, item.dismissed_at);
           existing.queued_at = minIso(existing.queued_at, item.queued_at);
+          existing.completed_at = maxIso(existing.completed_at, item.completed_at);
+          existing.status = mergeReplacementHistoryStatus(existing.status, item.status);
         } else {
           groups.set(key, {
             ...item,
             group_id: key,
-            count: 1
+            count: 1,
+            item_ids: [String(item.item_id || '')],
+            status: item.status || 'deleted'
           });
         }
       }
       return Array.from(groups.values());
+    }
+
+    function replacementHistoryStatusChip(status) {
+      if (status === 'completed') return '<span class="chip safe">replaced</span>';
+      if (status === 'dismissed') return '<span class="chip meta">deleted from queue</span>';
+      if (status === 'mixed') return '<span class="chip meta">mixed history</span>';
+      return '<span class="chip review">deleted</span>';
+    }
+
+    function mergeReplacementHistoryStatus(a, b) {
+      if (a === b) return a;
+      if (!a) return b || 'deleted';
+      if (!b) return a;
+      return 'mixed';
+    }
+
+    function replacementHistoryGroupActivityAt(item) {
+      if (item.status === 'completed') return item.completed_at || item.deleted_at || item.queued_at || '';
+      if (item.status === 'dismissed') return item.dismissed_at || item.deleted_at || item.queued_at || '';
+      if (item.status === 'mixed') return maxIso(maxIso(item.completed_at, item.dismissed_at), item.deleted_at) || item.queued_at || '';
+      return item.deleted_at || item.queued_at || '';
+    }
+
+    function replacementHistoryBaselineOrder(items) {
+      const filter = state.replacementHistoryFilter;
+      const sorted = [...items].sort((a, b) => {
+        const aWhen = replacementHistoryGroupActivityAt(a);
+        const bWhen = replacementHistoryGroupActivityAt(b);
+        return aWhen.localeCompare(bWhen);
+      });
+      return filter === 'all' || filter === 'completed' || filter === 'dismissed' ? sorted.reverse() : sorted;
     }
 
     function minIso(a, b) {
@@ -3922,28 +4158,48 @@ INDEX_HTML = """<!doctype html>
       return a.localeCompare(b) <= 0 ? a : b;
     }
 
+    function maxIso(a, b) {
+      if (!a) return b || '';
+      if (!b) return a || '';
+      return a.localeCompare(b) >= 0 ? a : b;
+    }
+
+    function replacementHistoryFilterLabel(filter) {
+      if (filter === 'completed') return 'Replaced';
+      if (filter === 'dismissed') return 'Deleted From Queue';
+      if (filter === 'all') return 'All Items';
+      return 'Deleted, Waiting Replacement';
+    }
+
     function renderReplacementQueueDetail(payload) {
       const queue = currentMovieReplacementQueue(payload);
       const queueItems = isMovieTriagePage() ? movieQueueItemsForFamily(payload, activeMovieTriageFamily()) : (queue?.items || []);
       const headingPrefix = isMovieTriagePage() ? `${activeMovieTriageFamilyLabel()} ` : '';
       const pending = queueItems.filter(item => item.status === 'pending');
-      const deleted = queueItems.filter(item => item.status === 'deleted');
-      const completed = queueItems.filter(item => item.status === 'completed');
+      const allHistoryItems = queueItems.filter(item => ['deleted', 'dismissed', 'completed'].includes(item.status));
+      const filteredHistoryItems = allHistoryItems.filter(item => {
+        if (state.replacementHistoryFilter === 'all') return true;
+        if (state.replacementHistoryFilter === 'dismissed') return item.status === 'dismissed';
+        return state.replacementHistoryFilter === 'completed' ? item.status === 'completed' : item.status === 'deleted';
+      });
       const source = sourceInput.value.trim() || queue?.source_root || '';
       const pendingRows = pending.length ? buildPendingReplacementTable(pending) : '';
-      const deletedTable = deleted.length ? buildDeletedQueueTable(deleted) : '';
-      const completedRows = completed.slice(0, 8).map(item => `
-        <div class="finding">
-          <h3>${escapeHtml(item.title || '')} ${item.year ? `(${escapeHtml(String(item.year))})` : ''}</h3>
-          <p>successfully replaced</p>
-          <p class="mono">${escapeHtml(item.completed_by_path || '')}</p>
+      const hasHistory = allHistoryItems.length > 0;
+      const filterButtons = hasHistory ? `
+        <div class="page-nav">
+          ${[
+            ['deleted', 'Deleted, Awaiting Replacement'],
+            ['completed', 'Replaced'],
+            ['dismissed', 'Deleted From Queue'],
+            ['all', 'All Items']
+          ].map(([id, label]) => `<button class="filter-button replacement-history-filter ${state.replacementHistoryFilter === id ? 'active' : ''}" data-history-filter="${id}">${label}</button>`).join('')}
         </div>
-      `).join('');
+      ` : '';
+      const historyTable = filteredHistoryItems.length ? buildReplacementHistoryTable(filteredHistoryItems) : `<div class="empty">No ${escapeHtml(replacementHistoryFilterLabel(state.replacementHistoryFilter).toLowerCase())} items in the replacement queue.</div>`;
       detailPanel.innerHTML = `
         ${pendingRows ? `<div style="font-weight:600;margin:10px 0 6px">${escapeHtml(headingPrefix)}Pending Delete</div>${pendingRows}` : ''}
-        ${deletedTable ? `<div style="font-weight:600;margin:10px 0 6px">${escapeHtml(headingPrefix)}Deleted, Waiting Replacement</div>${deletedTable}` : ''}
-        ${completedRows ? `<div style="font-weight:600;margin:10px 0 6px">${escapeHtml(headingPrefix)}Successfully Replaced</div>${completedRows}` : ''}
-        ${!pendingRows && !deletedTable && !completedRows ? '<div class="empty">No items in the replacement queue.</div>' : ''}
+        ${hasHistory ? `<div style="font-weight:600;margin:10px 0 6px">${escapeHtml(headingPrefix)}Replacement History</div>${filterButtons}${historyTable}` : ''}
+        ${!pendingRows && !hasHistory ? '<div class="empty">No items in the replacement queue.</div>' : ''}
       `;
       attachReplacementQueueDetailHandlers();
     }
@@ -4312,13 +4568,26 @@ INDEX_HTML = """<!doctype html>
       document.querySelectorAll('.replacement-delete').forEach(button => {
         button.addEventListener('click', () => deleteReplacementMedia([button.dataset.itemId]));
       });
-      document.querySelectorAll('.deleted-sort-th').forEach(th => {
+      document.querySelectorAll('.replacement-history-remove').forEach(button => {
+        button.addEventListener('click', () => {
+          const itemIds = (button.dataset.itemIds || '').split(',').filter(Boolean);
+          dismissReplacementQueueItems(itemIds);
+        });
+      });
+      document.querySelectorAll('.replacement-history-filter').forEach(button => {
+        button.addEventListener('click', () => {
+          state.replacementHistoryFilter = button.dataset.historyFilter || 'deleted';
+          state.replacementHistorySort = { col: null, dir: 'asc' };
+          renderReplacementQueueDetail(state.results.movies.profile);
+        });
+      });
+      document.querySelectorAll('.replacement-history-sort-th').forEach(th => {
         th.addEventListener('click', () => {
           const col = th.dataset.sortCol;
-          if (state.deletedSort.col === col) {
-            state.deletedSort.dir = state.deletedSort.dir === 'asc' ? 'desc' : 'asc';
+          if (state.replacementHistorySort.col === col) {
+            state.replacementHistorySort.dir = state.replacementHistorySort.dir === 'asc' ? 'desc' : 'asc';
           } else {
-            state.deletedSort = { col, dir: col === 'imdb' ? 'desc' : 'asc' };
+            state.replacementHistorySort = { col, dir: col === 'imdb' ? 'desc' : 'asc' };
           }
           renderReplacementQueueDetail(state.results.movies.profile);
         });
@@ -4527,6 +4796,40 @@ INDEX_HTML = """<!doctype html>
         const folders = result.removed_folders?.length || 0;
         const cleanup = sidecars || folders ? `; cleaned ${sidecars} sidecar${sidecars === 1 ? '' : 's'}${folders ? ` and ${folders} folder${folders === 1 ? '' : 's'}` : ''}` : '';
         setStatus(`Deleted ${result.deleted.length} item${result.deleted.length === 1 ? '' : 's'}${cleanup}${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
+        if (state.page === 'quality' || state.page === 'audio_packaging') rerenderActiveMovieTriagePage(state.results.movies.profile);
+        else renderReplacementQueueDetail(state.results.movies.profile);
+      } catch (error) {
+        setStatus(error.message, 'error');
+      }
+    }
+
+    async function dismissReplacementQueueItems(itemIds) {
+      const queue = currentMovieReplacementQueue(state.results.movies.profile);
+      const source = sourceInput.value.trim() || queue?.source_root || '';
+      if (!source) {
+        setStatus('Choose a source directory before removing items from the replacement queue.', 'error');
+        return;
+      }
+      if (!itemIds.length) {
+        setStatus('No deleted replacement queue items are selected for removal.', 'error');
+        return;
+      }
+      const message = `Remove ${itemIds.length} replacement queue item${itemIds.length === 1 ? '' : 's'} from history? This will not delete media.`;
+      if (!window.confirm(message)) return;
+      setStatus(`Removing ${itemIds.length} replacement queue item${itemIds.length === 1 ? '' : 's'} from history…`, 'running');
+      try {
+        const response = await fetch('/api/movies/replacement-queue/dismiss', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, item_ids: itemIds })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Queue removal failed.');
+        state.results.movies.replacementQueue = result;
+        state.results.movies.replacementQueueSource = source;
+        if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
+        const skipped = result.skipped?.length || 0;
+        setStatus(`Removed ${result.dismissed.length} item${result.dismissed.length === 1 ? '' : 's'} from the replacement queue${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
         if (state.page === 'quality' || state.page === 'audio_packaging') rerenderActiveMovieTriagePage(state.results.movies.profile);
         else renderReplacementQueueDetail(state.results.movies.profile);
       } catch (error) {
@@ -4874,6 +5177,9 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
                 if route == "/api/movies/profile":
                     self.handle_movies_profile(payload)
                     return
+                if route == "/api/movies/comparison-dashboard":
+                    self.handle_movies_comparison_dashboard(payload)
+                    return
                 if route == "/api/source/scan-warning":
                     self.handle_source_scan_warning(payload)
                     return
@@ -4906,6 +5212,9 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
                     return
                 if route == "/api/movies/replacement-queue/delete":
                     self.handle_movies_replacement_queue_delete(payload)
+                    return
+                if route == "/api/movies/replacement-queue/dismiss":
+                    self.handle_movies_replacement_queue_dismiss(payload)
                     return
                 if route == "/api/movies/audio-packaging/fix":
                     self.handle_movies_audio_packaging_fix(payload)
@@ -4965,6 +5274,23 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
                 response["histogram"] = build_histogram_payload(report)
                 response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
             self.respond_json(response)
+
+        def handle_movies_comparison_dashboard(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            dataset_root = payload.get("dataset_root")
+            selected_dataset_ids = payload.get("selected_dataset_ids")
+            if selected_dataset_ids is not None and not isinstance(selected_dataset_ids, list):
+                raise ValueError("selected_dataset_ids must be a list")
+            resolved_dataset_root = Path(str(dataset_root)).expanduser().resolve() if dataset_root else None
+            with ACTIVITY_TRACKER.track(source, "Movie comparison dashboard"):
+                report = build_movie_comparison_report(
+                    source,
+                    dataset_root=resolved_dataset_root,
+                    selected_dataset_ids=selected_dataset_ids,
+                    probe_media=tracked_probe(source, "ffprobe movie comparison"),
+                    should_cancel=self.client_disconnected,
+                )
+            self.respond_json(report.to_dict())
 
         def handle_music_profile(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
@@ -5103,6 +5429,13 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
             if not isinstance(item_ids, list):
                 raise ValueError("item_ids must be a list")
             self.respond_json(delete_replacement_queue_media(source, item_ids))
+
+        def handle_movies_replacement_queue_dismiss(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            item_ids = payload.get("item_ids")
+            if not isinstance(item_ids, list):
+                raise ValueError("item_ids must be a list")
+            self.respond_json(dismiss_replacement_queue_items(source, item_ids))
 
         def handle_movies_audio_packaging_fix(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
