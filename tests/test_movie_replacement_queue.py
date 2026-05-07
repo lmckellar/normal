@@ -330,6 +330,25 @@ class MovieReplacementQueueTests(unittest.TestCase):
             self.assertTrue(other_video.exists())
             self.assertTrue(poster.exists())
 
+    def test_delete_marks_item_deleted_when_media_is_already_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            state = root / "queue.json"
+            source = root / "movies"
+            movie = source / "Gone Movie (2001)" / "Gone Movie (2001).mp4"
+            movie.parent.mkdir(parents=True)
+            movie.write_text("video", encoding="utf-8")
+
+            queued = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+            movie.unlink()
+
+            result = delete_replacement_queue_media(source, [queued["added"][0]["item_id"]], state_path=state)
+
+            self.assertEqual(len(result["deleted"]), 1)
+            self.assertEqual(result["deleted"][0]["path"], str(movie.resolve()))
+            self.assertEqual(result["items"][0]["status"], "deleted")
+            self.assertEqual(result["skipped"], [])
+
     def test_deleted_items_await_replacement_then_complete_on_good_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

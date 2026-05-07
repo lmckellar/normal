@@ -46,6 +46,8 @@ Queue history has four hard filters: `Deleted, Awaiting Replacement`, `Replaced`
 
 The queue-history table is sortable by title, year, and IMDb rating. IMDb ratings are fetched from [OMDb](https://www.omdbapi.com/) and require a free API key passed via `--omdb-key` or the `OMDB_KEY` environment variable. Without a key the column is hidden.
 
+For the same source path, movie replacement-queue state is cached locally as well as persisted on disk, so `Deleted, Awaiting Replacement` history survives a hard refresh without needing a fresh scan first.
+
 ## Multi-audio packaging triage
 
 Some MKVs are muxed with the wrong main audio track: for example, Italian marked as default and a weaker English track left as the fallback. The **Fix Multi-Audio Packaging** page uses the same replacement-queue workflow as weak encode triage, but with different scan rules:
@@ -55,6 +57,8 @@ Some MKVs are muxed with the wrong main audio track: for example, Italian marked
 - show default-vs-English stream summaries so the queue is explainable before deletion
 
 For MKVs, the page can now do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops audio streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers are left as review-only items. Replacement queue delete/replace is still available for genuinely bad releases.
+
+While a remux is running, the page locks checkbox selection and disables conflicting bulk actions. This prevents mixing a live mux batch with a later delete click on a different selection set. The destructive `Delete Selected Files` button is also separated to the far right of the action row so it is visually distinct from the two repair actions.
 
 Current safety note: `Make English Default` has been exercised against real files. `Make English Default + Delete Foreign Audio` is implemented, but it is currently untested on real libraries and should still be treated as a cautious review-only workflow before first public push.
 

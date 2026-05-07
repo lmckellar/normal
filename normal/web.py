@@ -550,6 +550,27 @@ INDEX_HTML = """<!doctype html>
       gap: 10px;
       margin-bottom: 10px;
     }
+    .triage-action-spacer {
+      flex: 1 1 auto;
+      min-width: 16px;
+    }
+    .triage-action-note {
+      flex: 0 1 auto;
+    }
+    @media (max-width: 900px) {
+      .junk-actions.audio-packaging-actions {
+        flex-wrap: wrap;
+      }
+      .junk-actions.audio-packaging-actions .triage-action-spacer {
+        display: none;
+      }
+      .junk-actions.audio-packaging-actions .danger {
+        margin-left: 0;
+      }
+      .junk-actions.audio-packaging-actions .triage-action-note {
+        flex-basis: 100%;
+      }
+    }
     .chip {
       display: inline-flex;
       align-items: center;
@@ -994,6 +1015,7 @@ INDEX_HTML = """<!doctype html>
       filter: 'all',
       qualitySort: { col: null, dir: 'asc' },
       musicQualitySort: { col: null, dir: 'asc' },
+      movieAudioFixBusy: false,
       replacementHistoryFilter: 'deleted',
       replacementHistorySort: { col: null, dir: 'asc' },
       omdbRatings: new Map(),
@@ -1053,9 +1075,12 @@ INDEX_HTML = """<!doctype html>
     const activityDetail = document.getElementById('activityDetail');
 
     let _scanTimer = null;
+    let _activityGeneration = 0;
     let _scanStart = null;
     let _activeRunController = null;
     let _activityTimer = null;
+    let _activityRequest = null;
+    let _activityRequestSource = '';
     const _scanDurations = (() => { try { return JSON.parse(localStorage.getItem('n_scan_durations') || '{}'); } catch { return {}; } })();
     const _libraryRoots = (() => {
       try {
@@ -1082,6 +1107,14 @@ INDEX_HTML = """<!doctype html>
     let _movieDashboardCache = (() => {
       try {
         const cache = JSON.parse(localStorage.getItem('n_movie_dashboard_cache') || '{}');
+        return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
+      } catch {
+        return {};
+      }
+    })();
+    let _movieReplacementQueueCache = (() => {
+      try {
+        const cache = JSON.parse(localStorage.getItem('n_movie_replacement_queue_cache') || '{}');
         return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
       } catch {
         return {};
@@ -1181,22 +1214,47 @@ INDEX_HTML = """<!doctype html>
       const source = sourceInput.value.trim();
       if (!source) {
         setActivityState(null);
-        return;
+        return null;
       }
+      if (_activityRequest) {
+        if (_activityRequestSource === source) return _activityRequest;
+        return null;
+      }
+      const requestSource = source;
+      const request = (async () => {
       try {
-        const response = await fetch('/api/activity?source=' + encodeURIComponent(source));
+        const response = await fetch('/api/activity?source=' + encodeURIComponent(requestSource));
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Activity check failed.');
-        setActivityState(payload);
+        if (sourceInput.value.trim() === requestSource) setActivityState(payload);
+        return payload;
       } catch (error) {
-        setActivityState(null, error.message);
+        if (sourceInput.value.trim() === requestSource) setActivityState(null, error.message);
+        return null;
+      }
+      })();
+      _activityRequest = request;
+      _activityRequestSource = requestSource;
+      try {
+        return await request;
+      } finally {
+        if (_activityRequest === request) {
+          _activityRequest = null;
+          _activityRequestSource = '';
+        }
       }
     }
 
+    async function _runActivityPollLoop(gen) {
+      const payload = await refreshActivityState();
+      if (gen !== _activityGeneration) return;
+      _activityTimer = setTimeout(() => _runActivityPollLoop(gen), payload?.active ? 2000 : 10000);
+    }
+
     function startActivityPolling() {
-      clearInterval(_activityTimer);
-      refreshActivityState();
-      _activityTimer = setInterval(refreshActivityState, 2000);
+      clearTimeout(_activityTimer);
+      const gen = ++_activityGeneration;
+      _runActivityPollLoop(gen);
     }
 
     function startScanTimer(estimatedSecs) {
@@ -1246,6 +1304,10 @@ INDEX_HTML = """<!doctype html>
 
     function persistMovieDashboardCache() {
       try { localStorage.setItem('n_movie_dashboard_cache', JSON.stringify(_movieDashboardCache)); } catch {}
+    }
+
+    function persistMovieReplacementQueueCache() {
+      try { localStorage.setItem('n_movie_replacement_queue_cache', JSON.stringify(_movieReplacementQueueCache)); } catch {}
     }
 
     function persistMusicDashboardCache() {
@@ -1310,6 +1372,29 @@ INDEX_HTML = """<!doctype html>
       persistMovieDashboardCache();
     }
 
+    function cacheMovieReplacementQueue(queue) {
+      if (!queue || !queue.source_root || !Array.isArray(queue.items)) return;
+      _movieReplacementQueueCache[dashboardCacheKey(queue.source_root)] = {
+        source_root: queue.source_root,
+        issue_family: queue.issue_family || null,
+        items: queue.items,
+        cached_at: new Date().toISOString()
+      };
+      _movieReplacementQueueCache = trimDashboardCache(_movieReplacementQueueCache);
+      persistMovieReplacementQueueCache();
+    }
+
+    function cachedMovieReplacementQueue(source) {
+      const cached = _movieReplacementQueueCache[dashboardCacheKey(source)];
+      if (!cached || !Array.isArray(cached.items)) return null;
+      return {
+        source_root: cached.source_root || source,
+        issue_family: cached.issue_family || null,
+        generated_at: cached.cached_at || new Date().toISOString(),
+        items: cached.items
+      };
+    }
+
     function cachedMovieDashboard(source) {
       const cached = _movieDashboardCache[dashboardCacheKey(source)];
       if (!cached || !cached.histogram) return null;
@@ -1334,6 +1419,18 @@ INDEX_HTML = """<!doctype html>
       if (cached.replacement_queue) {
         state.results.movies.replacementQueue = cached.replacement_queue;
         state.results.movies.replacementQueueSource = cached.source_root || '';
+        cacheMovieReplacementQueue(cached.replacement_queue);
+      }
+      return cached;
+    }
+
+    function restoreCachedMovieReplacementQueue(source) {
+      const cached = cachedMovieReplacementQueue(source);
+      if (!cached) return null;
+      state.results.movies.replacementQueue = cached;
+      state.results.movies.replacementQueueSource = cached.source_root || source;
+      if (state.results.movies.profile && state.results.movies.profile.source_root === (cached.source_root || source)) {
+        state.results.movies.profile.replacement_queue = cached;
       }
       return cached;
     }
@@ -1861,6 +1958,7 @@ INDEX_HTML = """<!doctype html>
           if (payload.replacement_queue) {
             state.results.movies.replacementQueue = payload.replacement_queue;
             state.results.movies.replacementQueueSource = payload.source_root || '';
+            cacheMovieReplacementQueue(payload.replacement_queue);
           }
           state.selectedReplacementPaths.clear();
         }
@@ -1963,6 +2061,9 @@ INDEX_HTML = """<!doctype html>
         renderReplacementQueueDetail(state.results.movies.profile);
         return;
       }
+      if (!force && !state.results.movies.replacementQueue) {
+        restoreCachedMovieReplacementQueue(source);
+      }
       if (!force && state.results.movies.replacementQueue && state.results.movies.replacementQueueSource === source) {
         renderReplacementQueueDetail(state.results.movies.profile);
         return;
@@ -1977,6 +2078,7 @@ INDEX_HTML = """<!doctype html>
         if (!response.ok) throw new Error(result.error || 'Queue load failed.');
         state.results.movies.replacementQueue = result;
         state.results.movies.replacementQueueSource = source;
+        cacheMovieReplacementQueue(result);
         if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
         if (state.page === 'quality' && state.results.movies.profile) renderMovieQuality(state.results.movies.profile);
         else if (state.page === 'audio_packaging' && state.results.movies.profile) renderMovieAudioPackaging(state.results.movies.profile);
@@ -3815,6 +3917,7 @@ INDEX_HTML = """<!doctype html>
         const path = item.path || '';
         const queueItem = replacementQueueItemForPath(payload, path, 'audio_packaging');
         const checked = state.selectedReplacementPaths.has(path) ? 'checked' : '';
+        const locked = state.movieAudioFixBusy ? 'disabled' : '';
         const issueCode = movieAudioPackagingIssueCode(item);
         const issueLabel = issueCode === 'default_non_english_audio_with_weak_english'
           ? 'wrong default + weak English'
@@ -3824,7 +3927,7 @@ INDEX_HTML = """<!doctype html>
         const selectable = !!issueCode;
         return `
           <tr>
-            <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="replacement-select" data-path="${encodeURIComponent(path)}" ${checked}>` : ''}</td>
+            <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="replacement-select" data-path="${encodeURIComponent(path)}" ${checked} ${locked}>` : ''}</td>
             <td><div class="mono">${escapeHtml(path)}</div></td>
             <td>${escapeHtml(issueLabel)}</td>
             <td>${defaultStream}</td>
@@ -3837,14 +3940,18 @@ INDEX_HTML = """<!doctype html>
       const selectableCount = selectableVisibleReplacementItems(payload, items).length;
       const allVisibleSelected = selectableCount > 0 && selectedCount === selectableCount;
       const toggleLabel = allVisibleSelected ? 'Deselect All' : 'Select All';
+      const lockNote = state.movieAudioFixBusy
+        ? '<span class="subtle">Selection locked while ffmpeg remux is running.</span>'
+        : `<span class="subtle">${selectedCount} of ${selectableCount} selected</span>`;
       return `
         ${queueSummary}
-        <div class="junk-actions">
-          <button class="secondary" id="toggleAllReplacementButton" ${selectableCount ? '' : 'disabled'}>${toggleLabel}</button>
-          <button class="primary" id="fixSelectedAudioButton" ${selectedCount ? '' : 'disabled'}>Make English Default</button>
-          <button class="primary" id="fixSelectedAudioAndDropForeignButton" ${selectedCount ? '' : 'disabled'}>Make English Default + Delete Foreign Audio</button>
-          <button class="danger" id="deleteSelectedFilesButton" ${selectedCount ? '' : 'disabled'}>Delete Selected Files</button>
-          <span class="subtle">${selectedCount} of ${selectableCount} selected</span>
+        <div class="junk-actions audio-packaging-actions">
+          <button class="secondary" id="toggleAllReplacementButton" ${(selectableCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
+          <button class="primary" id="fixSelectedAudioButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Make English Default</button>
+          <button class="primary" id="fixSelectedAudioAndDropForeignButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Make English Default + Delete Foreign Audio</button>
+          <span class="triage-action-spacer"></span>
+          <button class="danger" id="deleteSelectedFilesButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Delete Selected Files</button>
+          <span class="triage-action-note">${lockNote}</span>
         </div>
         <div class="table-wrap">
           <table>
@@ -4393,10 +4500,18 @@ INDEX_HTML = """<!doctype html>
       else renderMovieQuality(payload);
     }
 
+    function movieAudioFixSelectionLocked() {
+      return state.page === 'audio_packaging' && state.movieAudioFixBusy;
+    }
+
     function attachMovieReplacementHandlers(payload, items) {
       const selectableItems = selectableVisibleReplacementItems(payload, items);
       document.querySelectorAll('.replacement-select').forEach(checkbox => {
         checkbox.addEventListener('change', () => {
+          if (movieAudioFixSelectionLocked()) {
+            checkbox.checked = state.selectedReplacementPaths.has(decodeURIComponent(checkbox.dataset.path));
+            return;
+          }
           const path = decodeURIComponent(checkbox.dataset.path);
           if (checkbox.checked) state.selectedReplacementPaths.add(path);
           else state.selectedReplacementPaths.delete(path);
@@ -4407,6 +4522,7 @@ INDEX_HTML = """<!doctype html>
       const toggleAllButton = document.getElementById('toggleAllReplacementButton');
       if (toggleAllButton) {
         toggleAllButton.addEventListener('click', () => {
+          if (movieAudioFixSelectionLocked()) return;
           const selectedCount = selectedVisibleReplacementCount(payload, selectableItems);
           const allVisibleSelected = selectableItems.length > 0 && selectedCount === selectableItems.length;
           selectableItems.forEach(item => {
@@ -4490,6 +4606,7 @@ INDEX_HTML = """<!doctype html>
         if (!response.ok) throw new Error(result.error || 'Queue failed.');
         state.results.movies.replacementQueue = result;
         state.results.movies.replacementQueueSource = source;
+        cacheMovieReplacementQueue(result);
         if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
         state.selectedReplacementPaths.clear();
         const skipped = result.skipped?.length || 0;
@@ -4554,6 +4671,10 @@ INDEX_HTML = """<!doctype html>
     }
 
     async function deleteSelectedFiles() {
+      if (movieAudioFixSelectionLocked()) {
+        setStatus('Wait for the active remux to finish before changing audio-packaging selections.', 'error');
+        return;
+      }
       const source = sourceInput.value.trim();
       const payload = state.results.movies.profile;
       const issueFamily = activeMovieTriageFamily();
@@ -4593,6 +4714,7 @@ INDEX_HTML = """<!doctype html>
         if (!delResponse.ok) throw new Error(delResult.error || 'Delete failed.');
         state.results.movies.replacementQueue = delResult;
         state.results.movies.replacementQueueSource = source;
+        cacheMovieReplacementQueue(delResult);
         if (state.results.movies.profile) state.results.movies.profile.replacement_queue = delResult;
         state.selectedReplacementPaths.clear();
         const skipped = delResult.skipped?.length || 0;
@@ -4610,6 +4732,10 @@ INDEX_HTML = """<!doctype html>
       const source = sourceInput.value.trim();
       const payload = state.results.movies.profile;
       const dropForeignAudio = !!options.dropForeignAudio;
+      if (state.movieAudioFixBusy) {
+        setStatus('An audio remux is already running.', 'error');
+        return;
+      }
       if (!source || !payload) return;
       const paths = selectableVisibleReplacementItems(payload, payload.movies || [])
         .filter(item => state.selectedReplacementPaths.has(item.path || ''))
@@ -4617,6 +4743,9 @@ INDEX_HTML = """<!doctype html>
         .filter(Boolean);
       if (!paths.length) return;
       const actionLabel = dropForeignAudio ? 'Repairing and pruning foreign audio' : 'Repairing';
+      state.movieAudioFixBusy = true;
+      rerenderActiveMovieTriagePage(payload);
+      renderReplacementQueueDetail(payload);
       setStatus(`${actionLabel} for ${paths.length} file${paths.length === 1 ? '' : 's'}…`, 'running');
       try {
         const response = await fetch('/api/movies/audio-packaging/fix', {
@@ -4628,6 +4757,7 @@ INDEX_HTML = """<!doctype html>
         if (!response.ok) throw new Error(result.error || 'Audio fix failed.');
         state.results.movies.replacementQueue = result.replacement_queue || state.results.movies.replacementQueue;
         state.results.movies.replacementQueueSource = source;
+        if (result.replacement_queue) cacheMovieReplacementQueue(result.replacement_queue);
         if (state.results.movies.profile) {
           state.results.movies.profile.replacement_queue = result.replacement_queue || state.results.movies.profile.replacement_queue;
           applyUpdatedMovieProfileItems(state.results.movies.profile, result.updated_items || []);
@@ -4637,6 +4767,10 @@ INDEX_HTML = """<!doctype html>
         rerenderActiveMovieTriagePage(state.results.movies.profile);
       } catch (error) {
         setStatus(error.message, 'error');
+      } finally {
+        state.movieAudioFixBusy = false;
+        rerenderActiveMovieTriagePage(state.results.movies.profile || payload);
+        renderReplacementQueueDetail(state.results.movies.profile || payload);
       }
     }
 
@@ -4664,6 +4798,7 @@ INDEX_HTML = """<!doctype html>
         if (!response.ok) throw new Error(result.error || 'Delete failed.');
         state.results.movies.replacementQueue = result;
         state.results.movies.replacementQueueSource = source;
+        cacheMovieReplacementQueue(result);
         if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
         const skipped = result.skipped?.length || 0;
         const sidecars = result.cleaned_sidecars?.length || 0;
@@ -4701,6 +4836,7 @@ INDEX_HTML = """<!doctype html>
         if (!response.ok) throw new Error(result.error || 'Queue removal failed.');
         state.results.movies.replacementQueue = result;
         state.results.movies.replacementQueueSource = source;
+        cacheMovieReplacementQueue(result);
         if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
         const skipped = result.skipped?.length || 0;
         setStatus(`Removed ${result.dismissed.length} item${result.dismissed.length === 1 ? '' : 's'} from the replacement queue${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
@@ -5642,7 +5778,10 @@ def tracked_probe(source: Path, label: str) -> Callable[[Path], Any]:
 
 def build_activity_payload(source: Path) -> dict[str, Any]:
     app_items = ACTIVITY_TRACKER.snapshot(source)
-    external_items, os_note = find_external_activity(source)
+    if app_items:
+        external_items, os_note = [], None
+    else:
+        external_items, os_note = find_external_activity(source)
     active_probes = [item for item in app_items if item["kind"] == "probe"]
     return {
         "source_root": str(source.resolve()),

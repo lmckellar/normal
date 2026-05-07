@@ -86,7 +86,11 @@ class WebTests(unittest.TestCase):
         self.assertIn("Drive activity: idle", INDEX_HTML)
         self.assertIn("'/api/activity?source='", INDEX_HTML)
         self.assertIn("function refreshActivityState", INDEX_HTML)
-        self.assertIn("setInterval(refreshActivityState, 2000)", INDEX_HTML)
+        self.assertIn("let _activityRequest = null;", INDEX_HTML)
+        self.assertIn("let _activityRequestSource = '';", INDEX_HTML)
+        self.assertIn("async function _runActivityPollLoop(gen)", INDEX_HTML)
+        self.assertIn("if (_activityRequestSource === source) return _activityRequest;", INDEX_HTML)
+        self.assertIn("_activityTimer = setTimeout(() => _runActivityPollLoop(gen), payload?.active ? 2000 : 10000);", INDEX_HTML)
         self.assertIn("external ${process.command} detected", INDEX_HTML)
         self.assertIn("ffprobe active", INDEX_HTML)
         self.assertIn("Drive activity: ffmpeg remux active", INDEX_HTML)
@@ -152,6 +156,30 @@ class WebTests(unittest.TestCase):
             self.assertEqual(payload["app"], [])
             self.assertEqual(payload["external"], [])
 
+    def test_build_activity_payload_skips_external_scan_when_app_activity_exists(self) -> None:
+        tracker = ActivityTracker()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Movie.mkv"
+            movie.write_text("movie", encoding="utf-8")
+            with tracker.track(source, "Movie audio fix", kind="remux", current_path=movie):
+                with patch("normal.web.ACTIVITY_TRACKER", tracker):
+                    with patch("normal.web.find_external_activity") as find_external:
+                        payload = build_activity_payload(source)
+            find_external.assert_not_called()
+            self.assertTrue(payload["active"])
+            self.assertEqual(payload["external"], [])
+
+    def test_build_activity_payload_uses_external_scan_when_no_app_activity_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            external_items = [{"pid": 123, "ppid": 1, "command": "ffprobe", "summary": "ffprobe Movie.mkv"}]
+            with patch("normal.web.find_external_activity", return_value=(external_items, None)) as find_external:
+                payload = build_activity_payload(source)
+            find_external.assert_called_once_with(source)
+            self.assertTrue(payload["active"])
+            self.assertEqual(payload["external"], external_items)
+
     def test_drive_directory_detection_covers_common_mount_roots(self) -> None:
         self.assertTrue(looks_like_drive_directory(Path("/mnt/media_storage")))
         self.assertTrue(looks_like_drive_directory(Path("/media/lachlan/Drive")))
@@ -206,6 +234,10 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("buildReplacementQueueSection", INDEX_HTML)
         self.assertIn("current directory's Replacement Queue", INDEX_HTML)
         self.assertIn("'/api/movies/replacement-queue/list'", INDEX_HTML)
+        self.assertIn("n_movie_replacement_queue_cache", INDEX_HTML)
+        self.assertIn("function cacheMovieReplacementQueue(queue)", INDEX_HTML)
+        self.assertIn("function restoreCachedMovieReplacementQueue(source)", INDEX_HTML)
+        self.assertIn("restoreCachedMovieReplacementQueue(source);", INDEX_HTML)
         self.assertIn("'/api/movies/replacement-queue/add'", INDEX_HTML)
         self.assertIn("'/api/movies/replacement-queue/delete'", INDEX_HTML)
         self.assertIn("'/api/movies/replacement-queue/dismiss'", INDEX_HTML)
@@ -243,6 +275,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("id: 'audio_packaging'", INDEX_HTML)
         self.assertIn("label: 'Fix Multi-Audio Packaging'", INDEX_HTML)
         self.assertIn("renderMovieAudioPackaging", INDEX_HTML)
+        self.assertIn("movieAudioFixBusy: false", INDEX_HTML)
+        self.assertIn("function movieAudioFixSelectionLocked()", INDEX_HTML)
         self.assertIn("wrong default + weak English", INDEX_HTML)
         self.assertIn("Wrong Default Language", INDEX_HTML)
         self.assertIn("Weak English Fallback", INDEX_HTML)
@@ -250,6 +284,12 @@ class WebTests(unittest.TestCase):
         self.assertIn("'/api/movies/audio-packaging/fix'", INDEX_HTML)
         self.assertIn("Make English Default", INDEX_HTML)
         self.assertIn("Make English Default + Delete Foreign Audio", INDEX_HTML)
+        self.assertIn("junk-actions audio-packaging-actions", INDEX_HTML)
+        self.assertIn("triage-action-spacer", INDEX_HTML)
+        self.assertIn("Selection locked while ffmpeg remux is running.", INDEX_HTML)
+        self.assertIn("Wait for the active remux to finish before changing audio-packaging selections.", INDEX_HTML)
+        self.assertIn("state.movieAudioFixBusy = true;", INDEX_HTML)
+        self.assertIn("state.movieAudioFixBusy = false;", INDEX_HTML)
         self.assertIn("function fixSelectedAudioDefaults(options = {})", INDEX_HTML)
         self.assertIn("drop_foreign_audio: dropForeignAudio", INDEX_HTML)
         self.assertIn("function summarizeAudioFixResult(result, dropForeignAudio)", INDEX_HTML)

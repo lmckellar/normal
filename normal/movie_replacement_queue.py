@@ -444,7 +444,9 @@ def delete_replacement_queue_media(
             skipped.append({"item_id": item_id, "path": str(target), "reason": "source_root"})
             continue
         if not target.exists():
-            skipped.append({"item_id": item_id, "path": str(target), "reason": "missing"})
+            item["status"] = "deleted"
+            item["deleted_at"] = now
+            deleted.append({"item_id": item_id, "path": str(target)})
             continue
         try:
             if item.get("mode") == "folder":
