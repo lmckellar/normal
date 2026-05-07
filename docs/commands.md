@@ -250,14 +250,18 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 | `--port` | No | Port (default: `8765`) |
 | `--source` | No | Default source path pre-filled in the UI |
 | `--omdb-key` | No | OMDb API key for IMDb ratings in the replacement queue (falls back to `OMDB_KEY` env var) |
+| `--tmdb-key` | No | TMDb API key for the Canonical Lists page (falls back to `TMDB_KEY` env var) |
 
 Movie pages currently exposed in the web UI:
 
 - `Dashboard View`
+- `Canonical Lists`
 - `Normalize Movie Files & Folders`
 - `Delete Weak Encodes`
 - `Fix Multi-Audio Packaging`
 - `Delete Junk Videos`
 - `Delete Junk Sidecar & Spam Files`
+
+Heavy recursive web scans now show a confirmation warning for risky sources such as drive-root style paths and NTFS/FUSE mounts. The server also rejects overlapping heavy scans for the same source instead of running them concurrently.
 
 Known issue: some cancelled movie scans can leave a background `ffprobe` running if another UI action starts immediately after cancellation. The exact trigger is still unknown, and the Drive Activity `ps` check may miss the leftover probe.

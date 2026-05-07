@@ -121,7 +121,7 @@ All routes in `web.py`. Key families:
 |---|---|---|
 | `/api/activity?source=...` | GET | Current normal / ffprobe / ffmpeg activity for a source |
 | `/api/library-roots` | GET / POST | Load or save main and recent library roots |
-| `/api/source/scan-warning` | POST | Detect likely drive-root scans and return a confirmation warning payload |
+| `/api/source/scan-warning` | POST | Detect risky scan sources such as drive-root style paths and NTFS/FUSE mounts and return a confirmation warning payload |
 | `/api/music/apply` | POST | Apply selected music changes in-place |
 | `/api/music/profile` | POST | Music dashboard profile / weak encode triage payload |
 | `/api/music/normalize` | POST | Build music normalize plan |
@@ -137,6 +137,7 @@ All routes in `web.py`. Key families:
 | `/api/music/artwork/image?...` | GET | Serve artwork preview image bytes |
 | `/api/movies/apply` | POST | Apply selected movie renames in-place |
 | `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, and audio packaging triage |
+| `/api/movies/canonical-lists` | POST | Canonical title coverage payload from TMDb plus local cache |
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
 | `/api/movies/inspect` | POST | One-file movie diagnostic payload |
 | `/api/movies/normalize` | POST | Build movie normalize plan |
@@ -160,6 +161,7 @@ Hard rules — do not relax without explicit user instruction:
 5. Web UI delete routes validate each path against the current source root before unlinking; outside-root paths are rejected.
 6. Junk deletion revalidates each candidate as junk immediately before deletion.
 7. No remote metadata fetching — all data comes from local files only.
+8. Heavy recursive web scans are single-flight per source; same-source overlaps are rejected.
 
 ## Intentional design decisions
 
@@ -173,5 +175,6 @@ These are deliberate choices, not gaps:
 - **Strict weak encode profiles.** Strict weak = `sd_low_quality`, `weak_1080p`, `weak_4k`, `unclassified`. `minimum_acceptable_1080p` and above are never shown as deletion candidates in the default view. Do not change this threshold without explicit instruction.
 - **Replacement queue keeps audit history.** Items move forward through states and are never silently removed. Auto-completion (`completed`) happens on future scans when a replacement appears. Manual dismissal (`dismissed`) is explicit queue state, not media deletion.
 - **Probe cancellation is not fully hardened yet.** There is a known open issue where cancelling a movie scan and quickly starting another UI action can leave a background `ffprobe` running, and the activity indicator may miss it. Do not document cancellation as stronger than best-effort until that is fixed.
+- **Ubuntu GNOME risk is treated as operationally real.** Large recursive scans on drive-root style paths and NTFS/FUSE mounts have caused desktop instability. Keep the warning and same-source heavy-scan gate in place unless the underlying failure mode is disproven.
 - **No cross-platform guarantees for v1.** Linux-first. Windows/macOS rough edges are known and deferred.
 - **`--in-place` is always explicit.** Never infer in-place mutation from context; the flag must be present.

@@ -165,6 +165,7 @@ def build_parser() -> argparse.ArgumentParser:
     web_parser.add_argument("--port", type=int, default=8765)
     web_parser.add_argument("--source", type=Path)
     web_parser.add_argument("--omdb-key", default=os.environ.get("OMDB_KEY"), metavar="KEY")
+    web_parser.add_argument("--tmdb-key", default=os.environ.get("TMDB_KEY"), metavar="KEY")
     web_parser.set_defaults(func=handle_web)
 
     return parser
@@ -241,7 +242,7 @@ def handle_artwork_sync_jellyfin_metadata(args: argparse.Namespace) -> int:
 
 
 def handle_web(args: argparse.Namespace) -> int:
-    return run_web(host=args.host, port=args.port, source=args.source, omdb_key=args.omdb_key)
+    return run_web(host=args.host, port=args.port, source=args.source, omdb_key=args.omdb_key, tmdb_key=args.tmdb_key)
 
 
 def main(argv: list[str] | None = None) -> int:

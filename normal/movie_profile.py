@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from itertools import chain
 from pathlib import Path
 import re
 from statistics import mean, median
@@ -10,8 +11,8 @@ from typing import Any, Callable
 from normal.models import WarningItem, utc_now_iso
 from normal.movie_scan import (
     MovieScanProgress,
-    discover_video_files,
     emit_progress,
+    iter_video_files,
     movie_id_for,
     probe_media_facts,
 )
@@ -83,8 +84,9 @@ def scan_movie_profiles(
     should_cancel: Callable[[], bool] | None = None,
 ) -> MovieProfileReport:
     report = MovieProfileReport(source_root=str(source_root.resolve()), generated_at=utc_now_iso())
-    movie_files = discover_video_files(source_root)
-    if not movie_files:
+    movie_files = iter_video_files(source_root, should_cancel=should_cancel)
+    first_movie = next(movie_files, None)
+    if first_movie is None:
         report.warnings.append(
             WarningItem(
                 code="no_video_files",
@@ -95,10 +97,10 @@ def scan_movie_profiles(
         return report
 
     started = time.monotonic()
-    total = len(movie_files)
+    total = 0
     emit_progress(progress_callback, 0, total, None, started, "starting")
 
-    for index, movie_path in enumerate(movie_files, start=1):
+    for index, movie_path in enumerate(chain([first_movie], movie_files), start=1):
         if should_cancel is not None and should_cancel():
             report.warnings.append(
                 WarningItem(

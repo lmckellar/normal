@@ -4,7 +4,7 @@
 
 Music lane: scan, plan, apply, artist deduplication, dashboard profile, artwork repair for Jellyfin, CSV export.
 
-Movie lane: normalize names, encode quality profiling, streaming/prestige comparison dashboard, weak encode triage, multi-audio packaging triage, shared replacement queue workflow, junk video and sidecar & spam file cleanup, dashboard, XLSX catalogue export.
+Movie lane: normalize names, encode quality profiling, canonical-list coverage dashboard, weak encode triage, multi-audio packaging triage, shared replacement queue workflow, junk video and sidecar & spam file cleanup, dashboard, XLSX catalogue export.
 
 Both lanes: local web UI, full CLI surface.
 
@@ -13,6 +13,7 @@ Both lanes: local web UI, full CLI surface.
 Features in no particular order. Priority will be shaped by usage patterns after v1.
 
 **Movies**
+- **Canonical Lists badge refinement** — keep the TMDb-backed coverage scan, but improve badge weighting, thresholds, and presentation once real usage shows what is noisy or misleading
 - **Plex Compatibility workflow** — heuristic findings for playback risk and indexing risk are implemented in `movie_profile.py`; the UI page is hidden pending a clearer workflow design
 - **Catalogue merge / swap report** — import another user's exported catalogue, compare shared movies, suggest swaps where one library has a stronger encode
 
