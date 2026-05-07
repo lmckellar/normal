@@ -21,6 +21,7 @@ from typing import Any, Callable, Iterator
 from PIL import Image
 
 from normal.movie_audio_fix import fix_english_audio_defaults
+from normal.movie_canonical_lists import build_canonical_lists_report
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_junk import (
     detect_movie_junk_document_reasons,
@@ -172,6 +173,29 @@ class ActivityTracker:
         ]
 
 
+class RequestConflictError(RuntimeError):
+    pass
+
+
+class HeavyScanRegistry:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._active: set[tuple[str, str]] = set()
+
+    @contextmanager
+    def claim(self, source: Path, category: str, label: str) -> Iterator[None]:
+        key = (category, str(source.resolve()))
+        with self._lock:
+            if key in self._active:
+                raise RequestConflictError(f"{label} is already running for {key[1]}")
+            self._active.add(key)
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._active.discard(key)
+
+
 def media_facts_from_dict(payload: dict[str, Any]) -> MediaFacts:
     audio_streams = []
     for raw_stream in payload.get("audio_streams", []):
@@ -183,6 +207,7 @@ def media_facts_from_dict(payload: dict[str, Any]) -> MediaFacts:
 
 
 ACTIVITY_TRACKER = ActivityTracker()
+HEAVY_SCAN_REGISTRY = HeavyScanRegistry()
 
 
 INDEX_HTML = """<!doctype html>
@@ -766,6 +791,48 @@ INDEX_HTML = """<!doctype html>
       height: 100%;
       background: linear-gradient(90deg, var(--accent), var(--accent-2));
     }
+    .coverage-card-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+      margin-top: 10px;
+      min-height: 32px;
+    }
+    .badge-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+    }
+    .badge-tile {
+      border-radius: 18px;
+      padding: 14px 12px;
+      color: #fff;
+      min-height: 98px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 10px 20px rgba(31, 29, 26, 0.12);
+    }
+    .badge-tile.locked {
+      background: #b8aa96 !important;
+      box-shadow: none;
+      color: rgba(255, 255, 255, 0.92);
+    }
+    .badge-kicker {
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      opacity: 0.92;
+    }
+    .badge-name {
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+    .badge-meta {
+      font-size: 11px;
+      opacity: 0.95;
+    }
     .dash-res-bars {
       display: grid;
       gap: 7px;
@@ -1028,7 +1095,7 @@ INDEX_HTML = """<!doctype html>
       artworkImageSearchOffsets: {},
       results: {
         music: { profile: null, normalize: null, apply: null, artwork: null, replacementQueue: null, replacementQueueSource: '' },
-        movies: { profile: null, normalize: null, apply: null, junk: null, replacementQueue: null, replacementQueueSource: '' }
+        movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null, replacementQueue: null, replacementQueueSource: '' }
       }
     };
 
@@ -1051,6 +1118,7 @@ INDEX_HTML = """<!doctype html>
         sourceLabel: '/path/to/movie or TV library',
         pages: [
           { id: 'library', label: 'Dashboard View', action: 'scan', endpoint: '/api/movies/profile' },
+          { id: 'canonical_lists', label: 'Canonical Lists', action: 'scan', endpoint: '/api/movies/canonical-lists' },
           { id: 'normalize', label: 'Normalize Movie Files & Folders', action: 'plan', endpoint: '/api/movies/normalize' },
           { id: 'quality', label: 'Delete Weak Encodes', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'audio_packaging', label: 'Fix Multi-Audio Packaging', action: 'scan', endpoint: '/api/movies/profile' },
@@ -1107,6 +1175,14 @@ INDEX_HTML = """<!doctype html>
     let _movieDashboardCache = (() => {
       try {
         const cache = JSON.parse(localStorage.getItem('n_movie_dashboard_cache') || '{}');
+        return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
+      } catch {
+        return {};
+      }
+    })();
+    let _movieCanonicalListsCache = (() => {
+      try {
+        const cache = JSON.parse(localStorage.getItem('n_movie_canonical_lists_cache_v2') || '{}');
         return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
       } catch {
         return {};
@@ -1306,6 +1382,10 @@ INDEX_HTML = """<!doctype html>
       try { localStorage.setItem('n_movie_dashboard_cache', JSON.stringify(_movieDashboardCache)); } catch {}
     }
 
+    function persistMovieCanonicalListsCache() {
+      try { localStorage.setItem('n_movie_canonical_lists_cache_v2', JSON.stringify(_movieCanonicalListsCache)); } catch {}
+    }
+
     function persistMovieReplacementQueueCache() {
       try { localStorage.setItem('n_movie_replacement_queue_cache', JSON.stringify(_movieReplacementQueueCache)); } catch {}
     }
@@ -1372,6 +1452,22 @@ INDEX_HTML = """<!doctype html>
       persistMovieDashboardCache();
     }
 
+    function cacheMovieCanonicalLists(payload) {
+      if (!payload || !payload.source_root || !payload.library_summary || !Array.isArray(payload.list_summaries)) return;
+      _movieCanonicalListsCache[dashboardCacheKey(payload.source_root)] = {
+        source_root: payload.source_root,
+        provider: payload.provider || '',
+        cache_state: payload.cache_state || '',
+        library_summary: payload.library_summary,
+        list_summaries: payload.list_summaries,
+        badges: payload.badges || [],
+        warnings: payload.warnings || [],
+        cached_at: new Date().toISOString()
+      };
+      _movieCanonicalListsCache = trimDashboardCache(_movieCanonicalListsCache);
+      persistMovieCanonicalListsCache();
+    }
+
     function cacheMovieReplacementQueue(queue) {
       if (!queue || !queue.source_root || !Array.isArray(queue.items)) return;
       _movieReplacementQueueCache[dashboardCacheKey(queue.source_root)] = {
@@ -1406,10 +1502,31 @@ INDEX_HTML = """<!doctype html>
       };
     }
 
+    function cachedMovieCanonicalLists(source) {
+      const cached = _movieCanonicalListsCache[dashboardCacheKey(source)];
+      if (!cached || !cached.library_summary || !Array.isArray(cached.list_summaries)) return null;
+      return {
+        source_root: cached.source_root || source,
+        generated_at: cached.cached_at || new Date().toISOString(),
+        provider: cached.provider || 'tmdb',
+        cache_state: cached.cache_state || 'fresh',
+        library_summary: cached.library_summary,
+        list_summaries: cached.list_summaries,
+        badges: cached.badges || [],
+        warnings: cached.warnings || []
+      };
+    }
+
     function currentMovieProfileForSource() {
       const source = sourceInput.value.trim();
       const profile = state.results.movies.profile;
       return profile && profile.source_root === source ? profile : null;
+    }
+
+    function currentMovieCanonicalForSource() {
+      const source = sourceInput.value.trim();
+      const payload = state.results.movies.canonical;
+      return payload && payload.source_root === source ? payload : null;
     }
 
     function restoreCachedMovieDashboard(source) {
@@ -1421,6 +1538,13 @@ INDEX_HTML = """<!doctype html>
         state.results.movies.replacementQueueSource = cached.source_root || '';
         cacheMovieReplacementQueue(cached.replacement_queue);
       }
+      return cached;
+    }
+
+    function restoreCachedMovieCanonicalLists(source) {
+      const cached = cachedMovieCanonicalLists(source);
+      if (!cached) return null;
+      state.results.movies.canonical = cached;
       return cached;
     }
 
@@ -1917,7 +2041,8 @@ INDEX_HTML = """<!doctype html>
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Unable to check source path.');
         if (!payload.warn) return true;
-        return confirm(`It looks like you are scanning a drive directory.\n\nTotal size: ${payload.total_size_label}\n\nContinue?`);
+        const warning = payload.message || 'This source may be risky for a heavy recursive scan.';
+        return confirm(`${warning}\n\nTotal size: ${payload.total_size_label}\n\nOnly run one heavy scan for this source at a time.\n\nContinue?`);
       } catch (error) {
         setStatus(error.message, 'error');
         return false;
@@ -1962,6 +2087,10 @@ INDEX_HTML = """<!doctype html>
           }
           state.selectedReplacementPaths.clear();
         }
+        if (page === 'canonical_lists') {
+          state.results.movies.canonical = payload;
+          cacheMovieCanonicalLists(payload);
+        }
         if (page === 'normalize') {
           state.results.movies.normalize = payload;
           state.results.movies.apply = null;
@@ -1981,7 +2110,7 @@ INDEX_HTML = """<!doctype html>
         normalize: 'Normalize',
         artwork: 'Artwork',
         recommend: 'Recommend',
-        comparison: 'Streaming Service Comparison Dashboard',
+        canonical_lists: 'Canonical Lists',
         quality: 'Delete Weak Encodes',
         audio_packaging: 'Fix Multi-Audio Packaging',
         music_quality: 'Delete Weak Encodes',
@@ -2025,6 +2154,7 @@ INDEX_HTML = """<!doctype html>
     function renderMoviePage(page) {
       const source = sourceInput.value.trim();
       const profile = currentMovieProfileForSource();
+      const canonical = currentMovieCanonicalForSource();
       const normalize = state.results.movies.normalize;
       const junk = state.results.movies.junk;
       if (page === 'normalize') {
@@ -2037,6 +2167,10 @@ INDEX_HTML = """<!doctype html>
       }
       if (page === 'library') {
         renderMovieLibrary(profile || restoreCachedMovieDashboard(source));
+        return;
+      }
+      if (page === 'canonical_lists') {
+        renderMovieCanonicalLists(canonical || restoreCachedMovieCanonicalLists(source));
         return;
       }
       if (page === 'quality') {
@@ -2964,6 +3098,77 @@ INDEX_HTML = """<!doctype html>
     function attachMovieDashboardHandlers() {
       const exportBtn = document.getElementById('exportCatalogueButton');
       if (exportBtn) exportBtn.addEventListener('click', () => generateCatalogue(exportBtn));
+    }
+
+    function renderMovieCanonicalLists(payload) {
+      mainTagline.textContent = 'Canonical title coverage against live all-time movie lists. This page ignores bitrate, quality, and warning telemetry.';
+      renderMetrics([]);
+      renderBars([]);
+      filterBar.innerHTML = '';
+      mainContent.innerHTML = buildMovieCanonicalListsDashboard(payload);
+      if (!payload) {
+        detailPanel.innerHTML = '<div class="empty">Run Movies / Canonical Lists to see badge progress.</div>';
+        return;
+      }
+      detailPanel.innerHTML = buildMovieCanonicalBadgePanel(payload);
+    }
+
+    function buildMovieCanonicalListsDashboard(payload) {
+      if (!payload) return '<div class="empty">Run Movies / Canonical Lists to compare the library against curated movie lists.</div>';
+      const summary = payload.library_summary || {};
+      const lists = Array.isArray(payload.list_summaries) ? payload.list_summaries : [];
+      const cacheLabel = payload.cache_state === 'stale' ? 'cached snapshot' : payload.cache_state === 'live' ? 'live fetch' : 'fresh cache';
+      const statsHtml = `
+        <div class="dash-stats">
+          <div class="metric"><strong>${String(summary.owned_movies || 0)}</strong><span>owned movies</span></div>
+          <div class="metric"><strong>${String(summary.matched_canonical_titles || 0)}</strong><span>matched canonical titles</span></div>
+          <div class="metric"><strong>${String(summary.lists_cleared || 0)}</strong><span>lists cleared</span></div>
+          <div class="metric"><strong>${String(summary.unparsed_files || 0)}</strong><span>unparsed files</span></div>
+        </div>
+      `;
+      const maxCovered = Math.max(...lists.map(item => item.covered_count || 0), 1);
+      const cardsHtml = lists.map(item => {
+        const barWidth = ((item.covered_count || 0) / maxCovered) * 100;
+        const missingPreview = (item.missing_titles || []).slice(0, 2).map(entry => `${entry.title} (${entry.year})`).join(' · ');
+        return `
+          <div class="profile-card">
+            <div class="profile-card-group">${escapeHtml(item.provider_label || 'Canonical list')}</div>
+            <div class="profile-card-name">${escapeHtml(item.label || 'List')}</div>
+            <div class="profile-card-count">${escapeHtml(`${item.covered_count || 0}/${item.total_count || 0}`)}</div>
+            <div class="profile-card-pct">${escapeHtml(formatPercent(item.coverage_percent || 0))} coverage</div>
+            <div class="profile-card-bar"><span style="width:${barWidth}%"></span></div>
+            <div class="coverage-card-note">${escapeHtml(item.missing_count ? `${item.missing_count} missing${missingPreview ? ` · ${missingPreview}` : ''}` : 'Complete or near-complete coverage.')}</div>
+          </div>
+        `;
+      }).join('');
+      return `
+        <div class="dash-actions">
+          <span class="subtle">Provider: TMDb canonical lists</span>
+          <span class="subtle">Data source: ${escapeHtml(cacheLabel)}</span>
+          ${(summary.duplicate_files || 0) ? `<span class="subtle">Duplicate files ignored: ${summary.duplicate_files}</span>` : ''}
+        </div>
+        ${statsHtml}
+        <div class="dash-section-label">Canonical List Coverage</div>
+        <div class="profile-grid">${cardsHtml || '<div class="subtle">No canonical list data.</div>'}</div>
+      `;
+    }
+
+    function buildMovieCanonicalBadgePanel(payload) {
+      const badges = Array.isArray(payload?.badges) ? payload.badges : [];
+      const badgeHtml = badges.map(badge => `
+        <div class="badge-tile ${badge.unlocked ? '' : 'locked'}" style="${badge.unlocked ? `background:${escapeHtml(badge.color || '#577590')}` : ''}">
+          <div class="badge-kicker">${badge.unlocked ? 'Unlocked' : 'Locked'}</div>
+          <div class="badge-name">${escapeHtml(badge.label || 'Badge')}</div>
+          <div class="badge-meta">${escapeHtml(`${formatPercent(badge.coverage_percent || 0)} / ${formatPercent(badge.threshold_percent || 0)}`)}</div>
+        </div>
+      `).join('');
+      return `
+        <div class="finding">
+          <h3>Badge Collection</h3>
+          <p>${badges.filter(item => item.unlocked).length} of ${badges.length} unlocked</p>
+          <div class="badge-grid">${badgeHtml || '<div class="subtle">No badges yet.</div>'}</div>
+        </div>
+      `;
     }
 
     function renderMovieQuality(payload) {
@@ -5127,15 +5332,25 @@ def save_library_roots(data: dict[str, Any]) -> None:
     temp_path.replace(path)
 
 
-def serve_web_ui(host: str, port: int, default_source: Path | None = None, omdb_key: str | None = None) -> None:
-    handler = build_handler(default_source=default_source, omdb_key=omdb_key)
+def serve_web_ui(
+    host: str,
+    port: int,
+    default_source: Path | None = None,
+    omdb_key: str | None = None,
+    tmdb_key: str | None = None,
+) -> None:
+    handler = build_handler(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
     server = ThreadingHTTPServer((host, port), handler)
     source_hint = f" default source {default_source}" if default_source else ""
     print(f"normal web UI listening on http://{host}:{port}/{source_hint}")
     server.serve_forever()
 
 
-def build_handler(default_source: Path | None = None, omdb_key: str | None = None):
+def build_handler(
+    default_source: Path | None = None,
+    omdb_key: str | None = None,
+    tmdb_key: str | None = None,
+):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             if self.path.startswith("/api/activity"):
@@ -5158,7 +5373,11 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
                 return
             html = INDEX_HTML.replace(
                 "</script>",
-                f"window.DEFAULT_SOURCE = {json.dumps(str(default_source) if default_source else '')};\nwindow.OMDB_KEY = {json.dumps(omdb_key or '')};</script>",
+                (
+                    f"window.DEFAULT_SOURCE = {json.dumps(str(default_source) if default_source else '')};\n"
+                    f"window.OMDB_KEY = {json.dumps(omdb_key or '')};\n"
+                    f"window.TMDB_KEY = {json.dumps(tmdb_key or '')};</script>"
+                ),
                 1,
             )
             body = html.encode("utf-8")
@@ -5186,6 +5405,9 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
                     return
                 if route == "/api/movies/profile":
                     self.handle_movies_profile(payload)
+                    return
+                if route == "/api/movies/canonical-lists":
+                    self.handle_movies_canonical_lists(payload)
                     return
                 if route == "/api/source/scan-warning":
                     self.handle_source_scan_warning(payload)
@@ -5263,6 +5485,8 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
                     self.handle_music_artwork_promote(payload)
                     return
                 self.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            except RequestConflictError as exc:
+                self.respond_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             except Exception as exc:
                 self.respond_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
@@ -5271,24 +5495,37 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
 
         def handle_movies_profile(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with ACTIVITY_TRACKER.track(source, "Movie profile scan"):
-                report = scan_movie_profiles(
-                    source,
-                    probe_media=tracked_probe(source, "ffprobe movie metadata"),
-                    should_cancel=self.client_disconnected,
-                )
-                response = report.to_dict()
-                response["histogram"] = build_histogram_payload(report)
-                response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
+            with guarded_heavy_scan(source, "Movie profile scan"):
+                with ACTIVITY_TRACKER.track(source, "Movie profile scan"):
+                    report = scan_movie_profiles(
+                        source,
+                        probe_media=tracked_probe(source, "ffprobe movie metadata"),
+                        should_cancel=self.client_disconnected,
+                    )
+                    response = report.to_dict()
+                    response["histogram"] = build_histogram_payload(report)
+                    response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
             self.respond_json(response)
+
+        def handle_movies_canonical_lists(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            with guarded_heavy_scan(source, "Movie canonical lists"):
+                with ACTIVITY_TRACKER.track(source, "Movie canonical lists"):
+                    report = build_canonical_lists_report(
+                        source,
+                        tmdb_key=tmdb_key,
+                        should_cancel=self.client_disconnected,
+                    )
+            self.respond_json(report.to_dict())
 
         def handle_music_profile(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with ACTIVITY_TRACKER.track(source, "Music profile scan"):
-                report = scan_music_profiles(source)
-                response = report.to_dict()
-                response["histogram"] = build_music_histogram_payload(report)
-                response["replacement_queue"] = music_reconcile_replacement_queue(source, response["tracks"])
+            with guarded_heavy_scan(source, "Music profile scan"):
+                with ACTIVITY_TRACKER.track(source, "Music profile scan"):
+                    report = scan_music_profiles(source)
+                    response = report.to_dict()
+                    response["histogram"] = build_music_histogram_payload(report)
+                    response["replacement_queue"] = music_reconcile_replacement_queue(source, response["tracks"])
             self.respond_json(response)
 
         def handle_music_replacement_queue_list(self, payload: dict[str, Any]) -> None:
@@ -5324,19 +5561,20 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
 
         def handle_movies_register(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with ACTIVITY_TRACKER.track(source, "Movie catalogue export"):
-                scan_report = scan_movie_library(source, probe_media=tracked_probe(source, "ffprobe movie catalogue"))
-                with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as jf:
-                    json.dump(scan_report.to_dict(), jf)
-                    report_path = Path(jf.name)
-                try:
-                    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as xf:
-                        xlsx_path = Path(xf.name)
-                    write_movie_register_xlsx(report_path, xlsx_path)
-                    data = xlsx_path.read_bytes()
-                finally:
-                    report_path.unlink(missing_ok=True)
-                    xlsx_path.unlink(missing_ok=True)
+            with guarded_heavy_scan(source, "Movie catalogue export"):
+                with ACTIVITY_TRACKER.track(source, "Movie catalogue export"):
+                    scan_report = scan_movie_library(source, probe_media=tracked_probe(source, "ffprobe movie catalogue"))
+                    with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as jf:
+                        json.dump(scan_report.to_dict(), jf)
+                        report_path = Path(jf.name)
+                    try:
+                        with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as xf:
+                            xlsx_path = Path(xf.name)
+                        write_movie_register_xlsx(report_path, xlsx_path)
+                        data = xlsx_path.read_bytes()
+                    finally:
+                        report_path.unlink(missing_ok=True)
+                        xlsx_path.unlink(missing_ok=True)
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
             self.send_header("Content-Disposition", 'attachment; filename="movie-catalogue.xlsx"')
@@ -5362,10 +5600,11 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
 
         def handle_movies_normalize(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with ACTIVITY_TRACKER.track(source, "Movie normalize plan"):
-                plan = build_movie_plan(source)
-                response = plan.to_dict()
-                response["movie_files"] = [str(path) for path in discover_video_files(source)]
+            with guarded_heavy_scan(source, "Movie normalize plan"):
+                with ACTIVITY_TRACKER.track(source, "Movie normalize plan"):
+                    plan = build_movie_plan(source)
+                    response = plan.to_dict()
+                    response["movie_files"] = [str(path) for path in discover_video_files(source)]
             self.respond_json(response)
 
         def handle_movies_apply(self, payload: dict[str, Any]) -> None:
@@ -5380,14 +5619,16 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
 
         def handle_movies_junk(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with ACTIVITY_TRACKER.track(source, "Movie junk scan"):
-                report = scan_movie_junk(source, probe_media=tracked_probe(source, "ffprobe junk scan"))
+            with guarded_heavy_scan(source, "Movie junk scan"):
+                with ACTIVITY_TRACKER.track(source, "Movie junk scan"):
+                    report = scan_movie_junk(source, probe_media=tracked_probe(source, "ffprobe junk scan"))
             self.respond_json(report.to_dict())
 
         def handle_movies_promo_docs(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with ACTIVITY_TRACKER.track(source, "Movie misc junk scan"):
-                report = scan_movie_promo_documents(source)
+            with guarded_heavy_scan(source, "Movie misc junk scan"):
+                with ACTIVITY_TRACKER.track(source, "Movie misc junk scan"):
+                    report = scan_movie_promo_documents(source)
             self.respond_json(report.to_dict())
 
         def handle_movies_junk_delete(self, payload: dict[str, Any]) -> None:
@@ -5847,14 +6088,65 @@ def summarize_process_args(args: str) -> str:
     return args[:177] + "..."
 
 
+@dataclass(frozen=True, slots=True)
+class SourceMountDetails:
+    fstype: str | None
+    target: str | None
+
+
+def source_mount_details(source: Path) -> SourceMountDetails:
+    try:
+        result = subprocess.run(
+            ["findmnt", "-T", str(source.resolve()), "-o", "TARGET,FSTYPE", "-n"],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=1,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return SourceMountDetails(fstype=None, target=None)
+    if result.returncode != 0:
+        return SourceMountDetails(fstype=None, target=None)
+    line = result.stdout.strip()
+    if not line:
+        return SourceMountDetails(fstype=None, target=None)
+    parts = line.split()
+    if len(parts) < 2:
+        return SourceMountDetails(fstype=None, target=None)
+    return SourceMountDetails(target=parts[0], fstype=parts[1].lower())
+
+
+def risky_mount_flags(source: Path) -> list[str]:
+    details = source_mount_details(source)
+    flags: list[str] = []
+    if details.fstype in {"fuseblk", "ntfs", "ntfs3"}:
+        flags.append(f"mount:{details.fstype}")
+    return flags
+
+
 def build_source_scan_warning(source: Path) -> dict[str, Any]:
     resolved = source.resolve()
     usage = shutil.disk_usage(resolved)
-    warn = looks_like_drive_directory(resolved)
+    reasons: list[str] = []
+    if looks_like_drive_directory(resolved):
+        reasons.append("drive_directory")
+    reasons.extend(risky_mount_flags(resolved))
+    mount_details = source_mount_details(resolved)
+    warn = bool(reasons)
+    message_parts: list[str] = []
+    if "drive_directory" in reasons:
+        message_parts.append("It looks like you are scanning a drive directory.")
+    if any(reason.startswith("mount:") for reason in reasons):
+        fstype = mount_details.fstype.upper() if mount_details.fstype else "FUSE/NTFS"
+        message_parts.append(f"This source is on a {fstype} mount, which is higher risk for heavy recursive scans on Ubuntu GNOME.")
     return {
         "source": str(resolved),
         "warn": warn,
-        "reason": "drive_directory" if warn else None,
+        "reason": reasons[0] if reasons else None,
+        "reasons": reasons,
+        "message": " ".join(message_parts).strip(),
+        "mount_fstype": mount_details.fstype,
+        "mount_target": mount_details.target,
         "total_size_bytes": usage.total,
         "total_size_label": format_storage_size(usage.total),
     }
@@ -5873,6 +6165,12 @@ def looks_like_drive_directory(path: Path) -> bool:
     if len(parts) == 4 and parts[1:3] == ("run", "media"):
         return True
     return False
+
+
+@contextmanager
+def guarded_heavy_scan(source: Path, label: str, *, category: str = "heavy_scan") -> Iterator[None]:
+    with HEAVY_SCAN_REGISTRY.claim(source, category, label):
+        yield
 
 
 def format_storage_size(size_bytes: int) -> str:

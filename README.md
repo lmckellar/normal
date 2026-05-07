@@ -5,7 +5,7 @@ Local workbench for taming pirated music and movie libraries.
 Two lanes:
 
 - **Music** — normalize FLAC tags, filenames, and folder structure; repair artist artwork for Jellyfin
-- **Movies** — normalize file and folder names; profile encode quality; compare normalized movies against installed service/prestige snapshots; triage weak encodes, repair or replace multi-audio packaging mistakes, and clean up junk
+- **Movies** — normalize file and folder names; profile encode quality; compare owned titles against canonical movie lists; triage weak encodes, repair or replace multi-audio packaging mistakes, and clean up junk
 
 No cloud. No transcoding. No destructive defaults.
 
@@ -59,38 +59,11 @@ For contributors and AI agents working in the codebase: [docs/agent.md](docs/age
 
 Movie replacement queue history now supports four hard filters in the web UI: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Items judged not worth replacing can be dismissed from queue history without deleting any media.
 
-## Comparison datasets
+## Canonical lists
 
-The movie comparison dashboard is local-only in v1. It does not fetch live catalogues or require API keys.
+The movie `Canonical Lists` page compares owned titles against live all-time movie lists using TMDb and a local cache. It ignores bitrate, quality tiers, and warning telemetry. Pass `--tmdb-key` to `normal web` or set `TMDB_KEY` before launching the UI.
 
-The current comparison workflow is selected-service-first:
-
-- one installed `service` snapshot is active at a time
-- installed `prestige` and `recent` datasets remain in play as benchmark lists
-- the UI emphasizes card-based menu comparison such as `Library Capture`, `Exclusive Titles`, `Gap Opportunity`, `IMDb Top 250 Coverage`, and `IMDb Top 1000 Coverage`
-
-Install JSON snapshot files under:
-
-- `datasets/movie_comparison/` relative to the repo root, or
-- a custom root via `NORMAL_MOVIE_COMPARISON_DATASET_ROOT`
-
-Each file must contain source metadata plus an `entries` list:
-
-```json
-{
-  "dataset_id": "imdb_top_250",
-  "dataset_name": "IMDb Top 250",
-  "dataset_kind": "prestige",
-  "snapshot_date": "2026-05-01",
-  "freshness_label": "snapshot May 2026",
-  "entries": [
-    { "title": "Alien", "year": 1979 },
-    { "title": "Dune Part Two", "year": 2024, "release_date": "2024-03-01" }
-  ]
-}
-```
-
-Supported `dataset_kind` values are `service`, `prestige`, and `recent`.
+Heavy recursive web scans now warn before running against risky sources such as drive-root style paths and NTFS/FUSE mounts. The web server also rejects overlapping heavy scans for the same source instead of stacking them.
 
 ## Known issue
 

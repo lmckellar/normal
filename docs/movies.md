@@ -18,6 +18,12 @@ Theme examples:
 
 ![Movies dashboard, sand theme](assets/movies_dashboard_sand.png)
 
+## Canonical Lists
+
+The **Canonical Lists** page compares owned titles against live all-time movie lists using TMDb and a local cache. It is title-coverage focused: bitrate, quality tiers, and warning telemetry do not affect the result.
+
+Pass `--tmdb-key` to `normal web` or set `TMDB_KEY` before launch. Current badges are intentionally simple and good enough for first-pass coverage tracking; badge-system refinement is deferred.
+
 ## Normalize names
 
 Files named by whoever uploaded them tend to have inconsistent formatting — varying year placement, leftover technical tokens, mismatched folder names. `normal` parses each path locally (no network lookups) and proposes a clean, consistent target shape:
@@ -84,6 +90,7 @@ normal movie-register --report scan.json --xlsx catalogue.xlsx
 | Page | What it does |
 |---|---|
 | Dashboard | Quality overview — tiers, histograms, resolution breakdown |
+| Canonical Lists | Compare owned titles against live all-time movie lists and unlock simple coverage badges |
 | Normalize | Review and apply rename plans |
 | Delete Weak Encodes | Triage and queue replacements |
 | Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |

@@ -120,15 +120,17 @@ The Library Switcher in the top right selects the active lane. The source path i
 
 **Movie pages**
 - Dashboard View — quality tier distribution, bitrate histograms, resolution breakdown
-- Streaming Service Comparison Dashboard — strict title/year overlap against one selected installed service snapshot at a time, plus installed prestige lists and recent-release datasets; skipped non-normalized files are surfaced explicitly
+- Canonical Lists — strict title/year overlap against live all-time movie lists with simple badge unlocks
 - Normalize Movie Files & Folders — interactive rename plan review and apply
 - Delete Weak Encodes — quality triage with replacement queue tracking; deleted queue items can be dismissed later if they are not worth replacing
 - Fix Multi-Audio Packaging — triage MKVs where default audio language/track choice is likely wrong, then either flip English to default in place, drop tagged foreign-language audio, or queue the file for replacement. The delete-foreign-audio variant is currently untested on real libraries.
 - Delete Junk Videos — checkbox select and confirm to delete
 - Delete Junk Sidecar & Spam Files — sidecar and spam file cleanup
 
-The comparison dashboard is local-only in v1. Install JSON datasets under `datasets/movie_comparison/` or point `NORMAL_MOVIE_COMPARISON_DATASET_ROOT` at another dataset directory.
+Canonical Lists uses TMDb plus a local cache. Start the web UI with `--tmdb-key` or set `TMDB_KEY`.
 
 Scans can be stopped mid-run with the Stop button. Per-page ETA estimates are stored in localStorage and shown on subsequent runs.
+
+Heavy recursive web scans now show a confirmation warning for risky sources such as drive-root style paths and NTFS/FUSE mounts. The web server also allows only one heavy scan per source at a time.
 
 Known issue: under some not-yet-isolated UI interaction pattern, cancelling a movie scan and quickly starting another workflow can leave an `ffprobe` probe running in the background. The Drive Activity indicator may not show that leftover probe in every case.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,12 +10,17 @@ from unittest.mock import patch
 from normal.web import (
     INDEX_HTML,
     ActivityTracker,
+    HEAVY_SCAN_REGISTRY,
     build_activity_payload,
+    build_source_scan_warning,
     delete_movie_junk_files,
     find_external_activity,
     format_storage_size,
+    guarded_heavy_scan,
     looks_like_drive_directory,
+    RequestConflictError,
     resolve_source_path,
+    SourceMountDetails,
 )
 
 
@@ -31,8 +37,9 @@ class WebTests(unittest.TestCase):
 
     def test_scan_warning_is_wired(self) -> None:
         self.assertIn("'/api/source/scan-warning'", INDEX_HTML)
-        self.assertIn("It looks like you are scanning a drive directory.", INDEX_HTML)
+        self.assertIn("payload.message || 'This source may be risky for a heavy recursive scan.'", INDEX_HTML)
         self.assertIn("Total size: ${payload.total_size_label}", INDEX_HTML)
+        self.assertIn("Only run one heavy scan for this source at a time.", INDEX_HTML)
 
     def test_library_switcher_remembers_music_and_movie_roots(self) -> None:
         self.assertIn("Library Switcher", INDEX_HTML)
@@ -186,6 +193,27 @@ class WebTests(unittest.TestCase):
         self.assertTrue(looks_like_drive_directory(Path("/Volumes/Media")))
         self.assertFalse(looks_like_drive_directory(Path("/mnt/media_storage/Movies")))
 
+    def test_build_source_scan_warning_marks_risky_ntfs_mount(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            usage = shutil.disk_usage(source)
+            with patch("normal.web.source_mount_details", return_value=SourceMountDetails(fstype="fuseblk", target="/mnt/media_storage")):
+                payload = build_source_scan_warning(source)
+        self.assertTrue(payload["warn"])
+        self.assertIn("mount:fuseblk", payload["reasons"])
+        self.assertIn("higher risk", payload["message"])
+        self.assertEqual(payload["mount_fstype"], "fuseblk")
+        self.assertEqual(payload["total_size_bytes"], usage.total)
+
+    def test_guarded_heavy_scan_rejects_same_source_overlap(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            with patch("normal.web.HEAVY_SCAN_REGISTRY", HEAVY_SCAN_REGISTRY.__class__()):
+                with guarded_heavy_scan(source, "Movie profile scan"):
+                    with self.assertRaises(RequestConflictError):
+                        with guarded_heavy_scan(source, "Movie canonical lists"):
+                            self.fail("overlapping heavy scan should not be allowed")
+
     def test_format_storage_size_uses_tb_for_large_drives(self) -> None:
         self.assertEqual(format_storage_size(4_500_000_000_000), "4.5 TB")
 
@@ -325,6 +353,25 @@ class WebTests(unittest.TestCase):
         )[0]
         self.assertNotIn("renderReplacementQueueDetail(payload)", library_section)
         self.assertNotIn("attachMovieReplacementHandlers(payload)", library_section)
+
+    def test_movie_canonical_lists_page_is_wired(self) -> None:
+        self.assertIn("id: 'canonical_lists'", INDEX_HTML)
+        self.assertIn("label: 'Canonical Lists'", INDEX_HTML)
+        self.assertIn("endpoint: '/api/movies/canonical-lists'", INDEX_HTML)
+        self.assertIn("n_movie_canonical_lists_cache", INDEX_HTML)
+        self.assertIn("function cacheMovieCanonicalLists(payload)", INDEX_HTML)
+        self.assertIn("function restoreCachedMovieCanonicalLists(source)", INDEX_HTML)
+        self.assertIn("renderMovieCanonicalLists(canonical || restoreCachedMovieCanonicalLists(source));", INDEX_HTML)
+        self.assertIn("Badge Collection", INDEX_HTML)
+        self.assertIn("This page ignores bitrate, quality, and warning telemetry.", INDEX_HTML)
+        self.assertIn("Provider: TMDb canonical lists", INDEX_HTML)
+        self.assertIn("Run Movies / Canonical Lists to compare the library against curated movie lists.", INDEX_HTML)
+        canonical_section = INDEX_HTML.split("function renderMovieCanonicalLists(payload) {", 1)[1].split(
+            "function renderMovieQuality(payload) {",
+            1,
+        )[0]
+        self.assertNotIn("buildBitrateBellCurve(payload)", canonical_section)
+        self.assertNotIn("renderReplacementQueueDetail(payload)", canonical_section)
 
     def test_movie_normalize_has_review_and_apply_workflow(self) -> None:
         self.assertIn("endpoint: '/api/movies/normalize'", INDEX_HTML)

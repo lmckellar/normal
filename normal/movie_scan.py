@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -73,12 +74,44 @@ def build_empty_movie_scan_report(source_root: Path) -> MovieScanReport:
     )
 
 
+def iter_video_files(
+    source_root: Path,
+    *,
+    should_cancel: Callable[[], bool] | None = None,
+) -> Any:
+    yield from _iter_video_files(source_root, source_root=source_root, should_cancel=should_cancel)
+
+
 def discover_video_files(source_root: Path) -> list[Path]:
-    return sorted(
-        path
-        for path in source_root.rglob("*")
-        if path.is_file() and is_supported_video_file(path, source_root)
-    )
+    return list(iter_video_files(source_root))
+
+
+def _iter_video_files(
+    current_root: Path,
+    *,
+    source_root: Path,
+    should_cancel: Callable[[], bool] | None,
+) -> Any:
+    if should_cancel is not None and should_cancel():
+        return
+    try:
+        with os.scandir(current_root) as entries:
+            ordered = sorted(entries, key=lambda entry: entry.name.lower())
+    except OSError:
+        return
+    for entry in ordered:
+        if should_cancel is not None and should_cancel():
+            return
+        path = Path(entry.path)
+        if entry.is_dir(follow_symlinks=False):
+            if entry.name.startswith("."):
+                continue
+            yield from _iter_video_files(path, source_root=source_root, should_cancel=should_cancel)
+            continue
+        if not entry.is_file(follow_symlinks=False):
+            continue
+        if is_supported_video_file(path, source_root):
+            yield path
 
 
 def is_supported_video_file(path: Path, source_root: Path | None = None) -> bool:

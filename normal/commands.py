@@ -234,11 +234,17 @@ def run_artwork_sync_jellyfin_metadata(source: Path, dry_run: bool) -> int:
     return 0
 
 
-def run_web(host: str, port: int, source: Path | None = None, omdb_key: str | None = None) -> int:
+def run_web(
+    host: str,
+    port: int,
+    source: Path | None = None,
+    omdb_key: str | None = None,
+    tmdb_key: str | None = None,
+) -> int:
     default_source = None
     if source is not None:
         default_source = ensure_source_directory(source)
-    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key)
+    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
     return 0
 
 

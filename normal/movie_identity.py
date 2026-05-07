@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 import re
-
-from normal.models import ChangePlan, ProposedChange, WarningItem, build_empty_plan
-from normal.movie_identity import ParsedMovieIdentity, parse_movie_identity
-from normal.movie_scan import VIDEO_EXTENSIONS, discover_video_files
 
 
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|2100)(?!\d)")
@@ -107,97 +103,96 @@ COMPACT_TITLE_WORDS = {
     "ODYSSEY": "Odyssey",
 }
 
-ParsedMovieName = ParsedMovieIdentity
+
+@dataclass(slots=True)
+class ParsedMovieIdentity:
+    title: str | None
+    year: int | None
+    tech_tokens: list[str]
+    release_group: str | None
+    confidence: str
+    warnings: list[str]
 
 
-def build_movie_plan(source_root: Path) -> ChangePlan:
-    plan = build_empty_plan(source_root)
-    movie_files = discover_video_files(source_root)
-
-    if not movie_files:
-        plan.warnings.append(
-            WarningItem(
-                code="no_video_files",
-                message="No supported video files were found under the source directory.",
-                path=str(source_root),
-            )
-        )
-        return plan
-
-    files_by_folder: dict[Path, list[Path]] = defaultdict(list)
-    for movie_path in movie_files:
-        files_by_folder[movie_path.parent].append(movie_path)
-
-    for folder_path, folder_files in sorted(files_by_folder.items()):
-        if folder_path.resolve() == source_root.resolve():
-            for movie_path in sorted(folder_files):
-                append_movie_file_changes(plan, source_root, folder_path, movie_path, loose_root_file=True)
-            continue
-
-        if len(folder_files) != 1:
-            plan.warnings.append(
-                WarningItem(
-                    code="movie_folder_multiple_videos",
-                    message="Folder contains multiple supported video files; movie normalization was skipped for safety.",
-                    path=str(folder_path),
-                )
-            )
-            continue
-
-        movie_path = folder_files[0]
-        append_movie_file_changes(plan, source_root, folder_path, movie_path, loose_root_file=False)
-
-    for folder_change in plan_collection_folder_cleanup(source_root, movie_files, files_by_folder):
-        plan.proposed_changes.append(folder_change)
-
-    return plan
+@dataclass(frozen=True, slots=True)
+class MovieIdentityKey:
+    title: str
+    year: int
 
 
-def append_movie_file_changes(
-    plan: ChangePlan,
-    source_root: Path,
-    folder_path: Path,
-    movie_path: Path,
-    loose_root_file: bool,
-) -> None:
-    parsed = parse_movie_name(movie_path)
-    for warning in parsed.warnings:
-        plan.warnings.append(
-            WarningItem(
-                code="movie_name_review",
-                message=warning,
-                path=str(movie_path),
-            )
-        )
+def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
+    stem = movie_path.stem
+    match = find_movie_year_match(stem)
+    source_text = stem
+    if match is None:
+        parent_match = find_movie_year_match(movie_path.parent.name)
+        if parent_match is None:
+            return ParsedMovieIdentity(None, None, [], None, "review", ["Unable to find a year token in filename or folder."])
+        source_text = movie_path.parent.name
+        match = parent_match
 
-    if parsed.title is None or parsed.year is None:
-        plan.warnings.append(
-            WarningItem(
-                code="movie_name_unparsed",
-                message="Movie title/year could not be parsed confidently from the local path.",
-                path=str(movie_path),
-            )
-        )
-        return
+    year = int(match.group(1))
+    title_text = cleanup_title_text(strip_leading_collection_index(strip_leading_site_credit(source_text[: match.start()])))
+    tail_text = source_text[match.end() :]
+    compact_review = False
+    compact_payload = parse_leading_number_compact_payload(source_text, match)
+    if compact_payload is not None:
+        title_text, year, tail_text = compact_payload
+        compact_review = title_text != match.group(1)
+    bracket_payload = parse_year_leading_bracket_payload(source_text, match)
+    if bracket_payload is not None and not title_text:
+        title_text, tail_text = bracket_payload
+        compact_review = True
+    release_group = None
 
-    canonical_base = canonical_movie_base(parsed)
-    if loose_root_file:
-        file_move = build_loose_file_move_change(source_root, movie_path, canonical_base, parsed.confidence)
-        if file_move is not None:
-            plan.proposed_changes.append(file_move)
-        return
+    if " - " in tail_text:
+        tail_text, release_group = tail_text.rsplit(" - ", 1)
+        release_group = cleanup_group_text(release_group)
+    else:
+        group_match = RELEASE_GROUP_SUFFIX_PATTERN.search(tail_text)
+        if group_match is not None:
+            tail_text = tail_text[: group_match.start()]
+            release_group = cleanup_group_text(group_match.group("group"))
 
-    file_change = build_file_change(source_root, movie_path, canonical_base, parsed.confidence)
-    if file_change is not None:
-        plan.proposed_changes.append(file_change)
+    tech_tokens = []
+    unknown_tokens = []
+    for raw_token in TOKEN_PATTERN.findall(tail_text):
+        split_tokens = split_compact_technical_token(raw_token)
+        if len(split_tokens) > 1 and should_mark_compact_split_for_review(raw_token):
+            compact_review = True
+        for split_token in split_tokens:
+            token = normalize_token(split_token)
+            if not token or token.lower() in SKIP_TOKENS:
+                continue
+            tech_tokens.append(token)
+            if token == split_token and token.isalnum() and len(token) > 9 and split_token.lower() not in CANONICAL_TOKEN_MAP:
+                unknown_tokens.append(token)
 
-    folder_change = build_folder_change(source_root, folder_path, canonical_base, parsed.confidence)
-    if folder_change is not None:
-        plan.proposed_changes.append(folder_change)
+    confidence = "safe"
+    warnings: list[str] = []
+    if compact_review:
+        confidence = "review"
+        warnings.append("Movie path contains compacted title or technical tokens; rename was split heuristically and requires review.")
+    if unknown_tokens:
+        confidence = "review"
+        warnings.append("Movie path contains unrecognized technical tokens; rename kept them but requires review.")
+    if not title_text:
+        confidence = "review"
+        warnings.append("Movie title was weakly inferred from the local path and should be reviewed.")
+
+    return ParsedMovieIdentity(
+        title=title_text or fallback_parent_title(movie_path.parent.name, year),
+        year=year,
+        tech_tokens=canonicalize_token_sequence(tech_tokens),
+        release_group=release_group,
+        confidence=confidence,
+        warnings=warnings,
+    )
 
 
-def parse_movie_name(movie_path: Path) -> ParsedMovieName:
-    return parse_movie_identity(movie_path)
+def canonical_identity_key(title: str, year: int) -> MovieIdentityKey:
+    normalized = re.sub(r"[^a-z0-9]+", " ", title.casefold())
+    return MovieIdentityKey(title=" ".join(normalized.split()), year=year)
 
 
 def find_movie_year_match(value: str) -> re.Match[str] | None:
@@ -246,7 +241,7 @@ def parse_leading_number_compact_payload(source_text: str, match: re.Match[str])
     return f"{leading_number} {title_tail}", int(inner_match.group(1)), tail_text
 
 
-def parse_year_leading_bracket_payload(source_text: str, match: re.Match[str], year: int) -> tuple[str, str] | None:
+def parse_year_leading_bracket_payload(source_text: str, match: re.Match[str]) -> tuple[str, str] | None:
     prefix = source_text[: match.start()]
     if cleanup_title_text(prefix):
         return None
@@ -332,16 +327,6 @@ def strip_leading_site_credit(value: str) -> str:
 def cleanup_group_text(value: str) -> str | None:
     cleaned = re.sub(r"[^A-Za-z0-9]+", "", value).upper()
     return cleaned or None
-
-
-def cleanup_collection_folder_name(value: str) -> str:
-    cleaned = value.replace("_", " ")
-    cleaned = re.sub(r"\.", " ", cleaned)
-    cleaned = re.sub(r"\s*\[\s*", " [", cleaned)
-    cleaned = re.sub(r"\s*\]\s*", "] ", cleaned)
-    cleaned = re.sub(r"\[\s+", "[", cleaned)
-    cleaned = re.sub(r"\s+\]", "]", cleaned)
-    return " ".join(cleaned.split()).strip()
 
 
 def normalize_token(token: str) -> str:
@@ -463,145 +448,3 @@ def dedupe_preserve_order(tokens: list[str]) -> list[str]:
         seen.add(marker)
         ordered.append(token)
     return ordered
-
-
-def canonical_movie_base(parsed: ParsedMovieName) -> str:
-    base = f"{parsed.title} ({parsed.year})"
-    details = list(parsed.tech_tokens)
-    if parsed.release_group:
-        details.append(parsed.release_group)
-    if details:
-        return f"{base} [{' '.join(details)}]"
-    return base
-
-
-def plan_collection_folder_cleanup(
-    source_root: Path,
-    movie_files: list[Path],
-    files_by_folder: dict[Path, list[Path]],
-) -> list[ProposedChange]:
-    direct_video_folders = set(files_by_folder)
-    candidate_folders: set[Path] = set()
-    source_resolved = source_root.resolve()
-
-    for movie_path in movie_files:
-        for parent in movie_path.parent.parents:
-            parent_resolved = parent.resolve()
-            if parent_resolved == source_resolved:
-                break
-            try:
-                parent_resolved.relative_to(source_resolved)
-            except ValueError:
-                break
-            if is_redundant_single_movie_wrapper(source_root, movie_path.parent):
-                continue
-            if parent in direct_video_folders:
-                continue
-            candidate_folders.add(parent)
-
-    changes: list[ProposedChange] = []
-    for folder_path in sorted(candidate_folders, key=lambda path: str(path.relative_to(source_root))):
-        proposed_name = cleanup_collection_folder_name(folder_path.name)
-        if not proposed_name or proposed_name == folder_path.name:
-            continue
-        changes.append(
-            ProposedChange(
-                item_id=f"{folder_path.relative_to(source_root)}#collection-folder",
-                change_type="folder_rename",
-                current_value=str(folder_path.relative_to(source_root)),
-                proposed_value=str(folder_path.with_name(proposed_name).relative_to(source_root)),
-                confidence="safe",
-                reason="Collection folder punctuation and spacing were normalized without inferring title or year.",
-                path=str(folder_path),
-            )
-        )
-    return changes
-
-
-def build_file_change(
-    source_root: Path,
-    movie_path: Path,
-    canonical_base: str,
-    confidence: str,
-) -> ProposedChange | None:
-    proposed_name = f"{canonical_base}{movie_path.suffix.lower()}"
-    current_name = movie_path.name
-    if proposed_name == current_name:
-        return None
-
-    return ProposedChange(
-        item_id=f"{movie_path.relative_to(source_root)}#file",
-        change_type="file_rename",
-        current_value=current_name,
-        proposed_value=proposed_name,
-        confidence=confidence,
-        reason="Movie filename was normalized from locally parsed title, year, and technical tokens.",
-        path=str(movie_path),
-    )
-
-
-def build_loose_file_move_change(
-    source_root: Path,
-    movie_path: Path,
-    canonical_base: str,
-    confidence: str,
-) -> ProposedChange | None:
-    proposed_path = Path(canonical_base) / f"{canonical_base}{movie_path.suffix.lower()}"
-    current_value = movie_path.name
-    if movie_path.relative_to(source_root) == proposed_path:
-        return None
-
-    return ProposedChange(
-        item_id=f"{movie_path.relative_to(source_root)}#file-move",
-        change_type="file_move",
-        current_value=current_value,
-        proposed_value=str(proposed_path),
-        confidence=confidence,
-        reason="Loose movie file was moved into its canonical movie folder.",
-        path=str(movie_path),
-    )
-
-
-def build_folder_change(
-    source_root: Path,
-    folder_path: Path,
-    canonical_base: str,
-    confidence: str,
-) -> ProposedChange | None:
-    if folder_path.resolve() == source_root.resolve():
-        return None
-    current_name = folder_path.name
-    if current_name == canonical_base:
-        return None
-
-    proposed_folder = folder_path.with_name(canonical_base)
-    reason = "Movie folder was normalized to match the canonical movie release name."
-    if is_redundant_single_movie_wrapper(source_root, folder_path):
-        proposed_folder = folder_path.parent.with_name(canonical_base)
-        reason = "Duplicate wrapper folder was collapsed into the canonical movie folder."
-
-    return ProposedChange(
-        item_id=f"{folder_path.relative_to(source_root)}#folder",
-        change_type="folder_rename",
-        current_value=str(folder_path.relative_to(source_root)),
-        proposed_value=str(proposed_folder.relative_to(source_root)),
-        confidence=confidence,
-        reason=reason,
-        path=str(folder_path),
-    )
-
-
-def is_redundant_single_movie_wrapper(source_root: Path, folder_path: Path) -> bool:
-    parent = folder_path.parent
-    if parent.resolve() == source_root.resolve():
-        return False
-    if cleanup_collection_folder_name(parent.name) != cleanup_collection_folder_name(folder_path.name):
-        return False
-    try:
-        entries = list(parent.iterdir())
-    except OSError:
-        return False
-    child_dirs = [entry for entry in entries if entry.is_dir()]
-    if len(child_dirs) != 1 or child_dirs[0] != folder_path:
-        return False
-    return all(entry.is_dir() or entry.suffix.lower() not in VIDEO_EXTENSIONS for entry in entries)

@@ -62,6 +62,11 @@ The web UI uses a Stop/Run toggle for in-flight scans:
 - Movie profile scans also check for client disconnects between files and report `movie_profile_cancelled` when cancellation is observed.
 - Cancellation is cooperative. A currently running media probe may finish or time out before the request fully unwinds.
 
+The web UI also applies two guards around heavy recursive scans:
+
+- risky sources such as drive-root style paths and NTFS/FUSE mounts trigger an explicit confirmation warning
+- only one heavy scan per source is allowed at a time; overlapping requests are rejected instead of running concurrently
+
 Movie metadata probes run through `ffprobe` with a 30 second timeout per file. A timed-out probe becomes a reported warning/error for that file rather than hanging the whole scan indefinitely.
 
 Known open issue:

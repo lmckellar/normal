@@ -7,6 +7,8 @@
 - New onboarding documentation
 
 ### Movie lane
+- Canonical Lists page backed by TMDb plus a local cache for owned-title coverage against live all-time movie lists
+- Simple Canonical Lists badge unlocks for quick coverage feedback; deeper badge refinement is deferred
 - Shared movie triage substrate with family-aware replacement queue state
 - New `Fix Multi-Audio Packaging` workflow for MKVs with wrong default language or weak English fallback tracks
 - Replacement queue history filters for `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`
@@ -14,6 +16,7 @@
 - Movie replacement-queue delete now treats already-missing media as already deleted instead of leaving the queue item stuck
 - `Fix Multi-Audio Packaging` now locks selection and action buttons during active remux, and separates `Delete Selected Files` to the far right to reduce accidental clicks
 - Movie replacement-queue state now persists across hard refresh for the same source, including audio-packaging `Deleted, Awaiting Replacement` history
+- Early local validation showed Canonical Lists and Weak Encodes scans complete with only moderate transient temperature rise that recedes after scan completion
 
 ### Known issue
 - Movie scan cancellation is still best-effort. Under some unknown fast UI interaction pattern, a background `ffprobe` may survive cancellation and fail to appear in the Drive Activity indicator.
