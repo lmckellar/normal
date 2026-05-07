@@ -9,6 +9,7 @@ from normal.movie_replacement_queue import (
     clear_pending_queue_items,
     delete_replacement_queue_media,
     dismiss_replacement_queue_items,
+    history_title_key,
     load_queue,
     reconcile_replacement_queue,
 )
@@ -91,6 +92,53 @@ class MovieReplacementQueueTests(unittest.TestCase):
 
             self.assertEqual(result["items"][0]["title"], "The Long Goodbye")
             self.assertEqual(result["items"][0]["year"], 1973)
+            self.assertEqual(result["items"][0]["history_title_key"], "the long goodbye")
+
+    def test_history_title_key_collapses_punctuation_and_unicode_prefix_variants(self) -> None:
+        self.assertEqual(history_title_key("*batteries Not Included"), "batteries not included")
+        self.assertEqual(history_title_key("\uf021batteries Not Included"), "batteries not included")
+        self.assertEqual(history_title_key("Top Secret!"), "top secret")
+        self.assertEqual(history_title_key("Robot & Frank"), "robot frank")
+
+    def test_load_queue_keeps_identity_locked_title(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            state = root / "queue.json"
+            source = root / "movies"
+            movie = source / "Robocop 3 Sci Fi (1993)" / "Robocop 3 Sci Fi (1993).mp4"
+            movie.parent.mkdir(parents=True)
+            movie.write_text("video", encoding="utf-8")
+            state.write_text(
+                """{
+  "version": 2,
+  "items": [
+    {
+      "item_id": "x",
+      "source_root": "%s",
+      "title": "Robocop 3",
+      "year": 1993,
+      "title_key": "robocop 3",
+      "original_path": "%s",
+      "original_folder_path": "%s",
+      "mode": "file",
+      "issue_family": "weak_encode",
+      "original_profile_label": "sd_low_quality",
+      "queued_at": "2026-01-01T00:00:00+00:00",
+      "status": "deleted",
+      "identity_locked": true
+    }
+  ]
+}
+"""
+                % (source.resolve(), movie.resolve(), movie.parent.resolve()),
+                encoding="utf-8",
+            )
+
+            result = load_queue(state)
+
+            self.assertEqual(result["items"][0]["title"], "Robocop 3")
+            self.assertEqual(result["items"][0]["title_key"], "robocop 3")
+            self.assertEqual(result["items"][0]["history_title_key"], "robocop 3")
 
     def test_skips_non_strict_weak_and_unparsed_items(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

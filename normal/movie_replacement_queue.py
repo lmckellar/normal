@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import tempfile
 from typing import Any
@@ -39,6 +40,7 @@ SAFE_MOVIE_SIDECAR_EXTENSIONS = {
     ".webp",
     ".xml",
 }
+HISTORY_TITLE_PATTERN = re.compile(r"[^a-z0-9]+")
 
 
 @dataclass(slots=True)
@@ -48,6 +50,7 @@ class ReplacementQueueItem:
     title: str
     year: int
     title_key: str
+    history_title_key: str
     original_path: str
     original_folder_path: str
     mode: str
@@ -72,6 +75,11 @@ def default_queue_path() -> Path:
 
 def title_key(title: str) -> str:
     return " ".join(title.casefold().split())
+
+
+def history_title_key(title: str) -> str:
+    collapsed = HISTORY_TITLE_PATTERN.sub(" ", title.casefold()).strip()
+    return " ".join(collapsed.split())
 
 
 def is_strict_weak_label(label: str | None) -> bool:
@@ -121,16 +129,46 @@ def normalize_queue_item(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_queue_item_identity(item: dict[str, Any]) -> dict[str, Any]:
+    if item.get("identity_locked"):
+        title = str(item.get("title") or "")
+        if not title:
+            return item
+        key = title_key(title)
+        history_key = history_title_key(title)
+        normalized = dict(item)
+        normalized["title_key"] = key
+        normalized["history_title_key"] = history_key
+        return normalized
     raw_path = item.get("original_path")
     if not raw_path:
-        return item
+        title = str(item.get("title") or "")
+        history_key = history_title_key(title) if title else ""
+        if item.get("history_title_key") == history_key:
+            return item
+        return {**item, "history_title_key": history_key}
     parsed = parse_movie_name(Path(str(raw_path)))
     if parsed.title is None or parsed.year is None:
-        return item
+        title = str(item.get("title") or "")
+        history_key = history_title_key(title) if title else ""
+        if item.get("history_title_key") == history_key:
+            return item
+        return {**item, "history_title_key": history_key}
     key = title_key(parsed.title)
-    if item.get("title") == parsed.title and item.get("year") == parsed.year and item.get("title_key") == key:
+    history_key = history_title_key(parsed.title)
+    if (
+        item.get("title") == parsed.title
+        and item.get("year") == parsed.year
+        and item.get("title_key") == key
+        and item.get("history_title_key") == history_key
+    ):
         return item
-    return {**item, "title": parsed.title, "year": parsed.year, "title_key": key}
+    return {
+        **item,
+        "title": parsed.title,
+        "year": parsed.year,
+        "title_key": key,
+        "history_title_key": history_key,
+    }
 
 
 def normalized_item_id(item: dict[str, Any]) -> str:
@@ -276,6 +314,7 @@ def build_queue_item(
         title=title,
         year=year,
         title_key=key,
+        history_title_key=history_title_key(title),
         original_path=str(path),
         original_folder_path=str(folder),
         mode=mode,
