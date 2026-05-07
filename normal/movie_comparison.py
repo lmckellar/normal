@@ -107,16 +107,34 @@ class MovieComparisonAggregates:
 
 
 @dataclass(slots=True)
+class MovieComparisonCard:
+    card_id: str
+    label: str
+    group: str
+    primary_count: int
+    primary_total: int
+    primary_pct: float
+    secondary_count: int | None = None
+    secondary_total: int | None = None
+    secondary_pct: float | None = None
+    detail: str = ""
+    dataset_id: str | None = None
+
+
+@dataclass(slots=True)
 class MovieComparisonReport:
     source_root: str
     dataset_root: str
     generated_at: str
     available_datasets: list[ComparisonDatasetMetadata] = field(default_factory=list)
     selected_dataset_ids: list[str] = field(default_factory=list)
+    active_service_dataset_id: str | None = None
+    active_service_dataset: ComparisonDatasetMetadata | None = None
     aggregates: MovieComparisonAggregates | None = None
     service_datasets: list[ComparisonDatasetReport] = field(default_factory=list)
     prestige_datasets: list[ComparisonDatasetReport] = field(default_factory=list)
     recent_datasets: list[ComparisonDatasetReport] = field(default_factory=list)
+    cards: list[MovieComparisonCard] = field(default_factory=list)
     unmatched_local_titles: list[dict[str, Any]] = field(default_factory=list)
     warnings: list[WarningItem] = field(default_factory=list)
 
@@ -176,11 +194,28 @@ def build_movie_comparison_report(
             )
         )
 
-    selected_datasets = [dataset for dataset in loaded_datasets if dataset["metadata"].dataset_id in set(selected)]
-    report.service_datasets = build_dataset_reports(local_movies, selected_datasets, "service")
-    report.prestige_datasets = build_dataset_reports(local_movies, selected_datasets, "prestige")
-    report.recent_datasets = build_dataset_reports(local_movies, selected_datasets, "recent")
-    report.unmatched_local_titles = build_unmatched_local_titles(local_movies, selected_datasets)
+    selected_service_datasets = [
+        dataset
+        for dataset in loaded_datasets
+        if dataset["metadata"].dataset_kind == "service" and dataset["metadata"].dataset_id in set(selected)
+    ]
+    benchmark_datasets = [
+        dataset
+        for dataset in loaded_datasets
+        if dataset["metadata"].dataset_kind in {"prestige", "recent"}
+    ]
+    comparison_datasets = selected_service_datasets + benchmark_datasets
+    report.service_datasets = build_dataset_reports(local_movies, selected_service_datasets, "service")
+    report.prestige_datasets = build_dataset_reports(local_movies, benchmark_datasets, "prestige")
+    report.recent_datasets = build_dataset_reports(local_movies, benchmark_datasets, "recent")
+    active_service = select_active_service_dataset(
+        report.service_datasets,
+        selected_dataset_ids=report.selected_dataset_ids,
+    )
+    if active_service is not None:
+        report.active_service_dataset_id = active_service.metadata.dataset_id
+        report.active_service_dataset = active_service.metadata
+    report.unmatched_local_titles = build_unmatched_local_titles(local_movies, comparison_datasets)
     report.aggregates = build_aggregates(
         local_movies,
         report.service_datasets,
@@ -188,6 +223,14 @@ def build_movie_comparison_report(
         report.recent_datasets,
         skipped_non_normalized=skipped_non_normalized,
         now=now,
+    )
+    report.cards = build_cards(
+        local_movies,
+        report.service_datasets,
+        report.prestige_datasets,
+        report.recent_datasets,
+        all_datasets=loaded_datasets,
+        active_service=active_service,
     )
     return report
 
@@ -503,6 +546,173 @@ def build_aggregates(
         service_union_overlap_count=len(service_union_keys),
         service_union_overlap_pct=percent(len(service_union_keys), total_normalized),
     )
+
+
+def select_active_service_dataset(
+    service_datasets: list[ComparisonDatasetReport],
+    *,
+    selected_dataset_ids: list[str],
+) -> ComparisonDatasetReport | None:
+    if not service_datasets:
+        return None
+    selected_ids = set(selected_dataset_ids)
+    for report in service_datasets:
+        if report.metadata.dataset_id in selected_ids:
+            return report
+    return service_datasets[0]
+
+
+def build_cards(
+    local_movies: dict[tuple[str, int], LocalNormalizedMovie],
+    service_datasets: list[ComparisonDatasetReport],
+    prestige_datasets: list[ComparisonDatasetReport],
+    recent_datasets: list[ComparisonDatasetReport],
+    *,
+    all_datasets: list[dict[str, Any]],
+    active_service: ComparisonDatasetReport | None,
+) -> list[MovieComparisonCard]:
+    if active_service is None:
+        return []
+    cards: list[MovieComparisonCard] = []
+    active_service_keys = dataset_entry_keys_for_id(all_datasets, active_service.metadata.dataset_id)
+    local_keys = set(local_movies.keys())
+    cards.append(
+        MovieComparisonCard(
+            card_id="library_capture",
+            label="Library Capture",
+            group="menu_breadth",
+            primary_count=active_service.overlap_count,
+            primary_total=active_service.total_dataset_titles,
+            primary_pct=percent(active_service.overlap_count, active_service.total_dataset_titles),
+            secondary_count=active_service.overlap_count,
+            secondary_total=len(local_movies),
+            secondary_pct=percent(active_service.overlap_count, len(local_movies)),
+            detail=f"{active_service.overlap_count} {active_service.metadata.dataset_name} titles already exist in the local library.",
+        )
+    )
+
+    exclusive_keys = exclusive_service_keys(all_datasets, active_service.metadata.dataset_id)
+    cards.append(
+        MovieComparisonCard(
+            card_id="exclusive_titles",
+            label="Exclusive Titles",
+            group="menu_breadth",
+            primary_count=len(exclusive_keys),
+            primary_total=active_service.total_dataset_titles,
+            primary_pct=percent(len(exclusive_keys), active_service.total_dataset_titles),
+            detail=f"{len(exclusive_keys)} titles are unique to {active_service.metadata.dataset_name} inside the currently installed service set.",
+        )
+    )
+
+    prestige_and_recent_keys = dataset_union_keys_by_kind(all_datasets, {"prestige", "recent"})
+    service_benchmark_keys = active_service_keys & prestige_and_recent_keys
+    missing_benchmark_keys = service_benchmark_keys - local_keys
+    cards.append(
+        MovieComparisonCard(
+            card_id="gap_opportunity",
+            label="Gap Opportunity",
+            group="menu_breadth",
+            primary_count=len(missing_benchmark_keys),
+            primary_total=len(service_benchmark_keys),
+            primary_pct=percent(len(missing_benchmark_keys), len(service_benchmark_keys)),
+            detail=f"{len(missing_benchmark_keys)} prestige or recent titles on {active_service.metadata.dataset_name} are missing locally.",
+        )
+    )
+
+    for report in ordered_prestige_reports(prestige_datasets):
+        service_list_keys = active_service_keys & dataset_entry_keys_for_id(all_datasets, report.metadata.dataset_id)
+        local_owned_keys = service_list_keys & local_keys
+        cards.append(
+            MovieComparisonCard(
+                card_id=f"{report.metadata.dataset_id}_coverage",
+                label=f"{report.metadata.dataset_name} Coverage",
+                group=prestige_card_group(report.metadata.dataset_id),
+                dataset_id=report.metadata.dataset_id,
+                primary_count=len(service_list_keys),
+                primary_total=report.total_dataset_titles,
+                primary_pct=percent(len(service_list_keys), report.total_dataset_titles),
+                secondary_count=len(local_owned_keys),
+                secondary_total=len(service_list_keys),
+                secondary_pct=percent(len(local_owned_keys), len(service_list_keys)),
+                detail=(
+                    f"{len(service_list_keys)} {report.metadata.dataset_name} titles are on "
+                    f"{active_service.metadata.dataset_name}. {len(local_owned_keys)} of those are already owned locally."
+                ),
+            )
+        )
+    return cards
+
+
+def ordered_prestige_reports(reports: list[ComparisonDatasetReport]) -> list[ComparisonDatasetReport]:
+    order = {
+        "imdb_top_250": 0,
+        "imdb_top_1000": 1,
+        "top_100_scifi": 2,
+        "top_100_fantasy": 3,
+        "top_100_action": 4,
+        "top_100_thriller": 5,
+        "top_100_horror": 6,
+        "top_100_comedy": 7,
+        "top_100_animation": 8,
+    }
+    return sorted(
+        reports,
+        key=lambda report: (order.get(report.metadata.dataset_id, 999), report.metadata.dataset_name.casefold()),
+    )
+
+
+def prestige_card_group(dataset_id: str) -> str:
+    if dataset_id in {"imdb_top_250", "imdb_top_1000"}:
+        return "classics"
+    return "genre_classics"
+
+
+def dataset_entry_keys_for_id(
+    all_datasets: list[dict[str, Any]],
+    dataset_id: str,
+) -> set[tuple[str, int]]:
+    for dataset in all_datasets:
+        metadata: ComparisonDatasetMetadata = dataset["metadata"]
+        if metadata.dataset_id != dataset_id:
+            continue
+        return {
+            (normalize_match_title(entry.title), entry.year)
+            for entry in dataset["entries"]
+        }
+    return set()
+
+
+def dataset_union_keys_by_kind(
+    all_datasets: list[dict[str, Any]],
+    dataset_kinds: set[str],
+) -> set[tuple[str, int]]:
+    keys: set[tuple[str, int]] = set()
+    for dataset in all_datasets:
+        metadata: ComparisonDatasetMetadata = dataset["metadata"]
+        if metadata.dataset_kind not in dataset_kinds:
+            continue
+        keys.update(
+            (normalize_match_title(entry.title), entry.year)
+            for entry in dataset["entries"]
+        )
+    return keys
+
+
+def exclusive_service_keys(
+    all_datasets: list[dict[str, Any]],
+    active_dataset_id: str,
+) -> set[tuple[str, int]]:
+    active_keys = dataset_entry_keys_for_id(all_datasets, active_dataset_id)
+    other_service_keys: set[tuple[str, int]] = set()
+    for dataset in all_datasets:
+        metadata: ComparisonDatasetMetadata = dataset["metadata"]
+        if metadata.dataset_kind != "service" or metadata.dataset_id == active_dataset_id:
+            continue
+        other_service_keys.update(
+            (normalize_match_title(entry.title), entry.year)
+            for entry in dataset["entries"]
+        )
+    return active_keys - other_service_keys
 
 
 def matched_identity_keys(reports: list[ComparisonDatasetReport]) -> set[tuple[str, int]]:

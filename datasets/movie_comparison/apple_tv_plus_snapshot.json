@@ -1,0 +1,17 @@
+{
+  "dataset_id": "apple_tv_plus_snapshot",
+  "dataset_name": "Apple TV+",
+  "dataset_kind": "service",
+  "snapshot_date": "2026-05-07",
+  "freshness_label": "test seed May 2026",
+  "entries": [
+    { "title": "CODA", "year": 2021 },
+    { "title": "Greyhound", "year": 2020 },
+    { "title": "Wolfwalkers", "year": 2020 },
+    { "title": "Swan Song", "year": 2021 },
+    { "title": "Sharper", "year": 2023 },
+    { "title": "Fancy Dance", "year": 2024 },
+    { "title": "Blitz", "year": 2024 },
+    { "title": "The Gorge", "year": 2025 }
+  ]
+}

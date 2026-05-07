@@ -109,10 +109,13 @@ Top-level shape:
 - `source_root`, `dataset_root`, `generated_at`
 - `available_datasets`
 - `selected_dataset_ids`
+- `active_service_dataset_id`
+- `active_service_dataset`
 - `aggregates`
 - `service_datasets`
 - `prestige_datasets`
 - `recent_datasets`
+- `cards`
 - `unmatched_local_titles`
 - `warnings`
 
@@ -124,6 +127,18 @@ Strict comparison rules:
 - punctuation/case normalization only
 - no fuzzy matching in v1
 - duplicate local copies collapse to one title; strongest local profile is used for threshold summaries
+
+Current dashboard stance:
+
+- exactly one `service` dataset is active in the UI at a time
+- installed `prestige` and `recent` datasets remain active as benchmark lists
+- comparison cards are menu/catalogue cards, not encode-quality cards
+
+Current card families:
+
+- `menu_breadth`: `Library Capture`, `Exclusive Titles`, `Gap Opportunity`
+- `classics`: `IMDb Top 250 Coverage`, `IMDb Top 1000 Coverage`
+- `genre_classics`: installed genre-top-list coverage cards such as sci-fi, fantasy, action, thriller, horror, comedy, and animation
 
 Dataset metadata contract:
 
