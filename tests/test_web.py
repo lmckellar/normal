@@ -1,21 +1,15 @@
 from __future__ import annotations
 
 import tempfile
-import threading
 import unittest
-from http.server import ThreadingHTTPServer
-import json
 from pathlib import Path
 from subprocess import CompletedProcess
-from urllib.request import Request, urlopen
 from unittest.mock import patch
 
-from normal.quality_review import MediaFacts
 from normal.web import (
     INDEX_HTML,
     ActivityTracker,
     build_activity_payload,
-    build_handler,
     delete_movie_junk_files,
     find_external_activity,
     format_storage_size,
@@ -174,17 +168,6 @@ class WebTests(unittest.TestCase):
         self.assertIn("endpoint: '/api/movies/promo-docs'", INDEX_HTML)
         self.assertIn("'/api/movies/junk/delete'", INDEX_HTML)
 
-    def test_movie_comparison_dashboard_is_wired(self) -> None:
-        self.assertIn("id: 'comparison'", INDEX_HTML)
-        self.assertIn("label: 'Streaming Service Comparison Dashboard'", INDEX_HTML)
-        self.assertIn("endpoint: '/api/movies/comparison-dashboard'", INDEX_HTML)
-        self.assertIn("renderMovieComparison", INDEX_HTML)
-        self.assertIn("selectedComparisonDatasetIds: new Set()", INDEX_HTML)
-        self.assertIn("requestBody.selected_dataset_ids = Array.from(state.selectedComparisonDatasetIds);", INDEX_HTML)
-        self.assertIn("No comparison datasets are installed.", INDEX_HTML)
-        self.assertIn("IMDb Top 250", INDEX_HTML)
-        self.assertIn("snapshot date missing", INDEX_HTML)
-
     def test_movie_replacement_queue_is_wired_inside_weak_encodes(self) -> None:
         self.assertIn("Replacement Queue", INDEX_HTML)
         self.assertIn("Replacement Queue · Weak Encode", INDEX_HTML)
@@ -309,38 +292,6 @@ class WebTests(unittest.TestCase):
         self.assertIn("function applySelectedMovieChanges", INDEX_HTML)
         self.assertIn("showMovieNormalizeTreeDetail", INDEX_HTML)
         self.assertIn("All Safe", INDEX_HTML)
-
-    def test_movie_comparison_api_returns_no_dataset_warning(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir) / "movies"
-            datasets = Path(tmpdir) / "datasets"
-            source.mkdir()
-            datasets.mkdir()
-            (source / "Alien.1979.1080p.mkv").write_text("video", encoding="utf-8")
-            handler = build_handler(default_source=source)
-            server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-            thread = threading.Thread(target=server.serve_forever, daemon=True)
-            thread.start()
-            try:
-                with patch.dict("os.environ", {"NORMAL_MOVIE_COMPARISON_DATASET_ROOT": str(datasets)}), patch(
-                    "normal.web.tracked_probe",
-                    return_value=lambda _: MediaFacts(width=1920, height=1080, video_bitrate_kbps=6000),
-                ):
-                    request = Request(
-                        f"http://127.0.0.1:{server.server_port}/api/movies/comparison-dashboard",
-                        data=b"{}",
-                        headers={"Content-Type": "application/json"},
-                        method="POST",
-                    )
-                    with urlopen(request) as response:
-                        payload = json.load(response)
-                self.assertEqual(payload["available_datasets"], [])
-                warning_codes = {item["code"] for item in payload["warnings"]}
-                self.assertIn("no_comparison_datasets", warning_codes)
-            finally:
-                server.shutdown()
-                server.server_close()
-                thread.join(timeout=2)
 
     def test_music_artwork_page_is_album_artist_browser(self) -> None:
         self.assertIn("label: 'Repair Artwork for Jellyfin'", INDEX_HTML)

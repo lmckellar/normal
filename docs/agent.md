@@ -16,7 +16,6 @@ normal/
 ├── movie_scan.py                # Movie scan: ffprobe probing, quality scoring, triage
 ├── movie_plan.py                # Movie plan: title/year parsing, rename proposals
 ├── movie_profile.py             # Movie profile: quality ladder classification, heuristic findings
-├── movie_comparison.py          # Movie comparison: strict normalized matching vs local benchmark datasets
 ├── movie_audio_fix.py           # Movie audio packaging repair: lossless MKV remux helpers
 ├── movie_inspect.py             # Movie inspect: single-file diagnostic
 ├── movie_junk.py                # Movie junk: sample/featurette/short detection
@@ -39,7 +38,6 @@ docs/                            # User and agent documentation
 - **Music normalization pipeline**: `scan.py` → `plan.py` → `apply.py` → `output.py`
 - **Movie normalization pipeline**: `movie_plan.py` → `movie_apply` (in `commands.py`)
 - **Movie quality pipeline**: `movie_scan.py` → `movie_profile.py` → `movie_inspect.py` → `movie_junk.py`
-- **Movie comparison pipeline**: `movie_plan.py` + `movie_profile.py` → `movie_comparison.py`
 - **Movie audio packaging repair**: `movie_profile.py` → `movie_audio_fix.py`
 - **Web layer**: `web.py` — all HTTP routes in one file; stdlib `http.server`, no external framework
 - **Shared data contract**: `models.py` — `ProposedChange` is the core type crossing module boundaries
@@ -100,55 +98,6 @@ Per-file classification against the quality ladder. See `docs/commands.md` for t
 
 Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_risk`, `multi_audio_anime_mux_risk`, `high_complexity_hevc_tv_risk`, `episodic_naming_parse_risk`, `anime_absolute_numbering_risk`, `attachment_heavy_visibility_risk`, `default_non_english_audio`, `default_non_english_audio_with_weak_english`.
 
-### Movie comparison report (JSON)
-
-Separate read-only payload for `Movies > Streaming Service Comparison Dashboard`.
-
-Top-level shape:
-
-- `source_root`, `dataset_root`, `generated_at`
-- `available_datasets`
-- `selected_dataset_ids`
-- `active_service_dataset_id`
-- `active_service_dataset`
-- `aggregates`
-- `service_datasets`
-- `prestige_datasets`
-- `recent_datasets`
-- `cards`
-- `unmatched_local_titles`
-- `warnings`
-
-Strict comparison rules:
-
-- reuse existing local movie title/year parsing from `movie_plan.py`
-- include only titles whose parse confidence is `safe`
-- normalized title plus same year only
-- punctuation/case normalization only
-- no fuzzy matching in v1
-- duplicate local copies collapse to one title; strongest local profile is used for threshold summaries
-
-Current dashboard stance:
-
-- exactly one `service` dataset is active in the UI at a time
-- installed `prestige` and `recent` datasets remain active as benchmark lists
-- comparison cards are menu/catalogue cards, not encode-quality cards
-
-Current card families:
-
-- `menu_breadth`: `Library Capture`, `Exclusive Titles`, `Gap Opportunity`
-- `classics`: `IMDb Top 250 Coverage`, `IMDb Top 1000 Coverage`
-- `genre_classics`: installed genre-top-list coverage cards such as sci-fi, fantasy, action, thriller, horror, comedy, and animation
-
-Dataset metadata contract:
-
-- `dataset_id`
-- `dataset_name`
-- `dataset_kind`: `service`, `prestige`, or `recent`
-- `snapshot_date`
-- `freshness_label`
-- `entries`: `{title, year, optional release_date}`
-
 ### Replacement queue (JSON)
 
 Path: `~/.local/share/normal/movie-replacement-queue.json`
@@ -188,7 +137,6 @@ All routes in `web.py`. Key families:
 | `/api/music/artwork/image?...` | GET | Serve artwork preview image bytes |
 | `/api/movies/apply` | POST | Apply selected movie renames in-place |
 | `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, and audio packaging triage |
-| `/api/movies/comparison-dashboard` | POST | Strict comparison payload against installed service/prestige/recent datasets |
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
 | `/api/movies/inspect` | POST | One-file movie diagnostic payload |
 | `/api/movies/normalize` | POST | Build movie normalize plan |
@@ -212,7 +160,6 @@ Hard rules — do not relax without explicit user instruction:
 5. Web UI delete routes validate each path against the current source root before unlinking; outside-root paths are rejected.
 6. Junk deletion revalidates each candidate as junk immediately before deletion.
 7. No remote metadata fetching — all data comes from local files only.
-8. Movie comparison datasets are local JSON snapshots only in v1. Do not add live fetches or API-key requirements without explicit instruction.
 
 ## Intentional design decisions
 
@@ -220,9 +167,6 @@ These are deliberate choices, not gaps:
 
 - **Hardcoded preferences over UI controls (v1 posture).** Quality thresholds, replacement priority weights, normalization rules are in code. The adjustment path is repo/agent edits. This is the core v1 stance; v2 changes it.
 - **Movie triage now has separate lanes on one shared scan.** `Delete Weak Encodes` and `Fix Multi-Audio Packaging` are sibling workflows backed by the same `movie-profile` report and the same replacement queue substrate. Keep workflow/UI code shared where possible, but keep issue-family rules separate.
-- **Movie comparison is a separate dashboard, not an extension of `movie-profile`.** Keep the comparison payload and route independent. Reuse normalization and profile logic underneath, but do not merge it into the existing dashboard contract.
-- **Comparison matching stays strict in v1.** Safe local parse only, normalized title plus same year, punctuation/case normalization only, no fuzzy matching.
-- **Comparison datasets are local snapshots.** Default root is `datasets/movie_comparison/`, overridable with `NORMAL_MOVIE_COMPARISON_DATASET_ROOT`. Freshness is descriptive metadata shown to the user, not inferred remotely.
 - **`Movies > Plex Compatibility` is hidden in the v1 UI.** The heuristics live in `movie_profile.py`. The page is suppressed because the workflow isn't concrete enough. Do not re-expose it without a workflow design.
 - **Music normalization is FLAC-only.** MP3 appears in dashboard profile views but is not a normalization target in v1.
 - **No external web framework.** `web.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.

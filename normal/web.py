@@ -21,7 +21,6 @@ from typing import Any, Callable, Iterator
 from PIL import Image
 
 from normal.movie_audio_fix import fix_english_audio_defaults
-from normal.movie_comparison import build_movie_comparison_report
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_junk import (
     detect_movie_junk_document_reasons,
@@ -1002,13 +1001,12 @@ INDEX_HTML = """<!doctype html>
       selectedReplacementPaths: new Set(),
       selectedChangeIds: new Set(),
       selectedArtistNames: new Set(),
-      selectedComparisonDatasetIds: new Set(),
       approvedArtworkCandidates: {},
       artworkCandidates: {},
       artworkImageSearchOffsets: {},
       results: {
         music: { profile: null, normalize: null, apply: null, artwork: null, replacementQueue: null, replacementQueueSource: '' },
-        movies: { profile: null, normalize: null, apply: null, junk: null, comparison: null, replacementQueue: null, replacementQueueSource: '' }
+        movies: { profile: null, normalize: null, apply: null, junk: null, replacementQueue: null, replacementQueueSource: '' }
       }
     };
 
@@ -1031,7 +1029,6 @@ INDEX_HTML = """<!doctype html>
         sourceLabel: '/path/to/movie or TV library',
         pages: [
           { id: 'library', label: 'Dashboard View', action: 'scan', endpoint: '/api/movies/profile' },
-          { id: 'comparison', label: 'Streaming Service Comparison Dashboard', action: 'scan', endpoint: '/api/movies/comparison-dashboard' },
           { id: 'normalize', label: 'Normalize Movie Files & Folders', action: 'plan', endpoint: '/api/movies/normalize' },
           { id: 'quality', label: 'Delete Weak Encodes', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'audio_packaging', label: 'Fix Multi-Audio Packaging', action: 'scan', endpoint: '/api/movies/profile' },
@@ -1093,14 +1090,6 @@ INDEX_HTML = """<!doctype html>
     let _musicDashboardCache = (() => {
       try {
         const cache = JSON.parse(localStorage.getItem('n_music_dashboard_cache') || '{}');
-        return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
-      } catch {
-        return {};
-      }
-    })();
-    let _movieComparisonCache = (() => {
-      try {
-        const cache = JSON.parse(localStorage.getItem('n_movie_comparison_cache') || '{}');
         return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
       } catch {
         return {};
@@ -1263,16 +1252,8 @@ INDEX_HTML = """<!doctype html>
       try { localStorage.setItem('n_music_dashboard_cache', JSON.stringify(_musicDashboardCache)); } catch {}
     }
 
-    function persistMovieComparisonCache() {
-      try { localStorage.setItem('n_movie_comparison_cache', JSON.stringify(_movieComparisonCache)); } catch {}
-    }
-
     function dashboardCacheKey(source) {
       return source || '';
-    }
-
-    function comparisonCacheKey(source, datasetId) {
-      return `${source || ''}::${datasetId || ''}`;
     }
 
     function trimDashboardCache(cache) {
@@ -1357,53 +1338,6 @@ INDEX_HTML = """<!doctype html>
       return cached;
     }
 
-    function cacheMovieComparison(payload) {
-      if (!payload || !payload.source_root) return;
-      const datasetId = currentComparisonDatasetId(payload);
-      if (!datasetId) return;
-      _movieComparisonCache[comparisonCacheKey(payload.source_root, datasetId)] = {
-        source_root: payload.source_root,
-        dataset_id: datasetId,
-        payload,
-        cached_at: new Date().toISOString()
-      };
-      _movieComparisonCache = trimDashboardCache(_movieComparisonCache);
-      persistMovieComparisonCache();
-    }
-
-    function cachedMovieComparison(source, datasetId = '') {
-      if (datasetId) {
-        const exact = _movieComparisonCache[comparisonCacheKey(source, datasetId)];
-        if (exact?.payload) return exact.payload;
-      }
-      const candidates = Object.values(_movieComparisonCache).filter(entry =>
-        entry &&
-        entry.source_root === source &&
-        entry.payload
-      );
-      if (!candidates.length) return null;
-      candidates.sort((a, b) => String(b.cached_at || '').localeCompare(String(a.cached_at || '')));
-      return candidates[0].payload || null;
-    }
-
-    function restoreCachedMovieComparison(source) {
-      const datasetId = Array.from(state.selectedComparisonDatasetIds || [])[0] || '';
-      const cached = cachedMovieComparison(source, datasetId);
-      if (!cached) return null;
-      state.results.movies.comparison = cached;
-      state.selectedComparisonDatasetIds = new Set(cached.selected_dataset_ids || []);
-      return cached;
-    }
-
-    function currentMovieComparisonForSource() {
-      const source = sourceInput.value.trim();
-      const comparison = state.results.movies.comparison;
-      if (!comparison || comparison.source_root !== source) return null;
-      const selectedId = Array.from(state.selectedComparisonDatasetIds || [])[0] || '';
-      if (!selectedId) return comparison;
-      return (comparison.selected_dataset_ids || []).includes(selectedId) ? comparison : null;
-    }
-
     function rememberScannedLibrary(source) {
       if (!source) return;
       const lane = state.lane;
@@ -1436,7 +1370,6 @@ INDEX_HTML = """<!doctype html>
       setLane(lane, { forceSource: source });
       if (lane === 'movies') {
         restoreCachedMovieDashboard(source);
-        restoreCachedMovieComparison(source);
       }
       if (lane === 'music') restoreCachedMusicDashboard(source);
       setStatus(`Using saved ${CONFIG[lane].title} library.`, 'idle');
@@ -1449,7 +1382,6 @@ INDEX_HTML = """<!doctype html>
       setLane(item.lane, { forceSource: item.source });
       if (item.lane === 'movies') {
         restoreCachedMovieDashboard(item.source);
-        restoreCachedMovieComparison(item.source);
       }
       if (item.lane === 'music') restoreCachedMusicDashboard(item.source);
       setStatus(`Using recent ${CONFIG[item.lane].title} library.`, 'idle');
@@ -1848,13 +1780,6 @@ INDEX_HTML = """<!doctype html>
       refreshActivityState();
       try {
         const requestBody = { source };
-        if (state.lane === 'movies' && state.page === 'comparison') {
-          if (!state.selectedComparisonDatasetIds.size && state.results.movies.comparison) {
-            const services = comparisonServiceOptions(state.results.movies.comparison);
-            if (services.length === 1) state.selectedComparisonDatasetIds = new Set([services[0].dataset_id]);
-          }
-          requestBody.selected_dataset_ids = Array.from(state.selectedComparisonDatasetIds);
-        }
         async function fetchPagePayload(body) {
           const response = await fetch(pageConfig.endpoint, {
             method: 'POST',
@@ -1866,21 +1791,7 @@ INDEX_HTML = """<!doctype html>
           if (!response.ok) throw new Error(payload.error || 'Request failed.');
           return payload;
         }
-        let payload = await fetchPagePayload(requestBody);
-        if (
-          state.lane === 'movies' &&
-          state.page === 'comparison' &&
-          !(requestBody.selected_dataset_ids || []).length
-        ) {
-          const services = comparisonServiceOptions(payload);
-          if (services.length === 1) {
-            state.selectedComparisonDatasetIds = new Set([services[0].dataset_id]);
-            payload = await fetchPagePayload({
-              source,
-              selected_dataset_ids: [services[0].dataset_id]
-            });
-          }
-        }
+        const payload = await fetchPagePayload(requestBody);
         storePayload(pageConfig.id, payload);
         if (state.lane !== 'movies') detailPanel.innerHTML = '<div class="empty">Run complete.</div>';
         const _elapsed = stopScanTimer();
@@ -1953,11 +1864,6 @@ INDEX_HTML = """<!doctype html>
           }
           state.selectedReplacementPaths.clear();
         }
-        if (page === 'comparison') {
-          state.results.movies.comparison = payload;
-          state.selectedComparisonDatasetIds = new Set(payload.selected_dataset_ids || []);
-          cacheMovieComparison(payload);
-        }
         if (page === 'normalize') {
           state.results.movies.normalize = payload;
           state.results.movies.apply = null;
@@ -2023,11 +1929,6 @@ INDEX_HTML = """<!doctype html>
       const profile = currentMovieProfileForSource();
       const normalize = state.results.movies.normalize;
       const junk = state.results.movies.junk;
-      const comparison = currentMovieComparisonForSource();
-      if (page === 'comparison') {
-        renderMovieComparison(comparison || restoreCachedMovieComparison(source));
-        return;
-      }
       if (page === 'normalize') {
         renderMovieNormalize(normalize);
         return;
@@ -2997,184 +2898,6 @@ INDEX_HTML = """<!doctype html>
       attachMovieReplacementHandlers(payload, items);
     }
 
-    function renderMovieComparison(payload) {
-      mainTagline.textContent = 'Read-only overlap against one selected service snapshot at a time. The right-side library switcher owns the loaded comparison object.';
-      renderMetrics(buildMovieComparisonMetrics(payload));
-      renderBars(buildMovieComparisonBars(payload));
-      filterBar.innerHTML = '';
-      if (!payload) {
-        mainContent.innerHTML = '<div class="empty">Run Movies / Streaming Service Comparison Dashboard to compare normalized movies against installed datasets.</div>';
-        detailPanel.innerHTML = '<div class="empty">Install a service dataset JSON file to load a comparison library.</div>';
-        return;
-      }
-      mainContent.innerHTML = buildMovieComparisonDashboard(payload);
-      detailPanel.innerHTML = buildMovieComparisonLibrary(payload);
-      attachMovieComparisonHandlers(payload);
-    }
-
-    function buildMovieComparisonMetrics(payload) {
-      if (!payload?.aggregates) return [];
-      const capture = comparisonCardById(payload, 'library_capture');
-      const gap = comparisonCardById(payload, 'gap_opportunity');
-      const metrics = payload.aggregates;
-      return [
-        { value: String(metrics.total_normalized_movies ?? 0), label: 'normalized movies' },
-        { value: String(payload.active_service_dataset?.entry_count ?? 0), label: 'service titles' },
-        { value: String(capture?.primary_count ?? 0), label: 'owned from service' },
-        { value: String(gap?.primary_count ?? 0), label: 'gap opportunity' },
-      ];
-    }
-
-    function buildMovieComparisonBars(payload) {
-      if (!payload?.cards?.length) return [];
-      return [
-        comparisonCardBar(payload, 'library_capture'),
-        comparisonCardBar(payload, 'exclusive_titles'),
-        comparisonCardBar(payload, 'gap_opportunity'),
-        comparisonCardBar(payload, 'imdb_top_250_coverage'),
-      ].filter(Boolean);
-    }
-
-    function buildMovieComparisonDashboard(payload) {
-      const active = payload.active_service_dataset;
-      const cards = payload.cards || [];
-      const menuCards = cards.filter(card => card.group === 'menu_breadth');
-      const classicCards = cards.filter(card => card.group === 'classics');
-      const genreCards = cards.filter(card => card.group === 'genre_classics');
-      return `
-        ${!active ? '<div class="empty">Choose a service from the Service Comparison Library to load one comparison object at a time.</div>' : ''}
-        ${active ? `
-          <div class="dash-section-label">Menu Breadth</div>
-          <div class="profile-grid">${buildComparisonCardGrid(menuCards)}</div>
-          <div class="dash-section-label">Classic Coverage</div>
-          <div class="profile-grid">${buildComparisonCardGrid(classicCards)}</div>
-          <div class="dash-section-label">Genre Classics</div>
-          <div class="profile-grid">${buildComparisonCardGrid(genreCards)}</div>
-        ` : ''}
-      `;
-    }
-
-    function buildMovieComparisonLibrary(payload) {
-      const services = comparisonServiceOptions(payload);
-      const active = currentComparisonServiceReport(payload);
-      const warnings = payload.warnings || [];
-      const unmatched = payload.unmatched_local_titles || [];
-      const selectedId = currentComparisonDatasetId(payload);
-      return `
-        <div class="finding">
-          <h3>Service Comparison Library</h3>
-          <p class="subtle">One loaded JSON library object at a time. Changing the active service reloads the comparison point.</p>
-          ${services.length ? `
-            <div class="switcher-list">
-              ${services.map(dataset => `
-                <button class="switcher-option ${dataset.dataset_id === selectedId ? 'active' : ''}" data-comparison-dataset-id="${escapeHtml(dataset.dataset_id)}">
-                  <div class="switcher-option-title">${escapeHtml(dataset.dataset_name)}</div>
-                  <div class="switcher-option-meta">${escapeHtml(datasetFreshnessLabel(dataset))}</div>
-                  <div class="switcher-option-state">${dataset.dataset_id === selectedId ? 'loaded comparison object' : 'available'}</div>
-                </button>
-              `).join('')}
-            </div>
-          ` : '<p class="subtle">No service datasets are installed.</p>'}
-        </div>
-        <div class="finding">
-          <h3>Loaded Object</h3>
-          ${active ? `
-            <p><strong>${escapeHtml(active.metadata.dataset_name)}</strong><br><span class="subtle">${escapeHtml(datasetFreshnessLabel(active.metadata))}</span></p>
-            <p>${active.total_dataset_titles || 0} titles in snapshot · ${active.overlap_count} local matches.</p>
-            <p><span class="mono">${escapeHtml(active.metadata.path || '')}</span></p>
-          ` : '<p class="subtle">No service comparison object is loaded yet.</p>'}
-        </div>
-        <div class="finding">
-          <h3>Unmatched Samples</h3>
-          ${unmatched.length ? unmatched.slice(0, 12).map(item => `<p>${escapeHtml(item.title)} (${item.year}) <span class="subtle">${escapeHtml(item.strongest_profile_label)}</span></p>`).join('') : '<p class="subtle">Every normalized movie matched at least one selected dataset.</p>'}
-        </div>
-      `;
-    }
-
-    function attachMovieComparisonHandlers(payload) {
-      detailPanel.querySelectorAll('[data-comparison-dataset-id]').forEach(button => {
-        button.addEventListener('click', () => {
-          const datasetId = button.dataset.comparisonDatasetId;
-          if (!datasetId || state.selectedComparisonDatasetIds.has(datasetId)) return;
-          state.selectedComparisonDatasetIds = new Set([datasetId]);
-          runCurrentPage();
-        });
-      });
-    }
-
-    function comparisonServiceOptions(payload) {
-      return (payload?.available_datasets || []).filter(dataset => dataset.dataset_kind === 'service');
-    }
-
-    function comparisonCardById(payload, cardId) {
-      return (payload?.cards || []).find(card => card.card_id === cardId) || null;
-    }
-
-    function comparisonCardBar(payload, cardId) {
-      const card = comparisonCardById(payload, cardId);
-      if (!card) return null;
-      return {
-        label: card.label,
-        value: formatPercent(card.primary_pct),
-        width: card.primary_pct || 0
-      };
-    }
-
-    function buildComparisonCardGrid(cards) {
-      if (!cards.length) return '<div class="subtle">No installed datasets are feeding this card group yet.</div>';
-      const maxCount = Math.max(...cards.map(card => card.primary_count), 1);
-      return cards.map(card => {
-        const secondary = card.secondary_count != null
-          ? `${card.secondary_count.toLocaleString()} / ${(card.secondary_total || 0).toLocaleString()} · ${formatPercent(card.secondary_pct)}`
-          : '';
-        return `
-          <div class="profile-card">
-            <div class="profile-card-group">${escapeHtml(humanComparisonCardGroup(card.group))}</div>
-            <div class="profile-card-name">${escapeHtml(card.label)}</div>
-            <div class="profile-card-count">${card.primary_count.toLocaleString()}</div>
-            <div class="profile-card-pct">${card.primary_count.toLocaleString()} / ${(card.primary_total || 0).toLocaleString()} · ${formatPercent(card.primary_pct)}</div>
-            <div class="profile-card-band">${escapeHtml(card.detail)}${secondary ? '<br>' + escapeHtml(secondary) : ''}</div>
-            <div class="profile-card-bar"><span style="width:${(card.primary_count / maxCount) * 100}%"></span></div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    function humanComparisonCardGroup(group) {
-      if (group === 'menu_breadth') return 'Menu Breadth';
-      if (group === 'classics') return 'Classic Coverage';
-      if (group === 'genre_classics') return 'Genre Classics';
-      return 'Comparison';
-    }
-
-    function currentComparisonDatasetId(payload) {
-      const selected = Array.from(state.selectedComparisonDatasetIds || []);
-      if (selected.length) return selected[0];
-      const payloadSelected = payload?.selected_dataset_ids || [];
-      if (payloadSelected.length) return payloadSelected[0];
-      const services = comparisonServiceOptions(payload);
-      return services.length === 1 ? services[0].dataset_id : '';
-    }
-
-    function currentComparisonServiceReport(payload) {
-      const selectedId = currentComparisonDatasetId(payload);
-      return (payload?.service_datasets || []).find(report => report.metadata?.dataset_id === selectedId) || null;
-    }
-
-    function isRecentReleaseDate(value) {
-      if (!value) return false;
-      const release = new Date(value + 'T00:00:00Z');
-      if (Number.isNaN(release.getTime())) return false;
-      const cutoff = new Date();
-      cutoff.setUTCMonth(cutoff.getUTCMonth() - 18);
-      return release >= cutoff;
-    }
-
-    function datasetFreshnessLabel(dataset) {
-      const snapshot = dataset?.snapshot_date ? `snapshot ${dataset.snapshot_date}` : 'snapshot date missing';
-      const label = dataset?.freshness_label || 'freshness unknown';
-      return `${label} · ${snapshot}`;
-    }
 
     function formatPercent(value) {
       if (value == null || !Number.isFinite(value)) return 'n/a';
@@ -4153,6 +3876,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function buildPendingReplacementTable(items) {
+      const replacementQueueReferenceFields = ['original_folder_path'];
       const rows = items.slice(0, 8).map(item => {
         const title = `${item.title || ''}${item.year ? ` (${item.year})` : ''}`;
         const videoBitrate = item.video_bitrate_kbps ? `${Math.round(item.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
@@ -5327,9 +5051,6 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
                 if route == "/api/movies/profile":
                     self.handle_movies_profile(payload)
                     return
-                if route == "/api/movies/comparison-dashboard":
-                    self.handle_movies_comparison_dashboard(payload)
-                    return
                 if route == "/api/source/scan-warning":
                     self.handle_source_scan_warning(payload)
                     return
@@ -5424,23 +5145,6 @@ def build_handler(default_source: Path | None = None, omdb_key: str | None = Non
                 response["histogram"] = build_histogram_payload(report)
                 response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
             self.respond_json(response)
-
-        def handle_movies_comparison_dashboard(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            dataset_root = payload.get("dataset_root")
-            selected_dataset_ids = payload.get("selected_dataset_ids")
-            if selected_dataset_ids is not None and not isinstance(selected_dataset_ids, list):
-                raise ValueError("selected_dataset_ids must be a list")
-            resolved_dataset_root = Path(str(dataset_root)).expanduser().resolve() if dataset_root else None
-            with ACTIVITY_TRACKER.track(source, "Movie comparison dashboard"):
-                report = build_movie_comparison_report(
-                    source,
-                    dataset_root=resolved_dataset_root,
-                    selected_dataset_ids=selected_dataset_ids,
-                    probe_media=tracked_probe(source, "ffprobe movie comparison"),
-                    should_cancel=self.client_disconnected,
-                )
-            self.respond_json(report.to_dict())
 
         def handle_music_profile(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)

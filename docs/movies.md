@@ -1,88 +1,12 @@
 # Movies
 
-The movie lane handles four practical problems in a pirated library: inconsistent naming, uneven encode quality, bad multi-audio packaging, and snapshot-based comparison against service/prestige benchmarks.
+The movie lane handles three practical problems in a pirated library: inconsistent naming, uneven encode quality, and bad multi-audio packaging.
 
 ![Movies dashboard](assets/movies_dashboard_default.png)
 
 ## Dashboard
 
 A library-wide view of encode quality — resolution breakdown, quality tier distribution, and bitrate histograms. A good first stop to understand the shape of your collection before deciding what to clean up.
-
-## Streaming Service Comparison Dashboard
-
-A separate read-only Movies page compares the normalized portion of your library against one selected installed streaming-service snapshot at a time, plus any installed benchmark lists:
-
-- streaming-service catalogue snapshots
-- prestige or canonical lists such as IMDb Top 250 and IMDb Top 1000
-- recent-release datasets with explicit release dates
-
-It does not extend the quality dashboard. It runs downstream of the existing local movie-title normalization pipeline and only includes titles whose title/year parse is already confident enough for strict matching.
-
-Current matching rules:
-
-- normalized title match
-- same year
-- punctuation/case normalization only
-- no fuzzy matching in v1
-- duplicate local copies count once for overlap metrics
-- if duplicates exist, the strongest local copy is used for quality-threshold summaries
-
-Current page shape:
-
-- left side uses dashboard-style comparison cards
-- right side is a **Service Comparison Library** switcher that owns the active loaded service snapshot
-- the last successful comparison snapshot persists locally until a new run replaces it
-
-The page reports menu-style comparison cards rather than encode/quality cards:
-
-- `Library Capture`
-- `Exclusive Titles`
-- `Gap Opportunity`
-- `IMDb Top 250 Coverage`
-- `IMDb Top 1000 Coverage`
-- genre-classics coverage cards such as `Top 100 Sci-Fi Coverage`, `Top 100 Fantasy Coverage`, `Top 100 Action Coverage`, `Top 100 Thriller Coverage`, `Top 100 Horror Coverage`, `Top 100 Comedy Coverage`, and `Top 100 Animation Coverage` when those list datasets are installed
-
-Freshness is shown directly from dataset metadata so snapshot staleness is visible in the UI.
-
-### Dataset format
-
-Comparison data is local JSON only in v1. No remote fetches and no API keys.
-
-Default dataset root:
-
-```text
-datasets/movie_comparison/
-```
-
-Override with:
-
-```bash
-NORMAL_MOVIE_COMPARISON_DATASET_ROOT=/path/to/datasets
-```
-
-Each dataset file must include:
-
-```json
-{
-  "dataset_id": "netflix_snapshot",
-  "dataset_name": "Netflix",
-  "dataset_kind": "service",
-  "snapshot_date": "2026-05-01",
-  "freshness_label": "snapshot May 2026",
-  "entries": [
-    { "title": "Alien", "year": 1979 },
-    { "title": "Dune Part Two", "year": 2024, "release_date": "2024-03-01" }
-  ]
-}
-```
-
-Supported `dataset_kind` values:
-
-- `service`
-- `prestige`
-- `recent`
-
-`prestige` currently carries both general canon lists and genre-classics lists.
 
 Theme examples:
 
@@ -156,7 +80,6 @@ normal movie-register --report scan.json --xlsx catalogue.xlsx
 | Page | What it does |
 |---|---|
 | Dashboard | Quality overview — tiers, histograms, resolution breakdown |
-| Streaming Service Comparison Dashboard | Strict title/year overlap against installed service, prestige, and recent-release snapshots |
 | Normalize | Review and apply rename plans |
 | Delete Weak Encodes | Triage and queue replacements |
 | Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |
