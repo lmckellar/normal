@@ -120,7 +120,7 @@ The Library Switcher in the top right selects the active lane. The source path i
 
 **Movie pages**
 - Dashboard View — quality tier distribution, bitrate histograms, resolution breakdown
-- Streaming Service Comparison Dashboard — strict title/year overlap against installed local service snapshots, prestige lists, and recent-release datasets; skipped non-normalized files are surfaced explicitly
+- Streaming Service Comparison Dashboard — strict title/year overlap against one selected installed service snapshot at a time, plus installed prestige lists and recent-release datasets; skipped non-normalized files are surfaced explicitly
 - Normalize Movie Files & Folders — interactive rename plan review and apply
 - Delete Weak Encodes — quality triage with replacement queue tracking; deleted queue items can be dismissed later if they are not worth replacing
 - Fix Multi-Audio Packaging — triage MKVs where default audio language/track choice is likely wrong, then either flip English to default in place, drop tagged foreign-language audio, or queue the file for replacement. The delete-foreign-audio variant is currently untested on real libraries.

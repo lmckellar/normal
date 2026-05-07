@@ -10,7 +10,7 @@ A library-wide view of encode quality — resolution breakdown, quality tier dis
 
 ## Streaming Service Comparison Dashboard
 
-A separate read-only Movies page compares the normalized portion of your library against installed local benchmark datasets:
+A separate read-only Movies page compares the normalized portion of your library against one selected installed streaming-service snapshot at a time, plus any installed benchmark lists:
 
 - streaming-service catalogue snapshots
 - prestige or canonical lists such as IMDb Top 250 and IMDb Top 1000
@@ -27,17 +27,20 @@ Current matching rules:
 - duplicate local copies count once for overlap metrics
 - if duplicates exist, the strongest local copy is used for quality-threshold summaries
 
-The page reports:
+Current page shape:
 
-- total normalized movies
-- skipped non-normalized or ambiguous files
-- per-service overlap count and overlap percent
-- service-union overlap across selected services
-- recent releases in the last 18 months
-- IMDb Top 250 and IMDb Top 1000 coverage
-- one extra prestige list if installed
-- share of matched titles that are at least `minimum_acceptable_1080p`
-- weak matched-title count for `sd_low_quality`, `weak_1080p`, `weak_4k`, and `unclassified`
+- left side uses dashboard-style comparison cards
+- right side is a **Service Comparison Library** switcher that owns the active loaded service snapshot
+- the last successful comparison snapshot persists locally until a new run replaces it
+
+The page reports menu-style comparison cards rather than encode/quality cards:
+
+- `Library Capture`
+- `Exclusive Titles`
+- `Gap Opportunity`
+- `IMDb Top 250 Coverage`
+- `IMDb Top 1000 Coverage`
+- genre-classics coverage cards such as `Top 100 Sci-Fi Coverage`, `Top 100 Fantasy Coverage`, `Top 100 Action Coverage`, `Top 100 Thriller Coverage`, `Top 100 Horror Coverage`, `Top 100 Comedy Coverage`, and `Top 100 Animation Coverage` when those list datasets are installed
 
 Freshness is shown directly from dataset metadata so snapshot staleness is visible in the UI.
 
@@ -78,6 +81,8 @@ Supported `dataset_kind` values:
 - `service`
 - `prestige`
 - `recent`
+
+`prestige` currently carries both general canon lists and genre-classics lists.
 
 Theme examples:
 

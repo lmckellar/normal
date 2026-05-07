@@ -63,6 +63,12 @@ Movie replacement queue history now supports four hard filters in the web UI: `D
 
 The movie comparison dashboard is local-only in v1. It does not fetch live catalogues or require API keys.
 
+The current comparison workflow is selected-service-first:
+
+- one installed `service` snapshot is active at a time
+- installed `prestige` and `recent` datasets remain in play as benchmark lists
+- the UI emphasizes card-based menu comparison such as `Library Capture`, `Exclusive Titles`, `Gap Opportunity`, `IMDb Top 250 Coverage`, and `IMDb Top 1000 Coverage`
+
 Install JSON snapshot files under:
 
 - `datasets/movie_comparison/` relative to the repo root, or
