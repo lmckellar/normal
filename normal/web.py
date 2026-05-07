@@ -4097,8 +4097,9 @@ INDEX_HTML = """<!doctype html>
     function groupedReplacementHistoryItems(items) {
       const groups = new Map();
       for (const item of items) {
-        const folder = item.original_folder_path || '';
-        const key = `${item.title || ''}\\u0000${item.year || ''}\\u0000${folder}`;
+        const historyTitleKey = item.history_title_key || item.title_key || item.title || '';
+        const issueFamily = item.issue_family || 'weak_encode';
+        const key = `${historyTitleKey}\\u0000${item.year || ''}\\u0000${issueFamily}`;
         const existing = groups.get(key);
         if (existing) {
           existing.count += 1;
