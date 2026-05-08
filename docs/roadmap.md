@@ -24,6 +24,7 @@ Features in no particular order. Priority will be shaped by usage patterns after
 - **Onboarding copy** — improve in-app onboarding text to better orient new users
 - **Configurable preference defaults** — quality thresholds, replacement priority weights, normalization rules are currently hardcoded; surface as documented config before adding UI controls
 - **Broader platform testing** — Linux-first for v1; Windows and macOS rough edges are known and deferred
+- **Cross-environment scan hygiene validation** — measure whether incremental traversal, temp-file strategy, cancellation, and process visibility behave cleanly under Windows/macOS and common Linux desktop setups with indexers, AV, cloud-sync clients, automounters, and alternate shell/service launch paths
 - **Replacement queue performance and state boundaries** — reduce full-table recompute/repaint cost when switching movie queue history filters, especially `Replaced` to `All Items`; tighten state ownership and backend domain boundaries before broader cleanup
 - **Replacement queue restore action** — add an inline `restore to queue` action for `Deleted From Queue` items so dismissed titles can re-enter the replacement workflow without re-scanning first
 - **Probe lifecycle hardening** — isolate and fix the open issue where cancelled movie scans can leave background `ffprobe` processes that are not always visible through the current activity indicator

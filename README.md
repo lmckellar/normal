@@ -65,6 +65,8 @@ The movie `Canonical Lists` page compares owned titles against live all-time mov
 
 Heavy recursive web scans now warn before running against risky sources such as drive-root style paths and NTFS/FUSE mounts. The web server also rejects overlapping heavy scans for the same source instead of stacking them.
 
+The bigger stability fix sits lower in the execution path: heavy movie-side scans no longer build a full recursive file list up front. They walk incrementally and check for cancellation during traversal, which was the main change behind the CPU-spike drop on large or risky sources.
+
 ## Known issue
 
 There is an open movie-scan / web UI issue around probe cancellation and observability. Under some currently unknown interaction pattern — likely involving scan cancellation, quick page changes, and rapidly starting another scan — an `ffprobe` process can keep running in the background after the UI thinks the scan is gone. In that state the leftover probe may also fail to appear in the Drive Activity indicator because the current `ps`-based visibility check does not catch every case.

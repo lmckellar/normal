@@ -67,6 +67,10 @@ The web UI also applies two guards around heavy recursive scans:
 - risky sources such as drive-root style paths and NTFS/FUSE mounts trigger an explicit confirmation warning
 - only one heavy scan per source is allowed at a time; overlapping requests are rejected instead of running concurrently
 
+There is also an execution-model guard behind the movie-side heavy scans: recursive discovery is no longer fully enumerated before probes begin. The scan walks the tree incrementally and checks for cancellation as it goes. That was the main change that reduced the earlier CPU spike on large or risky sources.
+
+This is also worth treating as a candidate pattern for broader platform hardening, not just a Linux-local fix. Different filesystems, launch paths, indexers, sync agents, antivirus, thumbnailers, and shell or service managers can amplify up-front directory walks and incidental writes differently. Current read/write hygiene looks directionally safer, but cross-platform effects are not yet characterized and should be validated rather than assumed.
+
 Movie metadata probes run through `ffprobe` with a 30 second timeout per file. A timed-out probe becomes a reported warning/error for that file rather than hanging the whole scan indefinitely.
 
 Known open issue:

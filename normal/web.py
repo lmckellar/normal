@@ -1118,12 +1118,12 @@ INDEX_HTML = """<!doctype html>
         sourceLabel: '/path/to/movie or TV library',
         pages: [
           { id: 'library', label: 'Dashboard View', action: 'scan', endpoint: '/api/movies/profile' },
-          { id: 'canonical_lists', label: 'Canonical Lists', action: 'scan', endpoint: '/api/movies/canonical-lists' },
           { id: 'normalize', label: 'Normalize Movie Files & Folders', action: 'plan', endpoint: '/api/movies/normalize' },
           { id: 'quality', label: 'Delete Weak Encodes', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'audio_packaging', label: 'Fix Multi-Audio Packaging', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'junk', label: 'Delete Junk Videos', action: 'scan', endpoint: '/api/movies/junk' },
-          { id: 'promo', label: 'Delete Junk Sidecar & Spam Files', action: 'scan', endpoint: '/api/movies/promo-docs' }
+          { id: 'promo', label: 'Delete Junk Sidecar & Spam Files', action: 'scan', endpoint: '/api/movies/promo-docs' },
+          { id: 'canonical_lists', label: 'Canonical Lists', action: 'scan', endpoint: '/api/movies/canonical-lists' }
         ]
       }
     };
@@ -2724,7 +2724,6 @@ INDEX_HTML = """<!doctype html>
           <td><div class="mono" style="font-size:0.8em">${escapeHtml(change.path || '')}</div></td>
           <td><div class="mono">${escapeHtml(change.current_value)}</div></td>
           <td><div class="mono">${escapeHtml(change.proposed_value)}</div></td>
-          <td class="subtle">${escapeHtml(change.reason)}</td>
         </tr>
       `).join('');
 
@@ -2744,8 +2743,8 @@ INDEX_HTML = """<!doctype html>
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th></th><th>Confidence</th><th>Type</th><th>Path</th><th>Current</th><th>Proposed</th><th>Reason</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="7" class="subtle">No changes for this filter.</td></tr>'}</tbody>
+            <thead><tr><th></th><th>Confidence</th><th>Type</th><th>Path</th><th>Current</th><th>Proposed</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="6" class="subtle">No changes for this filter.</td></tr>'}</tbody>
           </table>
         </div>
       `;
@@ -3261,7 +3260,6 @@ INDEX_HTML = """<!doctype html>
           <td><div class="mono">${escapeHtml(change.path || '')}</div></td>
           <td>${escapeHtml(change.current_value)}</td>
           <td>${escapeHtml(change.proposed_value)}</td>
-          <td>${escapeHtml(change.reason)}</td>
         </tr>
       `).join('');
       const warningCounts = CounterFromArray((payload.warnings || []).map(w => w.code));
@@ -3279,8 +3277,8 @@ INDEX_HTML = """<!doctype html>
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th></th><th>Confidence</th><th>Type</th><th>Path</th><th>Current</th><th>Proposed</th><th>Reason</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="7" class="subtle">No rename proposals for this filter.</td></tr>'}</tbody>
+            <thead><tr><th></th><th>Confidence</th><th>Type</th><th>Path</th><th>Current</th><th>Proposed</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="6" class="subtle">No rename proposals for this filter.</td></tr>'}</tbody>
           </table>
         </div>
       `;

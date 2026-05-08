@@ -255,12 +255,12 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 Movie pages currently exposed in the web UI:
 
 - `Dashboard View`
-- `Canonical Lists`
 - `Normalize Movie Files & Folders`
 - `Delete Weak Encodes`
 - `Fix Multi-Audio Packaging`
 - `Delete Junk Videos`
 - `Delete Junk Sidecar & Spam Files`
+- `Canonical Lists`
 
 Heavy recursive web scans now show a confirmation warning for risky sources such as drive-root style paths and NTFS/FUSE mounts. The server also rejects overlapping heavy scans for the same source instead of running them concurrently.
 
