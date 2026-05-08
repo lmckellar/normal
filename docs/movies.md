@@ -34,6 +34,8 @@ Title (Year) [technical tokens]/Title (Year) [technical tokens].mkv
 
 Ambiguous parses are flagged as `review`. Everything else is `safe`. You review the plan before anything moves.
 
+The Normalize review table now stays tighter: `Confidence`, `Type`, `Path`, `Current`, and `Proposed` are shown, while the old `Reason` column is no longer rendered in the web UI.
+
 ## Quality triage
 
 A full quality scan profiles every file against a bitrate/resolution ladder:
@@ -77,6 +79,8 @@ Two pages handle library noise:
 
 Both show a preview list before anything is deleted.
 
+Operational note: the heavy movie-side web scans that feed these workflows no longer pre-enumerate the whole tree before processing. They traverse incrementally with cancellation checks, and that execution-model change was the main fix for the earlier CPU spike on large libraries and risky mounts.
+
 ## Catalogue export
 
 Export a formatted XLSX of your full library: title, year, resolution, video codec, audio, container, file size — sorted alphabetically.
@@ -90,12 +94,12 @@ normal movie-register --report scan.json --xlsx catalogue.xlsx
 | Page | What it does |
 |---|---|
 | Dashboard | Quality overview — tiers, histograms, resolution breakdown |
-| Canonical Lists | Compare owned titles against live all-time movie lists and unlock simple coverage badges |
 | Normalize | Review and apply rename plans |
 | Delete Weak Encodes | Triage and queue replacements |
 | Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |
 | Delete Junk Videos | Remove samples and featurettes |
 | Delete Junk Sidecar & Spam Files | Remove sidecar and spam files |
+| Canonical Lists | Compare owned titles against live all-time movie lists and unlock simple coverage badges |
 
 ## Known issue
 

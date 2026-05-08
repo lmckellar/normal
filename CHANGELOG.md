@@ -10,13 +10,15 @@
 - Canonical Lists page backed by TMDb plus a local cache for owned-title coverage against live all-time movie lists
 - Simple Canonical Lists badge unlocks for quick coverage feedback; deeper badge refinement is deferred
 - Shared movie triage substrate with family-aware replacement queue state
+- Heavy movie-side recursive scans now walk incrementally instead of prebuilding the whole recursive path set first; that execution-model shift, plus cancellation checks during traversal, was the key fix behind the CPU-spike reduction on large or risky sources
 - New `Fix Multi-Audio Packaging` workflow for MKVs with wrong default language or weak English fallback tracks
 - Replacement queue history filters for `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`
 - Inline dismiss action for deleted queue rows that are not worth replacing
 - Movie replacement-queue delete now treats already-missing media as already deleted instead of leaving the queue item stuck
 - `Fix Multi-Audio Packaging` now locks selection and action buttons during active remux, and separates `Delete Selected Files` to the far right to reduce accidental clicks
 - Movie replacement-queue state now persists across hard refresh for the same source, including audio-packaging `Deleted, Awaiting Replacement` history
-- Early local validation showed Canonical Lists and Weak Encodes scans complete with only moderate transient temperature rise that recedes after scan completion
+- Early local validation showed Canonical Lists and Weak Encodes scans complete with only moderate transient temperature rise that recedes after scan completion once the scan stopped doing an up-front full-tree walk
+- Movie navigation now places `Canonical Lists` last in the page button list, and Normalize result tables no longer render the `Reason` column
 
 ### Known issue
 - Movie scan cancellation is still best-effort. Under some unknown fast UI interaction pattern, a background `ffprobe` may survive cancellation and fail to appear in the Drive Activity indicator.
