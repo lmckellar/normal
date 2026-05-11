@@ -139,7 +139,7 @@ Per-file classification against repo-local movie standards. The scan now carries
 
 Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_risk`, `multi_audio_anime_mux_risk`, `high_complexity_hevc_tv_risk`, `episodic_naming_parse_risk`, `anime_absolute_numbering_risk`, `attachment_heavy_visibility_risk`, `default_non_english_audio`, `default_non_english_audio_with_weak_english`.
 
-The dashboard payload also carries `movie_standards` and `quality_profile_definitions`. The movie dashboard uses that payload to split **Action Based** cards from **Quality Profile** cards, summarize each stance rule shape, and expose inline definition controls on the quality-profile cards.
+The dashboard payload also carries `movie_standards`, `movie_standards_revision`, and `quality_profile_definitions`. The movie dashboard uses that payload to split **Action Based** cards from **Quality Profile** cards, summarize each stance rule shape, and expose inline definition controls on the quality-profile cards.
 
 ### Replacement queue (JSON)
 
@@ -180,7 +180,7 @@ All routes in `web.py`. Key families:
 | `/api/music/artwork/image?...` | GET | Serve artwork preview image bytes |
 | `/api/movies/apply` | POST | Apply selected movie renames in-place |
 | `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, audio packaging triage, and subtitle-readiness triage |
-| `/api/movies/standards/update` | POST | Persist repo-local movie-standards edits from dashboard quality-profile cards |
+| `/api/movies/standards/update` | POST | Persist repo-local movie-standards edits from dashboard quality-profile cards; rejects stale saves when the standards revision no longer matches |
 | `/api/movies/canonical-lists` | POST | Canonical title coverage payload from TMDb plus local cache |
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
 | `/api/movies/inspect` | POST | One-file movie diagnostic payload |
@@ -220,6 +220,8 @@ These are deliberate choices, not gaps:
 - **Music normalization is FLAC-only.** MP3 appears in dashboard profile views but is not a normalization target in v1.
 - **No external web framework.** `web.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.
 - **Weak encode candidates are standards-driven.** Delete/replace eligibility is based on `profile.weak_candidate`, which is derived from repo-local `movie_standards.json`.
+- **Movie standards persistence is file-backed.** `movie_standards.json` is the authoritative store across server restarts and localhost port changes. Browser dashboard cache is origin-scoped convenience state only.
+- **Do not trust stale dashboard state for writes.** The web save path now carries `movie_standards_revision` and rejects a save if another edit changed the file after that dashboard view loaded.
 - **Movie standards are dashboard-owned in v2.** The card for each movie standards class now owns its label, count, summary, and inline definition editor. Edit the rule definition there; do not add a separate parallel settings surface unless the dashboard ownership model clearly breaks down.
 - **Replacement queue keeps audit history.** Items move forward through states and are never silently removed. Auto-completion (`completed`) happens on future scans when a replacement appears. Manual dismissal (`dismissed`) is explicit queue state, not media deletion.
 - **Probe cancellation is not fully hardened yet.** There is a known open issue where cancelling a movie scan and quickly starting another UI action can leave a background `ffprobe` running, and the activity indicator may miss it. Do not document cancellation as stronger than best-effort until that is fixed.

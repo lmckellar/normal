@@ -57,6 +57,13 @@ Quality profile cards:
 
 The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Each parameter is presented as a dropdown with logical gradation points rather than a raw text input. Those edits adjust the stance criteria and inherited defaults, then refresh the dashboard after save.
 
+Persistence posture:
+
+- `movie_standards.json` is the source of truth across server restarts and localhost port changes
+- browser cache is only a per-origin dashboard snapshot; `127.0.0.1:8765` and `127.0.0.1:8766` do not share localStorage
+- standards saves now use a revision check, so an older tab or stale cached dashboard is rejected instead of silently overwriting a newer standards file
+- writes are done with an atomic temp-file replace so interrupted writes do not leave a partial JSON file behind
+
 The audio channel minimum has a companion **Exempt pre-surround era films** setting. Set it to a release-year cutoff (Pre-1970 through Pre-1990) and films released before that year bypass the channel floor check — useful when Library Grade or higher requires 5.1 but classic titles with mono or stereo-only audio have no higher-channel release to replace them with.
 
 Quality scan results include a normalized main-audio summary for the playback-relevant stream alongside audio bitrate — `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`, and similar labels.

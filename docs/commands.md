@@ -167,6 +167,7 @@ Config source:
 
 Dashboard note:
 - `Movies / Dashboard View` now separates action cards from quality-profile cards. Inline definition controls live on the quality-profile cards and write `movie_standards.json`, then rerun the dashboard so counts refresh against the new stance rules.
+- Standards persistence is repo-local rather than port-local. Browser cache is only a convenience snapshot, and stale dashboard saves are rejected if `movie_standards.json` changed since that view loaded.
 
 The same `movie-profile` report also powers two separate web triage lanes:
 

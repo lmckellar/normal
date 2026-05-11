@@ -35,6 +35,8 @@ from normal.movie_profile import (
     build_movie_profile_definitions,
     build_movie_profile_item,
     load_movie_standards,
+    movie_standards_revision,
+    MovieStandardsConflictError,
     scan_movie_profiles,
     update_movie_profile_definition,
 )
@@ -5187,20 +5189,23 @@ INDEX_HTML = """<!doctype html>
     async function saveMovieProfileDefinition(label) {
       if (!label || state.movieStandardsSaveBusy || _activeRunController) return;
       const source = sourceInput.value.trim();
+      const currentPayload = state.results.movies.profile || restoreCachedMovieDashboard(source);
+      const revision = currentPayload?.movie_standards_revision || '';
       const editorValues = movieProfileEditorValues(label);
       state.movieStandardsSaveBusy = true;
       setStatus(`Saving ${humanProfileLabel(label)} definition…`, 'running');
-      renderMovieLibrary(state.results.movies.profile || restoreCachedMovieDashboard(source));
+      renderMovieLibrary(currentPayload);
       try {
         const response = await fetch('/api/movies/standards/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label, values: editorValues })
+          body: JSON.stringify({ label, revision, values: editorValues })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Standards save failed.');
         if (state.results.movies.profile) {
           state.results.movies.profile.movie_standards = result.movie_standards;
+          state.results.movies.profile.movie_standards_revision = result.movie_standards_revision || '';
           state.results.movies.profile.quality_profile_definitions = result.quality_profile_definitions || [];
           cacheMovieDashboard(state.results.movies.profile);
         }
@@ -6529,16 +6534,22 @@ def build_handler(
                     response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
                     standards = load_movie_standards()
                     response["movie_standards"] = standards
+                    response["movie_standards_revision"] = movie_standards_revision(standards)
                     response["quality_profile_definitions"] = build_movie_profile_definitions(standards)
             self.respond_json(response)
 
         def handle_movies_standards_update(self, payload: dict[str, Any]) -> None:
             label = str(payload.get("label") or "").strip()
             values = payload.get("values") if isinstance(payload.get("values"), dict) else {}
-            standards = update_movie_profile_definition(label, values)
+            revision = str(payload.get("revision") or "").strip() or None
+            try:
+                standards = update_movie_profile_definition(label, values, expected_revision=revision)
+            except MovieStandardsConflictError as exc:
+                raise RequestConflictError(str(exc)) from exc
             self.respond_json(
                 {
                     "movie_standards": standards,
+                    "movie_standards_revision": movie_standards_revision(standards),
                     "quality_profile_definitions": build_movie_profile_definitions(standards),
                 }
             )

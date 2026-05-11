@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import hashlib
 from itertools import chain
 import json
+import os
 from pathlib import Path
 import re
 from statistics import mean, median
+import tempfile
 import time
 from typing import Any, Callable
 
@@ -176,6 +179,10 @@ ENGLISH_AUDIO_LANGUAGES = {"eng", "en", "english"}
 ENGLISH_SUBTITLE_LANGUAGES = {"eng", "en", "english"}
 
 
+class MovieStandardsConflictError(RuntimeError):
+    pass
+
+
 def scan_movie_profiles(
     source_root: Path,
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
@@ -300,10 +307,34 @@ def load_movie_standards() -> dict[str, Any]:
     return deep_merge_dicts(standards, payload)
 
 
+def movie_standards_revision(standards: dict[str, Any] | None = None) -> str:
+    normalized = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards or load_movie_standards())
+    encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def save_movie_standards(standards: dict[str, Any]) -> dict[str, Any]:
     normalized = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards)
     payload = json.dumps(normalized, indent=2) + "\n"
-    MOVIE_STANDARDS_PATH.write_text(payload, encoding="utf-8")
+    MOVIE_STANDARDS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=MOVIE_STANDARDS_PATH.parent,
+            prefix=f"{MOVIE_STANDARDS_PATH.stem}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temp_path = Path(handle.name)
+        temp_path.replace(MOVIE_STANDARDS_PATH)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
     return normalized
 
 
@@ -450,9 +481,13 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
 def update_movie_profile_definition(
     label: str,
     values: dict[str, Any],
+    expected_revision: str | None = None,
     standards: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    active = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards or load_movie_standards())
+    current = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards or load_movie_standards())
+    if expected_revision and expected_revision != movie_standards_revision(current):
+        raise MovieStandardsConflictError("Movie standards changed since this dashboard view loaded. Refresh and retry.")
+    active = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, current)
     if label in QUALITY_STANCE_ORDER:
         stance = active.setdefault("quality_stances", {}).setdefault(label, {})
         stance["display_name"] = str(values.get("display_name") or human_quality_stance_label(label)).strip() or human_quality_stance_label(label)
