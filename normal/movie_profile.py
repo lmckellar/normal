@@ -1386,27 +1386,35 @@ def total_risk_score(diagnostics: list[DiagnosticFinding]) -> int:
 
 
 def build_histogram_payload(report: MovieProfileReport) -> dict[str, Any]:
-    video_bitrates = [item.facts.video_bitrate_kbps for item in report.movies if item.facts.video_bitrate_kbps]
-    audio_bitrates = [item.facts.audio_bitrate_kbps for item in report.movies if item.facts.audio_bitrate_kbps]
+    return build_histogram_payload_from_items(report.source_root, report.generated_at, report.movies)
+
+
+def build_histogram_payload_from_items(source_root: str, generated_at: str, movies: list[Any]) -> dict[str, Any]:
+    video_bitrates = [bitrate for item in movies if (bitrate := item_fact_value(item, "video_bitrate_kbps"))]
+    audio_bitrates = [bitrate for item in movies if (bitrate := item_fact_value(item, "audio_bitrate_kbps"))]
     profile_counts: dict[str, int] = {}
     quality_profile_counts: dict[str, int] = {}
     resolution_counts: dict[str, int] = {}
     risk_counts: dict[str, int] = {}
-    for item in report.movies:
-        profile_counts[item.profile.label] = profile_counts.get(item.profile.label, 0) + 1
-        quality_profile_counts[item.profile.quality_label] = quality_profile_counts.get(item.profile.quality_label, 0) + 1
-        resolution = item.facts.resolution_bucket or "unknown"
+    for item in movies:
+        profile_label = item_profile_value(item, "label") or "unknown"
+        quality_label = item_profile_value(item, "quality_label") or "unknown"
+        profile_counts[profile_label] = profile_counts.get(profile_label, 0) + 1
+        quality_profile_counts[quality_label] = quality_profile_counts.get(quality_label, 0) + 1
+        resolution = item_fact_value(item, "resolution_bucket") or "unknown"
         resolution_counts[resolution] = resolution_counts.get(resolution, 0) + 1
-        for category, count in item.profile.risk_counts.items():
-            risk_counts[category] = risk_counts.get(category, 0) + count
+        risk_values = item_profile_value(item, "risk_counts") or {}
+        if isinstance(risk_values, dict):
+            for category, count in risk_values.items():
+                risk_counts[str(category)] = risk_counts.get(str(category), 0) + int(count or 0)
 
-    total_size_bytes = sum(item.facts.file_size_bytes for item in report.movies if item.facts.file_size_bytes)
-    total_runtime_minutes = round(sum(item.runtime_minutes for item in report.movies if item.runtime_minutes), 1)
+    total_size_bytes = sum(value for item in movies if (value := item_fact_value(item, "file_size_bytes")))
+    total_runtime_minutes = round(sum(value for item in movies if (value := item_value(item, "runtime_minutes"))), 1)
 
     return {
-        "source_root": report.source_root,
-        "generated_at": report.generated_at,
-        "movie_count": len(report.movies),
+        "source_root": source_root,
+        "generated_at": generated_at,
+        "movie_count": len(movies),
         "total_size_bytes": total_size_bytes,
         "total_runtime_minutes": total_runtime_minutes,
         "video_bitrate_kbps": summarize_distribution(video_bitrates),
@@ -1417,6 +1425,26 @@ def build_histogram_payload(report: MovieProfileReport) -> dict[str, Any]:
         "risk_counts": risk_counts,
         "anchor_reference": {"1080p_uhd_kbps": ANCHOR_KBPS["1080p"]},
     }
+
+
+def item_value(item: Any, key: str) -> Any:
+    if isinstance(item, dict):
+        return item.get(key)
+    return getattr(item, key, None)
+
+
+def item_fact_value(item: Any, key: str) -> Any:
+    facts = item_value(item, "facts")
+    if isinstance(facts, dict):
+        return facts.get(key)
+    return getattr(facts, key, None)
+
+
+def item_profile_value(item: Any, key: str) -> Any:
+    profile = item_value(item, "profile")
+    if isinstance(profile, dict):
+        return profile.get(key)
+    return getattr(profile, key, None)
 
 
 def summarize_distribution(values: list[int], bin_width: int = 2000) -> dict[str, Any]:

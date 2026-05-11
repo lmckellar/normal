@@ -10,6 +10,7 @@ from normal.movie_profile import (
     build_movie_profile_definitions,
     build_replacement_candidate_definition,
     build_histogram_payload,
+    build_histogram_payload_from_items,
     choose_best_english_subtitle_stream,
     classify_profile_label,
     classify_standard_label,
@@ -368,6 +369,49 @@ class MovieProfileTests(unittest.TestCase):
             self.assertEqual(sum(payload["quality_profile_counts"].values()), payload["movie_count"])
             self.assertEqual(payload["video_bitrate_kbps"]["median"], 3500.0)
             self.assertIn("risk_counts", payload)
+
+    def test_build_histogram_payload_from_items_uses_payload_dicts(self) -> None:
+        payload = build_histogram_payload_from_items(
+            "/movies",
+            "2026-05-12T00:00:00Z",
+            [
+                {
+                    "runtime_minutes": 100,
+                    "facts": {
+                        "video_bitrate_kbps": 7000,
+                        "audio_bitrate_kbps": 640,
+                        "file_size_bytes": 1_000,
+                        "resolution_bucket": "1080p",
+                    },
+                    "profile": {
+                        "label": "meets_minimum",
+                        "quality_label": "library_grade",
+                        "risk_counts": {"playback_risk": 1},
+                    },
+                },
+                {
+                    "runtime_minutes": 90,
+                    "facts": {
+                        "video_bitrate_kbps": 30000,
+                        "audio_bitrate_kbps": 4000,
+                        "file_size_bytes": 2_000,
+                        "resolution_bucket": "2160p",
+                    },
+                    "profile": {
+                        "label": "reference",
+                        "quality_label": "reference",
+                        "risk_counts": {},
+                    },
+                },
+            ],
+        )
+
+        self.assertEqual(payload["movie_count"], 2)
+        self.assertEqual(payload["total_runtime_minutes"], 190)
+        self.assertEqual(payload["total_size_bytes"], 3_000)
+        self.assertEqual(payload["video_bitrate_kbps"]["mean"], 18500.0)
+        self.assertEqual(payload["profile_counts"]["reference"], 1)
+        self.assertEqual(payload["risk_counts"]["playback_risk"], 1)
 
     def test_scan_movie_profiles_can_cancel_between_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
