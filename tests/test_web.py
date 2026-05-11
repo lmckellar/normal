@@ -386,6 +386,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("function movieProfileEditorValues(label)", INDEX_HTML)
         self.assertIn("function saveMovieProfileDefinition(label)", INDEX_HTML)
         self.assertIn("quality_profile_definitions", INDEX_HTML)
+        self.assertIn("movie_standards_revision", INDEX_HTML)
+        self.assertIn("body: JSON.stringify({ label, revision, values: editorValues })", INDEX_HTML)
         self.assertIn("Saves to repo-local <span class=\"mono\">movie_standards.json</span> and reruns the dashboard.", INDEX_HTML)
 
     def test_movie_canonical_lists_page_is_wired(self) -> None:

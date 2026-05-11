@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,8 +14,11 @@ from normal.movie_profile import (
     classify_standard_label,
     detect_plex_diagnostics,
     looks_like_absolute_numbering,
-    scan_movie_profiles,
     evaluate_movie_standards,
+    load_movie_standards,
+    MovieStandardsConflictError,
+    movie_standards_revision,
+    scan_movie_profiles,
     update_movie_profile_definition,
 )
 from normal.quality_review import AudioStreamFacts, MediaFacts, SubtitleStreamFacts, build_audio_summary
@@ -170,6 +174,33 @@ class MovieProfileTests(unittest.TestCase):
             self.assertEqual(reference["audio_codecs"], ["truehd", "dtshd", "flac"])
             self.assertTrue(reference["require_lossless_audio"])
             self.assertIn('"video_custom"', path.read_text(encoding="utf-8"))
+
+    def test_update_movie_profile_definition_rejects_stale_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "movie_standards.json"
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", path):
+                stale_revision = movie_standards_revision(load_movie_standards())
+                path.write_text(
+                    json.dumps(
+                        {
+                            "quality_stances": {
+                                "library_grade": {
+                                    "video_custom": {"1080p": 6000, "2160p": 12000},
+                                }
+                            }
+                        },
+                        indent=2,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaises(MovieStandardsConflictError):
+                    update_movie_profile_definition(
+                        "library_grade",
+                        {"display_name": "Library Grade", "video_1080p_kbps": "8000"},
+                        expected_revision=stale_revision,
+                    )
 
     def test_detect_plex_diagnostics_flags_dts_and_anime_visibility_risks(self) -> None:
         findings = detect_plex_diagnostics(
