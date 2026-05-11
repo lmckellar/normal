@@ -1167,6 +1167,7 @@ INDEX_HTML = """<!doctype html>
       movieSubtitleFixBusy: false,
       movieStandardsEditorLabel: '',
       movieStandardsSaveBusy: false,
+      movieStandardsPendingDraft: null,
       replacementHistoryFilter: 'deleted',
       replacementHistorySort: { col: null, dir: 'asc' },
       omdbRatings: new Map(),
@@ -5095,13 +5096,23 @@ INDEX_HTML = """<!doctype html>
       `;
     }
 
+    function movieProfileDefinitionDraft(label) {
+      const draft = state.movieStandardsPendingDraft;
+      return draft && draft.label === label ? draft.values : null;
+    }
+
     function buildMovieProfileDefinitionEditor(definition) {
+      const draftValues = movieProfileDefinitionDraft(definition.label);
+      const isBusy = !!(state.movieStandardsSaveBusy && draftValues);
       const rows = (definition.fields || []).map(field => {
+        const hasDraftValue = !!draftValues && Object.prototype.hasOwnProperty.call(draftValues, field.key);
+        const fieldValue = hasDraftValue ? draftValues[field.key] : field.value;
+        const disabledAttr = isBusy ? ' disabled' : '';
         if (field.type === 'text') {
           return `
             <div class="profile-card-editor-row">
               <label for="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
-              <input id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}" type="text" value="${escapeHtml(field.value)}">
+              <input id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}" type="text" value="${escapeHtml(fieldValue)}"${disabledAttr}>
             </div>
           `;
         }
@@ -5109,7 +5120,7 @@ INDEX_HTML = """<!doctype html>
           return `
             <div class="profile-card-editor-row">
               <label for="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
-              <input id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}" type="number" value="${escapeHtml(field.value)}">
+              <input id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}" type="number" value="${escapeHtml(fieldValue)}"${disabledAttr}>
             </div>
           `;
         }
@@ -5117,7 +5128,7 @@ INDEX_HTML = """<!doctype html>
           return `
             <div class="profile-card-editor-row">
               <label for="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
-              <input id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}" type="text" value="${escapeHtml(field.value)}">
+              <input id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}" type="text" value="${escapeHtml(fieldValue)}"${disabledAttr}>
             </div>
           `;
         }
@@ -5125,8 +5136,8 @@ INDEX_HTML = """<!doctype html>
           return `
             <div class="profile-card-editor-row">
               <label for="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
-              <select id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}">
-                ${(field.options || []).map(option => `<option value="${escapeHtml(option.value)}" ${String(option.value) === String(field.value) ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+              <select id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}"${disabledAttr}>
+                ${(field.options || []).map(option => `<option value="${escapeHtml(option.value)}" ${String(option.value) === String(fieldValue) ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
               </select>
             </div>
           `;
@@ -5134,7 +5145,7 @@ INDEX_HTML = """<!doctype html>
         if (field.type === 'toggle') {
           return `
             <div class="profile-card-editor-row">
-              <label class="profile-card-toggle"><input data-profile-field="${escapeHtml(field.key)}" type="checkbox" ${field.value ? 'checked' : ''}>${escapeHtml(field.label)}</label>
+              <label class="profile-card-toggle"><input data-profile-field="${escapeHtml(field.key)}" type="checkbox" ${fieldValue ? 'checked' : ''}${disabledAttr}>${escapeHtml(field.label)}</label>
             </div>
           `;
         }
@@ -5144,8 +5155,8 @@ INDEX_HTML = """<!doctype html>
               <label>${escapeHtml(field.label)}</label>
               <div class="profile-card-checklist">
                 ${(field.options || []).map(option => {
-                  const checked = Array.isArray(field.value) && field.value.includes(option.value);
-                  return `<label><input data-profile-field="${escapeHtml(field.key)}" type="checkbox" value="${escapeHtml(option.value)}" ${checked ? 'checked' : ''}>${escapeHtml(option.label)}</label>`;
+                  const checked = Array.isArray(fieldValue) && fieldValue.includes(option.value);
+                  return `<label><input data-profile-field="${escapeHtml(field.key)}" type="checkbox" value="${escapeHtml(option.value)}" ${checked ? 'checked' : ''}${disabledAttr}>${escapeHtml(option.label)}</label>`;
                 }).join('')}
               </div>
             </div>
@@ -5174,7 +5185,7 @@ INDEX_HTML = """<!doctype html>
         if (!key) return;
         if (input.type === 'checkbox') {
           if (input.value && input.value !== 'on') {
-            if (!Array.isArray(values[key])) values[key] = [];
+            if (!Object.prototype.hasOwnProperty.call(values, key)) values[key] = [];
             if (input.checked) values[key].push(input.value);
           } else {
             values[key] = !!input.checked;
@@ -5192,6 +5203,7 @@ INDEX_HTML = """<!doctype html>
       const currentPayload = state.results.movies.profile || restoreCachedMovieDashboard(source);
       const revision = currentPayload?.movie_standards_revision || '';
       const editorValues = movieProfileEditorValues(label);
+      state.movieStandardsPendingDraft = { label, values: editorValues };
       state.movieStandardsSaveBusy = true;
       setStatus(`Saving ${humanProfileLabel(label)} definition…`, 'running');
       renderMovieLibrary(currentPayload);
@@ -5209,9 +5221,10 @@ INDEX_HTML = """<!doctype html>
           state.results.movies.profile.quality_profile_definitions = result.quality_profile_definitions || [];
           cacheMovieDashboard(state.results.movies.profile);
         }
-        state.movieStandardsEditorLabel = '';
         setStatus(`Saved ${humanProfileLabel(label)} definition. Re-running dashboard…`, 'running');
         if (!source) {
+          state.movieStandardsPendingDraft = null;
+          state.movieStandardsEditorLabel = '';
           state.movieStandardsSaveBusy = false;
           renderMovieLibrary(state.results.movies.profile);
           setStatus(`Saved ${humanProfileLabel(label)} definition.`, 'idle');
@@ -5225,6 +5238,8 @@ INDEX_HTML = """<!doctype html>
         const rerunPayload = await rerunResponse.json();
         if (!rerunResponse.ok) throw new Error(rerunPayload.error || 'Movie dashboard refresh failed.');
         storePayload('library', rerunPayload);
+        state.movieStandardsPendingDraft = null;
+        state.movieStandardsEditorLabel = '';
         setStatus(`Saved ${humanProfileLabel(label)} definition and refreshed ${rerunPayload.source_root}.`, 'idle');
         renderMovieLibrary(rerunPayload);
       } catch (error) {
