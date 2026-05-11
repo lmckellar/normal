@@ -34,6 +34,7 @@ from normal.movie_profile import (
     build_histogram_payload,
     build_movie_profile_definitions,
     build_movie_profile_item,
+    build_replacement_candidate_definition,
     load_movie_standards,
     movie_standards_revision,
     MovieStandardsConflictError,
@@ -1535,7 +1536,9 @@ INDEX_HTML = """<!doctype html>
         histogram: payload.histogram,
         replacement_queue: payload.replacement_queue || null,
         movie_standards: payload.movie_standards || null,
+        movie_standards_revision: payload.movie_standards_revision || '',
         quality_profile_definitions: payload.quality_profile_definitions || [],
+        replacement_candidate_definition: payload.replacement_candidate_definition || null,
         cached_at: new Date().toISOString()
       };
       _movieDashboardCache = trimDashboardCache(_movieDashboardCache);
@@ -1589,7 +1592,9 @@ INDEX_HTML = """<!doctype html>
         histogram: cached.histogram,
         replacement_queue: cached.replacement_queue || null,
         movie_standards: cached.movie_standards || null,
+        movie_standards_revision: cached.movie_standards_revision || '',
         quality_profile_definitions: cached.quality_profile_definitions || [],
+        replacement_candidate_definition: cached.replacement_candidate_definition || null,
         movies: []
       };
     }
@@ -4987,6 +4992,7 @@ INDEX_HTML = """<!doctype html>
       const queueItems = (currentMovieReplacementQueue(payload)?.items || []);
       const deletedAwaitingReplacementCount = queueItems.filter(item => item.status === 'deleted').length;
       const definitions = Array.isArray(payload.quality_profile_definitions) ? payload.quality_profile_definitions : [];
+      const replacementCandidateDefinition = payload.replacement_candidate_definition || null;
       const replacementQueueCard = deletedAwaitingReplacementCount ? [[
         'deleted_awaiting_replacement',
         deletedAwaitingReplacementCount,
@@ -5001,10 +5007,11 @@ INDEX_HTML = """<!doctype html>
         [
           'replacement_candidate',
           profileCounts.replacement_candidate || 0,
-          {
+          replacementCandidateDefinition || {
             group: 'Action Based',
             name: 'Replacement Candidate',
-            summary: 'Falls below the current weak-candidate floor and is eligible for delete/replace triage.'
+            display_name: 'Replacement Candidate',
+            summary: 'Quality profile at or below the configured cutoff and eligible for delete/replace triage.'
           }
         ],
         [
@@ -5020,19 +5027,25 @@ INDEX_HTML = """<!doctype html>
       const actionCardsHtml = actionCards.map(([label, count, options]) => {
         const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
         const barWidth = total ? (count / total) * 100 : 0;
+        const isEditable = label === 'replacement_candidate' && !!options?.fields;
         const inlineSummary = options?.summary || '';
+        const definitionSummary = options?.rule_summary || '';
+        const isEditorOpen = state.movieStandardsEditorLabel === label;
         return `
           <div class="profile-card">
             <div class="profile-card-head">
               <div>
                 <div class="profile-card-group">${escapeHtml(options?.group || 'Action Based')}</div>
-                <div class="profile-card-name">${escapeHtml(options?.name || humanProfileLabel(label))}</div>
+                <div class="profile-card-name">${escapeHtml(options?.display_name || options?.name || humanProfileLabel(label))}</div>
               </div>
+              ${isEditable ? `<button class="secondary movie-profile-definition-toggle" data-profile-label="${escapeHtml(label)}">${isEditorOpen ? 'Close' : 'Edit'}</button>` : ''}
             </div>
             <div class="profile-card-count">${count.toLocaleString()}</div>
             <div class="profile-card-pct">${escapeHtml(options?.pctLabel || `${pct}% of library`)}</div>
             ${inlineSummary ? `<div class="profile-card-band">${escapeHtml(inlineSummary)}</div>` : ''}
+            ${definitionSummary ? `<div class="profile-card-definition">${escapeHtml(definitionSummary)}</div>` : ''}
             <div class="profile-card-bar"><span style="width:${barWidth}%"></span></div>
+            ${isEditable && isEditorOpen ? buildMovieProfileDefinitionEditor(options) : ''}
           </div>
         `;
       }).join('');
@@ -5224,6 +5237,7 @@ INDEX_HTML = """<!doctype html>
           state.results.movies.profile.movie_standards = result.movie_standards;
           state.results.movies.profile.movie_standards_revision = result.movie_standards_revision || '';
           state.results.movies.profile.quality_profile_definitions = result.quality_profile_definitions || [];
+          state.results.movies.profile.replacement_candidate_definition = result.replacement_candidate_definition || null;
           cacheMovieDashboard(state.results.movies.profile);
         }
         setStatus(`Saved ${humanProfileLabel(label)} definition. Re-running dashboard…`, 'running');
@@ -6557,6 +6571,7 @@ def build_handler(
                     response["movie_standards"] = standards
                     response["movie_standards_revision"] = movie_standards_revision(standards)
                     response["quality_profile_definitions"] = build_movie_profile_definitions(standards)
+                    response["replacement_candidate_definition"] = build_replacement_candidate_definition(standards)
             self.respond_json(response)
 
         def handle_movies_standards_update(self, payload: dict[str, Any]) -> None:
@@ -6572,6 +6587,7 @@ def build_handler(
                     "movie_standards": standards,
                     "movie_standards_revision": movie_standards_revision(standards),
                     "quality_profile_definitions": build_movie_profile_definitions(standards),
+                    "replacement_candidate_definition": build_replacement_candidate_definition(standards),
                 }
             )
 
