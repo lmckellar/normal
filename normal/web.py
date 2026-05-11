@@ -5124,7 +5124,7 @@ INDEX_HTML = """<!doctype html>
             <div class="profile-card-editor-row">
               <label for="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
               <select id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}">
-                ${(field.options || []).map(option => `<option value="${escapeHtml(option.value)}" ${option.value === field.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+                ${(field.options || []).map(option => `<option value="${escapeHtml(option.value)}" ${String(option.value) === String(field.value) ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
               </select>
             </div>
           `;
@@ -5187,6 +5187,7 @@ INDEX_HTML = """<!doctype html>
     async function saveMovieProfileDefinition(label) {
       if (!label || state.movieStandardsSaveBusy || _activeRunController) return;
       const source = sourceInput.value.trim();
+      const editorValues = movieProfileEditorValues(label);
       state.movieStandardsSaveBusy = true;
       setStatus(`Saving ${humanProfileLabel(label)} definition…`, 'running');
       renderMovieLibrary(state.results.movies.profile || restoreCachedMovieDashboard(source));
@@ -5194,7 +5195,7 @@ INDEX_HTML = """<!doctype html>
         const response = await fetch('/api/movies/standards/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label, values: movieProfileEditorValues(label) })
+          body: JSON.stringify({ label, values: editorValues })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Standards save failed.');
