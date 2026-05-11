@@ -49,6 +49,7 @@ class AudioStreamFacts:
     codec: str | None = None
     bitrate_kbps: int | None = None
     channels: int | None = None
+    profile: str | None = None
     language: str | None = None
     title: str | None = None
     is_default: bool = False
@@ -67,6 +68,12 @@ class MediaFacts:
     audio_bitrate_kbps: int | None = None
     audio_channels: int | None = None
     audio_profile: str | None = None
+    audio_display_stream_index: int | None = None
+    audio_format_family: str | None = None
+    audio_format_variant: str | None = None
+    audio_channel_layout: str | None = None
+    audio_immersive_extension: str | None = None
+    audio_summary: str | None = None
     total_bitrate_kbps: int | None = None
     name_resolution_hint: str | None = None
     resolution_bucket: str | None = None
@@ -103,6 +110,78 @@ class QualityReview:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def channel_layout_label(channels: int | None) -> str | None:
+    if channels is None:
+        return None
+    mapping = {1: "Mono", 2: "2.0", 6: "5.1", 8: "7.1"}
+    return mapping.get(channels, f"{channels}ch")
+
+
+def detect_audio_immersive_extension(profile: str | None, title: str | None = None) -> str | None:
+    profile_text = (profile or "").casefold()
+    title_text = (title or "").casefold()
+    combined = f"{profile_text} {title_text}".strip()
+    if "atmos" in combined or "dolby atmos" in combined:
+        return "atmos"
+    if any(token in combined for token in ("dts:x", "dts-x", "dtsx")):
+        return "dtsx"
+    return None
+
+
+def normalize_audio_format(codec: str | None, profile: str | None = None) -> tuple[str | None, str | None, str | None]:
+    codec_text = (codec or "").casefold()
+    profile_text = (profile or "").casefold()
+
+    if codec_text == "aac":
+        variant = "he_aac" if "he-aac" in profile_text or "heaac" in profile_text else "aac"
+        return "aac", variant, "AAC"
+    if codec_text == "ac3":
+        return "ac3", "dolby_digital", "Dolby Digital"
+    if codec_text == "eac3":
+        return "eac3", "dolby_digital_plus", "Dolby Digital Plus"
+    if codec_text == "truehd":
+        return "truehd", "dolby_truehd", "Dolby TrueHD"
+    if codec_text == "dts":
+        if "master audio" in profile_text or re.search(r"\bma\b", profile_text):
+            return "dtshd", "dts_hd_ma", "DTS-HD MA"
+        if "high resolution" in profile_text or re.search(r"\bhra\b", profile_text):
+            return "dtshd", "dts_hd_hra", "DTS-HD HRA"
+        return "dts", "dts", "DTS"
+    if codec_text == "flac":
+        return "flac", "flac", "FLAC"
+    if codec_text.startswith("pcm"):
+        return "pcm", "pcm", "PCM"
+    if codec_text == "opus":
+        return "opus", "opus", "Opus"
+    if codec_text == "mp3":
+        return "mp3", "mp3", "MP3"
+    if codec_text:
+        return "unknown", codec_text, codec_text.upper()
+    return None, None, None
+
+
+def build_audio_summary(
+    codec: str | None,
+    channels: int | None,
+    profile: str | None = None,
+    title: str | None = None,
+) -> tuple[str | None, str | None, str | None, str | None, str | None]:
+    family, variant, display_name = normalize_audio_format(codec, profile)
+    layout = channel_layout_label(channels)
+    immersive = detect_audio_immersive_extension(profile, title)
+
+    if not display_name and not layout:
+        return family, variant, layout, immersive, None
+
+    parts = [part for part in (display_name, layout) if part]
+    summary = " ".join(parts)
+    if immersive == "atmos":
+        summary = f"{summary} Atmos".strip()
+    elif immersive == "dtsx":
+        summary = f"{summary} DTS:X".strip()
+    return family, variant, layout, immersive, summary or None
 
 
 def classify_resolution(width: int | None, height: int | None) -> str | None:
@@ -197,6 +276,12 @@ def score_quality_review(facts: MediaFacts, path: str | Path | None = None) -> Q
         audio_bitrate_kbps=facts.audio_bitrate_kbps,
         audio_channels=facts.audio_channels,
         audio_profile=facts.audio_profile,
+        audio_display_stream_index=facts.audio_display_stream_index,
+        audio_format_family=facts.audio_format_family,
+        audio_format_variant=facts.audio_format_variant,
+        audio_channel_layout=facts.audio_channel_layout,
+        audio_immersive_extension=facts.audio_immersive_extension,
+        audio_summary=facts.audio_summary,
         total_bitrate_kbps=facts.total_bitrate_kbps,
         name_resolution_hint=resolved_hint,
         resolution_bucket=resolution_bucket,

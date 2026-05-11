@@ -140,6 +140,7 @@ class OutputTests(unittest.TestCase):
                             "video_bitrate_kbps": 3200,
                             "audio_bitrate_kbps": 128,
                             "audio_channels": 2,
+                            "audio_summary": "AAC 2.0",
                             "container": "matroska",
                             "video_codec": "h264",
                             "audio_codec": "aac",
@@ -164,6 +165,7 @@ class OutputTests(unittest.TestCase):
                             "video_bitrate_kbps": 2200,
                             "audio_bitrate_kbps": 96,
                             "audio_channels": 2,
+                            "audio_summary": "AAC 2.0",
                             "container": "mp4",
                             "video_codec": "h264",
                             "audio_codec": "aac",
@@ -182,6 +184,8 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(rows[0][1], "87.8")
         self.assertEqual(rows[0][2], "117")
         self.assertEqual(rows[0][-1], "/movies/severe.mkv")
+        self.assertEqual(rows[0][11], "2")
+        self.assertEqual(rows[0][12], "AAC 2.0")
         self.assertEqual(rows[1][0], "review")
 
     def test_write_movie_review_csv_writes_triage_rows(self) -> None:
@@ -209,6 +213,7 @@ class OutputTests(unittest.TestCase):
           "video_bitrate_kbps": 2200,
           "audio_bitrate_kbps": 96,
           "audio_channels": 2,
+          "audio_summary": "AAC 2.0",
           "container": "mp4",
           "video_codec": "h264",
           "audio_codec": "aac"
@@ -231,7 +236,7 @@ class OutputTests(unittest.TestCase):
                 contents,
             )
             self.assertIn(
-                "severe,70.2,117,0.60,very_low,1980,high,1080p,120.0,2200,96,2,10.8,mp4,h264,aac,,,,,,,low_video_bitrate,/movies/severe.mkv",
+                "severe,70.2,117,0.60,very_low,1980,high,1080p,120.0,2200,96,2,AAC 2.0,10.8,mp4,h264,aac,,,,,,,low_video_bitrate,/movies/severe.mkv",
                 contents,
             )
 
@@ -246,6 +251,7 @@ class OutputTests(unittest.TestCase):
                             "video_codec": "h264",
                             "audio_codec": "dts",
                             "audio_channels": 2,
+                            "audio_summary": "Dolby TrueHD 7.1 Atmos",
                             "container": "matroska",
                             "file_size_bytes": 11_800_000_000,
                         }
@@ -259,6 +265,7 @@ class OutputTests(unittest.TestCase):
                             "video_codec": "hevc",
                             "audio_codec": "aac",
                             "audio_channels": 6,
+                            "audio_summary": "AAC 5.1",
                             "container": "matroska",
                             "file_size_bytes": 22_700_000_000,
                         }
@@ -270,6 +277,7 @@ class OutputTests(unittest.TestCase):
         rows = _build_register_rows(payload)
 
         self.assertEqual(rows[0][0:2], ["1917", "2019"])
+        self.assertEqual(rows[0][4], "Dolby TrueHD 7.1 Atmos")
         self.assertEqual(rows[1][0:2], ["2001 A Space Odyssey", "1968"])
 
 

@@ -84,6 +84,7 @@ def scan_movie_profiles(
     should_cancel: Callable[[], bool] | None = None,
 ) -> MovieProfileReport:
     report = MovieProfileReport(source_root=str(source_root.resolve()), generated_at=utc_now_iso())
+    cancelled = False
     movie_files = iter_video_files(source_root, should_cancel=should_cancel)
     first_movie = next(movie_files, None)
     if first_movie is None:
@@ -102,6 +103,7 @@ def scan_movie_profiles(
 
     for index, movie_path in enumerate(chain([first_movie], movie_files), start=1):
         if should_cancel is not None and should_cancel():
+            cancelled = True
             report.warnings.append(
                 WarningItem(
                     code="movie_profile_cancelled",
@@ -126,6 +128,20 @@ def scan_movie_profiles(
         facts.resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
         report.movies.append(build_movie_profile_item(source_root, movie_path, facts))
         emit_progress(progress_callback, index, total, movie_path, started, "running")
+
+    if (
+        should_cancel is not None
+        and should_cancel()
+        and not cancelled
+        and not any(warning.code == "movie_profile_cancelled" for warning in report.warnings)
+    ):
+        report.warnings.append(
+            WarningItem(
+                code="movie_profile_cancelled",
+                message="Movie profile scan was cancelled before completion.",
+                path=str(source_root),
+            )
+        )
 
     assign_percentiles(report.movies)
     report.movies.sort(key=lambda item: (total_risk_score(item.profile.diagnostics), item.profile.rank, item.path.lower()), reverse=True)

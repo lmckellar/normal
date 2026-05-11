@@ -48,6 +48,8 @@ A full quality scan profiles every file against a bitrate/resolution ladder:
 | `minimum_acceptable_1080p` | Watchable |
 | `weak_1080p` / `weak_4k` / `sd_low_quality` | Candidates for replacement |
 
+Quality scan results now also show a main-audio summary for the playback-relevant stream, separate from audio bitrate. The intent is fast library triage: you can see `AAC 2.0` versus `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, or `DTS-HD MA 5.1` at a glance without opening per-stream details.
+
 The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue — when a better encode for the same title shows up in a future scan, it's automatically marked complete.
 
 Queue history has four hard filters: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Deleted rows can be dismissed from queue history inline when the release is no longer worth replacing. That action only changes queue state; it does not touch media files.
@@ -62,7 +64,7 @@ Some MKVs are muxed with the wrong main audio track: for example, Italian marked
 
 - detect non-English default audio when English is present
 - flag the stronger case where the English fallback is materially weaker than the default track
-- show default-vs-English stream summaries so the queue is explainable before deletion
+- show the main audio summary plus default-vs-English stream summaries so the queue is explainable before deletion
 
 For MKVs, the page can now do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops audio streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers are left as review-only items. Replacement queue delete/replace is still available for genuinely bad releases.
 
@@ -88,6 +90,8 @@ Export a formatted XLSX of your full library: title, year, resolution, video cod
 ```bash
 normal movie-register --report scan.json --xlsx catalogue.xlsx
 ```
+
+The `Audio` column uses the same normalized main-audio summary as the scan and web UI.
 
 ## Web UI pages
 

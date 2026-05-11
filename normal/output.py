@@ -10,6 +10,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from normal.movie_plan import parse_movie_name
+from normal.quality_review import build_audio_summary
 from normal.scan import analyze_library, infer_album_root
 
 
@@ -94,6 +95,7 @@ def write_movie_review_csv(report_path: Path, csv_path: Path, minimum_status: st
                 "video_kbps",
                 "audio_kbps",
                 "audio_channels",
+                "audio_summary",
                 "mb_per_min",
                 "container",
                 "video_codec",
@@ -152,6 +154,7 @@ def build_movie_review_rows(payload: dict, minimum_status: str = "review") -> li
                 str(facts.get("video_bitrate_kbps", "") or ""),
                 str(facts.get("audio_bitrate_kbps", "") or ""),
                 str(facts.get("audio_channels", "") or ""),
+                facts.get("audio_summary", "") or "",
                 mb_per_min_display,
                 facts.get("container", "") or "",
                 facts.get("video_codec", "") or "",
@@ -254,6 +257,7 @@ def _build_register_rows(payload: dict) -> list[list]:
             facts.get("audio_codec") or "",
             facts.get("audio_channels"),
             facts.get("audio_profile") or "",
+            facts.get("audio_summary") or "",
         )
         container = facts.get("container") or ""
         size = _format_file_size(facts.get("file_size_bytes"))
@@ -294,45 +298,10 @@ def _display_video_codec(codec: str) -> str:
     return mapping.get(codec.lower(), codec.upper() if codec else "")
 
 
-def _derive_audio_label(codec: str, channels: int | None, profile: str) -> str:
-    codec_l = codec.lower()
-    profile_l = profile.lower()
-
-    atmos = "atmos" in profile_l or "dolby atmos" in profile_l
-    dtsx = "dts:x" in profile_l or "dts-x" in profile_l or "dtsx" in profile_l
-
-    layout = _channel_layout(channels)
-
-    if codec_l == "truehd":
-        base = f"TrueHD {layout}" if layout else "TrueHD"
-        return f"{base} Atmos" if atmos else base
-    if codec_l == "eac3":
-        base = f"DD+ {layout}" if layout else "DD+"
-        return f"{base} Atmos" if atmos else base
-    if codec_l == "ac3":
-        return f"Dolby {layout}" if layout else "Dolby"
-    if codec_l == "dts":
-        if dtsx:
-            return f"DTS:X {layout}" if layout else "DTS:X"
-        return f"DTS {layout}" if layout else "DTS"
-    if codec_l == "aac":
-        return f"AAC {layout}" if layout else "AAC"
-    if codec_l == "mp3":
-        return f"MP3 {layout}" if layout else "MP3"
-    if codec_l == "flac":
-        return f"FLAC {layout}" if layout else "FLAC"
-    if codec_l == "pcm_s16le" or codec_l.startswith("pcm"):
-        return f"PCM {layout}" if layout else "PCM"
-    if codec:
-        return f"{codec.upper()} {layout}".strip()
-    return layout
-
-
-def _channel_layout(channels: int | None) -> str:
-    if channels is None:
-        return ""
-    mapping = {1: "Mono", 2: "2.0", 6: "5.1", 8: "7.1"}
-    return mapping.get(channels, f"{channels}ch")
+def _derive_audio_label(codec: str, channels: int | None, profile: str, summary: str) -> str:
+    if summary:
+        return summary
+    return build_audio_summary(codec, channels, profile)[-1] or ""
 
 
 def _format_file_size(size_bytes: int | None) -> str:

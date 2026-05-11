@@ -11,10 +11,18 @@ from normal.movie_profile import (
     looks_like_absolute_numbering,
     scan_movie_profiles,
 )
-from normal.quality_review import AudioStreamFacts, MediaFacts
+from normal.quality_review import AudioStreamFacts, MediaFacts, build_audio_summary
 
 
 class MovieProfileTests(unittest.TestCase):
+    def test_build_audio_summary_formats_common_home_theater_variants(self) -> None:
+        self.assertEqual(build_audio_summary("aac", 2)[-1], "AAC 2.0")
+        self.assertEqual(build_audio_summary("ac3", 6)[-1], "Dolby Digital 5.1")
+        self.assertEqual(build_audio_summary("eac3", 6, "Dolby Digital Plus + Dolby Atmos")[-1], "Dolby Digital Plus 5.1 Atmos")
+        self.assertEqual(build_audio_summary("truehd", 8, "Dolby Atmos")[-1], "Dolby TrueHD 7.1 Atmos")
+        self.assertEqual(build_audio_summary("dts", 6, "DTS-HD Master Audio")[-1], "DTS-HD MA 5.1")
+        self.assertEqual(build_audio_summary("pcm_s16le", 2)[-1], "PCM 2.0")
+
     def test_classify_profile_label_marks_small_1080p_as_minimum_acceptable(self) -> None:
         label = classify_profile_label(
             MediaFacts(

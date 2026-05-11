@@ -293,7 +293,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("No pending replacement media is selected for deletion.", INDEX_HTML)
         self.assertIn("Choose a source directory before removing items from the replacement queue.", INDEX_HTML)
         self.assertIn("Remove from queue", INDEX_HTML)
-        self.assertIn("['file','profile','resolution','video_bitrate','audio_bitrate','file_size']", INDEX_HTML)
+        self.assertIn("['file','profile','resolution','video_bitrate','audio_bitrate','audio_summary','file_size']", INDEX_HTML)
         self.assertNotIn("Select strict weak", INDEX_HTML)
         self.assertNotIn("['strict_weak', 'Strict Weak']", INDEX_HTML)
         self.assertNotIn("<th>Inspect</th>", INDEX_HTML)
@@ -322,6 +322,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("drop_foreign_audio: dropForeignAudio", INDEX_HTML)
         self.assertIn("function summarizeAudioFixResult(result, dropForeignAudio)", INDEX_HTML)
         self.assertIn("English already default", INDEX_HTML)
+        self.assertIn("<th>Main Audio</th>", INDEX_HTML)
+        self.assertIn("function describeAudioFormat(stream)", INDEX_HTML)
 
     def test_movie_dashboard_has_replacement_queue_summary_without_detail_pane(self) -> None:
         self.assertIn("Deleted, Awaiting Replacement", INDEX_HTML)
