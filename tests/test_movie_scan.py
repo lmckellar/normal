@@ -229,6 +229,96 @@ class MovieScanTests(unittest.TestCase):
             self.assertTrue(facts.subtitle_streams[0].is_forced)
             self.assertEqual(facts.default_subtitle_stream_index, 2)
 
+    def test_media_facts_from_ffprobe_payload_infers_forced_subtitle_from_title_when_flag_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x" * 100)
+
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {
+                        "duration": "7200",
+                        "size": "1048576000",
+                        "bit_rate": "6000000",
+                        "format_name": "matroska,webm",
+                    },
+                    "streams": [
+                        {
+                            "index": 0,
+                            "codec_type": "video",
+                            "codec_name": "h264",
+                            "width": 1920,
+                            "height": 1080,
+                            "bit_rate": "5000000",
+                        },
+                        {
+                            "index": 1,
+                            "codec_type": "audio",
+                            "codec_name": "ac3",
+                            "channels": 6,
+                            "bit_rate": "640000",
+                            "disposition": {"default": 1},
+                            "tags": {"language": "eng"},
+                        },
+                        {
+                            "index": 2,
+                            "codec_type": "subtitle",
+                            "codec_name": "subrip",
+                            "disposition": {"default": 0, "forced": 0},
+                            "tags": {"language": "eng", "title": "English Forced"},
+                        },
+                    ],
+                },
+                movie_path,
+            )
+
+            self.assertTrue(facts.subtitle_streams[0].is_forced)
+
+    def test_media_facts_from_ffprobe_payload_does_not_treat_english_srt_as_forced(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x" * 100)
+
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {
+                        "duration": "7200",
+                        "size": "1048576000",
+                        "bit_rate": "6000000",
+                        "format_name": "matroska,webm",
+                    },
+                    "streams": [
+                        {
+                            "index": 0,
+                            "codec_type": "video",
+                            "codec_name": "h264",
+                            "width": 1920,
+                            "height": 1080,
+                            "bit_rate": "5000000",
+                        },
+                        {
+                            "index": 1,
+                            "codec_type": "audio",
+                            "codec_name": "ac3",
+                            "channels": 6,
+                            "bit_rate": "640000",
+                            "disposition": {"default": 1},
+                            "tags": {"language": "eng"},
+                        },
+                        {
+                            "index": 2,
+                            "codec_type": "subtitle",
+                            "codec_name": "subrip",
+                            "disposition": {"default": 0, "forced": 0},
+                            "tags": {"language": "eng", "handler_name": "English SRT"},
+                        },
+                    ],
+                },
+                movie_path,
+            )
+
+            self.assertFalse(facts.subtitle_streams[0].is_forced)
+
     def test_media_facts_from_ffprobe_payload_detects_immersive_audio_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             movie_path = Path(tmpdir) / "Movie.mkv"

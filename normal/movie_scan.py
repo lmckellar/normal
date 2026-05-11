@@ -37,6 +37,7 @@ VIDEO_EXTENSIONS = {
 STATUS_PRIORITY = {"severe": 0, "review": 1, "ok": 2, "unscored": 3}
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|2100)(?!\d)")
 FFPROBE_TIMEOUT_SECONDS = 30
+FORCED_SUBTITLE_TITLE_PATTERN = re.compile(r"\bforced\b", re.IGNORECASE)
 
 
 @dataclass(slots=True)
@@ -351,14 +352,21 @@ def subtitle_stream_facts_from_ffprobe_stream(stream: dict[str, Any]) -> Subtitl
     disposition = stream.get("disposition")
     if not isinstance(disposition, dict):
         disposition = {}
+    title = first_text(tags.get("title"), tags.get("handler_name"))
     return SubtitleStreamFacts(
         index=parse_int(stream.get("index")),
         codec=stream.get("codec_name"),
         language=normalize_language_tag(tags.get("language")),
-        title=first_text(tags.get("title"), tags.get("handler_name")),
+        title=title,
         is_default=bool(disposition.get("default")),
-        is_forced=bool(disposition.get("forced")),
+        is_forced=bool(disposition.get("forced")) or subtitle_title_looks_forced(title),
     )
+
+
+def subtitle_title_looks_forced(title: str | None) -> bool:
+    if not title:
+        return False
+    return bool(FORCED_SUBTITLE_TITLE_PATTERN.search(title))
 
 
 def choose_display_audio_stream(streams: list[AudioStreamFacts]) -> AudioStreamFacts | None:

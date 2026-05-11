@@ -984,6 +984,20 @@ def is_english_subtitle(stream: SubtitleStreamFacts | None) -> bool:
     return language in ENGLISH_SUBTITLE_LANGUAGES
 
 
+def choose_best_english_subtitle_stream(
+    streams: list[SubtitleStreamFacts],
+    *,
+    forced_only: bool = False,
+) -> SubtitleStreamFacts | None:
+    matching = [stream for stream in streams if is_english_subtitle(stream) and (stream.is_forced or not forced_only)]
+    if not matching:
+        return None
+    current_default = choose_default_subtitle_stream(streams)
+    if current_default in matching:
+        return current_default
+    return matching[0]
+
+
 def audio_stream_quality_key(stream: AudioStreamFacts) -> tuple[int, int, int]:
     return (
         stream.channels or 0,

@@ -325,6 +325,23 @@ class WebTests(unittest.TestCase):
         self.assertIn("<th>Main Audio</th>", INDEX_HTML)
         self.assertIn("function describeAudioFormat(stream)", INDEX_HTML)
 
+    def test_movie_subtitle_readiness_page_is_wired(self) -> None:
+        self.assertIn("id: 'subtitle_readiness'", INDEX_HTML)
+        self.assertIn("label: 'Repair Subtitle Readiness'", INDEX_HTML)
+        self.assertIn("renderMovieSubtitleReadiness", INDEX_HTML)
+        self.assertIn("movieSubtitleFixBusy: false", INDEX_HTML)
+        self.assertIn("function movieSubtitleFixSelectionLocked()", INDEX_HTML)
+        self.assertIn("function movieSubtitleReadinessIssueCode(item)", INDEX_HTML)
+        self.assertIn("function movieSubtitleReadinessIsRepairable(item)", INDEX_HTML)
+        self.assertIn("Repair Subtitle Defaults", INDEX_HTML)
+        self.assertIn("'/api/movies/subtitle-readiness/fix'", INDEX_HTML)
+        self.assertIn("This page is non-destructive", INDEX_HTML)
+        self.assertIn("Selection locked while ffmpeg remux is running.", INDEX_HTML)
+        self.assertIn("state.movieSubtitleFixBusy = true;", INDEX_HTML)
+        self.assertIn("state.movieSubtitleFixBusy = false;", INDEX_HTML)
+        self.assertIn("function summarizeSubtitleFixResult(result)", INDEX_HTML)
+        self.assertNotIn("Replacement Queue · Subtitle Readiness", INDEX_HTML)
+
     def test_movie_dashboard_has_replacement_queue_summary_without_detail_pane(self) -> None:
         self.assertIn("Deleted, Awaiting Replacement", INDEX_HTML)
         self.assertIn("from Replacement Queue", INDEX_HTML)

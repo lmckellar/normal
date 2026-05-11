@@ -1,6 +1,6 @@
 # Movies
 
-The movie lane handles three practical problems in a pirated library: inconsistent naming, uneven encode quality, and bad multi-audio packaging.
+The movie lane handles four practical problems in a pirated library: inconsistent naming, uneven encode quality, bad multi-audio packaging, and messy subtitle defaults.
 
 ![Movies dashboard](assets/movies_dashboard_default.png)
 
@@ -75,6 +75,18 @@ While a remux is running, the page locks checkbox selection and disables conflic
 
 Current safety note: `Make English Default` has been exercised against real files. `Make English Default + Delete Foreign Audio` is implemented, but it is currently untested on real libraries and should still be treated as a cautious review-only workflow before first public push.
 
+## Subtitle readiness repair
+
+The **Repair Subtitle Readiness** page is a sibling repair lane built on the same movie-profile scan. It follows the current subtitle hygiene stance from the standards engine:
+
+- default to no subtitle when main audio is already English
+- default to forced English when a forced English subtitle exists
+- default to English subtitles when the default audio track is non-English
+
+This workflow is explicitly non-destructive in v1: it does not delete media files or subtitle files, and it does not use the replacement queue. For supported MKVs it can do a lossless in-place remux that only updates embedded subtitle default flags. If the needed English or forced-English subtitle does not exist, the item stays review-only.
+
+Current v1 scope is embedded subtitle streams already inside the container. External `.srt` / `.ass` sidecars are not modified by this workflow.
+
 ## Junk cleanup
 
 Two pages handle library noise:
@@ -104,6 +116,7 @@ The `Audio` column uses the same normalized main-audio summary as the scan and w
 | Normalize | Review and apply rename plans |
 | Delete Weak Encodes | Triage and queue replacements |
 | Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |
+| Repair Subtitle Readiness | Repair embedded subtitle defaults for supported MKVs without deleting files |
 | Delete Junk Videos | Remove samples and featurettes |
 | Delete Junk Sidecar & Spam Files | Remove sidecar and spam files |
 | Canonical Lists | Compare owned titles against live all-time movie lists and unlock simple coverage badges |
