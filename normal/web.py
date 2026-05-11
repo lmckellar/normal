@@ -38,6 +38,7 @@ from normal.movie_profile import (
     scan_movie_profiles,
     update_movie_profile_definition,
 )
+from normal.movie_artwork import apply_movie_posters, scan_movie_posters
 from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
 from normal.music_profile import build_music_histogram_payload, scan_music_profiles
 from normal.movie_replacement_queue import (
@@ -1172,11 +1173,12 @@ INDEX_HTML = """<!doctype html>
       selectedChangeIds: new Set(),
       selectedArtistNames: new Set(),
       approvedArtworkCandidates: {},
+      approvedMoviePosterCandidates: {},
       artworkCandidates: {},
       artworkImageSearchOffsets: {},
       results: {
         music: { profile: null, normalize: null, apply: null, artwork: null, replacementQueue: null, replacementQueueSource: '' },
-        movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null, replacementQueue: null, replacementQueueSource: '' }
+        movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null, artwork: null, replacementQueue: null, replacementQueueSource: '' }
       }
     };
 
@@ -1203,6 +1205,7 @@ INDEX_HTML = """<!doctype html>
           { id: 'quality', label: 'Delete Weak Encodes', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'audio_packaging', label: 'Fix Multi-Audio Packaging', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'subtitle_readiness', label: 'Repair Subtitle Readiness', action: 'scan', endpoint: '/api/movies/profile' },
+          { id: 'movie_artwork', label: 'Repair Artwork for Plex', action: 'scan', endpoint: '/api/movies/artwork/scan' },
           { id: 'junk', label: 'Delete Junk Videos', action: 'scan', endpoint: '/api/movies/junk' },
           { id: 'promo', label: 'Delete Junk Sidecar & Spam Files', action: 'scan', endpoint: '/api/movies/promo-docs' },
           { id: 'canonical_lists', label: 'Canonical Lists', action: 'scan', endpoint: '/api/movies/canonical-lists' }
@@ -2186,6 +2189,10 @@ INDEX_HTML = """<!doctype html>
           state.results.movies.junk = payload;
           state.selectedJunkPaths.clear();
         }
+        if (page === 'movie_artwork') {
+          state.results.movies.artwork = payload;
+          state.approvedMoviePosterCandidates = {};
+        }
       }
     }
 
@@ -2200,6 +2207,7 @@ INDEX_HTML = """<!doctype html>
         quality: 'Delete Weak Encodes',
         audio_packaging: 'Fix Multi-Audio Packaging',
         subtitle_readiness: 'Repair Subtitle Readiness',
+        movie_artwork: 'Repair Artwork for Plex',
         music_quality: 'Delete Weak Encodes',
         compatibility: 'Compatibility',
         junk: 'Delete Junk Videos',
@@ -2272,6 +2280,10 @@ INDEX_HTML = """<!doctype html>
       }
       if (page === 'subtitle_readiness') {
         renderMovieSubtitleReadiness(profile);
+        return;
+      }
+      if (page === 'movie_artwork') {
+        renderMovieArtwork(state.results.movies.artwork);
         return;
       }
       if (page === 'compatibility') {
@@ -4046,6 +4058,346 @@ INDEX_HTML = """<!doctype html>
         delete state.artworkCandidates[result.artist_name];
         delete state.artworkImageSearchOffsets[result.artist_name];
       });
+    }
+
+    function renderMovieArtwork(payload) {
+      mainTagline.textContent = 'Browse movie folders as Plex-compatible poster art. Missing poster.jpg files are shown in place.';
+
+      if (!payload) {
+        renderMetrics([]);
+        renderBars([]);
+        filterBar.innerHTML = '';
+        mainContent.innerHTML = '<div class="empty">Run Movies / Repair Artwork for Plex to browse movie folders and poster art.</div>';
+        detailPanel.innerHTML = '<div class="empty">Run a scan first.</div>';
+        return;
+      }
+
+      const present = payload.present || [];
+      const missing = payload.missing || [];
+      const total = present.length + missing.length;
+
+      const LOW_SIZE = 30 * 1024;
+      const LOW_W = 400;
+      const LOW_H = 600;
+      const lowQuality = present.filter(p => p.file_size_bytes > 0 && (p.file_size_bytes < LOW_SIZE || p.width < LOW_W || p.height < LOW_H));
+      const presentByMovie = new Map(present.map(item => [item.movie_name, item]));
+      const approved = Object.values(state.approvedMoviePosterCandidates);
+
+      const movies = [
+        ...present.map(item => ({ movie_name: item.movie_name, folder_path: item.folder_path, status: 'present', poster: item })),
+        ...missing.map(item => ({ movie_name: item.movie_name, folder_path: item.folder_path, status: 'missing', poster: null }))
+      ].sort((a, b) => a.movie_name.localeCompare(b.movie_name));
+
+      renderMetrics([
+        { value: String(total), label: 'movie folders' },
+        { value: String(present.length), label: 'with poster' },
+        { value: String(missing.length), label: 'missing poster' },
+        { value: String(lowQuality.length), label: 'low quality' },
+      ]);
+      renderBars([
+        { label: 'with poster', value: String(present.length), width: total ? (present.length / total) * 100 : 0 },
+        { label: 'missing poster', value: String(missing.length), width: total ? (missing.length / total) * 100 : 0 },
+      ]);
+      renderFilters([
+        ['all', 'All'],
+        ['missing', 'Missing'],
+        ['present', 'With Poster'],
+        ['low', 'Low Quality']
+      ]);
+
+      function posterQualityBadge(item) {
+        if (!item.width) return '';
+        const isLow = item.file_size_bytes < LOW_SIZE || item.width < LOW_W || item.height < LOW_H;
+        const label = item.width + '\xd7' + item.height;
+        const color = isLow ? 'var(--danger)' : 'var(--accent)';
+        return `<span style="font-size:10px;font-weight:600;color:${color};letter-spacing:0.03em">${label}</span>`;
+      }
+
+      const visibleMovies = movies.filter(movie => {
+        if (state.filter === 'missing') return movie.status === 'missing';
+        if (state.filter === 'present') return movie.status === 'present';
+        if (state.filter === 'low') {
+          const item = movie.poster;
+          return item && item.file_size_bytes > 0 && (item.file_size_bytes < LOW_SIZE || item.width < LOW_W || item.height < LOW_H);
+        }
+        return true;
+      });
+
+      const movieTiles = visibleMovies.map(movie => {
+        const item = movie.poster;
+        const isLow = item && item.file_size_bytes > 0 && (item.file_size_bytes < LOW_SIZE || item.width < LOW_W || item.height < LOW_H);
+        const imgPath = item ? (item.image_path || (item.folder_path + '/' + item.filename)) : '';
+        const imgSrc = item ? moviePosterImageUrl(imgPath, item) : '';
+        const hasApproved = !!state.approvedMoviePosterCandidates[movie.movie_name];
+        return `
+          <button class="artist-tile" data-movie="${escapeHtml(movie.movie_name)}" style="width:140px">
+            ${item ? `
+              <div class="artist-art" style="aspect-ratio:2/3;${isLow ? 'outline:3px solid rgba(138,51,65,0.65);outline-offset:-3px' : ''}">
+                <img src="${imgSrc}" alt="${escapeHtml(movie.movie_name)}" loading="lazy" style="object-fit:cover;width:100%;height:100%">
+              </div>
+            ` : '<div class="artist-art missing" style="aspect-ratio:2/3">Missing poster</div>'}
+            <div class="artist-meta">
+              <div class="artist-name">${escapeHtml(movie.movie_name)}</div>
+              <div>${item ? `<span class="chip safe" style="font-size:0.72em">poster.jpg</span>` : hasApproved ? '<span class="chip review" style="font-size:0.72em">approved</span>' : '<span class="chip high" style="font-size:0.72em">missing</span>'}${item ? posterQualityBadge(item) : ''}</div>
+            </div>
+          </button>
+        `;
+      }).join('');
+
+      const approvedCount = approved.length;
+      mainContent.innerHTML = `
+        <div class="artist-toolbar">
+          <span class="subtle" id="moviePosterSelCount">${approvedCount} approved</span>
+          <button class="primary" id="moviePosterApplyBtn" ${approvedCount === 0 ? 'disabled' : ''}>Write Approved to Library</button>
+        </div>
+        <div class="artist-grid" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+          ${movieTiles || '<div class="empty">No movie folders match this filter.</div>'}
+        </div>
+      `;
+
+      mainContent.querySelectorAll('.artist-tile').forEach(button => {
+        button.addEventListener('click', () => showMoviePosterDetail(button.dataset.movie, movies, presentByMovie));
+        attachMoviePosterDropTarget(button, button.dataset.movie);
+      });
+      document.getElementById('moviePosterApplyBtn')?.addEventListener('click', applyMoviePosters);
+    }
+
+    function showMoviePosterDetail(movieName, movies, presentByMovie) {
+      const movie = movies.find(item => item.movie_name === movieName);
+      if (!movie) return;
+      const item = presentByMovie.get(movieName);
+      const imgPath = item ? (item.image_path || (item.folder_path + '/' + item.filename)) : '';
+      const imgSrc = item ? moviePosterImageUrl(imgPath, item) : '';
+      const approved = state.approvedMoviePosterCandidates[movieName];
+      const previewSrc = approved ? (approved.preview_url || '') : imgSrc;
+      detailPanel.innerHTML = `
+        <div class="finding">
+          <h3>${escapeHtml(movieName)}</h3>
+          <p class="mono">${escapeHtml(movie.folder_path)}</p>
+          ${item ? `
+            <div style="width:100%;max-width:220px;aspect-ratio:2/3;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#eee6d8;margin:12px 0">
+              <img src="${escapeHtml(previewSrc)}" alt="${escapeHtml(movieName)}" style="width:100%;height:100%;object-fit:cover">
+            </div>
+            <div class="artwork-drop-zone" id="moviePosterDropZone">Drop poster image or image URL here</div>
+            ${approved ? `
+              <p><span class="chip review">approved replacement</span></p>
+              <p class="subtle">Current: <span class="mono">${escapeHtml(item.filename)}</span>${item.width && item.height ? ` &middot; ${item.width}\xd7${item.height}` : ''} &middot; ${Math.round((item.file_size_bytes || 0) / 1024)} KB</p>
+              <button class="primary" id="saveMoviePosterBtn">Save Poster</button>
+              <button class="secondary" id="clearMoviePosterBtn">Clear Approval</button>
+            ` : `
+              <p><span class="chip safe">poster.jpg</span> ${escapeHtml(item.filename)}</p>
+              <p class="subtle">${item.width && item.height ? `${item.width}\xd7${item.height}` : 'dimensions unknown'} &middot; ${Math.round((item.file_size_bytes || 0) / 1024)} KB</p>
+              <p class="subtle">Drop a replacement image to update.</p>
+            `}
+          ` : `
+            ${approved ? `
+              <div style="width:100%;max-width:220px;aspect-ratio:2/3;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#eee6d8;margin:12px 0">
+                <img src="${escapeHtml(approved.preview_url || '')}" alt="${escapeHtml(movieName)} poster" style="width:100%;height:100%;object-fit:cover">
+              </div>
+              <div class="artwork-drop-zone" id="moviePosterDropZone">Drop poster image or image URL here</div>
+              <p><span class="chip review">approved</span></p>
+              <button class="primary" id="saveMoviePosterBtn">Save Poster</button>
+              <button class="secondary" id="clearMoviePosterBtn">Clear Approval</button>
+            ` : `
+              <div class="artist-art missing" style="width:100%;max-width:220px;aspect-ratio:2/3;border:1px dashed var(--line);border-radius:8px;margin:12px 0">Missing poster</div>
+              <div class="artwork-drop-zone" id="moviePosterDropZone">Drop poster image or image URL here</div>
+              <p><span class="chip high">missing</span> Add <span class="mono">poster.jpg</span> to this movie folder.</p>
+            `}
+          `}
+        </div>
+      `;
+      document.getElementById('clearMoviePosterBtn')?.addEventListener('click', () => {
+        delete state.approvedMoviePosterCandidates[movieName];
+        renderCurrentPage();
+        showMoviePosterDetailFromPayload(movieName);
+      });
+      document.getElementById('saveMoviePosterBtn')?.addEventListener('click', () => applySingleMoviePoster(movieName));
+      const dropZone = document.getElementById('moviePosterDropZone');
+      if (dropZone) attachMoviePosterDropTarget(dropZone, movieName);
+    }
+
+    function showMoviePosterDetailFromPayload(movieName) {
+      const payload = state.results.movies.artwork;
+      if (!payload) return;
+      const present = payload.present || [];
+      const missing = payload.missing || [];
+      const presentByMovie = new Map(present.map(item => [item.movie_name, item]));
+      const movies = [
+        ...present.map(item => ({ movie_name: item.movie_name, folder_path: item.folder_path, status: 'present', poster: item })),
+        ...missing.map(item => ({ movie_name: item.movie_name, folder_path: item.folder_path, status: 'missing', poster: null }))
+      ].sort((a, b) => a.movie_name.localeCompare(b.movie_name));
+      showMoviePosterDetail(movieName, movies, presentByMovie);
+    }
+
+    function attachMoviePosterDropTarget(element, movieName) {
+      element.addEventListener('dragover', event => {
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        element.classList.add('dragover');
+      });
+      element.addEventListener('dragleave', () => {
+        element.classList.remove('dragover');
+      });
+      element.addEventListener('drop', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        element.classList.remove('dragover');
+        approveDroppedMoviePoster(event.dataTransfer, movieName);
+      });
+    }
+
+    function approveDroppedMoviePoster(dataTransfer, movieName) {
+      const file = Array.from(dataTransfer.files || []).find(item => item.type && item.type.startsWith('image/'));
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          approveMoviePosterCandidate(movieName, {
+            movie_name: movieName,
+            folder_path: moviePosterFolderPath(movieName),
+            source: 'drop',
+            preview_url: String(reader.result || ''),
+            image_url: String(reader.result || ''),
+          });
+        };
+        reader.onerror = () => setStatus('Could not read dropped image file.', 'error');
+        reader.readAsDataURL(file);
+        return;
+      }
+      const url = droppedArtworkUrl(dataTransfer);
+      if (!url) {
+        setStatus('Drop an image file or a direct image URL.', 'error');
+        return;
+      }
+      approveMoviePosterCandidate(movieName, {
+        movie_name: movieName,
+        folder_path: moviePosterFolderPath(movieName),
+        source: 'drop',
+        preview_url: url,
+        image_url: url,
+      });
+    }
+
+    function approveMoviePosterCandidate(movieName, candidate) {
+      state.approvedMoviePosterCandidates[movieName] = candidate;
+      setStatus(`${movieName} poster approved from drop.`, 'idle');
+      renderCurrentPage();
+      showMoviePosterDetailFromPayload(movieName);
+    }
+
+    function moviePosterFolderPath(movieName) {
+      const payload = state.results.movies.artwork;
+      const item = (payload?.present || []).find(item => item.movie_name === movieName)
+        || (payload?.missing || []).find(item => item.movie_name === movieName);
+      return item?.folder_path || '';
+    }
+
+    function moviePosterImageUrl(path, item) {
+      const version = item?.mtime_ns || [item?.file_size_bytes || 0, item?.width || 0, item?.height || 0].join('-');
+      return '/api/movies/artwork/image?path=' + encodeURIComponent(path) + '&v=' + encodeURIComponent(version);
+    }
+
+    function applyMoviePosterResultsToPayload(results, payload) {
+      if (!payload) return;
+      payload.present = payload.present || [];
+      payload.missing = payload.missing || [];
+      results.filter(result => result.status === 'written').forEach(result => {
+        const imagePath = result.folder_path + '/poster.jpg';
+        payload.missing = payload.missing.filter(item => item.movie_name !== result.movie_name);
+        payload.present = payload.present.filter(item => item.movie_name !== result.movie_name);
+        payload.present.push({
+          movie_name: result.movie_name,
+          folder_path: result.folder_path,
+          filename: 'poster.jpg',
+          image_path: imagePath,
+          file_size_bytes: result.file_size_bytes || 0,
+          width: result.width || 0,
+          height: result.height || 0,
+          mtime_ns: Date.now(),
+        });
+        delete state.approvedMoviePosterCandidates[result.movie_name];
+      });
+    }
+
+    async function applyMoviePosters() {
+      const source = sourceInput.value.trim();
+      const payload = state.results.movies.artwork;
+      if (!source || !payload) return;
+
+      const candidates = Object.values(state.approvedMoviePosterCandidates);
+      if (candidates.length === 0) return;
+
+      const btn = document.getElementById('moviePosterApplyBtn');
+      if (btn) btn.disabled = true;
+      setStatus(`Writing posters for ${candidates.length} movie${candidates.length !== 1 ? 's' : ''}…`, 'running');
+
+      try {
+        const response = await fetch('/api/movies/artwork/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, candidates })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Apply failed.');
+
+        const resultItems = result.results || [];
+        const written = resultItems.filter(r => r.status === 'written').length;
+        const failed = resultItems.filter(r => r.status === 'failed').length;
+        setStatus(`Poster write: ${written} written, ${failed} failed.`, 'idle');
+        applyMoviePosterResultsToPayload(resultItems, payload);
+
+        detailPanel.innerHTML = `
+          <div class="finding">
+            <h3>Apply Results</h3>
+            ${resultItems.map(r => `
+              <p>
+                <span class="chip ${r.status === 'written' ? 'safe' : r.status === 'failed' ? 'high' : 'indexing'}" style="font-size:0.78em">${escapeHtml(r.status)}</span>
+                <span>${escapeHtml(r.movie_name)}</span>
+                ${r.message ? `<span class="subtle"> — ${escapeHtml(r.message)}</span>` : ''}
+              </p>
+            `).join('')}
+          </div>`;
+
+        renderCurrentPage();
+      } catch (error) {
+        setStatus(error.message, 'error');
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function applySingleMoviePoster(movieName) {
+      const source = sourceInput.value.trim();
+      const payload = state.results.movies.artwork;
+      const candidate = state.approvedMoviePosterCandidates[movieName];
+      if (!source || !payload || !candidate) return;
+
+      const btn = document.getElementById('saveMoviePosterBtn');
+      if (btn) btn.disabled = true;
+      setStatus(`Writing poster for ${movieName}…`, 'running');
+
+      try {
+        const response = await fetch('/api/movies/artwork/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, candidates: [candidate] })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Apply failed.');
+
+        const resultItems = result.results || [];
+        applyMoviePosterResultsToPayload(resultItems, payload);
+        const written = resultItems.some(r => r.status === 'written');
+        const failed = resultItems.find(r => r.status === 'failed');
+        if (failed) {
+          setStatus(`${movieName} poster write failed: ${failed.message || 'unknown error'}`, 'error');
+        } else {
+          setStatus(`${movieName} poster ${written ? 'saved' : 'not changed'}.`, 'idle');
+        }
+        renderCurrentPage();
+        showMoviePosterDetailFromPayload(movieName);
+      } catch (error) {
+        setStatus(error.message, 'error');
+        if (btn) btn.disabled = false;
+      }
     }
 
     function isLowConfidenceArtworkSource(source) {
@@ -5969,6 +6321,9 @@ def build_handler(
             if self.path.startswith("/api/music/artwork/image"):
                 self.handle_artwork_image()
                 return
+            if self.path.startswith("/api/movies/artwork/image"):
+                self.handle_artwork_image()
+                return
             if self.path not in {"/", "/index.html"}:
                 self.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
                 return
@@ -6090,6 +6445,12 @@ def build_handler(
                     return
                 if route == "/api/music/artwork/promote":
                     self.handle_music_artwork_promote(payload)
+                    return
+                if route == "/api/movies/artwork/scan":
+                    self.handle_movies_artwork_scan(payload)
+                    return
+                if route == "/api/movies/artwork/apply":
+                    self.handle_movies_artwork_apply(payload)
                     return
                 self.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             except RequestConflictError as exc:
@@ -6573,6 +6934,21 @@ def build_handler(
                 if provenance_file.exists():
                     provenance_file.unlink()
             self.respond_json({"ok": True, "folder_path": str(folder)})
+
+        def handle_movies_artwork_scan(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            with ACTIVITY_TRACKER.track(source, "Movie poster scan"):
+                report = scan_movie_posters(source)
+            self.respond_json(report.to_dict())
+
+        def handle_movies_artwork_apply(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            candidates = payload.get("candidates", [])
+            if not isinstance(candidates, list):
+                raise ValueError("candidates must be a list")
+            with ACTIVITY_TRACKER.track(source, "Movie poster apply"):
+                result = apply_movie_posters(source, candidates)
+            self.respond_json(result)
 
         def handle_artwork_image(self) -> None:
             from urllib.parse import parse_qs, urlparse

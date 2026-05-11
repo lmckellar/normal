@@ -5,7 +5,7 @@ Local workbench for taming pirated music and movie libraries.
 Two lanes:
 
 - **Music** — normalize FLAC tags, filenames, and folder structure; repair artist artwork for Jellyfin
-- **Movies** — normalize file and folder names; profile encode quality; compare owned titles against canonical movie lists; triage weak encodes, repair or replace multi-audio packaging mistakes, and clean up junk
+- **Movies** — normalize file and folder names; profile encode quality; compare owned titles against canonical movie lists; triage weak encodes; repair multi-audio packaging, subtitle defaults, and poster artwork for Plex
 
 No cloud. No transcoding. No destructive defaults.
 
@@ -41,8 +41,6 @@ normal movie-apply --source /path/to/movies --plan plan.json --target /path/to/o
 normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 ```
 
-Movie scan surfaces now expose an at-a-glance main-audio summary alongside bitrate, using labels such as `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, and `DTS-HD MA 5.1`.
-
 ## Docs
 
 - [Movies](docs/movies.md)
@@ -58,16 +56,6 @@ For contributors and AI agents working in the codebase: [docs/agent.md](docs/age
 ## Design posture
 
 `normal` is a single-user local utility. Some preferences are intentionally hardcoded rather than surfaced as UI controls — the expected adjustment path is direct repo or agent edits. This is a deliberate v1 stance; see the roadmap for how this evolves toward v2.
-
-Movie replacement queue history now supports four hard filters in the web UI: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Items judged not worth replacing can be dismissed from queue history without deleting any media.
-
-## Canonical lists
-
-The movie `Canonical Lists` page compares owned titles against live all-time movie lists using TMDb and a local cache. It ignores bitrate, quality tiers, and warning telemetry. Pass `--tmdb-key` to `normal web` or set `TMDB_KEY` before launching the UI.
-
-Heavy recursive web scans now warn before running against risky sources such as drive-root style paths and NTFS/FUSE mounts. The web server also rejects overlapping heavy scans for the same source instead of stacking them.
-
-The bigger stability fix sits lower in the execution path: heavy movie-side scans no longer build a full recursive file list up front. They walk incrementally and check for cancellation during traversal, which was the main change behind the CPU-spike drop on large or risky sources.
 
 ## Known issue
 
