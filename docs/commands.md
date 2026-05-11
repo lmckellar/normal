@@ -130,7 +130,7 @@ Requires `ffprobe`. No changes made.
 
 ### movie-profile
 
-Classify a movie library against the quality ladder with heuristic findings.
+Classify a movie library against the local movie standards with inline review findings.
 
 ```bash
 normal movie-profile --source /path/to/movies --report out/profile.json --histogram out/histogram.json
@@ -143,20 +143,20 @@ normal movie-profile --source /path/to/movies --report out/profile.json --histog
 | `--histogram` | No | Output path for an aggregate histogram payload |
 | `--progress` | No | Print progress to stderr |
 
-Quality ladder (video bitrate, resolution-gated):
+Primary profile labels:
 
-| Profile | Resolution | Video kbps |
-|---|---|---|
-| `sd_low_quality` | 720p or SD | any |
-| `weak_1080p` | 1080p | 1 – 4,499 |
-| `minimum_acceptable_1080p` | 1080p | 4,500 – 5,999 |
-| `compressed_1080p` | 1080p | 6,000 – 15,999 |
-| `1080p_uhd` | 1080p | ≥ 16,000 |
-| `weak_4k` | 2160p | 1 – 5,999 |
-| `compressed_4k` | 2160p | 6,000 – 11,999 |
-| `4k_uhd` | 2160p | 12,000 – 23,999 |
-| `4k_remux` | 2160p | ≥ 24,000 |
-| `unclassified` | any | unknown resolution or missing bitrate |
+| Profile | Meaning |
+|---|---|
+| `reference` | Meets configured reference video and audio floors |
+| `meets_minimum` | Meets configured minimum standards |
+| `needs_review` | Inline review attention needed, often low-confidence subtitle or hygiene issues |
+| `replacement_candidate` | Configured weak-candidate rules matched |
+
+Config source:
+- repo-local `movie_standards.json`
+
+Dashboard note:
+- `Movies / Dashboard View` now exposes inline definition controls on each movie-standards card. Saving a card edit writes `movie_standards.json` and reruns the dashboard so the class counts refresh against the new rule shape.
 
 The same `movie-profile` report also powers two separate web triage lanes:
 

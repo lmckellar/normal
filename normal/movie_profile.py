@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from itertools import chain
+import json
 from pathlib import Path
 import re
 from statistics import mean, median
@@ -9,6 +10,8 @@ import time
 from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
+from normal.movie_junk import detect_movie_junk_document_reasons
+from normal.movie_plan import canonical_movie_base, parse_movie_name
 from normal.movie_scan import (
     MovieScanProgress,
     emit_progress,
@@ -16,7 +19,7 @@ from normal.movie_scan import (
     movie_id_for,
     probe_media_facts,
 )
-from normal.quality_review import AudioStreamFacts, MediaFacts, classify_resolution
+from normal.quality_review import AudioStreamFacts, MediaFacts, SubtitleStreamFacts, classify_resolution
 
 
 ANCHOR_KBPS = {"1080p": 18000, "2160p": 45000}
@@ -39,7 +42,11 @@ class MovieProfile:
     rank: int
     percentile: float
     anchor_distance: float | None
+    legacy_bitrate_label: str | None = None
+    weak_candidate: bool = False
+    confidence: str = "high"
     diagnostics: list[DiagnosticFinding] = field(default_factory=list)
+    domain_results: list[dict[str, Any]] = field(default_factory=list)
     risk_counts: dict[str, int] = field(default_factory=dict)
 
 
@@ -64,17 +71,45 @@ class MovieProfileReport:
 
 
 PROFILE_RANKS = {
-    "sd_low_quality": 1,
-    "weak_1080p": 2,
-    "minimum_acceptable_1080p": 3,
-    "compressed_1080p": 4,
-    "1080p_uhd": 5,
-    "weak_4k": 6,
-    "compressed_4k": 7,
-    "4k_uhd": 8,
-    "4k_remux": 9,
-    "unclassified": 10,
+    "replacement_candidate": 1,
+    "needs_review": 2,
+    "meets_minimum": 3,
+    "reference": 4,
 }
+
+MOVIE_PROFILE_CARD_ORDER = [
+    "replacement_candidate",
+    "needs_review",
+    "meets_minimum",
+    "reference",
+]
+
+DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
+    "video": {
+        "1080p": {"minimum_kbps": 4500, "reference_kbps": 16000},
+        "2160p": {"minimum_kbps": 12000, "reference_kbps": 24000},
+        "720p": {"minimum_kbps": 2500, "reference_kbps": 6000},
+        "sd": {"minimum_kbps": 1500, "reference_kbps": 3000},
+    },
+    "audio": {
+        "minimum_channels": 6,
+        "minimum_bitrate_kbps": 384,
+        "minimum_codecs": ["ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
+        "reference_codecs": ["truehd", "dtshd", "flac", "pcm"],
+    },
+    "subtitle_setup": {"mode": "conservative"},
+    "folder_hygiene": {
+        "require_normalized_naming": True,
+        "junk_sidecar_extensions": [".txt", ".html", ".htm"],
+    },
+    "weak_candidate_rules": {
+        "any_failed_domains": ["video_minimum", "audio_minimum"],
+    },
+}
+
+MOVIE_STANDARDS_PATH = Path(__file__).resolve().parent.parent / "movie_standards.json"
+ENGLISH_AUDIO_LANGUAGES = {"eng", "en", "english"}
+ENGLISH_SUBTITLE_LANGUAGES = {"eng", "en", "english"}
 
 
 def scan_movie_profiles(
@@ -84,6 +119,7 @@ def scan_movie_profiles(
     should_cancel: Callable[[], bool] | None = None,
 ) -> MovieProfileReport:
     report = MovieProfileReport(source_root=str(source_root.resolve()), generated_at=utc_now_iso())
+    standards = load_movie_standards()
     cancelled = False
     movie_files = iter_video_files(source_root, should_cancel=should_cancel)
     first_movie = next(movie_files, None)
@@ -126,7 +162,7 @@ def scan_movie_profiles(
             continue
 
         facts.resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
-        report.movies.append(build_movie_profile_item(source_root, movie_path, facts))
+        report.movies.append(build_movie_profile_item(source_root, movie_path, facts, standards))
         emit_progress(progress_callback, index, total, movie_path, started, "running")
 
     if (
@@ -149,10 +185,21 @@ def scan_movie_profiles(
     return report
 
 
-def build_movie_profile_item(source_root: Path, movie_path: Path, facts: MediaFacts) -> MovieProfileItem:
+def build_movie_profile_item(
+    source_root: Path,
+    movie_path: Path,
+    facts: MediaFacts,
+    standards: dict[str, Any] | None = None,
+) -> MovieProfileItem:
     facts.resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
-    label = classify_profile_label(facts)
+    active_standards = standards or load_movie_standards()
+    legacy_label = classify_profile_label(facts)
+    domain_results = evaluate_movie_standards(movie_path, facts, active_standards)
+    label = classify_standard_label(domain_results, active_standards)
     diagnostics = detect_plex_diagnostics(movie_path, facts)
+    diagnostics.extend(domain_results_to_diagnostics(domain_results))
+    weak_candidate = is_weak_candidate(domain_results, active_standards)
+    confidence = "low" if any(result["confidence"] == "low" for result in domain_results) else "high"
     return MovieProfileItem(
         movie_id=movie_id_for(movie_path, source_root),
         path=str(movie_path),
@@ -163,10 +210,283 @@ def build_movie_profile_item(source_root: Path, movie_path: Path, facts: MediaFa
             rank=PROFILE_RANKS[label],
             percentile=0.0,
             anchor_distance=compute_anchor_distance(facts),
+            legacy_bitrate_label=legacy_label,
+            weak_candidate=weak_candidate,
+            confidence=confidence,
             diagnostics=diagnostics,
+            domain_results=domain_results,
             risk_counts=build_risk_counts(diagnostics),
         ),
     )
+
+
+def load_movie_standards() -> dict[str, Any]:
+    standards = json.loads(json.dumps(DEFAULT_MOVIE_STANDARDS))
+    if not MOVIE_STANDARDS_PATH.exists():
+        return standards
+    try:
+        payload = json.loads(MOVIE_STANDARDS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return standards
+    if not isinstance(payload, dict):
+        return standards
+    return deep_merge_dicts(standards, payload)
+
+
+def save_movie_standards(standards: dict[str, Any]) -> dict[str, Any]:
+    normalized = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards)
+    payload = json.dumps(normalized, indent=2) + "\n"
+    MOVIE_STANDARDS_PATH.write_text(payload, encoding="utf-8")
+    return normalized
+
+
+def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    active = standards or load_movie_standards()
+    video = active.get("video") or {}
+    audio = active.get("audio") or {}
+    subtitle = active.get("subtitle_setup") or {}
+    hygiene = active.get("folder_hygiene") or {}
+    weak_rules = active.get("weak_candidate_rules") or {}
+    return [
+        {
+            "label": "replacement_candidate",
+            "display_name": "Replacement Candidate",
+            "group": "Replace",
+            "summary": "Configured weak-candidate rules matched.",
+            "rule_summary": "Fails any of: "
+            + ", ".join(sorted((weak_rules.get("any_failed_domains") or ["video_minimum", "audio_minimum"]))),
+            "fields": [
+                {
+                    "key": "failed_domains",
+                    "label": "Failed domains trigger replacement",
+                    "type": "checklist",
+                    "value": list(weak_rules.get("any_failed_domains") or ["video_minimum", "audio_minimum"]),
+                    "options": [
+                        {"value": "video_minimum", "label": "Video minimum"},
+                        {"value": "audio_minimum", "label": "Audio minimum"},
+                    ],
+                }
+            ],
+        },
+        {
+            "label": "needs_review",
+            "display_name": "Needs Review",
+            "group": "Review",
+            "summary": "Low-confidence hygiene and subtitle-default checks still need attention.",
+            "rule_summary": "Subtitle mode: "
+            + str(subtitle.get("mode") or "conservative")
+            + "; normalized naming: "
+            + ("required" if hygiene.get("require_normalized_naming", True) else "optional")
+            + "; junk sidecars: "
+            + ", ".join(hygiene.get("junk_sidecar_extensions") or [".txt", ".html", ".htm"]),
+            "fields": [
+                {
+                    "key": "subtitle_mode",
+                    "label": "Subtitle review mode",
+                    "type": "select",
+                    "value": str(subtitle.get("mode") or "conservative"),
+                    "options": [{"value": "conservative", "label": "Conservative"}],
+                },
+                {
+                    "key": "require_normalized_naming",
+                    "label": "Require normalized folder and file naming",
+                    "type": "toggle",
+                    "value": bool(hygiene.get("require_normalized_naming", True)),
+                },
+                {
+                    "key": "junk_sidecar_extensions",
+                    "label": "Review junk sidecar extensions",
+                    "type": "csv",
+                    "value": ", ".join(hygiene.get("junk_sidecar_extensions") or [".txt", ".html", ".htm"]),
+                },
+            ],
+        },
+        {
+            "label": "meets_minimum",
+            "display_name": "Meets Minimum",
+            "group": "Pass",
+            "summary": "Configured minimum standards met.",
+            "rule_summary": "1080p >= "
+            + str(((video.get("1080p") or {}).get("minimum_kbps") or 0))
+            + " kbps; 4K >= "
+            + str(((video.get("2160p") or {}).get("minimum_kbps") or 0))
+            + " kbps; audio >= "
+            + str(audio.get("minimum_channels") or 0)
+            + " ch / "
+            + str(audio.get("minimum_bitrate_kbps") or 0)
+            + " kbps.",
+            "fields": [
+                {
+                    "key": "video_1080p_minimum_kbps",
+                    "label": "1080p minimum video kbps",
+                    "type": "number",
+                    "value": int(((video.get("1080p") or {}).get("minimum_kbps") or 0)),
+                },
+                {
+                    "key": "video_2160p_minimum_kbps",
+                    "label": "4K minimum video kbps",
+                    "type": "number",
+                    "value": int(((video.get("2160p") or {}).get("minimum_kbps") or 0)),
+                },
+                {
+                    "key": "audio_minimum_channels",
+                    "label": "Minimum main-audio channels",
+                    "type": "number",
+                    "value": int(audio.get("minimum_channels") or 0),
+                },
+                {
+                    "key": "audio_minimum_bitrate_kbps",
+                    "label": "Minimum main-audio kbps",
+                    "type": "number",
+                    "value": int(audio.get("minimum_bitrate_kbps") or 0),
+                },
+                {
+                    "key": "audio_minimum_codecs",
+                    "label": "Allowed minimum audio codecs",
+                    "type": "csv",
+                    "value": ", ".join(audio.get("minimum_codecs") or []),
+                },
+            ],
+        },
+        {
+            "label": "reference",
+            "display_name": "Reference",
+            "group": "Reference",
+            "summary": "Configured video and audio reference standard.",
+            "rule_summary": "1080p >= "
+            + str(((video.get("1080p") or {}).get("reference_kbps") or 0))
+            + " kbps; 4K >= "
+            + str(((video.get("2160p") or {}).get("reference_kbps") or 0))
+            + " kbps; reference codecs: "
+            + ", ".join(audio.get("reference_codecs") or []),
+            "fields": [
+                {
+                    "key": "video_1080p_reference_kbps",
+                    "label": "1080p reference video kbps",
+                    "type": "number",
+                    "value": int(((video.get("1080p") or {}).get("reference_kbps") or 0)),
+                },
+                {
+                    "key": "video_2160p_reference_kbps",
+                    "label": "4K reference video kbps",
+                    "type": "number",
+                    "value": int(((video.get("2160p") or {}).get("reference_kbps") or 0)),
+                },
+                {
+                    "key": "audio_reference_codecs",
+                    "label": "Reference audio codecs",
+                    "type": "csv",
+                    "value": ", ".join(audio.get("reference_codecs") or []),
+                },
+            ],
+        },
+    ]
+
+
+def update_movie_profile_definition(
+    label: str,
+    values: dict[str, Any],
+    standards: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    active = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards or load_movie_standards())
+    if label == "replacement_candidate":
+        active.setdefault("weak_candidate_rules", {})["any_failed_domains"] = normalize_domain_list(values.get("failed_domains"))
+        return save_movie_standards(active)
+    if label == "needs_review":
+        subtitle = active.setdefault("subtitle_setup", {})
+        subtitle["mode"] = normalize_subtitle_mode(values.get("subtitle_mode"))
+        hygiene = active.setdefault("folder_hygiene", {})
+        hygiene["require_normalized_naming"] = bool(values.get("require_normalized_naming", True))
+        hygiene["junk_sidecar_extensions"] = normalize_extension_list(values.get("junk_sidecar_extensions"))
+        return save_movie_standards(active)
+    if label == "meets_minimum":
+        video = active.setdefault("video", {})
+        video.setdefault("1080p", {})["minimum_kbps"] = normalize_positive_int(values.get("video_1080p_minimum_kbps"), 4500)
+        video.setdefault("2160p", {})["minimum_kbps"] = normalize_positive_int(values.get("video_2160p_minimum_kbps"), 12000)
+        audio = active.setdefault("audio", {})
+        audio["minimum_channels"] = normalize_positive_int(values.get("audio_minimum_channels"), 6)
+        audio["minimum_bitrate_kbps"] = normalize_positive_int(values.get("audio_minimum_bitrate_kbps"), 384)
+        audio["minimum_codecs"] = normalize_codec_list(
+            values.get("audio_minimum_codecs"),
+            list(DEFAULT_MOVIE_STANDARDS["audio"]["minimum_codecs"]),
+        )
+        return save_movie_standards(active)
+    if label == "reference":
+        video = active.setdefault("video", {})
+        video.setdefault("1080p", {})["reference_kbps"] = normalize_positive_int(values.get("video_1080p_reference_kbps"), 16000)
+        video.setdefault("2160p", {})["reference_kbps"] = normalize_positive_int(values.get("video_2160p_reference_kbps"), 24000)
+        active.setdefault("audio", {})["reference_codecs"] = normalize_codec_list(
+            values.get("audio_reference_codecs"),
+            list(DEFAULT_MOVIE_STANDARDS["audio"]["reference_codecs"]),
+        )
+        return save_movie_standards(active)
+    raise ValueError(f"Unsupported movie profile definition: {label}")
+
+
+def deep_merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in override.items():
+        current = merged.get(key)
+        if isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = deep_merge_dicts(current, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def normalize_positive_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def normalize_codec_list(value: Any, default: list[str]) -> list[str]:
+    if isinstance(value, str):
+        items = value.split(",")
+    elif isinstance(value, list):
+        items = value
+    else:
+        items = []
+    result: list[str] = []
+    for item in items:
+        token = str(item).strip().casefold()
+        if token and token not in result:
+            result.append(token)
+    return result or list(default)
+
+
+def normalize_extension_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        items = value.split(",")
+    elif isinstance(value, list):
+        items = value
+    else:
+        items = []
+    result: list[str] = []
+    for item in items:
+        token = str(item).strip().casefold()
+        if not token:
+            continue
+        if not token.startswith("."):
+            token = "." + token
+        if token not in result:
+            result.append(token)
+    return result or list(DEFAULT_MOVIE_STANDARDS["folder_hygiene"]["junk_sidecar_extensions"])
+
+
+def normalize_domain_list(value: Any) -> list[str]:
+    allowed = {"video_minimum", "audio_minimum"}
+    if not isinstance(value, list):
+        return list(DEFAULT_MOVIE_STANDARDS["weak_candidate_rules"]["any_failed_domains"])
+    result = [domain for domain in value if domain in allowed]
+    return result or list(DEFAULT_MOVIE_STANDARDS["weak_candidate_rules"]["any_failed_domains"])
+
+
+def normalize_subtitle_mode(value: Any) -> str:
+    mode = str(value or "").strip().casefold()
+    return mode if mode == "conservative" else "conservative"
 
 
 def classify_profile_label(facts: MediaFacts) -> str:
@@ -196,6 +516,197 @@ def classify_profile_label(facts: MediaFacts) -> str:
     if resolution in {"720p", "sd"}:
         return "sd_low_quality"
     return "unclassified"
+
+
+def evaluate_movie_standards(path: Path, facts: MediaFacts, standards: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        evaluate_video_domain(facts, standards),
+        evaluate_audio_domain(facts, standards),
+        evaluate_audio_language_hygiene_domain(facts),
+        evaluate_subtitle_setup_domain(facts, standards),
+        evaluate_folder_hygiene_domain(path, facts, standards),
+    ]
+
+
+def evaluate_video_domain(facts: MediaFacts, standards: dict[str, Any]) -> dict[str, Any]:
+    resolution = facts.resolution_bucket or classify_resolution(facts.width, facts.height) or "unknown"
+    bitrate = facts.video_bitrate_kbps or 0
+    config = (standards.get("video") or {}).get(resolution) or {}
+    minimum = int(config.get("minimum_kbps") or 0)
+    reference = int(config.get("reference_kbps") or 0)
+    if not bitrate or not minimum:
+        return standard_result("video_minimum", "review_low_confidence", "video_signal_missing", "Video bitrate is missing or incomplete.", "low")
+    if bitrate < minimum:
+        return standard_result(
+            "video_minimum",
+            "fail",
+            "video_below_minimum",
+            f"Video bitrate {bitrate:,} kbps is below the {resolution} minimum of {minimum:,} kbps.",
+            "high",
+        )
+    if reference and bitrate >= reference:
+        return standard_result(
+            "video_minimum",
+            "pass",
+            "video_reference",
+            f"Video bitrate meets the {resolution} reference floor.",
+            "high",
+        )
+    return standard_result(
+        "video_minimum",
+        "pass",
+        "video_meets_minimum",
+        f"Video bitrate meets the {resolution} minimum floor.",
+        "high",
+    )
+
+
+def evaluate_audio_domain(facts: MediaFacts, standards: dict[str, Any]) -> dict[str, Any]:
+    config = standards.get("audio") or {}
+    minimum_channels = int(config.get("minimum_channels") or 0)
+    minimum_bitrate = int(config.get("minimum_bitrate_kbps") or 0)
+    allowed_codecs = {str(codec).casefold() for codec in config.get("minimum_codecs") or []}
+    reference_codecs = {str(codec).casefold() for codec in config.get("reference_codecs") or []}
+    codec = (facts.audio_format_family or facts.audio_codec or "").casefold()
+    channels = facts.audio_channels or 0
+    bitrate = facts.audio_bitrate_kbps or 0
+
+    if not codec and not channels and not bitrate:
+        return standard_result("audio_minimum", "review_low_confidence", "audio_signal_missing", "Audio facts are too sparse to verify the minimum standard.", "low")
+    if allowed_codecs and codec and codec not in allowed_codecs:
+        return standard_result("audio_minimum", "fail", "audio_codec_below_minimum", f"Main audio codec `{codec}` is below the configured minimum standard.", "high")
+    if minimum_channels and channels and channels < minimum_channels:
+        return standard_result("audio_minimum", "fail", "audio_channels_below_minimum", f"Main audio layout is below the configured minimum of {minimum_channels} channels.", "high")
+    if minimum_bitrate and bitrate and bitrate < minimum_bitrate:
+        return standard_result("audio_minimum", "fail", "audio_bitrate_below_minimum", f"Main audio bitrate {bitrate:,} kbps is below the configured minimum of {minimum_bitrate:,} kbps.", "high")
+    if reference_codecs and codec in reference_codecs and channels >= minimum_channels and bitrate >= minimum_bitrate:
+        return standard_result("audio_minimum", "pass", "audio_reference", "Main audio meets the configured reference standard.", "high")
+    return standard_result("audio_minimum", "pass", "audio_meets_minimum", "Main audio meets the configured minimum standard.", "high")
+
+
+def evaluate_audio_language_hygiene_domain(facts: MediaFacts) -> dict[str, Any]:
+    default_stream = choose_default_audio_stream(facts.audio_streams)
+    if default_stream is None:
+        return standard_result("audio_language_hygiene", "review_low_confidence", "audio_default_unknown", "No clear default audio stream was visible.", "low")
+    default_language = canonical_audio_language(default_stream.language)
+    if default_language in {None, "english"}:
+        return standard_result("audio_language_hygiene", "pass", "audio_default_ok", "Default audio language looks sensible.", "high")
+    english_streams = [stream for stream in facts.audio_streams if canonical_audio_language(stream.language) == "english"]
+    if not english_streams:
+        return standard_result("audio_language_hygiene", "review_low_confidence", "audio_default_non_english_no_english_alt", "Default audio is non-English and no English alternate was clearly tagged.", "low")
+    return standard_result("audio_language_hygiene", "review_low_confidence", "audio_default_non_english", "Default audio is non-English while an English track is present.", "low")
+
+
+def evaluate_subtitle_setup_domain(facts: MediaFacts, standards: dict[str, Any]) -> dict[str, Any]:
+    mode = str((standards.get("subtitle_setup") or {}).get("mode") or "conservative")
+    if mode != "conservative":
+        return standard_result("subtitle_setup", "review_low_confidence", "subtitle_policy_unknown", "Subtitle policy is unsupported by the current standards engine.", "low")
+    if facts.default_subtitle_streams > 1:
+        return standard_result("subtitle_setup", "fail", "multiple_default_subtitles", "Multiple subtitle streams are marked default.", "high")
+
+    default_audio = choose_default_audio_stream(facts.audio_streams)
+    default_audio_language = canonical_audio_language(default_audio.language) if default_audio else None
+    english_forced = [stream for stream in facts.subtitle_streams if is_english_subtitle(stream) and stream.is_forced]
+    default_subtitle = choose_default_subtitle_stream(facts.subtitle_streams) if facts.default_subtitle_streams else None
+
+    if english_forced:
+        if default_subtitle is None:
+            return standard_result("subtitle_setup", "review_low_confidence", "english_forced_not_default", "English forced subtitles exist but no default subtitle is set.", "low")
+        if not (is_english_subtitle(default_subtitle) and default_subtitle.is_forced):
+            return standard_result("subtitle_setup", "review_low_confidence", "wrong_default_forced_subtitle", "English forced subtitles exist but the default subtitle is not the forced English track.", "low")
+        return standard_result("subtitle_setup", "pass", "english_forced_defaulted", "English forced subtitles are present and defaulted.", "high")
+
+    if default_audio_language not in {None, "english"}:
+        if default_subtitle is None:
+            return standard_result("subtitle_setup", "review_low_confidence", "missing_default_english_subtitle", "Default audio is non-English and no default subtitle was visible.", "low")
+        if not is_english_subtitle(default_subtitle):
+            return standard_result("subtitle_setup", "review_low_confidence", "wrong_default_subtitle_language", "Default audio is non-English but the default subtitle is not English.", "low")
+        return standard_result("subtitle_setup", "pass", "english_subtitle_defaulted", "English subtitles are defaulted for non-English main audio.", "high")
+
+    if default_subtitle is not None:
+        return standard_result("subtitle_setup", "review_low_confidence", "unnecessary_default_subtitle", "Default subtitles are set even though default audio is English.", "low")
+    return standard_result("subtitle_setup", "pass", "subtitle_defaults_ok", "Subtitle defaults look tidy.", "high")
+
+
+def evaluate_folder_hygiene_domain(path: Path, facts: MediaFacts, standards: dict[str, Any]) -> dict[str, Any]:
+    config = standards.get("folder_hygiene") or {}
+    if config.get("require_normalized_naming", True) and not path_matches_normalized_shape(path):
+        return standard_result("folder_hygiene", "review_low_confidence", "path_not_normalized", "Path does not match the normalized movie naming shape.", "low")
+    junk_extensions = {str(value).casefold() for value in config.get("junk_sidecar_extensions") or []}
+    try:
+        siblings = list(path.parent.iterdir())
+    except OSError:
+        siblings = []
+    for sibling in siblings:
+        if sibling == path or not sibling.is_file():
+            continue
+        if sibling.suffix.casefold() in junk_extensions and detect_movie_junk_document_reasons(sibling):
+            return standard_result("folder_hygiene", "review_low_confidence", "promo_sidecar_present", "Folder contains a likely promo or spam sidecar file.", "low")
+    return standard_result("folder_hygiene", "pass", "folder_hygiene_ok", "Folder looks tidy enough for the current standard.", "high")
+
+
+def path_matches_normalized_shape(path: Path) -> bool:
+    parsed = parse_movie_name(path)
+    if parsed.title is None or parsed.year is None:
+        return False
+    canonical_base = canonical_movie_base(parsed)
+    if path.stem != canonical_base:
+        return False
+    return path.parent.name == canonical_base
+
+
+def standard_result(domain: str, status: str, code: str, summary: str, confidence: str) -> dict[str, Any]:
+    return {
+        "domain": domain,
+        "status": status,
+        "code": code,
+        "summary": summary,
+        "confidence": confidence,
+    }
+
+
+def classify_standard_label(domain_results: list[dict[str, Any]], standards: dict[str, Any]) -> str:
+    if is_weak_candidate(domain_results, standards):
+        return "replacement_candidate"
+    statuses = {result["status"] for result in domain_results}
+    if "fail" in statuses or "review_low_confidence" in statuses:
+        return "needs_review"
+    if is_reference_standard(domain_results):
+        return "reference"
+    return "meets_minimum"
+
+
+def is_reference_standard(domain_results: list[dict[str, Any]]) -> bool:
+    return any(result["code"] == "video_reference" for result in domain_results) and any(
+        result["code"] == "audio_reference" for result in domain_results
+    )
+
+
+def is_weak_candidate(domain_results: list[dict[str, Any]], standards: dict[str, Any]) -> bool:
+    configured = set((standards.get("weak_candidate_rules") or {}).get("any_failed_domains") or [])
+    for result in domain_results:
+        if result["domain"] in configured and result["status"] == "fail":
+            return True
+    return False
+
+
+def domain_results_to_diagnostics(domain_results: list[dict[str, Any]]) -> list[DiagnosticFinding]:
+    diagnostics: list[DiagnosticFinding] = []
+    for result in domain_results:
+        if result["status"] == "pass":
+            continue
+        severity = "review" if result["status"] == "review_low_confidence" else "severe"
+        category = "standards_review" if severity == "review" else "standards_failure"
+        diagnostics.append(
+            DiagnosticFinding(
+                code=result["code"],
+                severity=severity,
+                category=category,
+                summary=result["summary"],
+                remedy="Review the title against the configured movie standards.",
+            )
+        )
+    return diagnostics
 
 
 def compute_anchor_distance(facts: MediaFacts) -> float | None:
@@ -455,6 +966,22 @@ def choose_default_audio_stream(streams: list[AudioStreamFacts]) -> AudioStreamF
     if streams:
         return streams[0]
     return None
+
+
+def choose_default_subtitle_stream(streams: list[SubtitleStreamFacts]) -> SubtitleStreamFacts | None:
+    defaults = [stream for stream in streams if stream.is_default]
+    if defaults:
+        return defaults[0]
+    if streams:
+        return streams[0]
+    return None
+
+
+def is_english_subtitle(stream: SubtitleStreamFacts | None) -> bool:
+    if stream is None:
+        return False
+    language = (stream.language or "").casefold()
+    return language in ENGLISH_SUBTITLE_LANGUAGES
 
 
 def audio_stream_quality_key(stream: AudioStreamFacts) -> tuple[int, int, int]:

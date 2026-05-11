@@ -30,7 +30,14 @@ from normal.movie_junk import (
     scan_movie_promo_documents,
 )
 from normal.movie_plan import build_movie_plan
-from normal.movie_profile import build_histogram_payload, build_movie_profile_item, scan_movie_profiles
+from normal.movie_profile import (
+    build_histogram_payload,
+    build_movie_profile_definitions,
+    build_movie_profile_item,
+    load_movie_standards,
+    scan_movie_profiles,
+    update_movie_profile_definition,
+)
 from normal.music_profile import build_music_histogram_payload, scan_music_profiles
 from normal.movie_replacement_queue import (
     add_profile_items_to_queue,
@@ -750,6 +757,18 @@ INDEX_HTML = """<!doctype html>
       background: var(--surface);
       padding: 16px;
     }
+    .profile-card-head {
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .profile-card-head .secondary {
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
     .profile-card-group {
       font-size: 11px;
       text-transform: uppercase;
@@ -779,6 +798,59 @@ INDEX_HTML = """<!doctype html>
       font-size: 12px;
       line-height: 1.35;
       margin: -4px 0 10px;
+    }
+    .profile-card-definition {
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.4;
+      margin: 0 0 12px;
+    }
+    .profile-card-editor {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+      display: grid;
+      gap: 10px;
+    }
+    .profile-card-editor-row {
+      display: grid;
+      gap: 5px;
+    }
+    .profile-card-editor-row label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .profile-card-editor-row input[type="number"],
+    .profile-card-editor-row input[type="text"],
+    .profile-card-editor-row select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      background: var(--input-bg);
+      color: var(--ink);
+      font-family: inherit;
+    }
+    .profile-card-checklist {
+      display: grid;
+      gap: 6px;
+    }
+    .profile-card-checklist label,
+    .profile-card-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--ink);
+    }
+    .profile-card-editor-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
     .profile-card-bar {
       height: 6px;
@@ -1083,6 +1155,8 @@ INDEX_HTML = """<!doctype html>
       qualitySort: { col: null, dir: 'asc' },
       musicQualitySort: { col: null, dir: 'asc' },
       movieAudioFixBusy: false,
+      movieStandardsEditorLabel: '',
+      movieStandardsSaveBusy: false,
       replacementHistoryFilter: 'deleted',
       replacementHistorySort: { col: null, dir: 'asc' },
       omdbRatings: new Map(),
@@ -1446,6 +1520,8 @@ INDEX_HTML = """<!doctype html>
         source_root: payload.source_root,
         histogram: payload.histogram,
         replacement_queue: payload.replacement_queue || null,
+        movie_standards: payload.movie_standards || null,
+        profile_definitions: payload.profile_definitions || [],
         cached_at: new Date().toISOString()
       };
       _movieDashboardCache = trimDashboardCache(_movieDashboardCache);
@@ -1498,6 +1574,8 @@ INDEX_HTML = """<!doctype html>
         source_root: cached.source_root || source,
         histogram: cached.histogram,
         replacement_queue: cached.replacement_queue || null,
+        movie_standards: cached.movie_standards || null,
+        profile_definitions: cached.profile_definitions || [],
         movies: []
       };
     }
@@ -3086,7 +3164,7 @@ INDEX_HTML = """<!doctype html>
       renderBars(buildMovieBars(payload));
       filterBar.innerHTML = '';
       mainContent.innerHTML = buildMovieDashboard(payload);
-      attachMovieDashboardHandlers();
+      attachMovieDashboardHandlers(payload);
       if (!payload) {
         detailPanel.innerHTML = '<div class="empty">Run Movies / Dashboard to see bitrate distribution.</div>';
         return;
@@ -3094,9 +3172,25 @@ INDEX_HTML = """<!doctype html>
       detailPanel.innerHTML = buildBitrateBellCurve(payload);
     }
 
-    function attachMovieDashboardHandlers() {
+    function attachMovieDashboardHandlers(payload) {
       const exportBtn = document.getElementById('exportCatalogueButton');
       if (exportBtn) exportBtn.addEventListener('click', () => generateCatalogue(exportBtn));
+      document.querySelectorAll('.movie-profile-definition-toggle').forEach(button => {
+        button.addEventListener('click', () => {
+          const label = button.dataset.profileLabel || '';
+          state.movieStandardsEditorLabel = state.movieStandardsEditorLabel === label ? '' : label;
+          renderMovieLibrary(payload);
+        });
+      });
+      document.querySelectorAll('.movie-profile-definition-save').forEach(button => {
+        button.addEventListener('click', () => saveMovieProfileDefinition(button.dataset.profileLabel || ''));
+      });
+      document.querySelectorAll('.movie-profile-definition-cancel').forEach(button => {
+        button.addEventListener('click', () => {
+          state.movieStandardsEditorLabel = '';
+          renderMovieLibrary(payload);
+        });
+      });
     }
 
     function renderMovieCanonicalLists(payload) {
@@ -3171,15 +3265,15 @@ INDEX_HTML = """<!doctype html>
     }
 
     function renderMovieQuality(payload) {
-      mainTagline.textContent = 'Weak encodes and profile distribution. This page emphasizes bitrate ladder and low-quality files.';
+      mainTagline.textContent = 'Replacement candidates and inline standards review. This page keeps low-confidence hygiene issues visible without expanding the table.';
       renderMetrics(buildMovieMetrics(payload));
       renderBars(buildMovieBars(payload));
       filterBar.innerHTML = '';
       if (!payload) {
-        mainContent.innerHTML = '<div class="empty">Run Movies / Delete Weak Encodes to see profile ladder results.</div>';
+        mainContent.innerHTML = '<div class="empty">Run Movies / Delete Weak Encodes to see standards results.</div>';
         return;
       }
-      const items = sortedMovies(strictWeakMovies(payload));
+      const items = sortedMovies(movieStandardsWorkflowItems(payload));
       mainContent.innerHTML = buildMovieQualityTable(payload, items);
       renderReplacementQueueDetail(payload);
       attachMovieReplacementHandlers(payload, items);
@@ -3976,6 +4070,24 @@ INDEX_HTML = """<!doctype html>
     }
 
     function humanProfileLabel(label) {
+      if (label === 'reference') return 'Reference';
+      if (label === 'meets_minimum') return 'Meets Minimum';
+      if (label === 'needs_review') return 'Needs Review';
+      if (label === 'replacement_candidate') return 'Replacement Candidate';
+      return label.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    function movieProfileInlineSummary(item) {
+      const failed = (item?.profile?.domain_results || []).filter(result => result?.status === 'fail');
+      const reviews = (item?.profile?.domain_results || []).filter(result => result?.status === 'review_low_confidence');
+      if (failed.length) return failed[0]?.summary || '';
+      if (reviews.length) return `Low confidence: ${reviews[0]?.summary || ''}`.trim();
+      if (item?.profile?.legacy_bitrate_label) return `Legacy bitrate: ${humanLegacyBitrateLabel(item.profile.legacy_bitrate_label)}`;
+      return '';
+    }
+
+    function humanLegacyBitrateLabel(label) {
+      if (!label) return '';
       if (label === '1080p_uhd') return '1080p UHD';
       if (label === '4k_uhd') return '4K UHD';
       if (label === 'weak_4k') return 'Weak 4K';
@@ -3984,35 +4096,22 @@ INDEX_HTML = """<!doctype html>
       return label.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     }
 
-    function movieProfileBitrateBand(label) {
-      const bands = {
-        sd_low_quality: '720p / SD source',
-        weak_1080p: '1080p video: < 4,500 kbps',
-        minimum_acceptable_1080p: '1080p video: 4,500-5,999 kbps',
-        compressed_1080p: '1080p video: 6,000-15,999 kbps',
-        '1080p_uhd': '1080p video: >= 16,000 kbps',
-        weak_4k: '4K video: < 6,000 kbps',
-        compressed_4k: '4K video: 6,000-11,999 kbps',
-        '4k_uhd': '4K video: 12,000-23,999 kbps',
-        '4k_remux': '4K video: >= 24,000 kbps',
-        unclassified: 'No usable bitrate / resolution'
-      };
-      return bands[label] || '';
-    }
-
     function buildMovieTable(items) {
       const rows = items.map(item => {
         const videoBitrate = item.facts.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
         const audioBitrate = item.facts.audio_bitrate_kbps ? `${Math.round(item.facts.audio_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
         const audioSummary = item.facts.audio_summary ? escapeHtml(item.facts.audio_summary) : '<span class="subtle">—</span>';
         const diagnostics = item.profile.diagnostics.slice(0, 3).map(diag => {
-          const categoryClass = diag.category === 'indexing_visibility_risk' ? 'indexing' : 'playback';
+          const categoryClass = diag.category === 'indexing_visibility_risk'
+            ? 'indexing'
+            : (diag.category === 'standards_review' ? 'review' : 'playback');
           return `<span class="chip ${categoryClass}">${escapeHtml(diag.code)}</span>`;
         }).join('');
+        const profileSummary = movieProfileInlineSummary(item);
         return `
           <tr>
             <td><div class="mono">${escapeHtml(item.path)}</div></td>
-            <td>${escapeHtml(humanProfileLabel(item.profile.label))}</td>
+            <td>${escapeHtml(humanProfileLabel(item.profile.label))}${profileSummary ? `<div class="subtle">${escapeHtml(profileSummary)}</div>` : ''}</td>
             <td>${escapeHtml(item.facts.resolution_bucket || '')}</td>
             <td>${videoBitrate}</td>
             <td>${audioBitrate}</td>
@@ -4070,12 +4169,13 @@ INDEX_HTML = """<!doctype html>
         const audioBitrate = item.facts.audio_bitrate_kbps ? `${Math.round(item.facts.audio_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
         const audioSummary = item.facts.audio_summary ? escapeHtml(item.facts.audio_summary) : '<span class="subtle">—</span>';
         const fileSize = item.facts.file_size_bytes ? fmtFileSize(item.facts.file_size_bytes) : '<span class="subtle">—</span>';
+        const profileSummary = movieProfileInlineSummary(item);
         const selectable = isWeak && !queueItem;
         return `
           <tr>
             <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="replacement-select" data-path="${encodeURIComponent(path)}" ${checked}>` : ''}</td>
             <td><div class="mono">${escapeHtml(path)}</div></td>
-            <td>${escapeHtml(humanProfileLabel(item.profile.label))}</td>
+            <td>${escapeHtml(humanProfileLabel(item.profile.label))}${profileSummary ? `<div class="subtle">${escapeHtml(profileSummary)}</div>` : ''}</td>
             <td>${escapeHtml(item.facts.resolution_bucket || '')}</td>
             <td>${videoBitrate}</td>
             <td>${audioBitrate}</td>
@@ -4130,6 +4230,7 @@ INDEX_HTML = """<!doctype html>
           ? 'wrong default + weak English'
           : 'wrong default language';
         const audioSummary = item.facts.audio_summary ? escapeHtml(item.facts.audio_summary) : '<span class="subtle">—</span>';
+        const profileSummary = movieProfileInlineSummary(item);
         const defaultStream = describeAudioStream(movieDefaultAudioStream(item));
         const englishStream = describeAudioStream(movieBestEnglishAudioStream(item));
         const selectable = !!issueCode;
@@ -4137,7 +4238,7 @@ INDEX_HTML = """<!doctype html>
           <tr>
             <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="replacement-select" data-path="${encodeURIComponent(path)}" ${checked} ${locked}>` : ''}</td>
             <td><div class="mono">${escapeHtml(path)}</div></td>
-            <td>${escapeHtml(issueLabel)}</td>
+            <td>${escapeHtml(issueLabel)}${profileSummary ? `<div class="subtle">${escapeHtml(profileSummary)}</div>` : ''}</td>
             <td>${audioSummary}</td>
             <td>${defaultStream}</td>
             <td>${englishStream}</td>
@@ -4417,10 +4518,10 @@ INDEX_HTML = """<!doctype html>
         return h ? `${h}h ${m}m` : `${m}m`;
       }
       function tierGroup(label) {
-        if (label.startsWith('4k') || label === 'compressed_4k') return '4K';
-        if (label.includes('1080')) return '1080p';
-        if (label === 'sd_low_quality') return 'Legacy';
-        if (label === 'weak_4k') return '4K';
+        if (label === 'reference') return 'Reference';
+        if (label === 'meets_minimum') return 'Pass';
+        if (label === 'needs_review') return 'Review';
+        if (label === 'replacement_candidate') return 'Replace';
         return 'Other';
       }
 
@@ -4439,13 +4540,8 @@ INDEX_HTML = """<!doctype html>
       const profileCounts = histogram.profile_counts || {};
       const queueItems = (currentMovieReplacementQueue(payload)?.items || []);
       const deletedAwaitingReplacementCount = queueItems.filter(item => item.status === 'deleted').length;
-      const TIER_ORDER = ['sd_low_quality', 'weak_1080p', 'minimum_acceptable_1080p', 'compressed_1080p', '1080p_uhd', 'weak_4k', 'compressed_4k', '4k_uhd', '4k_remux', 'unclassified'];
+      const definitions = Array.isArray(payload.profile_definitions) ? payload.profile_definitions : [];
       const maxCount = Math.max(...Object.values(profileCounts), 1);
-      const sortedTiers = Object.entries(profileCounts).sort((a, b) => {
-        const ai = TIER_ORDER.indexOf(a[0]);
-        const bi = TIER_ORDER.indexOf(b[0]);
-        return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
-      });
       const replacementQueueCard = deletedAwaitingReplacementCount ? [[
         'deleted_awaiting_replacement',
         deletedAwaitingReplacementCount,
@@ -4457,21 +4553,31 @@ INDEX_HTML = """<!doctype html>
       ]] : [];
       const tierCards = [
         ...replacementQueueCard,
-        ...sortedTiers.map(([label, count]) => [label, count, null])
+        ...definitions.map(definition => [definition.label, profileCounts[definition.label] || 0, definition])
       ];
       const dashboardMaxCount = Math.max(maxCount, deletedAwaitingReplacementCount, 1);
       const tierCardsHtml = tierCards.map(([label, count, options]) => {
         const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
         const barWidth = (count / dashboardMaxCount) * 100;
-        const bitrateBand = options ? '' : movieProfileBitrateBand(label);
+        const isEditable = !!options;
+        const inlineSummary = options?.summary || '';
+        const definitionSummary = options?.rule_summary || '';
+        const isEditorOpen = state.movieStandardsEditorLabel === label;
         return `
           <div class="profile-card">
-            <div class="profile-card-group">${escapeHtml(options?.group || tierGroup(label))}</div>
-            <div class="profile-card-name">${escapeHtml(options?.name || humanProfileLabel(label))}</div>
+            <div class="profile-card-head">
+              <div>
+                <div class="profile-card-group">${escapeHtml(options?.group || tierGroup(label))}</div>
+                <div class="profile-card-name">${escapeHtml(options?.display_name || options?.name || humanProfileLabel(label))}</div>
+              </div>
+              ${isEditable ? `<button class="secondary movie-profile-definition-toggle" data-profile-label="${escapeHtml(label)}">${isEditorOpen ? 'Close' : 'Edit definition'}</button>` : ''}
+            </div>
             <div class="profile-card-count">${count.toLocaleString()}</div>
             <div class="profile-card-pct">${escapeHtml(options?.pctLabel || `${pct}% of library`)}</div>
-            ${bitrateBand ? `<div class="profile-card-band">${escapeHtml(bitrateBand)}</div>` : ''}
+            ${inlineSummary ? `<div class="profile-card-band">${escapeHtml(inlineSummary)}</div>` : ''}
+            ${definitionSummary ? `<div class="profile-card-definition">${escapeHtml(definitionSummary)}</div>` : ''}
             <div class="profile-card-bar"><span style="width:${barWidth}%"></span></div>
+            ${isEditable && isEditorOpen ? buildMovieProfileDefinitionEditor(options) : ''}
           </div>
         `;
       }).join('');
@@ -4502,12 +4608,142 @@ INDEX_HTML = """<!doctype html>
       return `
         ${actionsHtml}
         ${statsHtml}
-        <div class="dash-section-label">Quality Profiles</div>
+        <div class="dash-section-label">Movie Standards</div>
         <div class="profile-grid">${tierCardsHtml || '<div class="subtle">No profile data.</div>'}</div>
         <div class="dash-section-label">Resolution Breakdown</div>
         <div class="dash-res-bars bars">${resBarsHtml || '<div class="subtle">No resolution data.</div>'}</div>
         ${riskHtml}
       `;
+    }
+
+    function buildMovieProfileDefinitionEditor(definition) {
+      const rows = (definition.fields || []).map(field => {
+        if (field.type === 'number') {
+          return `
+            <div class="profile-card-editor-row">
+              <label for="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+              <input id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}" type="number" value="${escapeHtml(field.value)}">
+            </div>
+          `;
+        }
+        if (field.type === 'csv') {
+          return `
+            <div class="profile-card-editor-row">
+              <label for="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+              <input id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}" type="text" value="${escapeHtml(field.value)}">
+            </div>
+          `;
+        }
+        if (field.type === 'select') {
+          return `
+            <div class="profile-card-editor-row">
+              <label for="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+              <select id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}">
+                ${(field.options || []).map(option => `<option value="${escapeHtml(option.value)}" ${option.value === field.value ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+              </select>
+            </div>
+          `;
+        }
+        if (field.type === 'toggle') {
+          return `
+            <div class="profile-card-editor-row">
+              <label class="profile-card-toggle"><input data-profile-field="${escapeHtml(field.key)}" type="checkbox" ${field.value ? 'checked' : ''}>${escapeHtml(field.label)}</label>
+            </div>
+          `;
+        }
+        if (field.type === 'checklist') {
+          return `
+            <div class="profile-card-editor-row">
+              <label>${escapeHtml(field.label)}</label>
+              <div class="profile-card-checklist">
+                ${(field.options || []).map(option => {
+                  const checked = Array.isArray(field.value) && field.value.includes(option.value);
+                  return `<label><input data-profile-field="${escapeHtml(field.key)}" type="checkbox" value="${escapeHtml(option.value)}" ${checked ? 'checked' : ''}>${escapeHtml(option.label)}</label>`;
+                }).join('')}
+              </div>
+            </div>
+          `;
+        }
+        return '';
+      }).join('');
+      return `
+        <div class="profile-card-editor" data-profile-editor="${escapeHtml(definition.label)}">
+          ${rows}
+          <div class="profile-card-editor-actions">
+            <button class="primary movie-profile-definition-save" data-profile-label="${escapeHtml(definition.label)}" ${state.movieStandardsSaveBusy ? 'disabled' : ''}>Save</button>
+            <button class="secondary movie-profile-definition-cancel" data-profile-label="${escapeHtml(definition.label)}" ${state.movieStandardsSaveBusy ? 'disabled' : ''}>Cancel</button>
+            <span class="subtle">Saves to repo-local <span class="mono">movie_standards.json</span> and reruns the dashboard.</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function movieProfileEditorValues(label) {
+      const editor = document.querySelector(`[data-profile-editor="${label}"]`);
+      if (!editor) return {};
+      const values = {};
+      editor.querySelectorAll('[data-profile-field]').forEach(input => {
+        const key = input.dataset.profileField;
+        if (!key) return;
+        if (input.type === 'checkbox') {
+          if (input.value && input.value !== 'on') {
+            if (!Array.isArray(values[key])) values[key] = [];
+            if (input.checked) values[key].push(input.value);
+          } else {
+            values[key] = !!input.checked;
+          }
+          return;
+        }
+        values[key] = input.value;
+      });
+      return values;
+    }
+
+    async function saveMovieProfileDefinition(label) {
+      if (!label || state.movieStandardsSaveBusy || _activeRunController) return;
+      const source = sourceInput.value.trim();
+      state.movieStandardsSaveBusy = true;
+      setStatus(`Saving ${humanProfileLabel(label)} definition…`, 'running');
+      renderMovieLibrary(state.results.movies.profile || restoreCachedMovieDashboard(source));
+      try {
+        const response = await fetch('/api/movies/standards/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label, values: movieProfileEditorValues(label) })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Standards save failed.');
+        if (state.results.movies.profile) {
+          state.results.movies.profile.movie_standards = result.movie_standards;
+          state.results.movies.profile.profile_definitions = result.profile_definitions || [];
+          cacheMovieDashboard(state.results.movies.profile);
+        }
+        state.movieStandardsEditorLabel = '';
+        setStatus(`Saved ${humanProfileLabel(label)} definition. Re-running dashboard…`, 'running');
+        if (!source) {
+          state.movieStandardsSaveBusy = false;
+          renderMovieLibrary(state.results.movies.profile);
+          setStatus(`Saved ${humanProfileLabel(label)} definition.`, 'idle');
+          return;
+        }
+        const rerunResponse = await fetch('/api/movies/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source })
+        });
+        const rerunPayload = await rerunResponse.json();
+        if (!rerunResponse.ok) throw new Error(rerunPayload.error || 'Movie dashboard refresh failed.');
+        storePayload('library', rerunPayload);
+        setStatus(`Saved ${humanProfileLabel(label)} definition and refreshed ${rerunPayload.source_root}.`, 'idle');
+        renderMovieLibrary(rerunPayload);
+      } catch (error) {
+        setStatus(error.message, 'error');
+      } finally {
+        state.movieStandardsSaveBusy = false;
+        if (state.page === 'library') {
+          renderMovieLibrary(state.results.movies.profile || restoreCachedMovieDashboard(source));
+        }
+      }
     }
 
     function renderMovieJunk(payload) {
@@ -4618,11 +4854,18 @@ INDEX_HTML = """<!doctype html>
     }
 
     function isStrictWeakMovie(item) {
-      return ['sd_low_quality', 'weak_1080p', 'weak_4k', 'unclassified'].includes(item?.profile?.label || '');
+      return !!item?.profile?.weak_candidate;
     }
 
     function strictWeakMovies(payload) {
       return (payload?.movies || []).filter(isStrictWeakMovie);
+    }
+
+    function movieStandardsWorkflowItems(payload) {
+      return (payload?.movies || []).filter(item => {
+        const label = item?.profile?.label || '';
+        return item?.profile?.weak_candidate || label === 'needs_review';
+      });
     }
 
     function isMovieTriagePage() {
@@ -5215,7 +5458,7 @@ INDEX_HTML = """<!doctype html>
         { value: String(histogram.movie_count ?? (payload.movies || []).length), label: 'files scanned' },
         { value: String(histogram.risk_counts?.playback_risk || 0), label: 'playback-risk hits' },
         { value: String(histogram.risk_counts?.indexing_visibility_risk || 0), label: 'visibility-risk hits' },
-        { value: topProfile.replaceAll('_', ' '), label: 'top profile' }
+        { value: humanProfileLabel(topProfile), label: 'top profile' }
       ];
     }
 
@@ -5456,6 +5699,9 @@ def build_handler(
                 if route == "/api/movies/profile":
                     self.handle_movies_profile(payload)
                     return
+                if route == "/api/movies/standards/update":
+                    self.handle_movies_standards_update(payload)
+                    return
                 if route == "/api/movies/canonical-lists":
                     self.handle_movies_canonical_lists(payload)
                     return
@@ -5555,7 +5801,21 @@ def build_handler(
                     response = report.to_dict()
                     response["histogram"] = build_histogram_payload(report)
                     response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
+                    standards = load_movie_standards()
+                    response["movie_standards"] = standards
+                    response["profile_definitions"] = build_movie_profile_definitions(standards)
             self.respond_json(response)
+
+        def handle_movies_standards_update(self, payload: dict[str, Any]) -> None:
+            label = str(payload.get("label") or "").strip()
+            values = payload.get("values") if isinstance(payload.get("values"), dict) else {}
+            standards = update_movie_profile_definition(label, values)
+            self.respond_json(
+                {
+                    "movie_standards": standards,
+                    "profile_definitions": build_movie_profile_definitions(standards),
+                }
+            )
 
         def handle_movies_canonical_lists(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)

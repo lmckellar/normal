@@ -148,6 +148,11 @@ class OutputTests(unittest.TestCase):
                         "derived": {"mb_per_min": 14.3},
                         "reasons": [{"code": "low_video_bitrate"}],
                     },
+                    "profile": {
+                        "label": "needs_review",
+                        "weak_candidate": False,
+                        "domain_results": [{"code": "audio_default_non_english"}],
+                    },
                 },
                 {
                     "path": "/movies/severe.mkv",
@@ -173,6 +178,11 @@ class OutputTests(unittest.TestCase):
                         "derived": {"mb_per_min": 10.8},
                         "reasons": [{"code": "low_video_bitrate"}, {"code": "weak_audio_bitrate"}],
                     },
+                    "profile": {
+                        "label": "replacement_candidate",
+                        "weak_candidate": True,
+                        "domain_results": [{"code": "video_below_minimum"}],
+                    },
                 },
             ]
         }
@@ -186,6 +196,8 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(rows[0][-1], "/movies/severe.mkv")
         self.assertEqual(rows[0][11], "2")
         self.assertEqual(rows[0][12], "AAC 2.0")
+        self.assertEqual(rows[0][17], "replacement_candidate")
+        self.assertEqual(rows[0][18], "true")
         self.assertEqual(rows[1][0], "review")
 
     def test_write_movie_review_csv_writes_triage_rows(self) -> None:
@@ -220,6 +232,11 @@ class OutputTests(unittest.TestCase):
         },
         "derived": {"mb_per_min": 10.8},
         "reasons": [{"code": "low_video_bitrate"}]
+      },
+      "profile": {
+        "label": "replacement_candidate",
+        "weak_candidate": true,
+        "domain_results": [{"code": "video_below_minimum"}]
       }
     }
   ]
@@ -236,7 +253,15 @@ class OutputTests(unittest.TestCase):
                 contents,
             )
             self.assertIn(
-                "severe,70.2,117,0.60,very_low,1980,high,1080p,120.0,2200,96,2,AAC 2.0,10.8,mp4,h264,aac,,,,,,,low_video_bitrate,/movies/severe.mkv",
+                "replacement_candidate,true",
+                contents,
+            )
+            self.assertIn(
+                "video_below_minimum",
+                contents,
+            )
+            self.assertIn(
+                "/movies/severe.mkv",
                 contents,
             )
 

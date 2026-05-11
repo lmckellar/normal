@@ -173,11 +173,61 @@ class MovieScanTests(unittest.TestCase):
             self.assertEqual(facts.audio_streams[1].language, "eng")
             self.assertEqual(facts.audio_streams[1].title, "English stereo")
             self.assertEqual(facts.audio_display_stream_index, 1)
+            self.assertEqual(facts.default_audio_stream_index, 1)
             self.assertEqual(facts.audio_format_family, "ac3")
             self.assertEqual(facts.audio_format_variant, "dolby_digital")
             self.assertEqual(facts.audio_channel_layout, "5.1")
             self.assertIsNone(facts.audio_immersive_extension)
             self.assertEqual(facts.audio_summary, "Dolby Digital 5.1")
+
+    def test_media_facts_from_ffprobe_payload_captures_subtitle_stream_details(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x" * 100)
+
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {
+                        "duration": "7200",
+                        "size": "1048576000",
+                        "bit_rate": "6000000",
+                        "format_name": "matroska,webm",
+                    },
+                    "streams": [
+                        {
+                            "index": 0,
+                            "codec_type": "video",
+                            "codec_name": "h264",
+                            "width": 1920,
+                            "height": 1080,
+                            "bit_rate": "5000000",
+                        },
+                        {
+                            "index": 1,
+                            "codec_type": "audio",
+                            "codec_name": "ac3",
+                            "channels": 6,
+                            "bit_rate": "640000",
+                            "disposition": {"default": 1},
+                            "tags": {"language": "eng"},
+                        },
+                        {
+                            "index": 2,
+                            "codec_type": "subtitle",
+                            "codec_name": "subrip",
+                            "disposition": {"default": 1, "forced": 1},
+                            "tags": {"language": "eng", "title": "English Forced"},
+                        },
+                    ],
+                },
+                movie_path,
+            )
+
+            self.assertEqual(len(facts.subtitle_streams), 1)
+            self.assertEqual(facts.subtitle_streams[0].language, "eng")
+            self.assertTrue(facts.subtitle_streams[0].is_default)
+            self.assertTrue(facts.subtitle_streams[0].is_forced)
+            self.assertEqual(facts.default_subtitle_stream_index, 2)
 
     def test_media_facts_from_ffprobe_payload_detects_immersive_audio_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

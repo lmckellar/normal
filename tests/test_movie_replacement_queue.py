@@ -23,7 +23,19 @@ def profile_item(path: Path, label: str, bitrate: int = 3000) -> dict:
             "video_bitrate_kbps": bitrate,
             "file_size_bytes": 1234,
         },
-        "profile": {"label": label},
+        "profile": {
+            "label": label,
+            "weak_candidate": label == "replacement_candidate",
+            "domain_results": [
+                {
+                    "domain": "video_minimum",
+                    "status": "fail" if label == "replacement_candidate" else "pass",
+                    "code": "video_below_minimum" if label == "replacement_candidate" else "video_meets_minimum",
+                    "summary": "",
+                    "confidence": "high",
+                }
+            ],
+        },
     }
 
 
@@ -57,8 +69,8 @@ class MovieReplacementQueueTests(unittest.TestCase):
             movie.parent.mkdir(parents=True)
             movie.write_text("video", encoding="utf-8")
 
-            first = add_profile_items_to_queue(source, [profile_item(movie, "unclassified")], state_path=state)
-            second = add_profile_items_to_queue(source, [profile_item(movie, "unclassified")], state_path=state)
+            first = add_profile_items_to_queue(source, [profile_item(movie, "replacement_candidate")], state_path=state)
+            second = add_profile_items_to_queue(source, [profile_item(movie, "replacement_candidate")], state_path=state)
 
             self.assertEqual(len(first["added"]), 1)
             self.assertEqual(len(second["items"]), 1)
@@ -74,7 +86,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             movie.parent.mkdir(parents=True)
             movie.write_text("video", encoding="utf-8")
 
-            result = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+            result = add_profile_items_to_queue(source, [profile_item(movie, "replacement_candidate")], state_path=state)
 
             self.assertEqual(result["items"][0]["title"], "Critters 1")
             self.assertEqual(result["items"][0]["year"], 1986)
@@ -88,7 +100,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             movie.parent.mkdir(parents=True)
             movie.write_text("video", encoding="utf-8")
 
-            result = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+            result = add_profile_items_to_queue(source, [profile_item(movie, "replacement_candidate")], state_path=state)
 
             self.assertEqual(result["items"][0]["title"], "The Long Goodbye")
             self.assertEqual(result["items"][0]["year"], 1973)
@@ -154,7 +166,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
 
             result = add_profile_items_to_queue(
                 source,
-                [profile_item(good, "compressed_1080p"), profile_item(unparsed, "sd_low_quality")],
+                [profile_item(good, "meets_minimum"), profile_item(unparsed, "replacement_candidate")],
                 state_path=state,
             )
 
@@ -218,9 +230,9 @@ class MovieReplacementQueueTests(unittest.TestCase):
             weak.write_text("video", encoding="utf-8")
             replacement.write_text("video", encoding="utf-8")
 
-            add_profile_items_to_queue(source, [profile_item(weak, "sd_low_quality")], state_path=state)
-            still_pending = reconcile_replacement_queue(source, [profile_item(replacement, "unclassified")], state_path=state)
-            completed = reconcile_replacement_queue(source, [profile_item(replacement, "compressed_1080p", 7000)], state_path=state)
+            add_profile_items_to_queue(source, [profile_item(weak, "replacement_candidate")], state_path=state)
+            still_pending = reconcile_replacement_queue(source, [profile_item(replacement, "replacement_candidate")], state_path=state)
+            completed = reconcile_replacement_queue(source, [profile_item(replacement, "meets_minimum", 7000)], state_path=state)
 
             self.assertEqual(still_pending["items"][0]["status"], "pending")
             self.assertEqual(completed["items"][0]["status"], "completed")
@@ -251,7 +263,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             )
             completed = reconcile_replacement_queue(
                 source,
-                [profile_item(replacement, "compressed_1080p", 7000)],
+                [profile_item(replacement, "meets_minimum", 7000)],
                 state_path=state,
             )
 
@@ -272,8 +284,8 @@ class MovieReplacementQueueTests(unittest.TestCase):
             sidecar = folder_movie.parent / "poster.jpg"
             sidecar.write_text("image", encoding="utf-8")
 
-            file_result = add_profile_items_to_queue(source, [profile_item(file_movie, "unclassified")], "file", state)
-            folder_result = add_profile_items_to_queue(source, [profile_item(folder_movie, "unclassified")], "folder", state)
+            file_result = add_profile_items_to_queue(source, [profile_item(file_movie, "replacement_candidate")], "file", state)
+            folder_result = add_profile_items_to_queue(source, [profile_item(folder_movie, "replacement_candidate")], "folder", state)
             item_ids = [file_result["added"][0]["item_id"], folder_result["added"][0]["item_id"]]
 
             result = delete_replacement_queue_media(source, item_ids, state_path=state)
@@ -299,7 +311,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             metadata.write_text("metadata", encoding="utf-8")
             subtitle.write_text("subtitle", encoding="utf-8")
 
-            queued = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+            queued = add_profile_items_to_queue(source, [profile_item(movie, "replacement_candidate")], state_path=state)
             result = delete_replacement_queue_media(source, [queued["added"][0]["item_id"]], state_path=state)
 
             self.assertEqual(len(result["deleted"]), 1)
@@ -321,7 +333,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             other_video.write_text("video", encoding="utf-8")
             poster.write_text("image", encoding="utf-8")
 
-            queued = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+            queued = add_profile_items_to_queue(source, [profile_item(movie, "replacement_candidate")], state_path=state)
             result = delete_replacement_queue_media(source, [queued["added"][0]["item_id"]], state_path=state)
 
             self.assertEqual(result["cleaned_sidecars"], [])
@@ -339,7 +351,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             movie.parent.mkdir(parents=True)
             movie.write_text("video", encoding="utf-8")
 
-            queued = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+            queued = add_profile_items_to_queue(source, [profile_item(movie, "replacement_candidate")], state_path=state)
             movie.unlink()
 
             result = delete_replacement_queue_media(source, [queued["added"][0]["item_id"]], state_path=state)
@@ -359,7 +371,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             weak.parent.mkdir(parents=True)
             weak.write_text("video", encoding="utf-8")
 
-            queued = add_profile_items_to_queue(source, [profile_item(weak, "sd_low_quality")], state_path=state)
+            queued = add_profile_items_to_queue(source, [profile_item(weak, "replacement_candidate")], state_path=state)
             deleted = delete_replacement_queue_media(source, [queued["added"][0]["item_id"]], state_path=state)
 
             self.assertEqual(deleted["items"][0]["status"], "deleted")
@@ -370,7 +382,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             replacement.write_text("video", encoding="utf-8")
             completed = reconcile_replacement_queue(
                 source,
-                [profile_item(replacement, "compressed_1080p", 7000)],
+                [profile_item(replacement, "meets_minimum", 7000)],
                 state_path=state,
             )
 
@@ -387,7 +399,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             weak.parent.mkdir(parents=True)
             weak.write_text("video", encoding="utf-8")
 
-            queued = add_profile_items_to_queue(source, [profile_item(weak, "sd_low_quality")], state_path=state)
+            queued = add_profile_items_to_queue(source, [profile_item(weak, "replacement_candidate")], state_path=state)
             deleted = delete_replacement_queue_media(source, [queued["added"][0]["item_id"]], state_path=state)
             dismissed = dismiss_replacement_queue_items(source, [deleted["items"][0]["item_id"]], state_path=state)
 
@@ -398,7 +410,7 @@ class MovieReplacementQueueTests(unittest.TestCase):
             replacement.write_text("video", encoding="utf-8")
             reconciled = reconcile_replacement_queue(
                 source,
-                [profile_item(replacement, "compressed_1080p", 7000)],
+                [profile_item(replacement, "meets_minimum", 7000)],
                 state_path=state,
             )
 
@@ -413,10 +425,10 @@ class MovieReplacementQueueTests(unittest.TestCase):
             movie.parent.mkdir(parents=True)
             movie.write_text("video", encoding="utf-8")
 
-            queued = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+            queued = add_profile_items_to_queue(source, [profile_item(movie, "replacement_candidate")], state_path=state)
             deleted = delete_replacement_queue_media(source, [queued["added"][0]["item_id"]], state_path=state)
             dismiss_replacement_queue_items(source, [deleted["items"][0]["item_id"]], state_path=state)
-            requeued = add_profile_items_to_queue(source, [profile_item(movie, "sd_low_quality")], state_path=state)
+            requeued = add_profile_items_to_queue(source, [profile_item(movie, "replacement_candidate")], state_path=state)
 
             self.assertEqual(requeued["items"][0]["status"], "pending")
             self.assertIsNone(requeued["items"][0]["dismissed_at"])
