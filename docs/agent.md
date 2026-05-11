@@ -62,6 +62,8 @@ python3 -m normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 
 When the user asks to start the web UI, open the app, or provide the localhost link, treat that as a request for a clean launch, not a minimal process spawn.
 
+If a change touches `web.py` or otherwise requires a server restart to go live, restart the local web UI as part of finishing the task and include the localhost link in the completion report so the user can test immediately.
+
 A clean launch must:
 
 1. use the repo virtual environment
