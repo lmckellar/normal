@@ -32,6 +32,7 @@ from normal.movie_junk import (
 from normal.movie_plan import build_movie_plan
 from normal.movie_profile import (
     build_histogram_payload,
+    build_histogram_payload_from_items,
     build_movie_profile_definitions,
     build_movie_profile_item,
     build_replacement_candidate_definition,
@@ -61,7 +62,7 @@ from normal.music_replacement_queue import (
 from normal.movie_scan import discover_video_files, probe_media_facts, scan_movie_library
 from normal.output import write_movie_register_xlsx
 from normal.apply import apply_changes_in_place
-from normal.models import ProposedChange
+from normal.models import ProposedChange, utc_now_iso
 from normal.plan import build_plan
 from normal.quality_review import AudioStreamFacts, MediaFacts, SubtitleStreamFacts
 from normal.artwork import (
@@ -1590,6 +1591,7 @@ INDEX_HTML = """<!doctype html>
       return {
         source_root: cached.source_root || source,
         histogram: cached.histogram,
+        dashboard_snapshot_only: true,
         replacement_queue: cached.replacement_queue || null,
         movie_standards: cached.movie_standards || null,
         movie_standards_revision: cached.movie_standards_revision || '',
@@ -3123,9 +3125,10 @@ INDEX_HTML = """<!doctype html>
         return '<div style="font-size:11px;color:var(--muted);padding:6px 0">' + title + ': no data</div>';
       }
       const bins = dist.bins;
-      const p10 = dist.p10, p50 = dist.p50, p90 = dist.p90, p95 = dist.p95;
+      const p10 = dist.p10, mean = dist.mean, p90 = dist.p90, p95 = dist.p95;
 
-      const clipKbps = p95 || Math.max.apply(null, bins.map(b => b.end_kbps));
+      const maxBinKbps = Math.max.apply(null, bins.map(b => b.end_kbps));
+      const clipKbps = p95 ? Math.max(p95, mean || 0) : maxBinKbps;
       const visibleBins = bins.filter(b => b.start_kbps <= clipKbps);
       const overflowCount = bins.filter(b => b.start_kbps > clipKbps).reduce((s, b) => s + b.count, 0);
 
@@ -3182,7 +3185,7 @@ INDEX_HTML = """<!doctype html>
           '<path d="' + curveD + '" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' +
           '<line x1="' + ml + '" y1="' + baseY + '" x2="' + (ml + pw) + '" y2="' + baseY + '" stroke="var(--line)" stroke-width="1"/>' +
           vline(p10, 'p10', 'var(--warn)') +
-          vline(p50, 'med', 'var(--accent-2)') +
+          vline(mean, 'mean', 'var(--accent-2)') +
           vline(p90, 'p90', 'var(--danger)') +
           ticks +
           overflowText +
@@ -3192,7 +3195,9 @@ INDEX_HTML = """<!doctype html>
     function buildBitrateBellCurve(payload) {
       const histogram = payload && payload.histogram;
       if (!histogram) return '<div class="empty">Run Movies / Dashboard to see bitrate distributions.</div>';
+      const snapshotNote = payload.dashboard_snapshot_only ? '<div class="subtle" style="margin-bottom:10px">Cached dashboard snapshot. Run Movies / Dashboard to rebuild after library changes.</div>' : '';
       return '<div class="finding" style="padding:14px 16px 14px">' +
+        snapshotNote +
         buildBitrateChart(histogram.video_bitrate_kbps, 'Video Bitrate') +
         '<div style="margin-top:14px">' +
         buildBitrateChart(histogram.audio_bitrate_kbps, 'Audio Bitrate') +
@@ -4967,6 +4972,9 @@ INDEX_HTML = """<!doctype html>
         const m = Math.round(mins % 60);
         return h ? `${h}h ${m}m` : `${m}m`;
       }
+      function fmtVideoBitrate(kbps) {
+        return kbps ? (kbps / 1000).toFixed(1) + ' Mbps' : '—';
+      }
       function tierGroup(label) {
         if (label === 'reference') return 'Reference';
         if (label === 'meets_minimum') return 'Pass';
@@ -4982,7 +4990,7 @@ INDEX_HTML = """<!doctype html>
           <div class="metric"><strong>${total.toLocaleString()}</strong><span>movies</span></div>
           <div class="metric"><strong>${fmtSize(histogram.total_size_bytes)}</strong><span>total size</span></div>
           <div class="metric"><strong>${fmtHours(histogram.total_runtime_minutes)}</strong><span>total runtime</span></div>
-          <div class="metric"><strong>${avgVideoBitrate ? Math.round(avgVideoBitrate).toLocaleString() + ' kbps' : '—'}</strong><span>avg video bitrate</span></div>
+          <div class="metric"><strong>${fmtVideoBitrate(avgVideoBitrate)}</strong><span>avg video bitrate</span></div>
           <div class="metric"><strong>${avgAudioBitrate ? Math.round(avgAudioBitrate).toLocaleString() + ' kbps' : '—'}</strong><span>avg audio bitrate</span></div>
         </div>
       `;
@@ -5815,6 +5823,32 @@ INDEX_HTML = """<!doctype html>
       });
     }
 
+    function removeDeletedMovieProfileItems(payload, deletedItems) {
+      if (!payload || !Array.isArray(payload.movies) || !Array.isArray(deletedItems) || !deletedItems.length) return;
+      const deletedPaths = (deletedItems || []).map(item => item?.path).filter(Boolean);
+      if (!deletedPaths.length) return;
+      payload.movies = payload.movies.filter(item => {
+        const path = item?.path || '';
+        return !deletedPaths.some(deletedPath => path === deletedPath || path.startsWith(deletedPath + '/'));
+      });
+    }
+
+    async function refreshMovieDashboardHistogram(payload) {
+      if (!payload || payload.dashboard_snapshot_only || !Array.isArray(payload.movies)) return;
+      const source = sourceInput.value.trim() || payload.source_root || '';
+      if (!source) return;
+      const response = await fetch('/api/movies/dashboard/histogram', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, movies: payload.movies })
+      });
+      const histogram = await response.json();
+      if (!response.ok) throw new Error(histogram.error || 'Dashboard histogram refresh failed.');
+      payload.histogram = histogram;
+      payload.dashboard_snapshot_only = false;
+      cacheMovieDashboard(payload);
+    }
+
     function humanAudioFixMessage(code) {
       const labels = {
         outside_source: 'outside source',
@@ -5928,7 +5962,11 @@ INDEX_HTML = """<!doctype html>
         state.results.movies.replacementQueue = delResult;
         state.results.movies.replacementQueueSource = source;
         cacheMovieReplacementQueue(delResult);
-        if (state.results.movies.profile) state.results.movies.profile.replacement_queue = delResult;
+        if (state.results.movies.profile) {
+          state.results.movies.profile.replacement_queue = delResult;
+          removeDeletedMovieProfileItems(state.results.movies.profile, delResult.deleted || []);
+          await refreshMovieDashboardHistogram(state.results.movies.profile);
+        }
         state.selectedReplacementPaths.clear();
         const skipped = delResult.skipped?.length || 0;
         const sidecars = delResult.cleaned_sidecars?.length || 0;
@@ -5974,6 +6012,7 @@ INDEX_HTML = """<!doctype html>
         if (state.results.movies.profile) {
           state.results.movies.profile.replacement_queue = result.replacement_queue || state.results.movies.profile.replacement_queue;
           applyUpdatedMovieProfileItems(state.results.movies.profile, result.updated_items || []);
+          await refreshMovieDashboardHistogram(state.results.movies.profile);
         }
         state.selectedReplacementPaths.clear();
         setStatus(summarizeAudioFixResult(result, dropForeignAudio), 'idle');
@@ -6013,6 +6052,7 @@ INDEX_HTML = """<!doctype html>
         if (!response.ok) throw new Error(result.error || 'Subtitle fix failed.');
         if (state.results.movies.profile) {
           applyUpdatedMovieProfileItems(state.results.movies.profile, result.updated_items || []);
+          await refreshMovieDashboardHistogram(state.results.movies.profile);
         }
         state.selectedReplacementPaths.clear();
         setStatus(summarizeSubtitleFixResult(result), 'idle');
@@ -6050,7 +6090,11 @@ INDEX_HTML = """<!doctype html>
         state.results.movies.replacementQueue = result;
         state.results.movies.replacementQueueSource = source;
         cacheMovieReplacementQueue(result);
-        if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
+        if (state.results.movies.profile) {
+          state.results.movies.profile.replacement_queue = result;
+          removeDeletedMovieProfileItems(state.results.movies.profile, result.deleted || []);
+          await refreshMovieDashboardHistogram(state.results.movies.profile);
+        }
         const skipped = result.skipped?.length || 0;
         const sidecars = result.cleaned_sidecars?.length || 0;
         const folders = result.removed_folders?.length || 0;
@@ -6456,6 +6500,9 @@ def build_handler(
                 if route == "/api/movies/profile":
                     self.handle_movies_profile(payload)
                     return
+                if route == "/api/movies/dashboard/histogram":
+                    self.handle_movies_dashboard_histogram(payload)
+                    return
                 if route == "/api/movies/standards/update":
                     self.handle_movies_standards_update(payload)
                     return
@@ -6573,6 +6620,19 @@ def build_handler(
                     response["quality_profile_definitions"] = build_movie_profile_definitions(standards)
                     response["replacement_candidate_definition"] = build_replacement_candidate_definition(standards)
             self.respond_json(response)
+
+        def handle_movies_dashboard_histogram(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            movies = payload.get("movies")
+            if not isinstance(movies, list):
+                raise ValueError("movies must be a list")
+            self.respond_json(
+                build_histogram_payload_from_items(
+                    str(source),
+                    utc_now_iso(),
+                    [item for item in movies if isinstance(item, dict)],
+                )
+            )
 
         def handle_movies_standards_update(self, payload: dict[str, Any]) -> None:
             label = str(payload.get("label") or "").strip()
