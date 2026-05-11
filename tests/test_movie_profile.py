@@ -320,6 +320,7 @@ class MovieProfileTests(unittest.TestCase):
             self.assertEqual(payload["movie_count"], 1)
             self.assertEqual(payload["profile_counts"]["replacement_candidate"], 1)
             self.assertEqual(payload["quality_profile_counts"]["standard_definition"], 1)
+            self.assertEqual(sum(payload["quality_profile_counts"].values()), payload["movie_count"])
             self.assertEqual(payload["video_bitrate_kbps"]["median"], 3500.0)
             self.assertIn("risk_counts", payload)
 

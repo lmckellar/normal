@@ -5010,10 +5010,9 @@ INDEX_HTML = """<!doctype html>
           }
         ],
       ];
-      const actionMaxCount = Math.max(...actionCards.map(([, count]) => count), 1);
       const actionCardsHtml = actionCards.map(([label, count, options]) => {
         const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
-        const barWidth = (count / actionMaxCount) * 100;
+        const barWidth = total ? (count / total) * 100 : 0;
         const inlineSummary = options?.summary || '';
         return `
           <div class="profile-card">
@@ -5031,10 +5030,9 @@ INDEX_HTML = """<!doctype html>
         `;
       }).join('');
       const qualityCards = definitions.map(definition => [definition.label, qualityProfileCounts[definition.label] || 0, definition]);
-      const qualityMaxCount = Math.max(...qualityCards.map(([, count]) => count), 1);
       const qualityCardsHtml = qualityCards.map(([label, count, options]) => {
         const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
-        const barWidth = (count / qualityMaxCount) * 100;
+        const barWidth = total ? (count / total) * 100 : 0;
         const isEditable = !!options;
         const inlineSummary = options?.summary || '';
         const definitionSummary = options?.rule_summary || '';
