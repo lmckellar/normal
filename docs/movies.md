@@ -38,17 +38,20 @@ The Normalize review table now stays tighter: `Confidence`, `Type`, `Path`, `Cur
 
 ## Quality triage
 
-A full quality scan profiles every file against a bitrate/resolution ladder:
+A full movie profile scan now grades each file against local standards instead of a pure bitrate ladder:
 
-| Tier | What it means |
+| Profile | What it means |
 |---|---|
-| `4k_remux` / `4k_uhd` | Reference quality |
-| `compressed_4k` | Acceptable 4K |
-| `1080p_uhd` / `compressed_1080p` | Good 1080p |
-| `minimum_acceptable_1080p` | Watchable |
-| `weak_1080p` / `weak_4k` / `sd_low_quality` | Candidates for replacement |
+| `reference` | Meets configured reference video and audio floors |
+| `meets_minimum` | Meets configured minimum standards |
+| `needs_review` | Inline review attention needed, often from subtitle/default/hygiene checks |
+| `replacement_candidate` | Fails configurable weak-candidate rules and is eligible for delete/replace triage |
 
-Quality scan results now also show a main-audio summary for the playback-relevant stream, separate from audio bitrate. The intent is fast library triage: you can see `AAC 2.0` versus `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, or `DTS-HD MA 5.1` at a glance without opening per-stream details.
+The standards definition lives in repo-local `movie_standards.json`.
+
+In the web UI, the **Dashboard View** standards cards now own their own definitions. Each card shows the current rule summary, current movie count for that class, and an inline `Edit definition` control that writes back to `movie_standards.json` and refreshes the dashboard count after save.
+
+Quality scan results still show a main-audio summary for the playback-relevant stream, separate from audio bitrate. The intent is fast library triage: you can see `AAC 2.0` versus `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, or `DTS-HD MA 5.1` at a glance without opening per-stream details.
 
 The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue — when a better encode for the same title shows up in a future scan, it's automatically marked complete.
 

@@ -15,7 +15,6 @@ from normal.movie_scan import VIDEO_EXTENSIONS
 
 
 QUEUE_VERSION = 2
-STRICT_WEAK_LABELS = {"sd_low_quality", "weak_1080p", "weak_4k", "unclassified"}
 MOVIE_TRIAGE_FAMILIES = {"weak_encode", "audio_packaging"}
 AUDIO_PACKAGING_CODES = {
     "default_non_english_audio_with_weak_english",
@@ -82,8 +81,11 @@ def history_title_key(title: str) -> str:
     return " ".join(collapsed.split())
 
 
-def is_strict_weak_label(label: str | None) -> bool:
-    return label in STRICT_WEAK_LABELS
+def is_strict_weak_item(raw_item: dict[str, Any]) -> bool:
+    profile = raw_item.get("profile") or {}
+    if not isinstance(profile, dict):
+        return False
+    return bool(profile.get("weak_candidate"))
 
 
 def load_queue(state_path: Path | None = None) -> dict[str, Any]:
@@ -388,10 +390,14 @@ def replacement_identities(source: Path, raw_movies: list[Any], issue_family: st
 
 def queue_issue_for_raw_item(raw_item: dict[str, Any], issue_family: str) -> dict[str, str | None] | None:
     if issue_family == "weak_encode":
-        label = str((raw_item.get("profile") or {}).get("label") or "")
-        if not is_strict_weak_label(label):
+        profile = raw_item.get("profile") or {}
+        if not isinstance(profile, dict) or not profile.get("weak_candidate"):
             return None
-        return {"issue_code": label, "issue_label": label.replace("_", " ")}
+        label = str(profile.get("label") or "")
+        domains = profile.get("domain_results") if isinstance(profile.get("domain_results"), list) else []
+        domain_codes = [str(result.get("code") or "") for result in domains if isinstance(result, dict) and result.get("status") == "fail"]
+        issue_code = ",".join(domain_codes) if domain_codes else label
+        return {"issue_code": issue_code, "issue_label": label.replace("_", " ")}
     if issue_family == "audio_packaging":
         diagnostics = (raw_item.get("profile") or {}).get("diagnostics")
         if not isinstance(diagnostics, list):

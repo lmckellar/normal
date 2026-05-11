@@ -10,7 +10,14 @@ import time
 from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
-from normal.quality_review import AudioStreamFacts, MediaFacts, build_audio_summary, QualityReview, score_quality_review
+from normal.quality_review import (
+    AudioStreamFacts,
+    MediaFacts,
+    SubtitleStreamFacts,
+    build_audio_summary,
+    QualityReview,
+    score_quality_review,
+)
 
 
 VIDEO_EXTENSIONS = {
@@ -216,7 +223,10 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
             video_bitrate_kbps = estimated
             video_bitrate_approximate = True
     detailed_audio_streams = [audio_stream_facts_from_ffprobe_stream(stream) for stream in audio_streams]
+    detailed_subtitle_streams = [subtitle_stream_facts_from_ffprobe_stream(stream) for stream in subtitle_streams]
     display_audio_stream = choose_display_audio_stream(detailed_audio_streams)
+    default_audio_stream = choose_default_audio_stream(detailed_audio_streams)
+    default_subtitle_stream = choose_default_subtitle_stream(detailed_subtitle_streams)
     (
         audio_format_family,
         audio_format_variant,
@@ -265,7 +275,10 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         attachment_stream_count=len(attachment_streams),
         default_audio_streams=count_default_streams(audio_streams),
         default_subtitle_streams=count_default_streams(subtitle_streams),
+        default_audio_stream_index=default_audio_stream.index if default_audio_stream else None,
+        default_subtitle_stream_index=default_subtitle_stream.index if default_subtitle_stream else None,
         audio_streams=detailed_audio_streams,
+        subtitle_streams=detailed_subtitle_streams,
     )
 
 
@@ -331,10 +344,41 @@ def audio_stream_facts_from_ffprobe_stream(stream: dict[str, Any]) -> AudioStrea
     )
 
 
+def subtitle_stream_facts_from_ffprobe_stream(stream: dict[str, Any]) -> SubtitleStreamFacts:
+    tags = stream.get("tags")
+    if not isinstance(tags, dict):
+        tags = {}
+    disposition = stream.get("disposition")
+    if not isinstance(disposition, dict):
+        disposition = {}
+    return SubtitleStreamFacts(
+        index=parse_int(stream.get("index")),
+        codec=stream.get("codec_name"),
+        language=normalize_language_tag(tags.get("language")),
+        title=first_text(tags.get("title"), tags.get("handler_name")),
+        is_default=bool(disposition.get("default")),
+        is_forced=bool(disposition.get("forced")),
+    )
+
+
 def choose_display_audio_stream(streams: list[AudioStreamFacts]) -> AudioStreamFacts | None:
     default_streams = [stream for stream in streams if stream.is_default]
     if len(default_streams) == 1:
         return default_streams[0]
+    return streams[0] if streams else None
+
+
+def choose_default_audio_stream(streams: list[AudioStreamFacts]) -> AudioStreamFacts | None:
+    for stream in streams:
+        if stream.is_default:
+            return stream
+    return streams[0] if streams else None
+
+
+def choose_default_subtitle_stream(streams: list[SubtitleStreamFacts]) -> SubtitleStreamFacts | None:
+    for stream in streams:
+        if stream.is_default:
+            return stream
     return streams[0] if streams else None
 
 

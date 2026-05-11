@@ -56,6 +56,16 @@ class AudioStreamFacts:
 
 
 @dataclass(slots=True)
+class SubtitleStreamFacts:
+    index: int | None = None
+    codec: str | None = None
+    language: str | None = None
+    title: str | None = None
+    is_default: bool = False
+    is_forced: bool = False
+
+
+@dataclass(slots=True)
 class MediaFacts:
     runtime_seconds: int | None = None
     file_size_bytes: int | None = None
@@ -91,7 +101,10 @@ class MediaFacts:
     attachment_stream_count: int = 0
     default_audio_streams: int = 0
     default_subtitle_streams: int = 0
+    default_audio_stream_index: int | None = None
+    default_subtitle_stream_index: int | None = None
     audio_streams: list[AudioStreamFacts] = field(default_factory=list)
+    subtitle_streams: list[SubtitleStreamFacts] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -192,7 +205,7 @@ def classify_resolution(width: int | None, height: int | None) -> str | None:
     short_edge = min(width, height)
     if long_edge >= 3000:
         return "2160p"
-    if long_edge >= 1800 or short_edge >= 1080:
+    if long_edge >= 1800 and short_edge >= 900:
         return "1080p"
     if long_edge >= 1200:
         return "720p"
@@ -299,7 +312,10 @@ def score_quality_review(facts: MediaFacts, path: str | Path | None = None) -> Q
         attachment_stream_count=facts.attachment_stream_count,
         default_audio_streams=facts.default_audio_streams,
         default_subtitle_streams=facts.default_subtitle_streams,
+        default_audio_stream_index=facts.default_audio_stream_index,
+        default_subtitle_stream_index=facts.default_subtitle_stream_index,
         audio_streams=list(facts.audio_streams),
+        subtitle_streams=list(facts.subtitle_streams),
     )
 
     score = 0

@@ -330,7 +330,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("from Replacement Queue", INDEX_HTML)
         self.assertIn("id=\"exportCatalogueButton\"", INDEX_HTML)
         self.assertIn("Export Catalogue", INDEX_HTML)
-        self.assertIn("attachMovieDashboardHandlers();", INDEX_HTML)
+        self.assertIn("attachMovieDashboardHandlers(payload);", INDEX_HTML)
         self.assertNotIn("Generate Catalogue", INDEX_HTML)
         self.assertNotIn("catalogue-btn", INDEX_HTML)
         self.assertIn("For movies, this pane stays attached to the current directory's Replacement Queue.", INDEX_HTML)
@@ -341,12 +341,11 @@ class WebTests(unittest.TestCase):
         self.assertIn("cacheMovieDashboard(payload);", INDEX_HTML)
         self.assertIn("renderMovieLibrary(profile || restoreCachedMovieDashboard(source));", INDEX_HTML)
         self.assertIn("const total = histogram.movie_count ?? (payload.movies || []).length;", INDEX_HTML)
-        self.assertIn("if (label === '1080p_uhd') return '1080p UHD';", INDEX_HTML)
-        self.assertIn("'1080p_uhd'", INDEX_HTML)
-        self.assertNotIn("'1080p_remux'", INDEX_HTML)
-        self.assertIn("function movieProfileBitrateBand(label)", INDEX_HTML)
-        self.assertIn("1080p video: 4,500-5,999 kbps", INDEX_HTML)
-        self.assertIn("4K video: 12,000-23,999 kbps", INDEX_HTML)
+        self.assertIn("if (label === 'replacement_candidate') return 'Replacement Candidate';", INDEX_HTML)
+        self.assertIn("'replacement_candidate'", INDEX_HTML)
+        self.assertIn("function movieProfileInlineSummary(item)", INDEX_HTML)
+        self.assertIn("const definitions = Array.isArray(payload.profile_definitions) ? payload.profile_definitions : [];", INDEX_HTML)
+        self.assertIn("const definitionSummary = options?.rule_summary || '';", INDEX_HTML)
         self.assertIn("profile-card-band", INDEX_HTML)
         self.assertLess(INDEX_HTML.index("function humanProfileLabel"), INDEX_HTML.index("function buildMovieQualityTable"))
         library_section = INDEX_HTML.split("function renderMovieLibrary(payload) {", 1)[1].split(
@@ -355,6 +354,15 @@ class WebTests(unittest.TestCase):
         )[0]
         self.assertNotIn("renderReplacementQueueDetail(payload)", library_section)
         self.assertNotIn("attachMovieReplacementHandlers(payload)", library_section)
+
+    def test_movie_dashboard_exposes_inline_profile_definition_controls(self) -> None:
+        self.assertIn("/api/movies/standards/update", INDEX_HTML)
+        self.assertIn("movieStandardsEditorLabel", INDEX_HTML)
+        self.assertIn("movie-profile-definition-toggle", INDEX_HTML)
+        self.assertIn("function buildMovieProfileDefinitionEditor(definition)", INDEX_HTML)
+        self.assertIn("function movieProfileEditorValues(label)", INDEX_HTML)
+        self.assertIn("function saveMovieProfileDefinition(label)", INDEX_HTML)
+        self.assertIn("Saves to repo-local <span class=\"mono\">movie_standards.json</span> and reruns the dashboard.", INDEX_HTML)
 
     def test_movie_canonical_lists_page_is_wired(self) -> None:
         self.assertIn("id: 'canonical_lists'", INDEX_HTML)
