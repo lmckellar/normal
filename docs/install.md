@@ -41,6 +41,15 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+Local API keys should be stored in a durable shell env source such as `~/.bashrc`, `~/.zshrc`, or a separate local env file that is sourced before launch. Do not store project API keys in `.venv/bin/activate`; recreating the venv can wipe them.
+
+Example:
+
+```bash
+export TMDB_KEY=your_tmdb_key
+export OMDB_KEY=your_omdb_key
+```
+
 ## Verify
 
 ```bash
@@ -54,6 +63,12 @@ ffprobe -version
 ```
 
 Both must succeed before running any movie lane command.
+
+If you plan to use Movies / Canonical Lists, also verify:
+
+```bash
+printf '%s\n' "${TMDB_KEY:+TMDB_KEY loaded}"
+```
 
 ## Platform notes
 

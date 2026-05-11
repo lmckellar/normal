@@ -53,9 +53,34 @@ normal <command> [flags]         # after pip install
 # Tests
 python3 -m unittest discover -s tests
 
-# Web server (local workstation note: use python3 -m normal, not python)
+# Web server
+source .venv/bin/activate
 python3 -m normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 ```
+
+## Launch contract
+
+When the user asks to start the web UI, open the app, or provide the localhost link, treat that as a request for a clean launch, not a minimal process spawn.
+
+A clean launch must:
+
+1. use the repo virtual environment
+2. load the canonical local env source before server start
+3. preserve configured API-backed features
+4. verify the localhost page responds before reporting success
+
+Current local env posture:
+
+- Keep durable local API config outside `.venv/bin/activate`.
+- Do not store or rely on secrets embedded in venv activation scripts; venv recreation can wipe them.
+- If the web UI is started by an agent, do not launch it via a bare venv interpreter path if that bypasses env loading.
+
+Minimum preflight before reporting success:
+
+- `python3` resolves inside the repo venv
+- required binaries for the requested workflow are present (`ffprobe` for movie workflows)
+- `TMDB_KEY` is loaded if the requested workflow includes Movies / Canonical Lists
+- localhost responds on the chosen port
 
 ## Data models
 
