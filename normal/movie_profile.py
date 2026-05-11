@@ -338,26 +338,78 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
                     {
                         "key": "video_1080p_kbps",
                         "label": "1080p video kbps floor",
-                        "type": "number",
+                        "type": "select",
                         "value": int(resolve_stance_video_floor(label, stance, active, "1080p")),
+                        "options": [
+                            {"value": 1200, "label": "1,200 kbps — SD minimum"},
+                            {"value": 1800, "label": "1,800 kbps — 720p minimum"},
+                            {"value": 3000, "label": "3,000 kbps — compact encode"},
+                            {"value": 4500, "label": "4,500 kbps — library grade"},
+                            {"value": 6000, "label": "6,000 kbps — solid encode"},
+                            {"value": 8000, "label": "8,000 kbps — collector grade"},
+                            {"value": 12000, "label": "12,000 kbps — high bitrate"},
+                            {"value": 16000, "label": "16,000 kbps — reference"},
+                            {"value": 20000, "label": "20,000 kbps — near-lossless"},
+                            {"value": 25000, "label": "25,000 kbps — remux tier"},
+                        ],
                     },
                     {
                         "key": "video_2160p_kbps",
                         "label": "4K video kbps floor",
-                        "type": "number",
+                        "type": "select",
                         "value": int(resolve_stance_video_floor(label, stance, active, "2160p")),
+                        "options": [
+                            {"value": 5000, "label": "5,000 kbps — compact 4K"},
+                            {"value": 8000, "label": "8,000 kbps — efficient encode"},
+                            {"value": 10000, "label": "10,000 kbps — library grade"},
+                            {"value": 12000, "label": "12,000 kbps — solid 4K"},
+                            {"value": 15000, "label": "15,000 kbps — collector grade"},
+                            {"value": 18000, "label": "18,000 kbps — high bitrate"},
+                            {"value": 24000, "label": "24,000 kbps — reference"},
+                            {"value": 30000, "label": "30,000 kbps — near-lossless"},
+                            {"value": 40000, "label": "40,000 kbps — remux tier"},
+                            {"value": 50000, "label": "50,000 kbps — full remux"},
+                        ],
                     },
                     {
                         "key": "audio_channels",
                         "label": "Minimum main-audio channels",
-                        "type": "number",
+                        "type": "select",
                         "value": int(resolve_stance_audio_channels(label, stance, active)),
+                        "options": [
+                            {"value": 1, "label": "1 — Mono"},
+                            {"value": 2, "label": "2 — Stereo"},
+                            {"value": 6, "label": "6 — 5.1 Surround"},
+                            {"value": 8, "label": "8 — 7.1 Surround"},
+                        ],
+                    },
+                    {
+                        "key": "audio_channels_vintage_cutoff",
+                        "label": "Exempt pre-surround era films from channel minimum",
+                        "type": "select",
+                        "value": int(stance.get("audio_channels_vintage_cutoff", 0)),
+                        "options": [
+                            {"value": 0, "label": "Off — apply to all films"},
+                            {"value": 1970, "label": "Pre-1970 films exempt"},
+                            {"value": 1980, "label": "Pre-1980 films exempt"},
+                            {"value": 1985, "label": "Pre-1985 films exempt"},
+                            {"value": 1990, "label": "Pre-1990 films exempt"},
+                        ],
                     },
                     {
                         "key": "audio_bitrate_kbps",
                         "label": "Minimum main-audio kbps",
-                        "type": "number",
+                        "type": "select",
                         "value": int(resolve_stance_audio_bitrate(label, stance, active)),
+                        "options": [
+                            {"value": 128, "label": "128 kbps"},
+                            {"value": 192, "label": "192 kbps"},
+                            {"value": 256, "label": "256 kbps"},
+                            {"value": 320, "label": "320 kbps"},
+                            {"value": 384, "label": "384 kbps"},
+                            {"value": 448, "label": "448 kbps"},
+                            {"value": 640, "label": "640 kbps"},
+                        ],
                     },
                     {
                         "key": "audio_codecs",
@@ -385,7 +437,7 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
                     },
                     {
                         "key": "require_lossless_audio",
-                        "label": "Require lossless audio posture",
+                        "label": "Require lossless audio",
                         "type": "toggle",
                         "value": bool(stance.get("require_lossless_audio", False)),
                     },
@@ -420,6 +472,8 @@ def update_movie_profile_definition(
             values.get("audio_channels"),
             int(resolve_stance_audio_channels(label, stance, active)),
         )
+        cutoff_raw = values.get("audio_channels_vintage_cutoff")
+        stance["audio_channels_vintage_cutoff"] = int(cutoff_raw) if cutoff_raw is not None and str(cutoff_raw).isdigit() else 0
         stance["audio_bitrate_kbps"] = normalize_positive_int(
             values.get("audio_bitrate_kbps"),
             int(resolve_stance_audio_bitrate(label, stance, active)),
@@ -806,8 +860,16 @@ def movie_matches_quality_stance(
     allowed_codecs = set(resolve_stance_audio_codecs(label, stance, standards))
     if allowed_codecs and codec and codec not in allowed_codecs:
         return False
-    if resolve_stance_audio_channels(label, stance, standards) and channels < resolve_stance_audio_channels(label, stance, standards):
-        return False
+    required_channels = resolve_stance_audio_channels(label, stance, standards)
+    if required_channels and channels < required_channels:
+        vintage_cutoff = int(stance.get("audio_channels_vintage_cutoff") or 0)
+        exempt = False
+        if vintage_cutoff:
+            parsed_identity = parse_movie_name(path)
+            if parsed_identity.year and parsed_identity.year < vintage_cutoff:
+                exempt = True
+        if not exempt:
+            return False
     if resolve_stance_audio_bitrate(label, stance, standards) and bitrate < resolve_stance_audio_bitrate(label, stance, standards):
         return False
     if stance.get("require_lossless_audio") and codec not in {"truehd", "dtshd", "flac", "pcm", "pcm_s16le", "pcm_s24le"}:

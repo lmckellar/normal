@@ -53,9 +53,11 @@ Quality profile cards:
 | `Standard Definition` | Edge cases and legacy files that are still worth keeping |
 | `Library Grade` | Good enough for casual viewing, including compact encodes like Tigole |
 | `Collector Grade` | Solid compact encodes that hold up better on difficult material |
-| `Reference` | Mild to no visual compression with lossless-audio posture |
+| `Reference` | Mild to no visual compression with lossless audio |
 
-The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards now own the inline **Edit definition** controls. Those edits adjust the user-facing stance criteria and inherited defaults, then refresh the dashboard after save.
+The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Each parameter is presented as a dropdown with logical gradation points rather than a raw text input. Those edits adjust the stance criteria and inherited defaults, then refresh the dashboard after save.
+
+The audio channel minimum has a companion **Exempt pre-surround era films** setting. Set it to a release-year cutoff (Pre-1970 through Pre-1990) and films released before that year bypass the channel floor check — useful when Library Grade or higher requires 5.1 but classic titles with mono or stereo-only audio have no higher-channel release to replace them with.
 
 Quality scan results include a normalized main-audio summary for the playback-relevant stream alongside audio bitrate — `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`, and similar labels.
 
