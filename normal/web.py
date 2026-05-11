@@ -1259,7 +1259,7 @@ INDEX_HTML = """<!doctype html>
     })();
     let _movieDashboardCache = (() => {
       try {
-        const cache = JSON.parse(localStorage.getItem('n_movie_dashboard_cache') || '{}');
+        const cache = JSON.parse(localStorage.getItem('n_movie_dashboard_cache_v2') || '{}');
         return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
       } catch {
         return {};
@@ -1464,7 +1464,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function persistMovieDashboardCache() {
-      try { localStorage.setItem('n_movie_dashboard_cache', JSON.stringify(_movieDashboardCache)); } catch {}
+      try { localStorage.setItem('n_movie_dashboard_cache_v2', JSON.stringify(_movieDashboardCache)); } catch {}
     }
 
     function persistMovieCanonicalListsCache() {
@@ -1532,7 +1532,7 @@ INDEX_HTML = """<!doctype html>
         histogram: payload.histogram,
         replacement_queue: payload.replacement_queue || null,
         movie_standards: payload.movie_standards || null,
-        profile_definitions: payload.profile_definitions || [],
+        quality_profile_definitions: payload.quality_profile_definitions || [],
         cached_at: new Date().toISOString()
       };
       _movieDashboardCache = trimDashboardCache(_movieDashboardCache);
@@ -1586,7 +1586,7 @@ INDEX_HTML = """<!doctype html>
         histogram: cached.histogram,
         replacement_queue: cached.replacement_queue || null,
         movie_standards: cached.movie_standards || null,
-        profile_definitions: cached.profile_definitions || [],
+        quality_profile_definitions: cached.quality_profile_definitions || [],
         movies: []
       };
     }
@@ -4457,6 +4457,9 @@ INDEX_HTML = """<!doctype html>
     }
 
     function humanProfileLabel(label) {
+      if (label === 'standard_definition') return 'Standard Definition';
+      if (label === 'library_grade') return 'Library Grade';
+      if (label === 'collector_grade') return 'Collector Grade';
       if (label === 'reference') return 'Reference';
       if (label === 'meets_minimum') return 'Meets Minimum';
       if (label === 'needs_review') return 'Needs Review';
@@ -4970,36 +4973,75 @@ INDEX_HTML = """<!doctype html>
       `;
 
       const profileCounts = histogram.profile_counts || {};
+      const qualityProfileCounts = histogram.quality_profile_counts || {};
       const queueItems = (currentMovieReplacementQueue(payload)?.items || []);
       const deletedAwaitingReplacementCount = queueItems.filter(item => item.status === 'deleted').length;
-      const definitions = Array.isArray(payload.profile_definitions) ? payload.profile_definitions : [];
-      const maxCount = Math.max(...Object.values(profileCounts), 1);
+      const definitions = Array.isArray(payload.quality_profile_definitions) ? payload.quality_profile_definitions : [];
       const replacementQueueCard = deletedAwaitingReplacementCount ? [[
         'deleted_awaiting_replacement',
         deletedAwaitingReplacementCount,
         {
-          group: 'Legacy',
+          group: 'Action Based',
           name: 'Deleted, Awaiting Replacement',
           pctLabel: 'from Replacement Queue'
         }
       ]] : [];
-      const tierCards = [
+      const actionCards = [
         ...replacementQueueCard,
-        ...definitions.map(definition => [definition.label, profileCounts[definition.label] || 0, definition])
+        [
+          'replacement_candidate',
+          profileCounts.replacement_candidate || 0,
+          {
+            group: 'Action Based',
+            name: 'Replacement Candidate',
+            summary: 'Falls below the current weak-candidate floor and is eligible for delete/replace triage.'
+          }
+        ],
+        [
+          'needs_review',
+          profileCounts.needs_review || 0,
+          {
+            group: 'Action Based',
+            name: 'Needs Review',
+            summary: 'Low-confidence hygiene, subtitle-default, or packaging issues need manual attention.'
+          }
+        ],
       ];
-      const dashboardMaxCount = Math.max(maxCount, deletedAwaitingReplacementCount, 1);
-      const tierCardsHtml = tierCards.map(([label, count, options]) => {
+      const actionMaxCount = Math.max(...actionCards.map(([, count]) => count), 1);
+      const actionCardsHtml = actionCards.map(([label, count, options]) => {
         const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
-        const barWidth = (count / dashboardMaxCount) * 100;
+        const barWidth = (count / actionMaxCount) * 100;
+        const inlineSummary = options?.summary || '';
+        return `
+          <div class="profile-card">
+            <div class="profile-card-head">
+              <div>
+                <div class="profile-card-group">${escapeHtml(options?.group || 'Action Based')}</div>
+                <div class="profile-card-name">${escapeHtml(options?.name || humanProfileLabel(label))}</div>
+              </div>
+            </div>
+            <div class="profile-card-count">${count.toLocaleString()}</div>
+            <div class="profile-card-pct">${escapeHtml(options?.pctLabel || `${pct}% of library`)}</div>
+            ${inlineSummary ? `<div class="profile-card-band">${escapeHtml(inlineSummary)}</div>` : ''}
+            <div class="profile-card-bar"><span style="width:${barWidth}%"></span></div>
+          </div>
+        `;
+      }).join('');
+      const qualityCards = definitions.map(definition => [definition.label, qualityProfileCounts[definition.label] || 0, definition]);
+      const qualityMaxCount = Math.max(...qualityCards.map(([, count]) => count), 1);
+      const qualityCardsHtml = qualityCards.map(([label, count, options]) => {
+        const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
+        const barWidth = (count / qualityMaxCount) * 100;
         const isEditable = !!options;
         const inlineSummary = options?.summary || '';
         const definitionSummary = options?.rule_summary || '';
+        const inheritedSummary = options?.inherits_summary || '';
         const isEditorOpen = state.movieStandardsEditorLabel === label;
         return `
           <div class="profile-card">
             <div class="profile-card-head">
               <div>
-                <div class="profile-card-group">${escapeHtml(options?.group || tierGroup(label))}</div>
+                <div class="profile-card-group">${escapeHtml(options?.group || 'Quality Profile')}</div>
                 <div class="profile-card-name">${escapeHtml(options?.display_name || options?.name || humanProfileLabel(label))}</div>
               </div>
               ${isEditable ? `<button class="secondary movie-profile-definition-toggle" data-profile-label="${escapeHtml(label)}">${isEditorOpen ? 'Close' : 'Edit definition'}</button>` : ''}
@@ -5007,6 +5049,7 @@ INDEX_HTML = """<!doctype html>
             <div class="profile-card-count">${count.toLocaleString()}</div>
             <div class="profile-card-pct">${escapeHtml(options?.pctLabel || `${pct}% of library`)}</div>
             ${inlineSummary ? `<div class="profile-card-band">${escapeHtml(inlineSummary)}</div>` : ''}
+            ${inheritedSummary ? `<div class="profile-card-band">${escapeHtml(inheritedSummary)}</div>` : ''}
             ${definitionSummary ? `<div class="profile-card-definition">${escapeHtml(definitionSummary)}</div>` : ''}
             <div class="profile-card-bar"><span style="width:${barWidth}%"></span></div>
             ${isEditable && isEditorOpen ? buildMovieProfileDefinitionEditor(options) : ''}
@@ -5040,8 +5083,10 @@ INDEX_HTML = """<!doctype html>
       return `
         ${actionsHtml}
         ${statsHtml}
-        <div class="dash-section-label">Movie Standards</div>
-        <div class="profile-grid">${tierCardsHtml || '<div class="subtle">No profile data.</div>'}</div>
+        <div class="dash-section-label">Action Based</div>
+        <div class="profile-grid">${actionCardsHtml || '<div class="subtle">No action data.</div>'}</div>
+        <div class="dash-section-label">Quality Profile</div>
+        <div class="profile-grid">${qualityCardsHtml || '<div class="subtle">No quality profile data.</div>'}</div>
         <div class="dash-section-label">Resolution Breakdown</div>
         <div class="dash-res-bars bars">${resBarsHtml || '<div class="subtle">No resolution data.</div>'}</div>
         ${riskHtml}
@@ -5050,6 +5095,14 @@ INDEX_HTML = """<!doctype html>
 
     function buildMovieProfileDefinitionEditor(definition) {
       const rows = (definition.fields || []).map(field => {
+        if (field.type === 'text') {
+          return `
+            <div class="profile-card-editor-row">
+              <label for="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+              <input id="movie-profile-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-profile-field="${escapeHtml(field.key)}" type="text" value="${escapeHtml(field.value)}">
+            </div>
+          `;
+        }
         if (field.type === 'number') {
           return `
             <div class="profile-card-editor-row">
@@ -5147,7 +5200,7 @@ INDEX_HTML = """<!doctype html>
         if (!response.ok) throw new Error(result.error || 'Standards save failed.');
         if (state.results.movies.profile) {
           state.results.movies.profile.movie_standards = result.movie_standards;
-          state.results.movies.profile.profile_definitions = result.profile_definitions || [];
+          state.results.movies.profile.quality_profile_definitions = result.quality_profile_definitions || [];
           cacheMovieDashboard(state.results.movies.profile);
         }
         state.movieStandardsEditorLabel = '';
@@ -6113,7 +6166,7 @@ INDEX_HTML = """<!doctype html>
     function buildMovieMetrics(payload) {
       if (!payload) return [];
       const histogram = payload.histogram || {};
-      const topProfile = Object.entries(histogram.profile_counts || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
+      const topProfile = Object.entries(histogram.quality_profile_counts || {}).sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
       return [
         { value: String(histogram.movie_count ?? (payload.movies || []).length), label: 'files scanned' },
         { value: String(histogram.risk_counts?.playback_risk || 0), label: 'playback-risk hits' },
@@ -6475,7 +6528,7 @@ def build_handler(
                     response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
                     standards = load_movie_standards()
                     response["movie_standards"] = standards
-                    response["profile_definitions"] = build_movie_profile_definitions(standards)
+                    response["quality_profile_definitions"] = build_movie_profile_definitions(standards)
             self.respond_json(response)
 
         def handle_movies_standards_update(self, payload: dict[str, Any]) -> None:
@@ -6485,7 +6538,7 @@ def build_handler(
             self.respond_json(
                 {
                     "movie_standards": standards,
-                    "profile_definitions": build_movie_profile_definitions(standards),
+                    "quality_profile_definitions": build_movie_profile_definitions(standards),
                 }
             )
 

@@ -36,16 +36,26 @@ Ambiguous parses are flagged as `review`. Everything else is `safe`. You review 
 
 ## Quality triage
 
-A full movie profile scan grades each file against local standards:
+A full movie profile scan now separates **Action Based** cards from **Quality Profile** cards.
+
+Action cards:
+
+| Card | What it means |
+|---|---|
+| `deleted, awaiting replacement` | File was deleted through the replacement queue and is still waiting for a better copy |
+| `replacement_candidate` | Fails configurable weak-candidate rules and is eligible for delete/replace triage |
+| `needs_review` | Inline review attention needed, often from subtitle/default/hygiene checks |
+
+Quality profile cards:
 
 | Profile | What it means |
 |---|---|
-| `reference` | Meets configured reference video and audio floors |
-| `meets_minimum` | Meets configured minimum standards |
-| `needs_review` | Inline review attention needed, often from subtitle/default/hygiene checks |
-| `replacement_candidate` | Fails configurable weak-candidate rules and is eligible for delete/replace triage |
+| `Standard Definition` | Edge cases and legacy files that are still worth keeping |
+| `Library Grade` | Good enough for casual viewing, including compact encodes like Tigole |
+| `Collector Grade` | Solid compact encodes that hold up better on difficult material |
+| `Reference` | Mild to no visual compression with lossless-audio posture |
 
-The standards definition lives in repo-local `movie_standards.json`. Dashboard View standards cards show the current rule summary, current movie count for that class, and an inline **Edit definition** control that writes back to `movie_standards.json` and refreshes the count after save.
+The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards now own the inline **Edit definition** controls. Those edits adjust the user-facing stance criteria and inherited defaults, then refresh the dashboard after save.
 
 Quality scan results include a normalized main-audio summary for the playback-relevant stream alongside audio bitrate — `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`, and similar labels.
 
