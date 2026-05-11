@@ -1181,7 +1181,7 @@ INDEX_HTML = """<!doctype html>
       artworkImageSearchOffsets: {},
       results: {
         music: { profile: null, normalize: null, apply: null, artwork: null, replacementQueue: null, replacementQueueSource: '' },
-        movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null, artwork: null, replacementQueue: null, replacementQueueSource: '' }
+        movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null, promo: null, artwork: null, replacementQueue: null, replacementQueueSource: '' }
       }
     };
 
@@ -2188,8 +2188,12 @@ INDEX_HTML = """<!doctype html>
           state.results.movies.apply = null;
           state.selectedChangeIds = new Set();
         }
-        if (page === 'junk' || page === 'promo') {
+        if (page === 'junk') {
           state.results.movies.junk = payload;
+          state.selectedJunkPaths.clear();
+        }
+        if (page === 'promo') {
+          state.results.movies.promo = payload;
           state.selectedJunkPaths.clear();
         }
         if (page === 'movie_artwork') {
@@ -2254,13 +2258,16 @@ INDEX_HTML = """<!doctype html>
       const profile = currentMovieProfileForSource();
       const canonical = currentMovieCanonicalForSource();
       const normalize = state.results.movies.normalize;
-      const junk = state.results.movies.junk;
       if (page === 'normalize') {
         renderMovieNormalize(normalize);
         return;
       }
-      if (page === 'junk' || page === 'promo') {
-        renderMovieJunk(junk);
+      if (page === 'junk') {
+        renderMovieJunk(state.results.movies.junk);
+        return;
+      }
+      if (page === 'promo') {
+        renderMovieJunk(state.results.movies.promo);
         return;
       }
       if (page === 'library') {
@@ -5341,11 +5348,12 @@ INDEX_HTML = """<!doctype html>
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Delete failed.');
-        state.results.movies.junk = removeDeletedJunk(state.results.movies.junk, payload.deleted || []);
+        const resultKey = state.page === 'promo' ? 'promo' : 'junk';
+        state.results.movies[resultKey] = removeDeletedJunk(state.results.movies[resultKey], payload.deleted || []);
         state.selectedJunkPaths.clear();
         const skipped = payload.skipped?.length || 0;
         statusText.textContent = `Deleted ${payload.deleted.length} file${payload.deleted.length === 1 ? '' : 's'}${skipped ? `; skipped ${skipped}` : ''}.`;
-        renderMovieJunk(state.results.movies.junk);
+        renderMovieJunk(state.results.movies[resultKey]);
       } catch (error) {
         statusText.textContent = error.message;
       }

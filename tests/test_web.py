@@ -223,6 +223,13 @@ class WebTests(unittest.TestCase):
         self.assertIn("id: 'promo'", INDEX_HTML)
         self.assertIn("endpoint: '/api/movies/promo-docs'", INDEX_HTML)
         self.assertIn("'/api/movies/junk/delete'", INDEX_HTML)
+        self.assertIn("junk: null, promo: null", INDEX_HTML)
+        self.assertIn("if (page === 'junk') {\n          state.results.movies.junk = payload;", INDEX_HTML)
+        self.assertIn("if (page === 'promo') {\n          state.results.movies.promo = payload;", INDEX_HTML)
+        self.assertIn("renderMovieJunk(state.results.movies.junk);", INDEX_HTML)
+        self.assertIn("renderMovieJunk(state.results.movies.promo);", INDEX_HTML)
+        self.assertIn("const resultKey = state.page === 'promo' ? 'promo' : 'junk';", INDEX_HTML)
+        self.assertNotIn("if (page === 'junk' || page === 'promo') {\n          state.results.movies.junk = payload;", INDEX_HTML)
 
     def test_movie_replacement_queue_is_wired_inside_weak_encodes(self) -> None:
         self.assertIn("Replacement Queue", INDEX_HTML)
