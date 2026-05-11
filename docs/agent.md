@@ -82,6 +82,17 @@ One entry per file. Key fields: `path`, `status`, `triage_score`, `quality_score
 
 `triage_score = quality_score × replacement_priority_score`
 
+Movie `facts` now also carry normalized main-audio display fields for scan/export/UI reuse:
+
+- `audio_display_stream_index`
+- `audio_format_family`
+- `audio_format_variant`
+- `audio_channel_layout`
+- `audio_immersive_extension`
+- `audio_summary`
+
+`audio_summary` is the user-facing label for the playback-relevant stream, usually the sole default audio stream or else the first audio stream. Typical values: `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`.
+
 Replacement priority by decade:
 
 | Year range | Multiplier |
@@ -170,6 +181,7 @@ These are deliberate choices, not gaps:
 
 - **Hardcoded preferences over UI controls (v1 posture).** Quality thresholds, replacement priority weights, normalization rules are in code. The adjustment path is repo/agent edits. This is the core v1 stance; v2 changes it.
 - **Movie triage now has separate lanes on one shared scan.** `Delete Weak Encodes` and `Fix Multi-Audio Packaging` are sibling workflows backed by the same `movie-profile` report and the same replacement queue substrate. Keep workflow/UI code shared where possible, but keep issue-family rules separate.
+- **Movie audio labels are centralized.** Main-audio display strings should come from the shared normalization path, not from per-surface ad hoc codec formatting. Keep scan JSON, CSV/XLSX export, and web tables aligned.
 - **`Movies > Plex Compatibility` is hidden in the v1 UI.** The heuristics live in `movie_profile.py`. The page is suppressed because the workflow isn't concrete enough. Do not re-expose it without a workflow design.
 - **Music normalization is FLAC-only.** MP3 appears in dashboard profile views but is not a normalization target in v1.
 - **No external web framework.** `web.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.

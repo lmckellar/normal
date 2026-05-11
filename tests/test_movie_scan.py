@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from normal.movie_scan import (
     MovieScanProgress,
+    choose_display_audio_stream,
     discover_video_files,
     extract_year_hint,
     media_facts_from_ffprobe_payload,
@@ -15,7 +16,7 @@ from normal.movie_scan import (
     score_replacement_priority,
     scan_movie_library,
 )
-from normal.quality_review import MediaFacts
+from normal.quality_review import AudioStreamFacts, MediaFacts
 
 
 class MovieScanTests(unittest.TestCase):
@@ -147,6 +148,7 @@ class MovieScanTests(unittest.TestCase):
                             "codec_name": "ac3",
                             "channels": 6,
                             "bit_rate": "640000",
+                            "profile": "Dolby Digital",
                             "disposition": {"default": 1},
                             "tags": {"language": "ita", "title": "Italian 5.1"},
                         },
@@ -167,8 +169,68 @@ class MovieScanTests(unittest.TestCase):
             self.assertEqual(len(facts.audio_streams), 2)
             self.assertEqual(facts.audio_streams[0].language, "ita")
             self.assertTrue(facts.audio_streams[0].is_default)
+            self.assertEqual(facts.audio_streams[0].profile, "Dolby Digital")
             self.assertEqual(facts.audio_streams[1].language, "eng")
             self.assertEqual(facts.audio_streams[1].title, "English stereo")
+            self.assertEqual(facts.audio_display_stream_index, 1)
+            self.assertEqual(facts.audio_format_family, "ac3")
+            self.assertEqual(facts.audio_format_variant, "dolby_digital")
+            self.assertEqual(facts.audio_channel_layout, "5.1")
+            self.assertIsNone(facts.audio_immersive_extension)
+            self.assertEqual(facts.audio_summary, "Dolby Digital 5.1")
+
+    def test_media_facts_from_ffprobe_payload_detects_immersive_audio_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x" * 100)
+
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {
+                        "duration": "7200",
+                        "size": "1048576000",
+                        "bit_rate": "18000000",
+                        "format_name": "matroska,webm",
+                    },
+                    "streams": [
+                        {
+                            "index": 0,
+                            "codec_type": "video",
+                            "codec_name": "h264",
+                            "width": 1920,
+                            "height": 1080,
+                            "bit_rate": "15000000",
+                        },
+                        {
+                            "index": 1,
+                            "codec_type": "audio",
+                            "codec_name": "eac3",
+                            "channels": 6,
+                            "bit_rate": "768000",
+                            "profile": "Dolby Digital Plus + Dolby Atmos",
+                            "disposition": {"default": 1},
+                            "tags": {"language": "eng", "title": "English Atmos"},
+                        },
+                    ],
+                },
+                movie_path,
+            )
+
+            self.assertEqual(facts.audio_format_family, "eac3")
+            self.assertEqual(facts.audio_format_variant, "dolby_digital_plus")
+            self.assertEqual(facts.audio_immersive_extension, "atmos")
+            self.assertEqual(facts.audio_summary, "Dolby Digital Plus 5.1 Atmos")
+
+    def test_choose_display_audio_stream_prefers_single_default(self) -> None:
+        chosen = choose_display_audio_stream(
+            [
+                AudioStreamFacts(index=1, codec="aac", channels=2, is_default=False),
+                AudioStreamFacts(index=2, codec="ac3", channels=6, is_default=True),
+            ]
+        )
+
+        self.assertTrue(chosen.is_default)
+        self.assertEqual(chosen.index, 2)
 
     def test_media_facts_from_ffprobe_payload_approximates_video_bitrate_from_total(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -10,7 +10,7 @@ import time
 from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
-from normal.quality_review import AudioStreamFacts, MediaFacts, QualityReview, score_quality_review
+from normal.quality_review import AudioStreamFacts, MediaFacts, build_audio_summary, QualityReview, score_quality_review
 
 
 VIDEO_EXTENSIONS = {
@@ -216,6 +216,19 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
             video_bitrate_kbps = estimated
             video_bitrate_approximate = True
     detailed_audio_streams = [audio_stream_facts_from_ffprobe_stream(stream) for stream in audio_streams]
+    display_audio_stream = choose_display_audio_stream(detailed_audio_streams)
+    (
+        audio_format_family,
+        audio_format_variant,
+        audio_channel_layout,
+        audio_immersive_extension,
+        audio_summary,
+    ) = build_audio_summary(
+        display_audio_stream.codec if display_audio_stream else audio_stream.get("codec_name"),
+        display_audio_stream.channels if display_audio_stream else parse_int(audio_stream.get("channels")),
+        display_audio_stream.profile if display_audio_stream else (audio_stream.get("profile") or None),
+        display_audio_stream.title if display_audio_stream else None,
+    )
 
     return MediaFacts(
         runtime_seconds=parse_seconds(format_payload.get("duration")),
@@ -229,6 +242,12 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         audio_bitrate_kbps=primary_audio_bitrate,
         audio_channels=parse_int(audio_stream.get("channels")),
         audio_profile=audio_stream.get("profile") or None,
+        audio_display_stream_index=display_audio_stream.index if display_audio_stream else None,
+        audio_format_family=audio_format_family,
+        audio_format_variant=audio_format_variant,
+        audio_channel_layout=audio_channel_layout,
+        audio_immersive_extension=audio_immersive_extension,
+        audio_summary=audio_summary,
         total_bitrate_kbps=total_bitrate_kbps,
         name_resolution_hint=None,
         resolution_bucket=None,
@@ -305,10 +324,18 @@ def audio_stream_facts_from_ffprobe_stream(stream: dict[str, Any]) -> AudioStrea
         codec=stream.get("codec_name"),
         bitrate_kbps=parse_stream_bitrate_kbps(stream),
         channels=parse_int(stream.get("channels")),
+        profile=stream.get("profile") or None,
         language=normalize_language_tag(tags.get("language")),
         title=first_text(tags.get("title"), tags.get("handler_name")),
         is_default=bool(disposition.get("default")),
     )
+
+
+def choose_display_audio_stream(streams: list[AudioStreamFacts]) -> AudioStreamFacts | None:
+    default_streams = [stream for stream in streams if stream.is_default]
+    if len(default_streams) == 1:
+        return default_streams[0]
+    return streams[0] if streams else None
 
 
 def normalize_language_tag(value: Any) -> str | None:

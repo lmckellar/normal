@@ -4004,6 +4004,7 @@ INDEX_HTML = """<!doctype html>
       const rows = items.map(item => {
         const videoBitrate = item.facts.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
         const audioBitrate = item.facts.audio_bitrate_kbps ? `${Math.round(item.facts.audio_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
+        const audioSummary = item.facts.audio_summary ? escapeHtml(item.facts.audio_summary) : '<span class="subtle">—</span>';
         const diagnostics = item.profile.diagnostics.slice(0, 3).map(diag => {
           const categoryClass = diag.category === 'indexing_visibility_risk' ? 'indexing' : 'playback';
           return `<span class="chip ${categoryClass}">${escapeHtml(diag.code)}</span>`;
@@ -4015,6 +4016,7 @@ INDEX_HTML = """<!doctype html>
             <td>${escapeHtml(item.facts.resolution_bucket || '')}</td>
             <td>${videoBitrate}</td>
             <td>${audioBitrate}</td>
+            <td>${audioSummary}</td>
             <td>${diagnostics || '<span class="subtle">none</span>'}</td>
           </tr>
         `;
@@ -4022,8 +4024,8 @@ INDEX_HTML = """<!doctype html>
       return `
         <div class="table-wrap">
           <table>
-            <thead><tr><th>File</th><th>Profile</th><th>Resolution</th><th>Video Bitrate</th><th>Audio Bitrate</th><th>Diagnostics</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="6" class="subtle">No files for this filter.</td></tr>'}</tbody>
+            <thead><tr><th>File</th><th>Profile</th><th>Resolution</th><th>Video Bitrate</th><th>Audio Bitrate</th><th>Audio</th><th>Diagnostics</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="7" class="subtle">No files for this filter.</td></tr>'}</tbody>
           </table>
         </div>
       `;
@@ -4066,6 +4068,7 @@ INDEX_HTML = """<!doctype html>
         const checked = state.selectedReplacementPaths.has(path) ? 'checked' : '';
         const videoBitrate = item.facts.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
         const audioBitrate = item.facts.audio_bitrate_kbps ? `${Math.round(item.facts.audio_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
+        const audioSummary = item.facts.audio_summary ? escapeHtml(item.facts.audio_summary) : '<span class="subtle">—</span>';
         const fileSize = item.facts.file_size_bytes ? fmtFileSize(item.facts.file_size_bytes) : '<span class="subtle">—</span>';
         const selectable = isWeak && !queueItem;
         return `
@@ -4076,6 +4079,7 @@ INDEX_HTML = """<!doctype html>
             <td>${escapeHtml(item.facts.resolution_bucket || '')}</td>
             <td>${videoBitrate}</td>
             <td>${audioBitrate}</td>
+            <td>${audioSummary}</td>
             <td>${fileSize}</td>
             <td>${replacementQueueStatusChip(queueItem)}</td>
           </tr>
@@ -4094,8 +4098,8 @@ INDEX_HTML = """<!doctype html>
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th></th>${['file','profile','resolution','video_bitrate','audio_bitrate','file_size'].map(col => { const active = state.qualitySort.col === col; const ind = active ? (state.qualitySort.dir === 'asc' ? '↑' : '↓') : '↕'; const label = {file:'File',profile:'Profile',resolution:'Resolution',video_bitrate:'Video Bitrate',audio_bitrate:'Audio Bitrate',file_size:'File Size'}[col]; return `<th class="sortable-th" data-sort-col="${col}">${label}<span class="sort-ind${active?' on':''}">${ind}</span></th>`; }).join('')}<th>Status</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="8" class="subtle">No files for this filter.</td></tr>'}</tbody>
+            <thead><tr><th></th>${['file','profile','resolution','video_bitrate','audio_bitrate','audio_summary','file_size'].map(col => { const active = state.qualitySort.col === col; const ind = active ? (state.qualitySort.dir === 'asc' ? '↑' : '↓') : '↕'; const label = {file:'File',profile:'Profile',resolution:'Resolution',video_bitrate:'Video Bitrate',audio_bitrate:'Audio Bitrate',audio_summary:'Audio',file_size:'File Size'}[col]; return `<th class="sortable-th" data-sort-col="${col}">${label}<span class="sort-ind${active?' on':''}">${ind}</span></th>`; }).join('')}<th>Status</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="9" class="subtle">No files for this filter.</td></tr>'}</tbody>
           </table>
         </div>
       `;
@@ -4125,6 +4129,7 @@ INDEX_HTML = """<!doctype html>
         const issueLabel = issueCode === 'default_non_english_audio_with_weak_english'
           ? 'wrong default + weak English'
           : 'wrong default language';
+        const audioSummary = item.facts.audio_summary ? escapeHtml(item.facts.audio_summary) : '<span class="subtle">—</span>';
         const defaultStream = describeAudioStream(movieDefaultAudioStream(item));
         const englishStream = describeAudioStream(movieBestEnglishAudioStream(item));
         const selectable = !!issueCode;
@@ -4133,6 +4138,7 @@ INDEX_HTML = """<!doctype html>
             <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="replacement-select" data-path="${encodeURIComponent(path)}" ${checked} ${locked}>` : ''}</td>
             <td><div class="mono">${escapeHtml(path)}</div></td>
             <td>${escapeHtml(issueLabel)}</td>
+            <td>${audioSummary}</td>
             <td>${defaultStream}</td>
             <td>${englishStream}</td>
             <td>${replacementQueueStatusChip(queueItem)}</td>
@@ -4158,8 +4164,8 @@ INDEX_HTML = """<!doctype html>
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th></th><th>File</th><th>Issue</th><th>Default Audio</th><th>English Audio</th><th>Status</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="6" class="subtle">No files for this filter.</td></tr>'}</tbody>
+            <thead><tr><th></th><th>File</th><th>Issue</th><th>Main Audio</th><th>Default Audio</th><th>English Audio</th><th>Status</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="7" class="subtle">No files for this filter.</td></tr>'}</tbody>
           </table>
         </div>
       `;
@@ -4675,11 +4681,56 @@ INDEX_HTML = """<!doctype html>
       const language = audioStreamLanguage(stream);
       const parts = [
         language ? language.charAt(0).toUpperCase() + language.slice(1) : 'Unknown',
-        stream.channels ? `${stream.channels}ch` : null,
-        stream.codec ? String(stream.codec).toUpperCase() : null,
+        describeAudioFormat(stream),
         stream.bitrate_kbps ? `${Math.round(stream.bitrate_kbps).toLocaleString()} kbps` : null
       ].filter(Boolean);
       return escapeHtml(parts.join(' · '));
+    }
+
+    function audioChannelLayout(channels) {
+      if (channels === null || channels === undefined) return '';
+      if (channels === 1) return 'Mono';
+      if (channels === 2) return '2.0';
+      if (channels === 6) return '5.1';
+      if (channels === 8) return '7.1';
+      return `${channels}ch`;
+    }
+
+    function audioImmersiveExtension(profile, title = '') {
+      const combined = `${String(profile || '').toLowerCase()} ${String(title || '').toLowerCase()}`;
+      if (combined.includes('atmos') || combined.includes('dolby atmos')) return 'Atmos';
+      if (combined.includes('dts:x') || combined.includes('dts-x') || combined.includes('dtsx')) return 'DTS:X';
+      return '';
+    }
+
+    function audioCodecDisplayName(codec, profile = '') {
+      const codecText = String(codec || '').toLowerCase();
+      const profileText = String(profile || '').toLowerCase();
+      if (codecText === 'aac') return 'AAC';
+      if (codecText === 'ac3') return 'Dolby Digital';
+      if (codecText === 'eac3') return 'Dolby Digital Plus';
+      if (codecText === 'truehd') return 'Dolby TrueHD';
+      if (codecText === 'dts') {
+        if (profileText.includes('master audio') || /\bma\b/.test(profileText)) return 'DTS-HD MA';
+        if (profileText.includes('high resolution') || /\bhra\b/.test(profileText)) return 'DTS-HD HRA';
+        return 'DTS';
+      }
+      if (codecText === 'flac') return 'FLAC';
+      if (codecText.startsWith('pcm')) return 'PCM';
+      if (codecText === 'opus') return 'Opus';
+      if (codecText === 'mp3') return 'MP3';
+      return codecText ? codecText.toUpperCase() : '';
+    }
+
+    function describeAudioFormat(stream) {
+      if (!stream) return '';
+      const parts = [
+        audioCodecDisplayName(stream.codec, stream.profile),
+        audioChannelLayout(stream.channels)
+      ].filter(Boolean);
+      const immersive = audioImmersiveExtension(stream.profile, stream.title);
+      const summary = parts.join(' ');
+      return immersive ? `${summary} ${immersive}`.trim() : summary;
     }
 
     function selectedVisibleReplacementCount(payload, items) {
@@ -5187,6 +5238,7 @@ INDEX_HTML = """<!doctype html>
         if (col === 'resolution') return mult * ((RES_RANK[a.facts?.resolution_bucket] || 0) - (RES_RANK[b.facts?.resolution_bucket] || 0));
         if (col === 'video_bitrate') return mult * ((a.facts?.video_bitrate_kbps || 0) - (b.facts?.video_bitrate_kbps || 0));
         if (col === 'audio_bitrate') return mult * ((a.facts?.audio_bitrate_kbps || 0) - (b.facts?.audio_bitrate_kbps || 0));
+        if (col === 'audio_summary') return mult * (String(a.facts?.audio_summary || '').localeCompare(String(b.facts?.audio_summary || ''), undefined, { sensitivity: 'base' }));
         if (col === 'file_size') return mult * ((a.facts?.file_size_bytes || 0) - (b.facts?.file_size_bytes || 0));
         return 0;
       });

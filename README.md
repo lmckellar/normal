@@ -41,6 +41,8 @@ normal movie-apply --source /path/to/movies --plan plan.json --target /path/to/o
 normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 ```
 
+Movie scan surfaces now expose an at-a-glance main-audio summary alongside bitrate, using labels such as `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, and `DTS-HD MA 5.1`.
+
 ## Docs
 
 - [Movies](docs/movies.md)
@@ -70,8 +72,6 @@ The bigger stability fix sits lower in the execution path: heavy movie-side scan
 ## Known issue
 
 There is an open movie-scan / web UI issue around probe cancellation and observability. Under some currently unknown interaction pattern — likely involving scan cancellation, quick page changes, and rapidly starting another scan — an `ffprobe` process can keep running in the background after the UI thinks the scan is gone. In that state the leftover probe may also fail to appear in the Drive Activity indicator because the current `ps`-based visibility check does not catch every case.
-
-The movie audio-packaging page now supports in-place MKV remux actions for `Make English Default` and `Make English Default + Delete Foreign Audio`. The stricter delete-foreign-audio variant is currently untested on real libraries and should still be treated as a review path before first public push.
 
 ## License
 
