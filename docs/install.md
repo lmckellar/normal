@@ -72,7 +72,7 @@ printf '%s\n' "${TMDB_KEY:+TMDB_KEY loaded}"
 
 ## Platform notes
 
-`normal` is developed and tested on Linux. macOS and Windows are not explicitly supported for v1 — rough edges are expected, particularly around:
+`normal` is developed and tested on Linux. macOS and Windows are not explicitly supported before 1.0 — rough edges are expected, particularly around:
 
 - file path handling on Windows
 - `ffprobe` PATH resolution

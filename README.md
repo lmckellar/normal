@@ -55,7 +55,7 @@ For contributors and AI agents working in the codebase: [docs/agent.md](docs/age
 
 ## Design posture
 
-`normal` is a single-user local utility. Some preferences are intentionally hardcoded rather than surfaced as UI controls — the expected adjustment path is direct repo or agent edits. This is a deliberate v1 stance; see the roadmap for how this evolves toward v2.
+`normal` is a single-user local utility. Some preferences are intentionally hardcoded rather than surfaced as UI controls — the expected adjustment path is direct repo or agent edits. This is a deliberate pre-1.0 stance; see the roadmap for how this evolves toward the 1.0 UI.
 
 ## Known issue
 
