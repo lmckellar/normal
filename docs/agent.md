@@ -143,6 +143,8 @@ Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_ri
 
 The dashboard payload also carries `movie_standards`, `movie_standards_revision`, `quality_profile_definitions`, and `replacement_candidate_definition`. The movie dashboard uses that payload to split **Action Based** cards from **Quality Profile** cards, summarize each rule shape, and expose inline definition controls on the quality-profile cards and Replacement Candidate card.
 
+Movie bitrate histograms are derived aggregates, not durable state. Full dashboard scans build them from the `movie-profile` report. Partial web mutations that already have the current `movies` payload rebuild only the histogram aggregate through the lightweight dashboard histogram route, then refresh the browser dashboard cache.
+
 ### Replacement queue (JSON)
 
 Path: `~/.local/share/normal/movie-replacement-queue.json`
@@ -182,6 +184,7 @@ All routes in `web.py`. Key families:
 | `/api/music/artwork/image?...` | GET | Serve artwork preview image bytes |
 | `/api/movies/apply` | POST | Apply selected movie renames in-place |
 | `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, audio packaging triage, and subtitle-readiness triage |
+| `/api/movies/dashboard/histogram` | POST | Rebuild movie dashboard histogram aggregates from the current in-memory `movies` payload after partial web mutations |
 | `/api/movies/standards/update` | POST | Persist repo-local movie-standards edits from dashboard quality-profile cards; rejects stale saves when the standards revision no longer matches |
 | `/api/movies/canonical-lists` | POST | Canonical title coverage payload from TMDb plus local cache |
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
@@ -223,6 +226,8 @@ These are deliberate choices, not gaps:
 - **No external web framework.** `web.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.
 - **Replacement candidates are standards-driven.** Delete/replace eligibility is based on `profile.weak_candidate`, which is derived from the configured quality-profile cutoff in repo-local `movie_standards.json`.
 - **Movie standards persistence is file-backed.** `movie_standards.json` is the authoritative store across server restarts and localhost port changes. Browser dashboard cache is origin-scoped convenience state only.
+- **Movie histogram persistence is intentionally absent.** Bitrate histograms are rebuilt from the current movie profile payload. Cached dashboard snapshots may be shown for convenience, but cannot be incrementally trusted when they do not carry `movies`.
+- **Movie bitrate charts use mean, not median.** Keep the chart marker aligned with the dashboard average and avoid adding median labels/tooltips back into the crowded SVG.
 - **Do not trust stale dashboard state for writes.** The web save path now carries `movie_standards_revision` and rejects a save if another edit changed the file after that dashboard view loaded.
 - **Movie standards are dashboard-owned in v2.** The card for each movie standards class now owns its label, count, summary, and inline definition editor. Edit the rule definition there; do not add a separate parallel settings surface unless the dashboard ownership model clearly breaks down.
 - **Replacement queue keeps audit history.** Items move forward through states and are never silently removed. Auto-completion (`completed`) happens on future scans when a replacement appears. Manual dismissal (`dismissed`) is explicit queue state, not media deletion.
