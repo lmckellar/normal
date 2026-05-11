@@ -1,6 +1,6 @@
 # Movies
 
-The movie lane handles four practical problems in a pirated library: inconsistent naming, uneven encode quality, bad multi-audio packaging, and messy subtitle defaults.
+The movie lane handles five practical problems in a pirated library: inconsistent naming, uneven encode quality, bad multi-audio packaging, messy subtitle defaults, and missing poster artwork.
 
 ![Movies dashboard](assets/movies_dashboard_default.png)
 
@@ -34,11 +34,9 @@ Title (Year) [technical tokens]/Title (Year) [technical tokens].mkv
 
 Ambiguous parses are flagged as `review`. Everything else is `safe`. You review the plan before anything moves.
 
-The Normalize review table now stays tighter: `Confidence`, `Type`, `Path`, `Current`, and `Proposed` are shown, while the old `Reason` column is no longer rendered in the web UI.
-
 ## Quality triage
 
-A full movie profile scan now grades each file against local standards instead of a pure bitrate ladder:
+A full movie profile scan grades each file against local standards:
 
 | Profile | What it means |
 |---|---|
@@ -47,19 +45,15 @@ A full movie profile scan now grades each file against local standards instead o
 | `needs_review` | Inline review attention needed, often from subtitle/default/hygiene checks |
 | `replacement_candidate` | Fails configurable weak-candidate rules and is eligible for delete/replace triage |
 
-The standards definition lives in repo-local `movie_standards.json`.
+The standards definition lives in repo-local `movie_standards.json`. Dashboard View standards cards show the current rule summary, current movie count for that class, and an inline **Edit definition** control that writes back to `movie_standards.json` and refreshes the count after save.
 
-In the web UI, the **Dashboard View** standards cards now own their own definitions. Each card shows the current rule summary, current movie count for that class, and an inline `Edit definition` control that writes back to `movie_standards.json` and refreshes the dashboard count after save.
+Quality scan results include a normalized main-audio summary for the playback-relevant stream alongside audio bitrate — `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`, and similar labels.
 
-Quality scan results still show a main-audio summary for the playback-relevant stream, separate from audio bitrate. The intent is fast library triage: you can see `AAC 2.0` versus `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, or `DTS-HD MA 5.1` at a glance without opening per-stream details.
-
-The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue — when a better encode for the same title shows up in a future scan, it's automatically marked complete.
+The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue — when a better encode for the same title shows up in a future scan, it is automatically marked complete.
 
 Queue history has four hard filters: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Deleted rows can be dismissed from queue history inline when the release is no longer worth replacing. That action only changes queue state; it does not touch media files.
 
 The queue-history table is sortable by title, year, and IMDb rating. IMDb ratings are fetched from [OMDb](https://www.omdbapi.com/) and require a free API key passed via `--omdb-key` or the `OMDB_KEY` environment variable. Without a key the column is hidden.
-
-For the same source path, movie replacement-queue state is cached locally as well as persisted on disk, so `Deleted, Awaiting Replacement` history survives a hard refresh without needing a fresh scan first.
 
 ## Multi-audio packaging triage
 
@@ -69,11 +63,11 @@ Some MKVs are muxed with the wrong main audio track: for example, Italian marked
 - flag the stronger case where the English fallback is materially weaker than the default track
 - show the main audio summary plus default-vs-English stream summaries so the queue is explainable before deletion
 
-For MKVs, the page can now do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops audio streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers are left as review-only items. Replacement queue delete/replace is still available for genuinely bad releases.
+For MKVs, the page can do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops audio streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers are left as review-only items. Replacement queue delete/replace is still available for genuinely bad releases.
 
-While a remux is running, the page locks checkbox selection and disables conflicting bulk actions. This prevents mixing a live mux batch with a later delete click on a different selection set. The destructive `Delete Selected Files` button is also separated to the far right of the action row so it is visually distinct from the two repair actions.
+While a remux is running, the page locks checkbox selection and disables conflicting bulk actions. The destructive **Delete Selected Files** button is separated to the far right of the action row so it is visually distinct from the two repair actions.
 
-Current safety note: `Make English Default` has been exercised against real files. `Make English Default + Delete Foreign Audio` is implemented, but it is currently untested on real libraries and should still be treated as a cautious review-only workflow before first public push.
+Current safety note: **Make English Default** has been exercised against real files. **Make English Default + Delete Foreign Audio** is implemented but currently untested on real libraries and should be treated as a cautious review-only workflow before first public push.
 
 ## Subtitle readiness repair
 
@@ -83,9 +77,34 @@ The **Repair Subtitle Readiness** page is a sibling repair lane built on the sam
 - default to forced English when a forced English subtitle exists
 - default to English subtitles when the default audio track is non-English
 
-This workflow is explicitly non-destructive in v1: it does not delete media files or subtitle files, and it does not use the replacement queue. For supported MKVs it can do a lossless in-place remux that only updates embedded subtitle default flags. If the needed English or forced-English subtitle does not exist, the item stays review-only.
+This workflow is non-destructive: it does not delete media files or subtitle files, and it does not use the replacement queue. For supported MKVs it can do a lossless in-place remux that only updates embedded subtitle default flags. If the needed English or forced-English subtitle does not exist, the item stays review-only.
 
-Current v1 scope is embedded subtitle streams already inside the container. External `.srt` / `.ass` sidecars are not modified by this workflow.
+Current scope is embedded subtitle streams already inside the container. External `.srt` / `.ass` sidecars are not modified.
+
+## Repair artwork for Plex
+
+The **Repair Artwork for Plex** page scans each movie folder for a poster sidecar and shows the results as a portrait thumbnail gallery — 2:3 aspect ratio, matching how Plex renders movie posters. The thumbnails load from the same paths Plex reads, so the gallery is a direct preview of what Plex displays.
+
+Recognized poster filenames: `poster.jpg`, `poster.png`, `folder.jpg`, `folder.png`, and `{movie-filename}-poster.jpg` for flat libraries. Missing posters and low-quality images — under 30 KB or smaller than 400×600 px — are flagged.
+
+The write target is always `poster.jpg` in the movie folder.
+
+### Finding and dragging poster art
+
+The recommended workflow: open `normal` on one half of your screen and an image source — Google Images, a movie database site, or your file manager — on the other half. Drag poster images directly onto a movie tile or into the drop zone in the detail panel.
+
+The image must be a real image resource that the browser has loaded, not an HTML-framed thumbnail. The practical distinction:
+
+- **Works:** The large preview image in Google Images' right-side panel (after clicking a result). An image URL opened directly in its own browser tab. An image file dragged from your file manager.
+- **May not work:** Small thumbnails in a search result grid. Images inside complex page layouts where the dragged element is a styled `div`, not an `<img>` tag.
+
+A quick test: right-click the image → **Open Image in New Tab**. If the browser shows it as a standalone image with no surrounding page chrome, that image is draggable. Drag from that tab.
+
+Accepted formats: JPEG and PNG. All sources are converted to JPEG on write.
+
+### What gets written
+
+`poster.jpg` in the movie folder. Plex reads this path directly. The preview in `normal` loads from the same location, so what you see in the gallery is what Plex shows.
 
 ## Junk cleanup
 
@@ -95,8 +114,6 @@ Two pages handle library noise:
 - **Delete Junk Sidecar & Spam Files** — promo PDFs, NFO files, and other non-video sidecars
 
 Both show a preview list before anything is deleted.
-
-Operational note: the heavy movie-side web scans that feed these workflows no longer pre-enumerate the whole tree before processing. They traverse incrementally with cancellation checks, and that execution-model change was the main fix for the earlier CPU spike on large libraries and risky mounts.
 
 ## Catalogue export
 
@@ -117,6 +134,7 @@ The `Audio` column uses the same normalized main-audio summary as the scan and w
 | Delete Weak Encodes | Triage and queue replacements |
 | Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |
 | Repair Subtitle Readiness | Repair embedded subtitle defaults for supported MKVs without deleting files |
+| Repair Artwork for Plex | Movie poster gallery with drag-and-drop apply; writes poster.jpg to each movie folder |
 | Delete Junk Videos | Remove samples and featurettes |
 | Delete Junk Sidecar & Spam Files | Remove sidecar and spam files |
 | Canonical Lists | Compare owned titles against live all-time movie lists and unlock simple coverage badges |
