@@ -149,7 +149,7 @@ All routes in `web.py`. Key families:
 | `/api/music/artwork/promote` | POST | Promote a cached/approved artwork candidate |
 | `/api/music/artwork/image?...` | GET | Serve artwork preview image bytes |
 | `/api/movies/apply` | POST | Apply selected movie renames in-place |
-| `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, and audio packaging triage |
+| `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, audio packaging triage, and subtitle-readiness triage |
 | `/api/movies/standards/update` | POST | Persist repo-local movie-standards edits from dashboard profile cards |
 | `/api/movies/canonical-lists` | POST | Canonical title coverage payload from TMDb plus local cache |
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
@@ -163,6 +163,7 @@ All routes in `web.py`. Key families:
 | `/api/movies/replacement-queue/delete` | POST | Delete queued movie triage items and mark them deleted |
 | `/api/movies/replacement-queue/dismiss` | POST | Mark deleted movie queue items as dismissed without touching media |
 | `/api/movies/audio-packaging/fix` | POST | Lossless MKV remux to fix English-default audio packaging when possible |
+| `/api/movies/subtitle-readiness/fix` | POST | Lossless MKV remux to repair embedded subtitle default flags without deleting files |
 
 ## Safety constraints
 

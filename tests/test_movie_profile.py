@@ -8,6 +8,7 @@ from unittest.mock import patch
 from normal.movie_profile import (
     build_movie_profile_definitions,
     build_histogram_payload,
+    choose_best_english_subtitle_stream,
     classify_profile_label,
     classify_standard_label,
     detect_plex_diagnostics,
@@ -110,6 +111,16 @@ class MovieProfileTests(unittest.TestCase):
         subtitle = next(result for result in results if result["domain"] == "subtitle_setup")
         self.assertEqual(subtitle["status"], "review_low_confidence")
         self.assertEqual(subtitle["code"], "english_forced_not_default")
+
+    def test_choose_best_english_subtitle_stream_prefers_current_default(self) -> None:
+        streams = [
+            SubtitleStreamFacts(index=2, codec="subrip", language="eng", title="English Forced", is_default=False, is_forced=True),
+            SubtitleStreamFacts(index=3, codec="subrip", language="eng", title="English", is_default=True, is_forced=False),
+        ]
+
+        chosen = choose_best_english_subtitle_stream(streams)
+
+        self.assertIs(chosen, streams[1])
 
     def test_classify_standard_label_marks_failed_core_standard_as_replacement_candidate(self) -> None:
         label = classify_standard_label(

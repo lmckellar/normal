@@ -38,6 +38,7 @@ from normal.movie_profile import (
     scan_movie_profiles,
     update_movie_profile_definition,
 )
+from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
 from normal.music_profile import build_music_histogram_payload, scan_music_profiles
 from normal.movie_replacement_queue import (
     add_profile_items_to_queue,
@@ -58,7 +59,7 @@ from normal.output import write_movie_register_xlsx
 from normal.apply import apply_changes_in_place
 from normal.models import ProposedChange
 from normal.plan import build_plan
-from normal.quality_review import AudioStreamFacts, MediaFacts
+from normal.quality_review import AudioStreamFacts, MediaFacts, SubtitleStreamFacts
 from normal.artwork import (
     PROVENANCE_FILENAME,
     ArtworkGapItem,
@@ -208,8 +209,13 @@ def media_facts_from_dict(payload: dict[str, Any]) -> MediaFacts:
     for raw_stream in payload.get("audio_streams", []):
         if isinstance(raw_stream, dict):
             audio_streams.append(AudioStreamFacts(**raw_stream))
+    subtitle_streams = []
+    for raw_stream in payload.get("subtitle_streams", []):
+        if isinstance(raw_stream, dict):
+            subtitle_streams.append(SubtitleStreamFacts(**raw_stream))
     normalized = dict(payload)
     normalized["audio_streams"] = audio_streams
+    normalized["subtitle_streams"] = subtitle_streams
     return MediaFacts(**normalized)
 
 
@@ -1155,6 +1161,7 @@ INDEX_HTML = """<!doctype html>
       qualitySort: { col: null, dir: 'asc' },
       musicQualitySort: { col: null, dir: 'asc' },
       movieAudioFixBusy: false,
+      movieSubtitleFixBusy: false,
       movieStandardsEditorLabel: '',
       movieStandardsSaveBusy: false,
       replacementHistoryFilter: 'deleted',
@@ -1195,6 +1202,7 @@ INDEX_HTML = """<!doctype html>
           { id: 'normalize', label: 'Normalize Movie Files & Folders', action: 'plan', endpoint: '/api/movies/normalize' },
           { id: 'quality', label: 'Delete Weak Encodes', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'audio_packaging', label: 'Fix Multi-Audio Packaging', action: 'scan', endpoint: '/api/movies/profile' },
+          { id: 'subtitle_readiness', label: 'Repair Subtitle Readiness', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'junk', label: 'Delete Junk Videos', action: 'scan', endpoint: '/api/movies/junk' },
           { id: 'promo', label: 'Delete Junk Sidecar & Spam Files', action: 'scan', endpoint: '/api/movies/promo-docs' },
           { id: 'canonical_lists', label: 'Canonical Lists', action: 'scan', endpoint: '/api/movies/canonical-lists' }
@@ -2155,7 +2163,7 @@ INDEX_HTML = """<!doctype html>
           state.selectedChangeIds = new Set();
         }
       } else {
-        if (['library', 'quality', 'audio_packaging', 'compatibility'].includes(page)) {
+        if (['library', 'quality', 'audio_packaging', 'subtitle_readiness', 'compatibility'].includes(page)) {
           state.results.movies.profile = payload;
           cacheMovieDashboard(payload);
           if (payload.replacement_queue) {
@@ -2191,6 +2199,7 @@ INDEX_HTML = """<!doctype html>
         canonical_lists: 'Canonical Lists',
         quality: 'Delete Weak Encodes',
         audio_packaging: 'Fix Multi-Audio Packaging',
+        subtitle_readiness: 'Repair Subtitle Readiness',
         music_quality: 'Delete Weak Encodes',
         compatibility: 'Compatibility',
         junk: 'Delete Junk Videos',
@@ -2261,6 +2270,10 @@ INDEX_HTML = """<!doctype html>
         renderMovieAudioPackaging(profile);
         return;
       }
+      if (page === 'subtitle_readiness') {
+        renderMovieSubtitleReadiness(profile);
+        return;
+      }
       if (page === 'compatibility') {
         renderMovieCompatibility(profile);
         return;
@@ -2294,6 +2307,7 @@ INDEX_HTML = """<!doctype html>
         if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
         if (state.page === 'quality' && state.results.movies.profile) renderMovieQuality(state.results.movies.profile);
         else if (state.page === 'audio_packaging' && state.results.movies.profile) renderMovieAudioPackaging(state.results.movies.profile);
+        else if (state.page === 'subtitle_readiness' && state.results.movies.profile) renderMovieSubtitleReadiness(state.results.movies.profile);
         else renderReplacementQueueDetail(state.results.movies.profile);
       } catch (error) {
         detailPanel.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
@@ -3298,6 +3312,27 @@ INDEX_HTML = """<!doctype html>
       attachMovieReplacementHandlers(payload, items);
     }
 
+    function renderMovieSubtitleReadiness(payload) {
+      mainTagline.textContent = 'Repair subtitle defaults without deleting files: no subtitle by default when appropriate, forced English when needed, and English subtitles for non-English default audio.';
+      renderMetrics(buildMovieMetrics(payload));
+      renderBars(buildMovieBars(payload));
+      renderFilters([
+        ['all', 'All'],
+        ['forced_english', 'Forced English'],
+        ['non_english_audio', 'Non-English Audio'],
+        ['clear_default', 'Clear Default']
+      ]);
+      if (!payload) {
+        mainContent.innerHTML = '<div class="empty">Run Movies / Repair Subtitle Readiness to review subtitle-default mistakes.</div>';
+        detailPanel.innerHTML = '<div class="empty">This page is non-destructive: it only repairs embedded subtitle default flags for supported MKVs.</div>';
+        return;
+      }
+      const items = sortedMovies(filteredSubtitleReadinessMovies(payload));
+      mainContent.innerHTML = buildMovieSubtitleReadinessTable(payload, items);
+      detailPanel.innerHTML = '<div class="empty">This page is non-destructive: no delete or queue actions are available here.</div>';
+      attachMovieSubtitleReadinessHandlers(payload, items);
+    }
+
 
     function formatPercent(value) {
       if (value == null || !Number.isFinite(value)) return 'n/a';
@@ -4272,6 +4307,51 @@ INDEX_HTML = """<!doctype html>
       `;
     }
 
+    function buildMovieSubtitleReadinessTable(payload, items) {
+      const rows = items.map(item => {
+        const path = item.path || '';
+        const checked = state.selectedReplacementPaths.has(path) ? 'checked' : '';
+        const locked = state.movieSubtitleFixBusy ? 'disabled' : '';
+        const issueCode = movieSubtitleReadinessIssueCode(item);
+        const issueLabel = humanSubtitleReadinessIssueLabel(issueCode);
+        const targetSummary = itemSubtitleTargetSummary(item, { forcedOnly: true });
+        const englishSummary = itemSubtitleTargetSummary(item);
+        const selectable = movieSubtitleReadinessIsRepairable(item);
+        return `
+          <tr>
+            <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="subtitle-repair-select" data-path="${encodeURIComponent(path)}" ${checked} ${locked}>` : ''}</td>
+            <td><div class="mono">${escapeHtml(path)}</div></td>
+            <td>${escapeHtml(issueLabel)}</td>
+            <td>${describeAudioStream(movieDefaultAudioStream(item))}</td>
+            <td>${describeSubtitleStream(movieDefaultSubtitleStream(item))}</td>
+            <td>${targetSummary}</td>
+            <td>${englishSummary}</td>
+            <td>${subtitleRepairStatusChip(item)}</td>
+          </tr>
+        `;
+      }).join('');
+      const selectedCount = selectedVisibleSubtitleRepairCount(payload, items);
+      const selectableCount = selectableVisibleSubtitleRepairItems(payload, items).length;
+      const allVisibleSelected = selectableCount > 0 && selectedCount === selectableCount;
+      const toggleLabel = allVisibleSelected ? 'Deselect All' : 'Select All';
+      const lockNote = state.movieSubtitleFixBusy
+        ? '<span class="subtle">Selection locked while ffmpeg remux is running.</span>'
+        : `<span class="subtle">${selectedCount} of ${selectableCount} selected</span>`;
+      return `
+        <div class="junk-actions audio-packaging-actions">
+          <button class="secondary" id="toggleSubtitleRepairButton" ${(selectableCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
+          <button class="primary" id="fixSelectedSubtitleButton" ${(selectedCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>Repair Subtitle Defaults</button>
+          <span class="triage-action-note">${lockNote}</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th></th><th>File</th><th>Issue</th><th>Default Audio</th><th>Current Default Subtitle</th><th>English Forced Subtitle</th><th>English Subtitle</th><th>Status</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="8" class="subtle">No files for this filter.</td></tr>'}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
     function currentMovieReplacementQueue(payload) {
       return payload?.replacement_queue || state.results.movies.replacementQueue || null;
     }
@@ -4879,6 +4959,118 @@ INDEX_HTML = """<!doctype html>
       return '';
     }
 
+    function movieSubtitleSetupResult(item) {
+      return (item?.profile?.domain_results || []).find(result => result?.domain === 'subtitle_setup') || null;
+    }
+
+    function movieSubtitleReadinessIssueCode(item) {
+      return movieSubtitleSetupResult(item)?.code || '';
+    }
+
+    function movieDefaultSubtitleStream(item) {
+      const streams = item?.facts?.subtitle_streams || [];
+      return streams.find(stream => stream?.is_default) || streams[0] || null;
+    }
+
+    function subtitleStreamLanguage(stream) {
+      const value = String(stream?.language || '').toLowerCase();
+      if (['eng', 'en', 'english'].includes(value)) return 'english';
+      if (['ita', 'it', 'italian'].includes(value)) return 'italian';
+      return value;
+    }
+
+    function isEnglishSubtitleStream(stream) {
+      return subtitleStreamLanguage(stream) === 'english';
+    }
+
+    function chooseBestEnglishSubtitleStream(item, options = {}) {
+      const streams = item?.facts?.subtitle_streams || [];
+      const forcedOnly = !!options.forcedOnly;
+      const matching = streams.filter(stream => isEnglishSubtitleStream(stream) && (stream?.is_forced || !forcedOnly));
+      if (!matching.length) return null;
+      const currentDefault = movieDefaultSubtitleStream(item);
+      if (currentDefault && matching.includes(currentDefault)) return currentDefault;
+      return matching[0];
+    }
+
+    function itemDefaultAudioLanguage(item) {
+      return audioStreamLanguage(movieDefaultAudioStream(item)) || '';
+    }
+
+    function movieSubtitleReadinessRepairTarget(item) {
+      const forced = chooseBestEnglishSubtitleStream(item, { forcedOnly: true });
+      if (forced) return forced;
+      if (!['', 'english'].includes(itemDefaultAudioLanguage(item))) {
+        return chooseBestEnglishSubtitleStream(item);
+      }
+      return null;
+    }
+
+    function movieSubtitleReadinessIsRepairable(item) {
+      const issueCode = movieSubtitleReadinessIssueCode(item);
+      if (!issueCode) return false;
+      if (!String(item?.path || '').toLowerCase().endsWith('.mkv')) return false;
+      if (!Array.isArray(item?.facts?.subtitle_streams) || !item.facts.subtitle_streams.length) return false;
+      if (issueCode === 'missing_default_english_subtitle') return false;
+      if (issueCode === 'multiple_default_subtitles') return !!movieSubtitleReadinessRepairTarget(item) || itemDefaultAudioLanguage(item) === 'english';
+      if (['english_forced_not_default', 'wrong_default_forced_subtitle', 'wrong_default_subtitle_language'].includes(issueCode)) {
+        return !!movieSubtitleReadinessRepairTarget(item);
+      }
+      if (issueCode === 'unnecessary_default_subtitle') return true;
+      return false;
+    }
+
+    function subtitleReadinessMovies(payload) {
+      return (payload?.movies || []).filter(item => !!movieSubtitleReadinessIssueCode(item));
+    }
+
+    function filteredSubtitleReadinessMovies(payload) {
+      const items = subtitleReadinessMovies(payload);
+      if (state.filter === 'forced_english') {
+        return items.filter(item => ['english_forced_not_default', 'wrong_default_forced_subtitle'].includes(movieSubtitleReadinessIssueCode(item)));
+      }
+      if (state.filter === 'non_english_audio') {
+        return items.filter(item => ['missing_default_english_subtitle', 'wrong_default_subtitle_language'].includes(movieSubtitleReadinessIssueCode(item)));
+      }
+      if (state.filter === 'clear_default') {
+        return items.filter(item => ['unnecessary_default_subtitle', 'multiple_default_subtitles'].includes(movieSubtitleReadinessIssueCode(item)));
+      }
+      return items;
+    }
+
+    function humanSubtitleReadinessIssueLabel(code) {
+      const labels = {
+        english_forced_not_default: 'forced English exists but is not default',
+        wrong_default_forced_subtitle: 'wrong subtitle is default instead of forced English',
+        missing_default_english_subtitle: 'non-English audio but no default English subtitle',
+        wrong_default_subtitle_language: 'non-English audio but default subtitle is not English',
+        unnecessary_default_subtitle: 'English audio should default to no subtitles',
+        multiple_default_subtitles: 'multiple subtitle streams are default'
+      };
+      return labels[code] || code.replaceAll('_', ' ');
+    }
+
+    function describeSubtitleStream(stream) {
+      if (!stream) return '<span class="subtle">—</span>';
+      const language = subtitleStreamLanguage(stream);
+      const parts = [
+        language ? language.charAt(0).toUpperCase() + language.slice(1) : 'Unknown',
+        stream?.is_forced ? 'forced' : null,
+        stream?.title || null
+      ].filter(Boolean);
+      return escapeHtml(parts.join(' · '));
+    }
+
+    function itemSubtitleTargetSummary(item, options = {}) {
+      return describeSubtitleStream(chooseBestEnglishSubtitleStream(item, options));
+    }
+
+    function subtitleRepairStatusChip(item) {
+      return movieSubtitleReadinessIsRepairable(item)
+        ? '<span class="chip meta">repairable</span>'
+        : '<span class="chip review">review only</span>';
+    }
+
     function audioPackagingMovies(payload) {
       return (payload?.movies || []).filter(item => !!movieAudioPackagingIssueCode(item));
     }
@@ -4987,6 +5179,14 @@ INDEX_HTML = """<!doctype html>
       return items.filter(item => item.path && movieMatchesActiveTriageFamily(item) && !replacementQueueItemForPath(payload, item.path));
     }
 
+    function selectedVisibleSubtitleRepairCount(payload, items) {
+      return selectableVisibleSubtitleRepairItems(payload, items).filter(item => state.selectedReplacementPaths.has(item.path)).length;
+    }
+
+    function selectableVisibleSubtitleRepairItems(payload, items) {
+      return items.filter(item => item.path && movieSubtitleReadinessIsRepairable(item));
+    }
+
     function movieMatchesActiveTriageFamily(item) {
       if (state.page === 'audio_packaging') return !!movieAudioPackagingIssueCode(item);
       return isStrictWeakMovie(item);
@@ -4994,11 +5194,16 @@ INDEX_HTML = """<!doctype html>
 
     function rerenderActiveMovieTriagePage(payload) {
       if (state.page === 'audio_packaging') renderMovieAudioPackaging(payload);
+      else if (state.page === 'subtitle_readiness') renderMovieSubtitleReadiness(payload);
       else renderMovieQuality(payload);
     }
 
     function movieAudioFixSelectionLocked() {
       return state.page === 'audio_packaging' && state.movieAudioFixBusy;
+    }
+
+    function movieSubtitleFixSelectionLocked() {
+      return state.page === 'subtitle_readiness' && state.movieSubtitleFixBusy;
     }
 
     function attachMovieReplacementHandlers(payload, items) {
@@ -5049,6 +5254,38 @@ INDEX_HTML = """<!doctype html>
           renderReplacementQueueDetail(payload);
         });
       });
+    }
+
+    function attachMovieSubtitleReadinessHandlers(payload, items) {
+      const selectableItems = selectableVisibleSubtitleRepairItems(payload, items);
+      document.querySelectorAll('.subtitle-repair-select').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+          if (movieSubtitleFixSelectionLocked()) {
+            checkbox.checked = state.selectedReplacementPaths.has(decodeURIComponent(checkbox.dataset.path));
+            return;
+          }
+          const path = decodeURIComponent(checkbox.dataset.path);
+          if (checkbox.checked) state.selectedReplacementPaths.add(path);
+          else state.selectedReplacementPaths.delete(path);
+          renderMovieSubtitleReadiness(payload);
+        });
+      });
+      const toggleButton = document.getElementById('toggleSubtitleRepairButton');
+      if (toggleButton) {
+        toggleButton.addEventListener('click', () => {
+          if (movieSubtitleFixSelectionLocked()) return;
+          const selectedCount = selectedVisibleSubtitleRepairCount(payload, selectableItems);
+          const allVisibleSelected = selectableItems.length > 0 && selectedCount === selectableItems.length;
+          selectableItems.forEach(item => {
+            if (!item.path) return;
+            if (allVisibleSelected) state.selectedReplacementPaths.delete(item.path);
+            else state.selectedReplacementPaths.add(item.path);
+          });
+          renderMovieSubtitleReadiness(payload);
+        });
+      }
+      const fixButton = document.getElementById('fixSelectedSubtitleButton');
+      if (fixButton) fixButton.addEventListener('click', () => fixSelectedSubtitleDefaults());
     }
 
     function attachReplacementQueueDetailHandlers() {
@@ -5154,6 +5391,27 @@ INDEX_HTML = """<!doctype html>
       return code.replaceAll('_', ' ');
     }
 
+    function humanSubtitleFixMessage(code) {
+      const labels = {
+        outside_source: 'outside source',
+        path_missing: 'path missing',
+        unsupported_container: 'unsupported container',
+        subtitle_streams_missing: 'subtitle streams missing',
+        clear_default_subtitles: 'subtitle defaults need clearing',
+        repair_subtitle_defaults: 'subtitle defaults need repair',
+        already_repaired: 'subtitle defaults already correct',
+        english_forced_defaulted: 'forced English set as default',
+        english_subtitle_defaulted: 'English subtitle set as default',
+        subtitle_defaults_cleared: 'subtitle defaults cleared',
+        ffmpeg_missing: 'ffmpeg missing'
+      };
+      if (!code) return 'unknown result';
+      if (labels[code]) return labels[code];
+      if (code.startsWith('probe_failed:')) return `probe failed: ${code.slice('probe_failed:'.length).trim()}`;
+      if (code.startsWith('fix_failed:')) return `fix failed: ${code.slice('fix_failed:'.length).trim()}`;
+      return code.replaceAll('_', ' ');
+    }
+
     function summarizeAudioFixResult(result, dropForeignAudio) {
       const fixed = result?.fixed?.length || 0;
       const skipped = result?.skipped?.length || 0;
@@ -5161,6 +5419,18 @@ INDEX_HTML = """<!doctype html>
       const parts = [`${verb} ${fixed} file${fixed === 1 ? '' : 's'}`];
       if (skipped) {
         const skipReasons = Array.from(new Set((result.skipped || []).map(item => humanAudioFixMessage(item.message)).filter(Boolean))).slice(0, 3);
+        parts.push(`skipped ${skipped}`);
+        if (skipReasons.length) parts.push(skipReasons.join('; '));
+      }
+      return parts.join('; ') + '.';
+    }
+
+    function summarizeSubtitleFixResult(result) {
+      const fixed = result?.fixed?.length || 0;
+      const skipped = result?.skipped?.length || 0;
+      const parts = [`Fixed ${fixed} file${fixed === 1 ? '' : 's'}`];
+      if (skipped) {
+        const skipReasons = Array.from(new Set((result.skipped || []).map(item => humanSubtitleFixMessage(item.message)).filter(Boolean))).slice(0, 3);
         parts.push(`skipped ${skipped}`);
         if (skipReasons.length) parts.push(skipReasons.join('; '));
       }
@@ -5268,6 +5538,44 @@ INDEX_HTML = """<!doctype html>
         state.movieAudioFixBusy = false;
         rerenderActiveMovieTriagePage(state.results.movies.profile || payload);
         renderReplacementQueueDetail(state.results.movies.profile || payload);
+      }
+    }
+
+    async function fixSelectedSubtitleDefaults() {
+      const source = sourceInput.value.trim();
+      const payload = state.results.movies.profile;
+      if (state.movieSubtitleFixBusy) {
+        setStatus('A subtitle remux is already running.', 'error');
+        return;
+      }
+      if (!source || !payload) return;
+      const paths = selectableVisibleSubtitleRepairItems(payload, payload.movies || [])
+        .filter(item => state.selectedReplacementPaths.has(item.path || ''))
+        .map(item => item.path)
+        .filter(Boolean);
+      if (!paths.length) return;
+      state.movieSubtitleFixBusy = true;
+      renderMovieSubtitleReadiness(payload);
+      setStatus(`Repairing subtitle defaults for ${paths.length} file${paths.length === 1 ? '' : 's'}…`, 'running');
+      try {
+        const response = await fetch('/api/movies/subtitle-readiness/fix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, paths })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Subtitle fix failed.');
+        if (state.results.movies.profile) {
+          applyUpdatedMovieProfileItems(state.results.movies.profile, result.updated_items || []);
+        }
+        state.selectedReplacementPaths.clear();
+        setStatus(summarizeSubtitleFixResult(result), 'idle');
+        renderMovieSubtitleReadiness(state.results.movies.profile);
+      } catch (error) {
+        setStatus(error.message, 'error');
+      } finally {
+        state.movieSubtitleFixBusy = false;
+        renderMovieSubtitleReadiness(state.results.movies.profile || payload);
       }
     }
 
@@ -5744,6 +6052,9 @@ def build_handler(
                 if route == "/api/movies/audio-packaging/fix":
                     self.handle_movies_audio_packaging_fix(payload)
                     return
+                if route == "/api/movies/subtitle-readiness/fix":
+                    self.handle_movies_subtitle_readiness_fix(payload)
+                    return
                 if route == "/api/music/replacement-queue/list":
                     self.handle_music_replacement_queue_list(payload)
                     return
@@ -6008,6 +6319,29 @@ def build_handler(
                 profiled = build_movie_profile_item(source, movie_path, media_facts_from_dict(raw_facts))
                 updated_items.append(asdict(profiled))
             result["replacement_queue"] = queue
+            result["updated_items"] = updated_items
+            self.respond_json(result)
+
+        def handle_movies_subtitle_readiness_fix(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            paths = payload.get("paths")
+            if not isinstance(paths, list):
+                raise ValueError("paths must be a list")
+            with ACTIVITY_TRACKER.track(source, "Movie subtitle fix: repair defaults", kind="remux") as activity_id:
+                result = fix_movie_subtitle_defaults(
+                    source,
+                    [str(path) for path in paths],
+                    probe_media=tracked_probe(source, "ffprobe subtitle readiness fix"),
+                    progress_callback=lambda update: ACTIVITY_TRACKER.update(activity_id, **update),
+                )
+            updated_items = []
+            for item in result["fixed"]:
+                raw_facts = item.get("facts")
+                if not isinstance(raw_facts, dict):
+                    continue
+                movie_path = Path(str(item["path"]))
+                profiled = build_movie_profile_item(source, movie_path, media_facts_from_dict(raw_facts))
+                updated_items.append(asdict(profiled))
             result["updated_items"] = updated_items
             self.respond_json(result)
 
