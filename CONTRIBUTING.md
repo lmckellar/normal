@@ -4,7 +4,8 @@ Contributions are welcome — happy to have them.
 
 ## Before opening a PR
 
-- Check the roadmap (`docs/roadmap.md`) — if your change touches a post-v1 area, it may not be in scope yet
+- Check the [roadmap](docs/roadmap.md) — if your change touches a future milestone, it may not be in scope yet
+- Check the [release notes](docs/release.md) before changing version, changelog, or roadmap structure
 - Open an issue first for anything non-trivial so we can agree on approach before you write code
 
 ## Running tests
