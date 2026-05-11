@@ -202,10 +202,9 @@ def classify_resolution(width: int | None, height: int | None) -> str | None:
         return None
 
     long_edge = max(width, height)
-    short_edge = min(width, height)
     if long_edge >= 3000:
         return "2160p"
-    if long_edge >= 1800 and short_edge >= 900:
+    if long_edge >= 1800:
         return "1080p"
     if long_edge >= 1200:
         return "720p"
