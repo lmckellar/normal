@@ -345,6 +345,11 @@ class WebTests(unittest.TestCase):
     def test_movie_dashboard_has_replacement_queue_summary_without_detail_pane(self) -> None:
         self.assertIn("Deleted, Awaiting Replacement", INDEX_HTML)
         self.assertIn("from Replacement Queue", INDEX_HTML)
+        self.assertIn("Action Based", INDEX_HTML)
+        self.assertIn("Quality Profile", INDEX_HTML)
+        self.assertIn("Standard Definition", INDEX_HTML)
+        self.assertIn("Library Grade", INDEX_HTML)
+        self.assertIn("Collector Grade", INDEX_HTML)
         self.assertIn("id=\"exportCatalogueButton\"", INDEX_HTML)
         self.assertIn("Export Catalogue", INDEX_HTML)
         self.assertIn("attachMovieDashboardHandlers(payload);", INDEX_HTML)
@@ -352,7 +357,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("catalogue-btn", INDEX_HTML)
         self.assertIn("For movies, this pane stays attached to the current directory's Replacement Queue.", INDEX_HTML)
         self.assertIn("library: 'Dashboard'", INDEX_HTML)
-        self.assertIn("n_movie_dashboard_cache", INDEX_HTML)
+        self.assertIn("n_movie_dashboard_cache_v2", INDEX_HTML)
         self.assertIn("function cacheMovieDashboard(payload)", INDEX_HTML)
         self.assertIn("function restoreCachedMovieDashboard(source)", INDEX_HTML)
         self.assertIn("cacheMovieDashboard(payload);", INDEX_HTML)
@@ -361,7 +366,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("if (label === 'replacement_candidate') return 'Replacement Candidate';", INDEX_HTML)
         self.assertIn("'replacement_candidate'", INDEX_HTML)
         self.assertIn("function movieProfileInlineSummary(item)", INDEX_HTML)
-        self.assertIn("const definitions = Array.isArray(payload.profile_definitions) ? payload.profile_definitions : [];", INDEX_HTML)
+        self.assertIn("const qualityProfileCounts = histogram.quality_profile_counts || {};", INDEX_HTML)
+        self.assertIn("const definitions = Array.isArray(payload.quality_profile_definitions) ? payload.quality_profile_definitions : [];", INDEX_HTML)
         self.assertIn("const definitionSummary = options?.rule_summary || '';", INDEX_HTML)
         self.assertIn("profile-card-band", INDEX_HTML)
         self.assertLess(INDEX_HTML.index("function humanProfileLabel"), INDEX_HTML.index("function buildMovieQualityTable"))
@@ -379,6 +385,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("function buildMovieProfileDefinitionEditor(definition)", INDEX_HTML)
         self.assertIn("function movieProfileEditorValues(label)", INDEX_HTML)
         self.assertIn("function saveMovieProfileDefinition(label)", INDEX_HTML)
+        self.assertIn("quality_profile_definitions", INDEX_HTML)
         self.assertIn("Saves to repo-local <span class=\"mono\">movie_standards.json</span> and reruns the dashboard.", INDEX_HTML)
 
     def test_movie_canonical_lists_page_is_wired(self) -> None:

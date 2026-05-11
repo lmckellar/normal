@@ -136,9 +136,12 @@ class MovieProfileTests(unittest.TestCase):
     def test_build_movie_profile_definitions_exposes_dashboard_owned_controls(self) -> None:
         definitions = build_movie_profile_definitions()
 
-        self.assertEqual([definition["label"] for definition in definitions], ["replacement_candidate", "needs_review", "meets_minimum", "reference"])
-        self.assertEqual(definitions[0]["fields"][0]["key"], "failed_domains")
-        self.assertEqual(definitions[-1]["fields"][0]["key"], "video_1080p_reference_kbps")
+        self.assertEqual(
+            [definition["label"] for definition in definitions],
+            ["standard_definition", "library_grade", "collector_grade", "reference"],
+        )
+        self.assertEqual(definitions[0]["fields"][0]["key"], "display_name")
+        self.assertEqual(definitions[-1]["fields"][2]["key"], "video_1080p_kbps")
 
     def test_update_movie_profile_definition_persists_reference_controls(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -147,16 +150,26 @@ class MovieProfileTests(unittest.TestCase):
                 standards = update_movie_profile_definition(
                     "reference",
                     {
-                        "video_1080p_reference_kbps": "18000",
-                        "video_2160p_reference_kbps": "26000",
-                        "audio_reference_codecs": "truehd, dtshd, flac",
+                        "display_name": "Reference",
+                        "summary": "Lossless audio and near-transparent video.",
+                        "video_1080p_kbps": "18000",
+                        "video_2160p_kbps": "26000",
+                        "audio_channels": "6",
+                        "audio_bitrate_kbps": "512",
+                        "audio_codecs": "truehd, dtshd, flac",
+                        "require_audio_language_hygiene": True,
+                        "require_subtitle_setup": True,
+                        "require_folder_hygiene": True,
+                        "require_lossless_audio": True,
                     },
                 )
 
-            self.assertEqual(standards["video"]["1080p"]["reference_kbps"], 18000)
-            self.assertEqual(standards["video"]["2160p"]["reference_kbps"], 26000)
-            self.assertEqual(standards["audio"]["reference_codecs"], ["truehd", "dtshd", "flac"])
-            self.assertIn('"reference_kbps": 18000', path.read_text(encoding="utf-8"))
+            reference = standards["quality_stances"]["reference"]
+            self.assertEqual(reference["video_custom"]["1080p"], 18000)
+            self.assertEqual(reference["video_custom"]["2160p"], 26000)
+            self.assertEqual(reference["audio_codecs"], ["truehd", "dtshd", "flac"])
+            self.assertTrue(reference["require_lossless_audio"])
+            self.assertIn('"video_custom"', path.read_text(encoding="utf-8"))
 
     def test_detect_plex_diagnostics_flags_dts_and_anime_visibility_risks(self) -> None:
         findings = detect_plex_diagnostics(
@@ -248,6 +261,7 @@ class MovieProfileTests(unittest.TestCase):
             second_item = next(item for item in report.movies if item.path == str(second))
             self.assertEqual(first_item.profile.label, "replacement_candidate")
             self.assertEqual(second_item.profile.label, "needs_review")
+            self.assertEqual(first_item.profile.quality_label, "standard_definition")
             self.assertFalse(second_item.profile.weak_candidate)
             self.assertTrue(first_item.profile.weak_candidate)
             self.assertEqual(first_item.profile.percentile, 100.0)
@@ -274,6 +288,7 @@ class MovieProfileTests(unittest.TestCase):
 
             self.assertEqual(payload["movie_count"], 1)
             self.assertEqual(payload["profile_counts"]["replacement_candidate"], 1)
+            self.assertEqual(payload["quality_profile_counts"]["standard_definition"], 1)
             self.assertEqual(payload["video_bitrate_kbps"]["median"], 3500.0)
             self.assertIn("risk_counts", payload)
 

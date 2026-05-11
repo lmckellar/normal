@@ -143,20 +143,30 @@ normal movie-profile --source /path/to/movies --report out/profile.json --histog
 | `--histogram` | No | Output path for an aggregate histogram payload |
 | `--progress` | No | Print progress to stderr |
 
-Primary profile labels:
+Dashboard groupings:
+
+Action-based labels:
+
+| Label | Meaning |
+|---|---|
+| `deleted, awaiting replacement` | Deleted through the replacement queue and still waiting for a better copy |
+| `replacement_candidate` | Configured weak-candidate rules matched |
+| `needs_review` | Inline review attention needed, often low-confidence subtitle or hygiene issues |
+
+Quality-profile labels:
 
 | Profile | Meaning |
 |---|---|
-| `reference` | Meets configured reference video and audio floors |
-| `meets_minimum` | Meets configured minimum standards |
-| `needs_review` | Inline review attention needed, often low-confidence subtitle or hygiene issues |
-| `replacement_candidate` | Configured weak-candidate rules matched |
+| `Standard Definition` | Edge cases and legacy files that are still worth keeping |
+| `Library Grade` | Good enough for casual viewing, including compact encodes like Tigole |
+| `Collector Grade` | Solid compact encodes that hold up better on difficult material |
+| `Reference` | Mild to no visual compression with lossless-audio posture |
 
 Config source:
 - repo-local `movie_standards.json`
 
 Dashboard note:
-- `Movies / Dashboard View` now exposes inline definition controls on each movie-standards card. Saving a card edit writes `movie_standards.json` and reruns the dashboard so the class counts refresh against the new rule shape.
+- `Movies / Dashboard View` now separates action cards from quality-profile cards. Inline definition controls live on the quality-profile cards and write `movie_standards.json`, then rerun the dashboard so counts refresh against the new stance rules.
 
 The same `movie-profile` report also powers two separate web triage lanes:
 

@@ -105,11 +105,16 @@ Replacement priority by decade:
 
 ### Movie profile report (JSON)
 
-Per-file classification against repo-local movie standards. Primary labels are `reference`, `meets_minimum`, `needs_review`, and `replacement_candidate`. Heuristic finding categories: `playback_risk`, `indexing_visibility_risk`, `standards_review`, `standards_failure`.
+Per-file classification against repo-local movie standards. The scan now carries two parallel layers:
+
+- action labels: `replacement_candidate`, `needs_review`
+- quality stances: `standard_definition`, `library_grade`, `collector_grade`, `reference`
+
+`deleted, awaiting replacement` remains replacement-queue state rather than a per-file profile label. Heuristic finding categories: `playback_risk`, `indexing_visibility_risk`, `standards_review`, `standards_failure`.
 
 Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_risk`, `multi_audio_anime_mux_risk`, `high_complexity_hevc_tv_risk`, `episodic_naming_parse_risk`, `anime_absolute_numbering_risk`, `attachment_heavy_visibility_risk`, `default_non_english_audio`, `default_non_english_audio_with_weak_english`.
 
-The dashboard payload also carries `movie_standards` and `profile_definitions`. The movie dashboard cards use that payload to show each standards class, summarize its current rule shape, and expose inline definition controls.
+The dashboard payload also carries `movie_standards` and `quality_profile_definitions`. The movie dashboard uses that payload to split **Action Based** cards from **Quality Profile** cards, summarize each stance rule shape, and expose inline definition controls on the quality-profile cards.
 
 ### Replacement queue (JSON)
 
@@ -150,7 +155,7 @@ All routes in `web.py`. Key families:
 | `/api/music/artwork/image?...` | GET | Serve artwork preview image bytes |
 | `/api/movies/apply` | POST | Apply selected movie renames in-place |
 | `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, audio packaging triage, and subtitle-readiness triage |
-| `/api/movies/standards/update` | POST | Persist repo-local movie-standards edits from dashboard profile cards |
+| `/api/movies/standards/update` | POST | Persist repo-local movie-standards edits from dashboard quality-profile cards |
 | `/api/movies/canonical-lists` | POST | Canonical title coverage payload from TMDb plus local cache |
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
 | `/api/movies/inspect` | POST | One-file movie diagnostic payload |

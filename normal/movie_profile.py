@@ -40,6 +40,8 @@ class DiagnosticFinding:
 class MovieProfile:
     label: str
     rank: int
+    quality_label: str
+    quality_rank: int
     percentile: float
     anchor_distance: float | None
     legacy_bitrate_label: str | None = None
@@ -77,24 +79,31 @@ PROFILE_RANKS = {
     "reference": 4,
 }
 
-MOVIE_PROFILE_CARD_ORDER = [
-    "replacement_candidate",
-    "needs_review",
-    "meets_minimum",
+QUALITY_STANCE_RANKS = {
+    "standard_definition": 1,
+    "library_grade": 2,
+    "collector_grade": 3,
+    "reference": 4,
+}
+
+QUALITY_STANCE_ORDER = [
+    "standard_definition",
+    "library_grade",
+    "collector_grade",
     "reference",
 ]
 
 DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
     "video": {
-        "1080p": {"minimum_kbps": 4500, "reference_kbps": 16000},
-        "2160p": {"minimum_kbps": 12000, "reference_kbps": 24000},
-        "720p": {"minimum_kbps": 2500, "reference_kbps": 6000},
-        "sd": {"minimum_kbps": 1500, "reference_kbps": 3000},
+        "1080p": {"minimum_kbps": 2500, "reference_kbps": 16000},
+        "2160p": {"minimum_kbps": 6000, "reference_kbps": 24000},
+        "720p": {"minimum_kbps": 1800, "reference_kbps": 6000},
+        "sd": {"minimum_kbps": 1200, "reference_kbps": 3000},
     },
     "audio": {
-        "minimum_channels": 6,
-        "minimum_bitrate_kbps": 384,
-        "minimum_codecs": ["ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
+        "minimum_channels": 2,
+        "minimum_bitrate_kbps": 192,
+        "minimum_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
         "reference_codecs": ["truehd", "dtshd", "flac", "pcm"],
     },
     "subtitle_setup": {"mode": "conservative"},
@@ -104,6 +113,61 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
     },
     "weak_candidate_rules": {
         "any_failed_domains": ["video_minimum", "audio_minimum"],
+    },
+    "quality_stances": {
+        "standard_definition": {
+            "display_name": "Standard Definition",
+            "summary": "Edge cases and legacy files that are still worth keeping.",
+            "video_floor": "minimum",
+            "audio_floor": "minimum",
+            "audio_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
+            "require_audio_language_hygiene": False,
+            "require_subtitle_setup": False,
+            "require_folder_hygiene": False,
+            "require_lossless_audio": False,
+        },
+        "library_grade": {
+            "display_name": "Library Grade",
+            "summary": "Good enough for casual viewing, including compact encode favourites like Tigole.",
+            "video_floor": "custom",
+            "video_custom": {"1080p": 4500, "2160p": 12000},
+            "audio_floor": "custom",
+            "audio_channels": 2,
+            "audio_bitrate_kbps": 192,
+            "audio_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
+            "require_audio_language_hygiene": True,
+            "require_subtitle_setup": False,
+            "require_folder_hygiene": False,
+            "require_lossless_audio": False,
+        },
+        "collector_grade": {
+            "display_name": "Collector Grade",
+            "summary": "Solid compact encodes that hold up better on difficult material.",
+            "video_floor": "custom",
+            "video_custom": {"1080p": 8000, "2160p": 18000},
+            "audio_floor": "custom",
+            "audio_channels": 6,
+            "audio_bitrate_kbps": 384,
+            "audio_codecs": ["ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
+            "require_audio_language_hygiene": True,
+            "require_subtitle_setup": True,
+            "require_folder_hygiene": False,
+            "require_lossless_audio": False,
+        },
+        "reference": {
+            "display_name": "Reference",
+            "summary": "Mild to no compression to visual quality with lossless audio.",
+            "video_floor": "custom",
+            "video_custom": {"1080p": 16000, "2160p": 24000},
+            "audio_floor": "custom",
+            "audio_channels": 6,
+            "audio_bitrate_kbps": 384,
+            "audio_codecs": ["truehd", "dtshd", "flac", "pcm"],
+            "require_audio_language_hygiene": True,
+            "require_subtitle_setup": True,
+            "require_folder_hygiene": True,
+            "require_lossless_audio": True,
+        },
     },
 }
 
@@ -195,6 +259,7 @@ def build_movie_profile_item(
     active_standards = standards or load_movie_standards()
     legacy_label = classify_profile_label(facts)
     domain_results = evaluate_movie_standards(movie_path, facts, active_standards)
+    quality_label = classify_quality_stance(movie_path, facts, domain_results, active_standards)
     label = classify_standard_label(domain_results, active_standards)
     diagnostics = detect_plex_diagnostics(movie_path, facts)
     diagnostics.extend(domain_results_to_diagnostics(domain_results))
@@ -208,6 +273,8 @@ def build_movie_profile_item(
         profile=MovieProfile(
             label=label,
             rank=PROFILE_RANKS[label],
+            quality_label=quality_label,
+            quality_rank=QUALITY_STANCE_RANKS[quality_label],
             percentile=0.0,
             anchor_distance=compute_anchor_distance(facts),
             legacy_bitrate_label=legacy_label,
@@ -242,145 +309,90 @@ def save_movie_standards(standards: dict[str, Any]) -> dict[str, Any]:
 
 def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     active = standards or load_movie_standards()
-    video = active.get("video") or {}
-    audio = active.get("audio") or {}
-    subtitle = active.get("subtitle_setup") or {}
-    hygiene = active.get("folder_hygiene") or {}
-    weak_rules = active.get("weak_candidate_rules") or {}
-    return [
-        {
-            "label": "replacement_candidate",
-            "display_name": "Replacement Candidate",
-            "group": "Replace",
-            "summary": "Configured weak-candidate rules matched.",
-            "rule_summary": "Fails any of: "
-            + ", ".join(sorted((weak_rules.get("any_failed_domains") or ["video_minimum", "audio_minimum"]))),
-            "fields": [
-                {
-                    "key": "failed_domains",
-                    "label": "Failed domains trigger replacement",
-                    "type": "checklist",
-                    "value": list(weak_rules.get("any_failed_domains") or ["video_minimum", "audio_minimum"]),
-                    "options": [
-                        {"value": "video_minimum", "label": "Video minimum"},
-                        {"value": "audio_minimum", "label": "Audio minimum"},
-                    ],
-                }
-            ],
-        },
-        {
-            "label": "needs_review",
-            "display_name": "Needs Review",
-            "group": "Review",
-            "summary": "Low-confidence hygiene and subtitle-default checks still need attention.",
-            "rule_summary": "Subtitle mode: "
-            + str(subtitle.get("mode") or "conservative")
-            + "; normalized naming: "
-            + ("required" if hygiene.get("require_normalized_naming", True) else "optional")
-            + "; junk sidecars: "
-            + ", ".join(hygiene.get("junk_sidecar_extensions") or [".txt", ".html", ".htm"]),
-            "fields": [
-                {
-                    "key": "subtitle_mode",
-                    "label": "Subtitle review mode",
-                    "type": "select",
-                    "value": str(subtitle.get("mode") or "conservative"),
-                    "options": [{"value": "conservative", "label": "Conservative"}],
-                },
-                {
-                    "key": "require_normalized_naming",
-                    "label": "Require normalized folder and file naming",
-                    "type": "toggle",
-                    "value": bool(hygiene.get("require_normalized_naming", True)),
-                },
-                {
-                    "key": "junk_sidecar_extensions",
-                    "label": "Review junk sidecar extensions",
-                    "type": "csv",
-                    "value": ", ".join(hygiene.get("junk_sidecar_extensions") or [".txt", ".html", ".htm"]),
-                },
-            ],
-        },
-        {
-            "label": "meets_minimum",
-            "display_name": "Meets Minimum",
-            "group": "Pass",
-            "summary": "Configured minimum standards met.",
-            "rule_summary": "1080p >= "
-            + str(((video.get("1080p") or {}).get("minimum_kbps") or 0))
-            + " kbps; 4K >= "
-            + str(((video.get("2160p") or {}).get("minimum_kbps") or 0))
-            + " kbps; audio >= "
-            + str(audio.get("minimum_channels") or 0)
-            + " ch / "
-            + str(audio.get("minimum_bitrate_kbps") or 0)
-            + " kbps.",
-            "fields": [
-                {
-                    "key": "video_1080p_minimum_kbps",
-                    "label": "1080p minimum video kbps",
-                    "type": "number",
-                    "value": int(((video.get("1080p") or {}).get("minimum_kbps") or 0)),
-                },
-                {
-                    "key": "video_2160p_minimum_kbps",
-                    "label": "4K minimum video kbps",
-                    "type": "number",
-                    "value": int(((video.get("2160p") or {}).get("minimum_kbps") or 0)),
-                },
-                {
-                    "key": "audio_minimum_channels",
-                    "label": "Minimum main-audio channels",
-                    "type": "number",
-                    "value": int(audio.get("minimum_channels") or 0),
-                },
-                {
-                    "key": "audio_minimum_bitrate_kbps",
-                    "label": "Minimum main-audio kbps",
-                    "type": "number",
-                    "value": int(audio.get("minimum_bitrate_kbps") or 0),
-                },
-                {
-                    "key": "audio_minimum_codecs",
-                    "label": "Allowed minimum audio codecs",
-                    "type": "csv",
-                    "value": ", ".join(audio.get("minimum_codecs") or []),
-                },
-            ],
-        },
-        {
-            "label": "reference",
-            "display_name": "Reference",
-            "group": "Reference",
-            "summary": "Configured video and audio reference standard.",
-            "rule_summary": "1080p >= "
-            + str(((video.get("1080p") or {}).get("reference_kbps") or 0))
-            + " kbps; 4K >= "
-            + str(((video.get("2160p") or {}).get("reference_kbps") or 0))
-            + " kbps; reference codecs: "
-            + ", ".join(audio.get("reference_codecs") or []),
-            "fields": [
-                {
-                    "key": "video_1080p_reference_kbps",
-                    "label": "1080p reference video kbps",
-                    "type": "number",
-                    "value": int(((video.get("1080p") or {}).get("reference_kbps") or 0)),
-                },
-                {
-                    "key": "video_2160p_reference_kbps",
-                    "label": "4K reference video kbps",
-                    "type": "number",
-                    "value": int(((video.get("2160p") or {}).get("reference_kbps") or 0)),
-                },
-                {
-                    "key": "audio_reference_codecs",
-                    "label": "Reference audio codecs",
-                    "type": "csv",
-                    "value": ", ".join(audio.get("reference_codecs") or []),
-                },
-            ],
-        },
-    ]
+    stances = active.get("quality_stances") or {}
+    definitions: list[dict[str, Any]] = []
+    for label in QUALITY_STANCE_ORDER:
+        stance = stances.get(label) or {}
+        video_custom = stance.get("video_custom") or {}
+        definitions.append(
+            {
+                "label": label,
+                "display_name": str(stance.get("display_name") or human_quality_stance_label(label)),
+                "group": "Quality Profile",
+                "summary": str(stance.get("summary") or ""),
+                "rule_summary": build_quality_stance_rule_summary(label, stance, active),
+                "inherits_summary": build_quality_stance_inherits_summary(label, stance),
+                "fields": [
+                    {
+                        "key": "display_name",
+                        "label": "Card label",
+                        "type": "text",
+                        "value": str(stance.get("display_name") or human_quality_stance_label(label)),
+                    },
+                    {
+                        "key": "summary",
+                        "label": "Card summary",
+                        "type": "text",
+                        "value": str(stance.get("summary") or ""),
+                    },
+                    {
+                        "key": "video_1080p_kbps",
+                        "label": "1080p video kbps floor",
+                        "type": "number",
+                        "value": int(resolve_stance_video_floor(label, stance, active, "1080p")),
+                    },
+                    {
+                        "key": "video_2160p_kbps",
+                        "label": "4K video kbps floor",
+                        "type": "number",
+                        "value": int(resolve_stance_video_floor(label, stance, active, "2160p")),
+                    },
+                    {
+                        "key": "audio_channels",
+                        "label": "Minimum main-audio channels",
+                        "type": "number",
+                        "value": int(resolve_stance_audio_channels(label, stance, active)),
+                    },
+                    {
+                        "key": "audio_bitrate_kbps",
+                        "label": "Minimum main-audio kbps",
+                        "type": "number",
+                        "value": int(resolve_stance_audio_bitrate(label, stance, active)),
+                    },
+                    {
+                        "key": "audio_codecs",
+                        "label": "Allowed audio codecs",
+                        "type": "csv",
+                        "value": ", ".join(resolve_stance_audio_codecs(label, stance, active)),
+                    },
+                    {
+                        "key": "require_audio_language_hygiene",
+                        "label": "Require sensible default audio language",
+                        "type": "toggle",
+                        "value": bool(stance.get("require_audio_language_hygiene", False)),
+                    },
+                    {
+                        "key": "require_subtitle_setup",
+                        "label": "Require subtitle default hygiene",
+                        "type": "toggle",
+                        "value": bool(stance.get("require_subtitle_setup", False)),
+                    },
+                    {
+                        "key": "require_folder_hygiene",
+                        "label": "Require normalized folder hygiene",
+                        "type": "toggle",
+                        "value": bool(stance.get("require_folder_hygiene", False)),
+                    },
+                    {
+                        "key": "require_lossless_audio",
+                        "label": "Require lossless audio posture",
+                        "type": "toggle",
+                        "value": bool(stance.get("require_lossless_audio", False)),
+                    },
+                ],
+            }
+        )
+    return definitions
 
 
 def update_movie_profile_definition(
@@ -389,36 +401,37 @@ def update_movie_profile_definition(
     standards: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     active = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards or load_movie_standards())
-    if label == "replacement_candidate":
-        active.setdefault("weak_candidate_rules", {})["any_failed_domains"] = normalize_domain_list(values.get("failed_domains"))
-        return save_movie_standards(active)
-    if label == "needs_review":
-        subtitle = active.setdefault("subtitle_setup", {})
-        subtitle["mode"] = normalize_subtitle_mode(values.get("subtitle_mode"))
-        hygiene = active.setdefault("folder_hygiene", {})
-        hygiene["require_normalized_naming"] = bool(values.get("require_normalized_naming", True))
-        hygiene["junk_sidecar_extensions"] = normalize_extension_list(values.get("junk_sidecar_extensions"))
-        return save_movie_standards(active)
-    if label == "meets_minimum":
-        video = active.setdefault("video", {})
-        video.setdefault("1080p", {})["minimum_kbps"] = normalize_positive_int(values.get("video_1080p_minimum_kbps"), 4500)
-        video.setdefault("2160p", {})["minimum_kbps"] = normalize_positive_int(values.get("video_2160p_minimum_kbps"), 12000)
-        audio = active.setdefault("audio", {})
-        audio["minimum_channels"] = normalize_positive_int(values.get("audio_minimum_channels"), 6)
-        audio["minimum_bitrate_kbps"] = normalize_positive_int(values.get("audio_minimum_bitrate_kbps"), 384)
-        audio["minimum_codecs"] = normalize_codec_list(
-            values.get("audio_minimum_codecs"),
-            list(DEFAULT_MOVIE_STANDARDS["audio"]["minimum_codecs"]),
+    if label in QUALITY_STANCE_ORDER:
+        stance = active.setdefault("quality_stances", {}).setdefault(label, {})
+        stance["display_name"] = str(values.get("display_name") or human_quality_stance_label(label)).strip() or human_quality_stance_label(label)
+        stance["summary"] = str(values.get("summary") or "").strip()
+        stance["video_floor"] = "custom"
+        stance["audio_floor"] = "custom"
+        stance.setdefault("video_custom", {})
+        stance["video_custom"]["1080p"] = normalize_positive_int(
+            values.get("video_1080p_kbps"),
+            int(resolve_stance_video_floor(label, stance, active, "1080p")),
         )
-        return save_movie_standards(active)
-    if label == "reference":
-        video = active.setdefault("video", {})
-        video.setdefault("1080p", {})["reference_kbps"] = normalize_positive_int(values.get("video_1080p_reference_kbps"), 16000)
-        video.setdefault("2160p", {})["reference_kbps"] = normalize_positive_int(values.get("video_2160p_reference_kbps"), 24000)
-        active.setdefault("audio", {})["reference_codecs"] = normalize_codec_list(
-            values.get("audio_reference_codecs"),
-            list(DEFAULT_MOVIE_STANDARDS["audio"]["reference_codecs"]),
+        stance["video_custom"]["2160p"] = normalize_positive_int(
+            values.get("video_2160p_kbps"),
+            int(resolve_stance_video_floor(label, stance, active, "2160p")),
         )
+        stance["audio_channels"] = normalize_positive_int(
+            values.get("audio_channels"),
+            int(resolve_stance_audio_channels(label, stance, active)),
+        )
+        stance["audio_bitrate_kbps"] = normalize_positive_int(
+            values.get("audio_bitrate_kbps"),
+            int(resolve_stance_audio_bitrate(label, stance, active)),
+        )
+        stance["audio_codecs"] = normalize_codec_list(
+            values.get("audio_codecs"),
+            list(resolve_stance_audio_codecs(label, stance, active)),
+        )
+        stance["require_audio_language_hygiene"] = bool(values.get("require_audio_language_hygiene", False))
+        stance["require_subtitle_setup"] = bool(values.get("require_subtitle_setup", False))
+        stance["require_folder_hygiene"] = bool(values.get("require_folder_hygiene", False))
+        stance["require_lossless_audio"] = bool(values.get("require_lossless_audio", False))
         return save_movie_standards(active)
     raise ValueError(f"Unsupported movie profile definition: {label}")
 
@@ -487,6 +500,101 @@ def normalize_domain_list(value: Any) -> list[str]:
 def normalize_subtitle_mode(value: Any) -> str:
     mode = str(value or "").strip().casefold()
     return mode if mode == "conservative" else "conservative"
+
+
+def human_quality_stance_label(label: str) -> str:
+    if label == "standard_definition":
+        return "Standard Definition"
+    if label == "library_grade":
+        return "Library Grade"
+    if label == "collector_grade":
+        return "Collector Grade"
+    if label == "reference":
+        return "Reference"
+    return label.replace("_", " ").title()
+
+
+def build_quality_stance_rule_summary(label: str, stance: dict[str, Any], standards: dict[str, Any]) -> str:
+    audio_codecs = ", ".join(resolve_stance_audio_codecs(label, stance, standards))
+    parts = [
+        f"1080p >= {resolve_stance_video_floor(label, stance, standards, '1080p')} kbps",
+        f"4K >= {resolve_stance_video_floor(label, stance, standards, '2160p')} kbps",
+        f"audio >= {resolve_stance_audio_channels(label, stance, standards)} ch / {resolve_stance_audio_bitrate(label, stance, standards)} kbps",
+    ]
+    if audio_codecs:
+        parts.append(f"codecs: {audio_codecs}")
+    if stance.get("require_lossless_audio"):
+        parts.append("lossless audio required")
+    return "; ".join(parts) + "."
+
+
+def build_quality_stance_inherits_summary(label: str, stance: dict[str, Any]) -> str:
+    if label == "standard_definition":
+        return "Inherited default: tolerant keep posture for legacy and edge-case files."
+    if label == "library_grade":
+        return "Inherited default: casual-viewing baseline with relaxed subtitle and folder hygiene."
+    if label == "collector_grade":
+        return "Inherited default: stronger encode floor with subtitle hygiene enabled."
+    if label == "reference":
+        return "Inherited default: reference-grade video floor with lossless audio and tidy packaging."
+    return str(stance.get("inherits_summary") or "")
+
+
+def resolve_stance_video_floor(label: str, stance: dict[str, Any], standards: dict[str, Any], resolution: str) -> int:
+    video = standards.get("video") or {}
+    default_video = DEFAULT_MOVIE_STANDARDS["video"]
+    floor_mode = str(stance.get("video_floor") or "custom")
+    if floor_mode == "reference":
+        config = (video.get(resolution) or {}) or (default_video.get(resolution) or {})
+        return int(config.get("reference_kbps") or 0)
+    if floor_mode == "minimum":
+        config = (video.get(resolution) or {}) or (default_video.get(resolution) or {})
+        return int(config.get("minimum_kbps") or 0)
+    custom = stance.get("video_custom") or {}
+    value = custom.get(resolution)
+    if value is not None:
+        return int(value)
+    fallback = (DEFAULT_MOVIE_STANDARDS["quality_stances"].get(label) or {}).get("video_custom") or {}
+    if resolution in fallback:
+        return int(fallback[resolution])
+    config = (video.get(resolution) or {}) or (default_video.get(resolution) or {})
+    return int(config.get("minimum_kbps") or 0)
+
+
+def resolve_stance_audio_channels(label: str, stance: dict[str, Any], standards: dict[str, Any]) -> int:
+    audio = standards.get("audio") or {}
+    if str(stance.get("audio_floor") or "custom") == "reference":
+        return int(audio.get("minimum_channels") or DEFAULT_MOVIE_STANDARDS["audio"]["minimum_channels"])
+    if stance.get("audio_channels") is not None:
+        return int(stance["audio_channels"])
+    fallback = DEFAULT_MOVIE_STANDARDS["quality_stances"].get(label) or {}
+    if fallback.get("audio_channels") is not None:
+        return int(fallback["audio_channels"])
+    return int(audio.get("minimum_channels") or DEFAULT_MOVIE_STANDARDS["audio"]["minimum_channels"])
+
+
+def resolve_stance_audio_bitrate(label: str, stance: dict[str, Any], standards: dict[str, Any]) -> int:
+    audio = standards.get("audio") or {}
+    if str(stance.get("audio_floor") or "custom") == "reference":
+        return int(audio.get("minimum_bitrate_kbps") or DEFAULT_MOVIE_STANDARDS["audio"]["minimum_bitrate_kbps"])
+    if stance.get("audio_bitrate_kbps") is not None:
+        return int(stance["audio_bitrate_kbps"])
+    fallback = DEFAULT_MOVIE_STANDARDS["quality_stances"].get(label) or {}
+    if fallback.get("audio_bitrate_kbps") is not None:
+        return int(fallback["audio_bitrate_kbps"])
+    return int(audio.get("minimum_bitrate_kbps") or DEFAULT_MOVIE_STANDARDS["audio"]["minimum_bitrate_kbps"])
+
+
+def resolve_stance_audio_codecs(label: str, stance: dict[str, Any], standards: dict[str, Any]) -> list[str]:
+    audio = standards.get("audio") or {}
+    if str(stance.get("audio_floor") or "custom") == "reference":
+        return list(audio.get("reference_codecs") or DEFAULT_MOVIE_STANDARDS["audio"]["reference_codecs"])
+    if stance.get("audio_codecs"):
+        return [str(codec).casefold() for codec in stance.get("audio_codecs") or []]
+    fallback = DEFAULT_MOVIE_STANDARDS["quality_stances"].get(label) or {}
+    if fallback.get("audio_codecs"):
+        return [str(codec).casefold() for codec in fallback.get("audio_codecs") or []]
+    return list(audio.get("minimum_codecs") or DEFAULT_MOVIE_STANDARDS["audio"]["minimum_codecs"])
 
 
 def classify_profile_label(facts: MediaFacts) -> str:
@@ -663,6 +771,60 @@ def standard_result(domain: str, status: str, code: str, summary: str, confidenc
         "summary": summary,
         "confidence": confidence,
     }
+
+
+def classify_quality_stance(
+    path: Path,
+    facts: MediaFacts,
+    domain_results: list[dict[str, Any]],
+    standards: dict[str, Any],
+) -> str:
+    stances = standards.get("quality_stances") or {}
+    for label in reversed(QUALITY_STANCE_ORDER):
+        stance = stances.get(label) or {}
+        if movie_matches_quality_stance(label, stance, path, facts, domain_results, standards):
+            return label
+    return "standard_definition"
+
+
+def movie_matches_quality_stance(
+    label: str,
+    stance: dict[str, Any],
+    path: Path,
+    facts: MediaFacts,
+    domain_results: list[dict[str, Any]],
+    standards: dict[str, Any],
+) -> bool:
+    resolution = facts.resolution_bucket or classify_resolution(facts.width, facts.height) or "unknown"
+    required_video = resolve_stance_video_floor(label, stance, standards, resolution)
+    if required_video and (facts.video_bitrate_kbps or 0) < required_video:
+        return False
+
+    codec = (facts.audio_format_family or facts.audio_codec or "").casefold()
+    channels = facts.audio_channels or 0
+    bitrate = facts.audio_bitrate_kbps or 0
+    allowed_codecs = set(resolve_stance_audio_codecs(label, stance, standards))
+    if allowed_codecs and codec and codec not in allowed_codecs:
+        return False
+    if resolve_stance_audio_channels(label, stance, standards) and channels < resolve_stance_audio_channels(label, stance, standards):
+        return False
+    if resolve_stance_audio_bitrate(label, stance, standards) and bitrate < resolve_stance_audio_bitrate(label, stance, standards):
+        return False
+    if stance.get("require_lossless_audio") and codec not in {"truehd", "dtshd", "flac", "pcm", "pcm_s16le", "pcm_s24le"}:
+        return False
+
+    if stance.get("require_audio_language_hygiene") and not domain_passed(domain_results, "audio_language_hygiene"):
+        return False
+    if stance.get("require_subtitle_setup") and not domain_passed(domain_results, "subtitle_setup"):
+        return False
+    if stance.get("require_folder_hygiene") and not domain_passed(domain_results, "folder_hygiene"):
+        return False
+
+    return True
+
+
+def domain_passed(domain_results: list[dict[str, Any]], domain: str) -> bool:
+    return any(result["domain"] == domain and result["status"] == "pass" for result in domain_results)
 
 
 def classify_standard_label(domain_results: list[dict[str, Any]], standards: dict[str, Any]) -> str:
@@ -1087,10 +1249,12 @@ def build_histogram_payload(report: MovieProfileReport) -> dict[str, Any]:
     video_bitrates = [item.facts.video_bitrate_kbps for item in report.movies if item.facts.video_bitrate_kbps]
     audio_bitrates = [item.facts.audio_bitrate_kbps for item in report.movies if item.facts.audio_bitrate_kbps]
     profile_counts: dict[str, int] = {}
+    quality_profile_counts: dict[str, int] = {}
     resolution_counts: dict[str, int] = {}
     risk_counts: dict[str, int] = {}
     for item in report.movies:
         profile_counts[item.profile.label] = profile_counts.get(item.profile.label, 0) + 1
+        quality_profile_counts[item.profile.quality_label] = quality_profile_counts.get(item.profile.quality_label, 0) + 1
         resolution = item.facts.resolution_bucket or "unknown"
         resolution_counts[resolution] = resolution_counts.get(resolution, 0) + 1
         for category, count in item.profile.risk_counts.items():
@@ -1108,6 +1272,7 @@ def build_histogram_payload(report: MovieProfileReport) -> dict[str, Any]:
         "video_bitrate_kbps": summarize_distribution(video_bitrates),
         "audio_bitrate_kbps": summarize_distribution(audio_bitrates, bin_width=150),
         "profile_counts": profile_counts,
+        "quality_profile_counts": quality_profile_counts,
         "resolution_counts": resolution_counts,
         "risk_counts": risk_counts,
         "anchor_reference": {"1080p_uhd_kbps": ANCHOR_KBPS["1080p"]},
