@@ -105,7 +105,10 @@ Formatted XLSX: title, year, resolution, video codec, audio, container, file siz
 
 ## Web UI
 
+If you use API-backed web features, load your local env first. Keep durable API keys outside `.venv/bin/activate`; venv recreation can wipe them.
+
 ```bash
+source .venv/bin/activate
 normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 ```
 
@@ -129,7 +132,7 @@ The Library Switcher in the top right selects the active lane. The source path i
 - Delete Junk Sidecar & Spam Files — sidecar and spam file cleanup
 - Canonical Lists — strict title/year overlap against live all-time movie lists with simple badge unlocks
 
-Canonical Lists uses TMDb plus a local cache. Start the web UI with `--tmdb-key` or set `TMDB_KEY`.
+Canonical Lists uses TMDb plus a local cache. Start the web UI with `--tmdb-key` or load `TMDB_KEY` before launch. If an agent starts the server for you, the expected behavior is a clean launch with configured API integrations available, not a degraded launch that only serves the page shell.
 
 Scans can be stopped mid-run with the Stop button. Per-page ETA estimates are stored in localStorage and shown on subsequent runs.
 
