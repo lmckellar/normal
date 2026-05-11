@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from normal.movie_profile import (
     build_movie_profile_definitions,
+    build_replacement_candidate_definition,
     build_histogram_payload,
     choose_best_english_subtitle_stream,
     classify_profile_label,
@@ -20,6 +21,7 @@ from normal.movie_profile import (
     movie_standards_revision,
     scan_movie_profiles,
     update_movie_profile_definition,
+    is_replacement_candidate_quality,
 )
 from normal.quality_review import AudioStreamFacts, MediaFacts, SubtitleStreamFacts, build_audio_summary
 
@@ -126,16 +128,29 @@ class MovieProfileTests(unittest.TestCase):
 
         self.assertIs(chosen, streams[1])
 
-    def test_classify_standard_label_marks_failed_core_standard_as_replacement_candidate(self) -> None:
+    def test_classify_standard_label_keeps_failed_core_standard_in_review_without_cutoff_match(self) -> None:
         label = classify_standard_label(
             [
                 {"domain": "video_minimum", "status": "fail", "code": "video_below_minimum", "summary": "", "confidence": "high"},
                 {"domain": "audio_minimum", "status": "pass", "code": "audio_meets_minimum", "summary": "", "confidence": "high"},
             ],
-            {"weak_candidate_rules": {"any_failed_domains": ["video_minimum", "audio_minimum"]}},
+            {"replacement_candidate_rules": {"quality_profile_floor": "standard_definition"}},
         )
 
+        self.assertEqual(label, "needs_review")
+
+    def test_classify_standard_label_marks_cutoff_match_as_replacement_candidate(self) -> None:
+        label = classify_standard_label([], {}, weak_candidate=True)
+
         self.assertEqual(label, "replacement_candidate")
+
+    def test_replacement_candidate_quality_cutoff_is_inclusive(self) -> None:
+        standards = {"replacement_candidate_rules": {"quality_profile_floor": "library_grade"}}
+
+        self.assertTrue(is_replacement_candidate_quality("standard_definition", standards))
+        self.assertTrue(is_replacement_candidate_quality("library_grade", standards))
+        self.assertFalse(is_replacement_candidate_quality("collector_grade", standards))
+        self.assertFalse(is_replacement_candidate_quality("reference", standards))
 
     def test_build_movie_profile_definitions_exposes_dashboard_owned_controls(self) -> None:
         definitions = build_movie_profile_definitions()
@@ -146,6 +161,24 @@ class MovieProfileTests(unittest.TestCase):
         )
         self.assertEqual(definitions[0]["fields"][0]["key"], "display_name")
         self.assertEqual(definitions[-1]["fields"][2]["key"], "video_1080p_kbps")
+
+    def test_build_replacement_candidate_definition_exposes_quality_profile_cutoff(self) -> None:
+        definition = build_replacement_candidate_definition(
+            {
+                "replacement_candidate_rules": {"quality_profile_floor": "library_grade"},
+                "quality_stances": {
+                    "standard_definition": {"display_name": "Weak Encodes & Standard Definition"},
+                    "library_grade": {"display_name": "Library Grade"},
+                    "collector_grade": {"display_name": "Collector Grade"},
+                    "reference": {"display_name": "Reference"},
+                },
+            }
+        )
+
+        self.assertEqual(definition["label"], "replacement_candidate")
+        self.assertEqual(definition["fields"][0]["key"], "quality_profile_floor")
+        self.assertEqual(definition["fields"][0]["value"], "library_grade")
+        self.assertIn("Library Grade and lower", definition["rule_summary"])
 
     def test_update_movie_profile_definition_persists_reference_controls(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -174,6 +207,18 @@ class MovieProfileTests(unittest.TestCase):
             self.assertEqual(reference["audio_codecs"], ["truehd", "dtshd", "flac"])
             self.assertTrue(reference["require_lossless_audio"])
             self.assertIn('"video_custom"', path.read_text(encoding="utf-8"))
+
+    def test_update_movie_profile_definition_persists_replacement_cutoff(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "movie_standards.json"
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", path):
+                standards = update_movie_profile_definition(
+                    "replacement_candidate",
+                    {"quality_profile_floor": "library_grade"},
+                )
+
+            self.assertEqual(standards["replacement_candidate_rules"]["quality_profile_floor"], "library_grade")
+            self.assertIn('"replacement_candidate_rules"', path.read_text(encoding="utf-8"))
 
     def test_update_movie_profile_definition_rejects_stale_revision(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -291,9 +336,9 @@ class MovieProfileTests(unittest.TestCase):
             first_item = next(item for item in report.movies if item.path == str(first))
             second_item = next(item for item in report.movies if item.path == str(second))
             self.assertEqual(first_item.profile.label, "replacement_candidate")
-            self.assertEqual(second_item.profile.label, "needs_review")
+            self.assertEqual(second_item.profile.label, "replacement_candidate")
             self.assertEqual(first_item.profile.quality_label, "standard_definition")
-            self.assertFalse(second_item.profile.weak_candidate)
+            self.assertTrue(second_item.profile.weak_candidate)
             self.assertTrue(first_item.profile.weak_candidate)
             self.assertEqual(first_item.profile.percentile, 100.0)
             self.assertIn("playback_risk", first_item.profile.risk_counts)

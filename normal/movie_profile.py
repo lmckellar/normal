@@ -114,8 +114,8 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
         "require_normalized_naming": True,
         "junk_sidecar_extensions": [".txt", ".html", ".htm"],
     },
-    "weak_candidate_rules": {
-        "any_failed_domains": ["video_minimum", "audio_minimum"],
+    "replacement_candidate_rules": {
+        "quality_profile_floor": "standard_definition",
     },
     "quality_stances": {
         "standard_definition": {
@@ -267,10 +267,10 @@ def build_movie_profile_item(
     legacy_label = classify_profile_label(facts)
     domain_results = evaluate_movie_standards(movie_path, facts, active_standards)
     quality_label = classify_quality_stance(movie_path, facts, domain_results, active_standards)
-    label = classify_standard_label(domain_results, active_standards)
+    weak_candidate = is_replacement_candidate_quality(quality_label, active_standards)
+    label = classify_standard_label(domain_results, active_standards, weak_candidate=weak_candidate)
     diagnostics = detect_plex_diagnostics(movie_path, facts)
     diagnostics.extend(domain_results_to_diagnostics(domain_results))
-    weak_candidate = is_weak_candidate(domain_results, active_standards)
     confidence = "low" if any(result["confidence"] == "low" for result in domain_results) else "high"
     return MovieProfileItem(
         movie_id=movie_id_for(movie_path, source_root),
@@ -478,6 +478,38 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
     return definitions
 
 
+def build_replacement_candidate_definition(standards: dict[str, Any] | None = None) -> dict[str, Any]:
+    active = standards or load_movie_standards()
+    cutoff = replacement_candidate_quality_floor(active)
+    stances = active.get("quality_stances") or {}
+    display = human_quality_stance_label(cutoff)
+    cutoff_stance = stances.get(cutoff) or {}
+    if cutoff_stance.get("display_name"):
+        display = str(cutoff_stance["display_name"])
+    return {
+        "label": "replacement_candidate",
+        "display_name": "Replacement Candidate",
+        "group": "Action Based",
+        "summary": "Quality profile at or below the configured cutoff and eligible for delete/replace triage.",
+        "rule_summary": f"Current cutoff: {display} and lower.",
+        "fields": [
+            {
+                "key": "quality_profile_floor",
+                "label": "Quality profile cutoff",
+                "type": "select",
+                "value": cutoff,
+                "options": [
+                    {
+                        "value": label,
+                        "label": str((stances.get(label) or {}).get("display_name") or human_quality_stance_label(label)),
+                    }
+                    for label in QUALITY_STANCE_ORDER
+                ],
+            }
+        ],
+    }
+
+
 def update_movie_profile_definition(
     label: str,
     values: dict[str, Any],
@@ -488,6 +520,12 @@ def update_movie_profile_definition(
     if expected_revision and expected_revision != movie_standards_revision(current):
         raise MovieStandardsConflictError("Movie standards changed since this dashboard view loaded. Refresh and retry.")
     active = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, current)
+    if label == "replacement_candidate":
+        active.setdefault("replacement_candidate_rules", {})["quality_profile_floor"] = normalize_quality_stance_label(
+            values.get("quality_profile_floor"),
+            replacement_candidate_quality_floor(active),
+        )
+        return save_movie_standards(active)
     if label in QUALITY_STANCE_ORDER:
         stance = active.setdefault("quality_stances", {}).setdefault(label, {})
         stance["display_name"] = str(values.get("display_name") or human_quality_stance_label(label)).strip() or human_quality_stance_label(label)
@@ -578,12 +616,16 @@ def normalize_extension_list(value: Any) -> list[str]:
     return result or list(DEFAULT_MOVIE_STANDARDS["folder_hygiene"]["junk_sidecar_extensions"])
 
 
-def normalize_domain_list(value: Any) -> list[str]:
-    allowed = {"video_minimum", "audio_minimum"}
-    if not isinstance(value, list):
-        return list(DEFAULT_MOVIE_STANDARDS["weak_candidate_rules"]["any_failed_domains"])
-    result = [domain for domain in value if domain in allowed]
-    return result or list(DEFAULT_MOVIE_STANDARDS["weak_candidate_rules"]["any_failed_domains"])
+def normalize_quality_stance_label(value: Any, default: str | None = None) -> str:
+    label = str(value or "").strip()
+    if label in QUALITY_STANCE_RANKS:
+        return label
+    return default if default in QUALITY_STANCE_RANKS else QUALITY_STANCE_ORDER[0]
+
+
+def replacement_candidate_quality_floor(standards: dict[str, Any]) -> str:
+    config = standards.get("replacement_candidate_rules") or {}
+    return normalize_quality_stance_label(config.get("quality_profile_floor"), QUALITY_STANCE_ORDER[0])
 
 
 def normalize_subtitle_mode(value: Any) -> str:
@@ -924,8 +966,12 @@ def domain_passed(domain_results: list[dict[str, Any]], domain: str) -> bool:
     return any(result["domain"] == domain and result["status"] == "pass" for result in domain_results)
 
 
-def classify_standard_label(domain_results: list[dict[str, Any]], standards: dict[str, Any]) -> str:
-    if is_weak_candidate(domain_results, standards):
+def classify_standard_label(
+    domain_results: list[dict[str, Any]],
+    standards: dict[str, Any],
+    weak_candidate: bool = False,
+) -> str:
+    if weak_candidate:
         return "replacement_candidate"
     statuses = {result["status"] for result in domain_results}
     if "fail" in statuses or "review_low_confidence" in statuses:
@@ -935,18 +981,15 @@ def classify_standard_label(domain_results: list[dict[str, Any]], standards: dic
     return "meets_minimum"
 
 
+def is_replacement_candidate_quality(quality_label: str, standards: dict[str, Any]) -> bool:
+    cutoff = replacement_candidate_quality_floor(standards)
+    return QUALITY_STANCE_RANKS.get(quality_label, 99) <= QUALITY_STANCE_RANKS.get(cutoff, QUALITY_STANCE_RANKS[QUALITY_STANCE_ORDER[0]])
+
+
 def is_reference_standard(domain_results: list[dict[str, Any]]) -> bool:
     return any(result["code"] == "video_reference" for result in domain_results) and any(
         result["code"] == "audio_reference" for result in domain_results
     )
-
-
-def is_weak_candidate(domain_results: list[dict[str, Any]], standards: dict[str, Any]) -> bool:
-    configured = set((standards.get("weak_candidate_rules") or {}).get("any_failed_domains") or [])
-    for result in domain_results:
-        if result["domain"] in configured and result["status"] == "fail":
-            return True
-    return False
 
 
 def domain_results_to_diagnostics(domain_results: list[dict[str, Any]]) -> list[DiagnosticFinding]:

@@ -150,7 +150,7 @@ Action-based labels:
 | Label | Meaning |
 |---|---|
 | `deleted, awaiting replacement` | Deleted through the replacement queue and still waiting for a better copy |
-| `replacement_candidate` | Configured weak-candidate rules matched |
+| `replacement_candidate` | Quality profile is at or below the configured replacement cutoff |
 | `needs_review` | Inline review attention needed, often low-confidence subtitle or hygiene issues |
 
 Quality-profile labels:
@@ -166,7 +166,7 @@ Config source:
 - repo-local `movie_standards.json`
 
 Dashboard note:
-- `Movies / Dashboard View` now separates action cards from quality-profile cards. Inline definition controls live on the quality-profile cards and write `movie_standards.json`, then rerun the dashboard so counts refresh against the new stance rules.
+- `Movies / Dashboard View` now separates action cards from quality-profile cards. Inline definition controls live on the quality-profile cards and the Replacement Candidate card, write `movie_standards.json`, then rerun the dashboard so counts refresh against the new stance rules.
 - Standards persistence is repo-local rather than port-local. Browser cache is only a convenience snapshot, and stale dashboard saves are rejected if `movie_standards.json` changed since that view loaded.
 
 The same `movie-profile` report also powers two separate web triage lanes:

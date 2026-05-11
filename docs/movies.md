@@ -43,7 +43,7 @@ Action cards:
 | Card | What it means |
 |---|---|
 | `deleted, awaiting replacement` | File was deleted through the replacement queue and is still waiting for a better copy |
-| `replacement_candidate` | Fails configurable weak-candidate rules and is eligible for delete/replace triage |
+| `replacement_candidate` | Quality profile is at or below the configured replacement cutoff and is eligible for delete/replace triage |
 | `needs_review` | Inline review attention needed, often from subtitle/default/hygiene checks |
 
 Quality profile cards:
@@ -55,7 +55,7 @@ Quality profile cards:
 | `Collector Grade` | Solid compact encodes that hold up better on difficult material |
 | `Reference` | Mild to no visual compression with lossless audio |
 
-The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Each parameter is presented as a dropdown with logical gradation points rather than a raw text input. Those edits adjust the stance criteria and inherited defaults, then refresh the dashboard after save.
+The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Replacement Candidate uses a simpler inline **Edit** control: choose the quality-profile cutoff, then save to refresh the dashboard.
 
 Persistence posture:
 
