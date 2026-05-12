@@ -26,6 +26,21 @@ run separate scans and produce separate UI projections. Recent hardening moved
 IMDb rating lookup server-side with local title cleanup and fallback search, but
 the broader scan/state split remains.
 
+## 0.6.x — existing-lane validation and polish
+
+Focus: finish proving the current 0.6-era workflows before starting the next
+feature line.
+
+- **Plex Artwork Repair testing** — test against real libraries and refine
+  poster previews.
+- **Subtitle Readiness validation** — confirm downstream Plex behavior and
+  document any required Plex refresh/cache steps after repair.
+- **Minor UI polish** — fix twitchy button hover behavior, accidental
+  double-height buttons, theme contrast issues, typeface leaks, and rogue CSS
+  paths that do not fit the active theme.
+- **Movie dashboard hardening** — keep profile persistence, scan-derived
+  rendering, and replacement-history rating lookup stable while 0.6.x settles.
+
 ## 0.7.x — normalization controls and canonical-list actionability
 
 Focus: make movie normalization output easier to steer and make Canonical Lists
