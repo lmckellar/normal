@@ -19,6 +19,7 @@ from normal.web import (
     guarded_heavy_scan,
     looks_like_drive_directory,
     RequestConflictError,
+    render_index_html,
     resolve_source_path,
     SourceMountDetails,
 )
@@ -40,6 +41,15 @@ class WebTests(unittest.TestCase):
         self.assertIn("payload.message || 'This source may be risky for a heavy recursive scan.'", INDEX_HTML)
         self.assertIn("Total size: ${payload.total_size_label}", INDEX_HTML)
         self.assertIn("Only run one heavy scan for this source at a time.", INDEX_HTML)
+
+    def test_web_runtime_keys_are_available_before_initial_render(self) -> None:
+        html = render_index_html(Path("/library/movies"), omdb_key="omdb-test", tmdb_key="tmdb-test")
+        self.assertLess(html.index("window.OMDB_AVAILABLE"), html.index("sourceInput.value = window.DEFAULT_SOURCE"))
+        self.assertLess(html.index("window.OMDB_AVAILABLE"), html.index("setLane('movies');"))
+        self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
+        self.assertIn("window.OMDB_AVAILABLE = true;", html)
+        self.assertNotIn("omdb-test", html)
+        self.assertIn('window.TMDB_KEY = "tmdb-test";', html)
 
     def test_library_switcher_remembers_music_and_movie_roots(self) -> None:
         self.assertIn("Library Switcher", INDEX_HTML)
@@ -276,6 +286,11 @@ class WebTests(unittest.TestCase):
         self.assertIn("'/api/movies/replacement-queue/add'", INDEX_HTML)
         self.assertIn("'/api/movies/replacement-queue/delete'", INDEX_HTML)
         self.assertIn("'/api/movies/replacement-queue/dismiss'", INDEX_HTML)
+        self.assertIn("'/api/movies/omdb/ratings'", INDEX_HTML)
+        self.assertNotIn("www.omdbapi.com", INDEX_HTML)
+        self.assertIn("function replacementHistoryRatingCell", INDEX_HTML)
+        self.assertIn("IMDb limit reached. Cached ratings still show; new ratings retry later.", INDEX_HTML)
+        self.assertIn("return '<span class=\"subtle\">limit</span>';", INDEX_HTML)
         self.assertIn("function buildMovieQualityTable", INDEX_HTML)
         self.assertIn("function buildMovieAudioPackagingTable", INDEX_HTML)
         self.assertIn("function strictWeakMovies", INDEX_HTML)

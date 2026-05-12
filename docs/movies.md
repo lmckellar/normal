@@ -72,7 +72,7 @@ The **Delete Weak Encodes** page lets you select weak files for deletion. Each d
 
 Queue history has four hard filters: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Deleted rows can be dismissed from queue history inline when the release is no longer worth replacing. That action only changes queue state; it does not touch media files.
 
-The queue-history table is sortable by title, year, and IMDb rating. IMDb ratings are fetched from [OMDb](https://www.omdbapi.com/) and require a free API key passed via `--omdb-key` or the `OMDB_KEY` environment variable. Without a key the column is hidden.
+The queue-history table is sortable by title, year, and IMDb rating. IMDb ratings are fetched server-side from [OMDb](https://www.omdbapi.com/) and require a free API key passed via `--omdb-key` or the `OMDB_KEY` environment variable. Lookups use local title cleanup plus a small cache, so repeated page loads do not keep spending the OMDb quota. Without a key the column is hidden; when OMDb is rate-limited, new cells show `limit` and cached ratings still display.
 
 ## Multi-audio packaging triage
 

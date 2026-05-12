@@ -29,6 +29,7 @@ from normal.movie_junk import (
     scan_movie_junk,
     scan_movie_promo_documents,
 )
+from normal.movie_omdb import lookup_omdb_ratings
 from normal.movie_plan import build_movie_plan
 from normal.movie_profile import (
     build_histogram_payload,
@@ -1173,6 +1174,7 @@ INDEX_HTML = """<!doctype html>
       replacementHistoryFilter: 'deleted',
       replacementHistorySort: { col: null, dir: 'asc' },
       omdbRatings: new Map(),
+      omdbStatus: '',
       selectedJunkPaths: new Set(),
       selectedReplacementPaths: new Set(),
       selectedChangeIds: new Set(),
@@ -4778,15 +4780,15 @@ INDEX_HTML = """<!doctype html>
       const seqMap = new Map(baseline.map((item, i) => [item.group_id, i + 1]));
       const { col, dir } = state.replacementHistorySort;
       const mult = dir === 'asc' ? 1 : -1;
-      const hasOmdb = !!(window.OMDB_KEY);
+      const hasOmdb = !!(window.OMDB_AVAILABLE);
       const sorted = col ? [...grouped].sort((a, b) => {
         if (col === 'seq') return mult * ((seqMap.get(a.group_id) || 0) - (seqMap.get(b.group_id) || 0));
         if (col === 'title') return mult * (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base' });
         if (col === 'year') return mult * ((a.year || 0) - (b.year || 0));
         if (col === 'count') return mult * ((a.count || 0) - (b.count || 0));
         if (col === 'imdb') {
-          const ra = state.omdbRatings.get(`${a.title}|${a.year}`) ?? -1;
-          const rb = state.omdbRatings.get(`${b.title}|${b.year}`) ?? -1;
+          const ra = replacementHistoryRatingValue(a);
+          const rb = replacementHistoryRatingValue(b);
           return mult * (ra - rb);
         }
         return 0;
@@ -4799,9 +4801,8 @@ INDEX_HTML = """<!doctype html>
         return `<th class="replacement-history-sort-th sortable-th" data-sort-col="${c}">${label}<span class="sort-ind${active?' on':''}">${ind}</span></th>`;
       }).join('') + '<th>Status</th>';
       const rows = sorted.map(item => {
-        const ratingKey = `${item.title}|${item.year}`;
-        const rating = state.omdbRatings.get(ratingKey);
-        const ratingCell = hasOmdb ? `<td>${rating == null ? '<span class="subtle">…</span>' : rating > 0 ? rating.toFixed(1) : '<span class="subtle">—</span>'}</td>` : '';
+        const rating = state.omdbRatings.get(item.group_id);
+        const ratingCell = hasOmdb ? `<td>${replacementHistoryRatingCell(rating)}</td>` : '';
         const dismissButton = item.status === 'deleted'
           ? `<button class="queue-inline-remove replacement-history-remove" data-item-ids="${escapeHtml(item.item_ids.join(','))}" title="Remove from queue">x</button>`
           : '';
@@ -4817,25 +4818,52 @@ INDEX_HTML = """<!doctype html>
         `;
       }).join('');
       if (hasOmdb) fetchMissingOmdbRatings(grouped);
-      return `<div class="table-wrap"><table style="min-width:0"><thead><tr>${thead}</tr></thead><tbody>${rows}</tbody></table></div>`;
+      const status = hasOmdb && state.omdbStatus ? `<div class="subtle" style="margin:0 0 8px">${escapeHtml(state.omdbStatus)}</div>` : '';
+      return `${status}<div class="table-wrap"><table style="min-width:0"><thead><tr>${thead}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    }
+
+    function replacementHistoryRatingValue(item) {
+      const result = state.omdbRatings.get(item.group_id);
+      return result && result.status === 'matched' && Number.isFinite(result.rating) ? result.rating : -1;
+    }
+
+    function replacementHistoryRatingCell(result) {
+      if (!result) return '<span class="subtle">…</span>';
+      if (result.status === 'pending') return '<span class="subtle">…</span>';
+      if (result.status === 'matched' && Number.isFinite(result.rating)) return result.rating.toFixed(1);
+      if (result.status === 'api_limited') return '<span class="subtle">limit</span>';
+      return '<span class="subtle">—</span>';
     }
 
     async function fetchMissingOmdbRatings(items) {
-      const missing = items.filter(item => !state.omdbRatings.has(`${item.title}|${item.year}`));
+      const missing = items.filter(item => !state.omdbRatings.has(item.group_id));
       if (!missing.length) return;
-      missing.forEach(item => state.omdbRatings.set(`${item.title}|${item.year}`, null));
-      await Promise.allSettled(missing.map(async item => {
-        const key = `${item.title}|${item.year}`;
-        const url = `https://www.omdbapi.com/?apikey=${encodeURIComponent(window.OMDB_KEY)}&t=${encodeURIComponent(item.title || '')}&y=${encodeURIComponent(String(item.year || ''))}`;
-        try {
-          const resp = await fetch(url);
-          const data = await resp.json();
-          const raw = data.imdbRating;
-          state.omdbRatings.set(key, raw && raw !== 'N/A' ? parseFloat(raw) : 0);
-        } catch {
-          state.omdbRatings.set(key, 0);
+      missing.forEach(item => state.omdbRatings.set(item.group_id, { status: 'pending', rating: null }));
+      try {
+        const response = await fetch('/api/movies/omdb/ratings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: missing.map(item => ({
+              key: item.group_id,
+              title: item.title || '',
+              year: item.year || null
+            }))
+          })
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'IMDb rating lookup failed.');
+        let limited = false;
+        for (const result of (payload.items || [])) {
+          if (!result || !result.key) continue;
+          state.omdbRatings.set(result.key, result);
+          if (result.status === 'api_limited') limited = true;
         }
-      }));
+        state.omdbStatus = limited ? 'IMDb limit reached. Cached ratings still show; new ratings retry later.' : '';
+      } catch (error) {
+        missing.forEach(item => state.omdbRatings.set(item.group_id, { status: 'error', rating: null }));
+        state.omdbStatus = error.message || 'IMDb rating lookup failed.';
+      }
       renderReplacementQueueDetail(state.results.movies.profile);
     }
 
@@ -6437,6 +6465,19 @@ def serve_web_ui(
     server.serve_forever()
 
 
+def render_index_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
+    return INDEX_HTML.replace(
+        "<script>",
+        (
+            "<script>\n"
+            f"    window.DEFAULT_SOURCE = {json.dumps(str(default_source) if default_source else '')};\n"
+            f"    window.OMDB_AVAILABLE = {json.dumps(bool(omdb_key))};\n"
+            f"    window.TMDB_KEY = {json.dumps(tmdb_key or '')};"
+        ),
+        1,
+    )
+
+
 def build_handler(
     default_source: Path | None = None,
     omdb_key: str | None = None,
@@ -6465,15 +6506,7 @@ def build_handler(
             if self.path not in {"/", "/index.html"}:
                 self.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
                 return
-            html = INDEX_HTML.replace(
-                "</script>",
-                (
-                    f"window.DEFAULT_SOURCE = {json.dumps(str(default_source) if default_source else '')};\n"
-                    f"window.OMDB_KEY = {json.dumps(omdb_key or '')};\n"
-                    f"window.TMDB_KEY = {json.dumps(tmdb_key or '')};</script>"
-                ),
-                1,
-            )
+            html = render_index_html(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
             body = html.encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -6508,6 +6541,9 @@ def build_handler(
                     return
                 if route == "/api/movies/canonical-lists":
                     self.handle_movies_canonical_lists(payload)
+                    return
+                if route == "/api/movies/omdb/ratings":
+                    self.handle_movies_omdb_ratings(payload)
                     return
                 if route == "/api/source/scan-warning":
                     self.handle_source_scan_warning(payload)
@@ -6661,6 +6697,12 @@ def build_handler(
                         should_cancel=self.client_disconnected,
                     )
             self.respond_json(report.to_dict())
+
+        def handle_movies_omdb_ratings(self, payload: dict[str, Any]) -> None:
+            items = payload.get("items")
+            if not isinstance(items, list):
+                raise ValueError("items must be a list")
+            self.respond_json(lookup_omdb_ratings([item for item in items if isinstance(item, dict)], omdb_key))
 
         def handle_music_profile(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
