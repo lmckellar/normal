@@ -2060,6 +2060,7 @@ INDEX_HTML = """<!doctype html>
       state.filter = page === 'quality' ? 'strict_weak' : 'all';
       state.qualitySort = { col: null, dir: 'asc' };
       state.musicQualitySort = { col: null, dir: 'asc' };
+      state.subtitleSort = { col: null, dir: 'asc' };
       state.replacementHistoryFilter = 'deleted';
       state.replacementHistorySort = { col: null, dir: 'asc' };
       renderPageNav();
@@ -3401,7 +3402,7 @@ INDEX_HTML = """<!doctype html>
         detailPanel.innerHTML = '<div class="empty">No review-only items.</div>';
         return;
       }
-      const items = sortedMovies(filteredSubtitleReadinessMovies(payload));
+      const items = sortedSubtitleItems(filteredSubtitleReadinessMovies(payload));
       mainContent.innerHTML = buildMovieSubtitleReadinessTable(payload, items);
       renderSubtitleReadinessDetail(payload);
       attachMovieSubtitleReadinessHandlers(payload, items);
@@ -4796,7 +4797,7 @@ INDEX_HTML = """<!doctype html>
         </div>
         <div class="table-wrap">
           <table class="subtitle-table">
-            <thead><tr><th></th><th>Title</th><th>Issue</th><th>Default Audio</th><th>Current Default Subtitle</th><th>English Forced Subtitle</th><th>English Subtitle</th></tr></thead>
+            <thead><tr><th></th>${[['title','Title'],['issue','Issue'],['default_audio','Default Audio'],['current_default_subtitle','Current Default Subtitle'],['english_forced_subtitle','English Forced Subtitle'],['english_subtitle','English Subtitle']].map(([col,label]) => { const active = state.subtitleSort.col === col; const ind = active ? (state.subtitleSort.dir === 'asc' ? '↑' : '↓') : '↕'; return `<th class="subtitle-sortable-th sortable-th" data-sort-col="${col}">${label}<span class="sort-ind${active?' on':''}">${ind}</span></th>`; }).join('')}</tr></thead>
             <tbody>${rows || '<tr><td colspan="7" class="subtle">No files for this filter.</td></tr>'}</tbody>
           </table>
         </div>
@@ -5957,6 +5958,17 @@ INDEX_HTML = """<!doctype html>
       }
       const fixButton = document.getElementById('fixSelectedSubtitleButton');
       if (fixButton) fixButton.addEventListener('click', () => fixSelectedSubtitleDefaults());
+      document.querySelectorAll('.subtitle-sortable-th').forEach(th => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.sortCol;
+          if (state.subtitleSort.col === col) {
+            state.subtitleSort.dir = state.subtitleSort.dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            state.subtitleSort = { col, dir: 'asc' };
+          }
+          renderMovieSubtitleReadiness(payload);
+        });
+      });
     }
 
     function attachReplacementQueueDetailHandlers() {
@@ -6484,6 +6496,24 @@ INDEX_HTML = """<!doctype html>
       const entries = Object.entries(counts);
       const max = Math.max(...entries.map(([, value]) => value), 1);
       return entries.map(([key, value]) => ({ label: key.replaceAll('_', ' '), value: String(value), width: (value / max) * 100 }));
+    }
+
+    function subtitleItemSortKey(item, col) {
+      const stripHtml = s => String(s || '').replace(/<[^>]*>/g, '').trim();
+      if (col === 'title') { const stem = (item.path || '').split('/').pop().replace(/\.[^.]+$/, ''); const m = stem.match(/^(.+?)\s*\((\d{4})\)/); return m ? `${m[1]} ${m[2]}` : stem; }
+      if (col === 'issue') return humanSubtitleReadinessIssueLabel(movieSubtitleReadinessIssueCode(item)) || '';
+      if (col === 'default_audio') return stripHtml(describeAudioStream(movieDefaultAudioStream(item)));
+      if (col === 'current_default_subtitle') return stripHtml(describeSubtitleStream(movieDefaultSubtitleStream(item)));
+      if (col === 'english_forced_subtitle') return stripHtml(itemSubtitleTargetSummary(item, { forcedOnly: true }));
+      if (col === 'english_subtitle') return stripHtml(itemSubtitleTargetSummary(item));
+      return '';
+    }
+
+    function sortedSubtitleItems(items) {
+      const { col, dir } = state.subtitleSort;
+      if (!col) return items;
+      const mult = dir === 'asc' ? 1 : -1;
+      return [...items].sort((a, b) => mult * subtitleItemSortKey(a, col).localeCompare(subtitleItemSortKey(b, col), undefined, { sensitivity: 'base' }));
     }
 
     function sortedMovies(items) {
