@@ -594,6 +594,13 @@ INDEX_HTML = """<!doctype html>
     .junk-table th:nth-child(4), .junk-table td:nth-child(4) { width: 120px; white-space: nowrap; }
     .junk-table td:nth-child(3) .mono { word-break: normal; overflow-wrap: anywhere; }
     .junk-table td:nth-child(2) { word-break: break-word; overflow-wrap: anywhere; }
+    .subtitle-table {
+      min-width: 0;
+      width: 100%;
+      table-layout: fixed;
+    }
+    .subtitle-table th:nth-child(1), .subtitle-table td:nth-child(1) { width: 28px; text-align: center; }
+    .subtitle-table td { word-break: break-word; overflow-wrap: anywhere; }
     .junk-actions {
       display: flex;
       align-items: center;
@@ -4753,7 +4760,7 @@ INDEX_HTML = """<!doctype html>
         return `
           <tr>
             <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="subtitle-repair-select" data-path="${encodeURIComponent(path)}" ${checked} ${locked}>` : ''}</td>
-            <td><div class="mono">${escapeHtml(path)}</div></td>
+            <td>${(() => { const stem = path.split('/').pop().replace(/\\.[^.]+$/, ''); const m = stem.match(/^(.+?)\\s*\\((\\d{4})\\)/); return m ? escapeHtml(`${m[1]} (${m[2]})`) : `<span class="mono">${escapeHtml(stem || path)}</span>`; })()}</td>
             <td>${escapeHtml(issueLabel)}</td>
             <td>${describeAudioStream(movieDefaultAudioStream(item))}</td>
             <td>${describeSubtitleStream(movieDefaultSubtitleStream(item))}</td>
@@ -4777,8 +4784,8 @@ INDEX_HTML = """<!doctype html>
           <span class="triage-action-note">${lockNote}</span>
         </div>
         <div class="table-wrap">
-          <table>
-            <thead><tr><th></th><th>File</th><th>Issue</th><th>Default Audio</th><th>Current Default Subtitle</th><th>English Forced Subtitle</th><th>English Subtitle</th><th>Status</th></tr></thead>
+          <table class="subtitle-table">
+            <thead><tr><th></th><th>Title</th><th>Issue</th><th>Default Audio</th><th>Current Default Subtitle</th><th>English Forced Subtitle</th><th>English Subtitle</th><th>Status</th></tr></thead>
             <tbody>${rows || '<tr><td colspan="8" class="subtle">No files for this filter.</td></tr>'}</tbody>
           </table>
         </div>
