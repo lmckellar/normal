@@ -7557,11 +7557,12 @@ def find_external_activity(source: Path) -> tuple[list[dict[str, Any]], str | No
             continue
         command_lower = command.lower()
         args_lower = args.lower()
+        is_shell = command_lower in {"bash", "sh", "zsh", "fish", "dash"}
         is_relevant_process = (
             command_lower in {"ffprobe", "ffmpeg", "normal", "python", "python3"}
             or "ffprobe" in args_lower
             or "ffmpeg" in args_lower
-            or "normal " in args_lower
+            or (not is_shell and "normal " in args_lower)
         )
         if not is_relevant_process:
             continue
