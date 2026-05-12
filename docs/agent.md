@@ -142,7 +142,9 @@ Per-file classification against repo-local movie standards. The scan now carries
 
 Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_risk`, `multi_audio_anime_mux_risk`, `high_complexity_hevc_tv_risk`, `episodic_naming_parse_risk`, `anime_absolute_numbering_risk`, `attachment_heavy_visibility_risk`, `default_non_english_audio`, `default_non_english_audio_with_weak_english`.
 
-The dashboard payload also carries `movie_standards`, `movie_standards_revision`, `quality_profile_definitions`, and `replacement_candidate_definition`. The movie dashboard uses that payload to split **Action Based** cards from **Quality Profile** cards, summarize each rule shape, and expose inline definition controls on the quality-profile cards and Replacement Candidate card.
+The dashboard payload also carries `movie_standards`, `movie_standards_revision`, `quality_profile_definitions`, and `replacement_candidate_definition`. The movie dashboard uses that payload to split **Action Based** cards from **Quality Profile** cards, summarize each rule shape, and expose inline definition controls on the quality-profile cards and Replacement Candidate card. Do not reintroduce per-profile allowed audio codec controls; audio codec arrays may exist in older standards files, but profile matching now relies on channel/bitrate floors, vintage channel exemptions, hygiene toggles, and `require_lossless_audio`.
+
+Dashboard movie profile scans stream file discovery and do not pre-count the whole tree. If you touch scan observability, preserve forward guidance that is true for streamed scans: processed file count, elapsed time, current probe target when available, and ETA/percent only when the backend has a real bounded total.
 
 Movie bitrate histograms are derived aggregates, not durable state. Full dashboard scans build them from the `movie-profile` report. Partial web mutations that already have the current `movies` payload rebuild only the histogram aggregate through the lightweight dashboard histogram route, then refresh the browser dashboard cache.
 

@@ -113,6 +113,9 @@ class WebTests(unittest.TestCase):
         self.assertIn("Drive activity: ffmpeg remux active", INDEX_HTML)
         self.assertIn("formatEta(job.eta_seconds)", INDEX_HTML)
         self.assertIn("formatByteSize(job.output_size_bytes)", INDEX_HTML)
+        self.assertIn("function activityProgressPieces(job)", INDEX_HTML)
+        self.assertIn("files processed", INDEX_HTML)
+        self.assertIn("app.find(item => item.kind !== 'probe')", INDEX_HTML)
 
     def test_activity_tracker_snapshots_active_probe_for_source(self) -> None:
         tracker = ActivityTracker()
@@ -138,6 +141,8 @@ class WebTests(unittest.TestCase):
                 tracker.update(
                     item_id,
                     status_text="ffmpeg remux active",
+                    processed=10,
+                    total=20,
                     progress_fraction=0.5,
                     completed_seconds=60.0,
                     total_seconds=120.0,
@@ -149,6 +154,8 @@ class WebTests(unittest.TestCase):
                 items = tracker.snapshot(source)
             self.assertEqual(items[0]["kind"], "remux")
             self.assertEqual(items[0]["status_text"], "ffmpeg remux active")
+            self.assertEqual(items[0]["processed"], 10)
+            self.assertEqual(items[0]["total"], 20)
             self.assertEqual(items[0]["progress_fraction"], 0.5)
             self.assertEqual(items[0]["eta_seconds"], 60.0)
             self.assertEqual(items[0]["output_path"], str(temp_output.resolve()))

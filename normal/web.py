@@ -32,6 +32,7 @@ from normal.movie_junk import (
 )
 from normal.movie_omdb import lookup_omdb_ratings
 from normal.movie_plan import build_movie_plan
+from normal.movie_scan import MovieScanProgress
 from normal.movie_profile import (
     build_histogram_payload,
     build_histogram_payload_from_items,
@@ -93,6 +94,8 @@ class ActivityItem:
     started_at: float
     current_path: str | None = None
     status_text: str | None = None
+    processed: int | None = None
+    total: int | None = None
     progress_fraction: float | None = None
     completed_seconds: float | None = None
     total_seconds: float | None = None
@@ -174,6 +177,8 @@ class ActivityTracker:
                 "current_path": item.current_path,
                 "elapsed_seconds": round(now - item.started_at, 1),
                 "status_text": item.status_text,
+                "processed": item.processed,
+                "total": item.total,
                 "progress_fraction": item.progress_fraction,
                 "completed_seconds": item.completed_seconds,
                 "total_seconds": item.total_seconds,
@@ -1322,6 +1327,17 @@ INDEX_HTML = """<!doctype html>
       return `${Math.round(bytes / 1e3)} KB`;
     }
 
+    function activityProgressPieces(job) {
+      const pieces = [];
+      if (job.progress_fraction != null) pieces.push(`${Math.round(job.progress_fraction * 100)}%`);
+      if (job.processed != null) {
+        pieces.push(job.total && job.total > job.processed ? `${job.processed}/${job.total} files` : `${job.processed} files processed`);
+      }
+      pieces.push(`${Math.floor(job.elapsed_seconds || 0)}s elapsed`);
+      pieces.push(formatEta(job.eta_seconds));
+      return pieces.filter(Boolean);
+    }
+
     function setActivityState(payload, errorMessage = '') {
       activityBar.classList.remove('active', 'external');
       if (errorMessage) {
@@ -1341,9 +1357,11 @@ INDEX_HTML = """<!doctype html>
       if (probes.length) {
         activityBar.classList.add('active');
         const probe = probes[0];
+        const job = app.find(item => item.kind !== 'probe') || null;
         const path = probe.current_path || '';
         activityTitle.textContent = 'Drive activity: ffprobe active';
-        activityDetail.textContent = `${probe.label}${path ? ' on ' + path.split('/').pop() : ''}`;
+        const progress = job ? activityProgressPieces(job).join(' · ') : '';
+        activityDetail.textContent = `${probe.label}${path ? ' on ' + path.split('/').pop() : ''}${progress ? ' · ' + progress : ''}`;
         return;
       }
       if (app.length) {
@@ -1365,7 +1383,9 @@ INDEX_HTML = """<!doctype html>
           return;
         }
         activityTitle.textContent = 'Drive activity: normal is running';
-        activityDetail.textContent = `${job.label} (${Math.floor(job.elapsed_seconds || 0)}s)`;
+        const pieces = activityProgressPieces(job);
+        const path = job.current_path ? ` on ${job.current_path.split('/').pop()}` : '';
+        activityDetail.textContent = `${job.label}${path}${pieces.length ? ' · ' + pieces.join(' · ') : ''}`;
         return;
       }
       if (external.length) {
@@ -6685,10 +6705,23 @@ def build_handler(
         def handle_movies_profile(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
             with guarded_heavy_scan(source, "Movie profile scan"):
-                with ACTIVITY_TRACKER.track(source, "Movie profile scan"):
+                with ACTIVITY_TRACKER.track(source, "Movie profile scan") as activity_id:
+                    def update_profile_activity(progress: MovieScanProgress) -> None:
+                        has_total = progress.total > progress.processed
+                        ACTIVITY_TRACKER.update(
+                            activity_id,
+                            current_path=progress.current_path,
+                            status_text=f"{progress.processed} files processed",
+                            processed=progress.processed,
+                            total=progress.total if has_total else None,
+                            progress_fraction=(progress.processed / progress.total) if has_total else None,
+                            eta_seconds=progress.eta_seconds if has_total else None,
+                        )
+
                     report = scan_movie_profiles(
                         source,
                         probe_media=tracked_probe(source, "ffprobe movie metadata"),
+                        progress_callback=update_profile_activity,
                         should_cancel=self.client_disconnected,
                     )
                     response = report.to_dict()

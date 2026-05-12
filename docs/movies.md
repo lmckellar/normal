@@ -55,7 +55,9 @@ Quality profile cards:
 | `Collector Grade` | Solid compact encodes that hold up better on difficult material |
 | `Reference` | Mild to no visual compression with lossless audio |
 
-The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Replacement Candidate uses a simpler inline **Edit** control: choose the quality-profile cutoff, then save to refresh the dashboard.
+The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Replacement Candidate uses a simpler inline **Edit** control: choose the quality-profile cutoff, then save to refresh the dashboard. Quality-profile editing no longer exposes per-profile allowed audio codec lists; audio posture is controlled through channel floor, bitrate floor, vintage channel exemption, and **Require lossless audio**.
+
+Dashboard movie profile scans stream progress without pre-counting the whole tree. During a scan, the drive activity bar shows processed file count, elapsed time, current `ffprobe` target when visible, and ETA only when a bounded total is known. This avoids false precision on large rebuilds while still showing forward movement.
 
 Persistence posture:
 
