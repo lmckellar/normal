@@ -47,6 +47,11 @@ from normal.movie_profile import (
 )
 from normal.movie_artwork import apply_movie_posters, scan_movie_posters
 from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
+from normal.movie_subtitle_history import (
+    dismiss_items as dismiss_subtitle_history_items,
+    history_for_source as subtitle_history_for_source,
+    upsert_items as upsert_subtitle_history_items,
+)
 from normal.music_profile import build_music_histogram_payload, scan_music_profiles
 from normal.movie_replacement_queue import (
     add_profile_items_to_queue,
@@ -1181,6 +1186,8 @@ INDEX_HTML = """<!doctype html>
       musicQualitySort: { col: null, dir: 'asc' },
       movieAudioFixBusy: false,
       movieSubtitleFixBusy: false,
+      subtitleHistory: null,
+      subtitleHistoryFilter: 'all',
       movieStandardsEditorLabel: '',
       movieStandardsSaveBusy: false,
       movieStandardsPendingDraft: null,
@@ -2215,6 +2222,11 @@ INDEX_HTML = """<!doctype html>
             cacheMovieReplacementQueue(payload.replacement_queue);
           }
           state.selectedReplacementPaths.clear();
+          if (page === 'subtitle_readiness') {
+            state.subtitleHistory = null;
+            state.subtitleHistoryFilter = 'all';
+            syncSubtitleReviewOnlyHistory(payload);
+          }
         }
         if (page === 'canonical_lists') {
           state.results.movies.canonical = payload;
@@ -4791,20 +4803,20 @@ INDEX_HTML = """<!doctype html>
       `;
     }
 
-    function buildSubtitleReviewOnlyTable(items) {
+    function buildSubtitleHistoryTable(items) {
       const rows = items.map(item => {
-        const path = item.path || '';
-        const stem = path.split('/').pop().replace(/\\.[^.]+$/, '');
-        const m = stem.match(/^(.+?)\\s*\\((\\d{4})\\)/);
-        const title = m ? `${m[1]} (${m[2]})` : stem || path;
-        const issueCode = movieSubtitleReadinessIssueCode(item);
-        const issueLabel = humanSubtitleReadinessIssueLabel(issueCode);
-        return `<tr><td>${escapeHtml(title)}</td><td>${escapeHtml(issueLabel)}</td></tr>`;
+        const title = item.title ? (item.year ? `${item.title} (${item.year})` : item.title) : (item.path || '').split('/').pop().replace(/\.[^.]+$/, '');
+        const issueLabel = humanSubtitleReadinessIssueLabel(item.issue_code || '');
+        const typeChip = item.entry_type === 'fixed'
+          ? '<span class="chip safe">fixed</span>'
+          : '<span class="chip review">review only</span>';
+        const dismissBtn = `<button class="subtitle-history-dismiss" data-item-id="${escapeHtml(item.item_id)}" title="Dismiss">×</button>`;
+        return `<tr><td>${escapeHtml(title)}</td><td>${issueLabel ? escapeHtml(issueLabel) : '<span class="subtle">—</span>'}</td><td>${typeChip}</td><td style="text-align:right">${dismissBtn}</td></tr>`;
       }).join('');
       return `
         <div class="table-wrap">
           <table>
-            <thead><tr><th style="width:50%">Title</th><th style="width:50%">Issue</th></tr></thead>
+            <thead><tr><th style="width:45%">Title</th><th style="width:30%">Issue</th><th style="width:15%">Type</th><th style="width:10%"></th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
@@ -4812,15 +4824,87 @@ INDEX_HTML = """<!doctype html>
     }
 
     function renderSubtitleReadinessDetail(payload) {
-      const items = reviewOnlySubtitleReadinessMovies(payload);
-      if (!items.length) {
-        detailPanel.innerHTML = '<div class="empty">No review-only items.</div>';
-        return;
+      const history = state.subtitleHistory;
+      const historyItems = history ? (history.items || []) : null;
+      const activeItems = historyItems ? historyItems.filter(i => !i.dismissed_at) : null;
+      const filter = state.subtitleHistoryFilter || 'all';
+      const filteredItems = activeItems ? activeItems.filter(i => {
+        if (filter === 'fixed') return i.entry_type === 'fixed';
+        if (filter === 'review_only') return i.entry_type === 'review_only';
+        return true;
+      }) : null;
+      const hasHistory = activeItems && activeItems.length > 0;
+      const filterButtons = hasHistory ? `
+        <div class="page-nav">
+          ${[['all', 'All'], ['fixed', 'Fixed'], ['review_only', 'Review Only']].map(([id, label]) =>
+            `<button class="filter-button subtitle-history-filter ${filter === id ? 'active' : ''}" data-history-filter="${id}">${label}</button>`
+          ).join('')}
+        </div>
+      ` : '';
+      const tableHtml = filteredItems && filteredItems.length
+        ? buildSubtitleHistoryTable(filteredItems)
+        : (hasHistory ? '<div class="empty">No items matching this filter.</div>' : null);
+      if (!historyItems) {
+        detailPanel.innerHTML = '<div class="empty">No subtitle history yet.</div>';
+      } else if (!hasHistory) {
+        detailPanel.innerHTML = '<div class="empty">No subtitle history yet.</div>';
+      } else {
+        detailPanel.innerHTML = `
+          <div style="font-weight:600;margin:10px 0 6px">Subtitle History</div>
+          ${filterButtons}
+          ${tableHtml || ''}
+        `;
+        attachSubtitleHistoryHandlers(payload);
       }
-      detailPanel.innerHTML = `
-        <div style="font-weight:600;margin:10px 0 6px">Review Only</div>
-        ${buildSubtitleReviewOnlyTable(items)}
-      `;
+    }
+
+    function attachSubtitleHistoryHandlers(payload) {
+      document.querySelectorAll('.subtitle-history-dismiss').forEach(button => {
+        button.addEventListener('click', () => dismissSubtitleHistoryItem(button.dataset.itemId, payload));
+      });
+      document.querySelectorAll('.subtitle-history-filter').forEach(button => {
+        button.addEventListener('click', () => {
+          state.subtitleHistoryFilter = button.dataset.historyFilter || 'all';
+          renderSubtitleReadinessDetail(payload);
+        });
+      });
+    }
+
+    async function syncSubtitleReviewOnlyHistory(payload) {
+      const source = sourceInput.value.trim();
+      if (!source || !payload) return;
+      const reviewOnlyItems = reviewOnlySubtitleReadinessMovies(payload);
+      const items = reviewOnlyItems.map(item => ({
+        path: item.path || '',
+        issue_code: movieSubtitleReadinessIssueCode(item),
+      })).filter(i => i.path);
+      try {
+        const response = await fetch('/api/movies/subtitle-readiness/history/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, items }),
+        });
+        if (!response.ok) return;
+        const history = await response.json();
+        state.subtitleHistory = history;
+        renderSubtitleReadinessDetail(payload);
+      } catch (_) {}
+    }
+
+    async function dismissSubtitleHistoryItem(itemId, payload) {
+      const source = sourceInput.value.trim();
+      if (!source || !itemId) return;
+      try {
+        const response = await fetch('/api/movies/subtitle-readiness/history/dismiss', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, item_ids: [itemId] }),
+        });
+        if (!response.ok) return;
+        const history = await response.json();
+        state.subtitleHistory = history;
+        renderSubtitleReadinessDetail(payload);
+      } catch (_) {}
     }
 
     function currentMovieReplacementQueue(payload) {
@@ -6167,11 +6251,12 @@ INDEX_HTML = """<!doctype html>
         return;
       }
       if (!source || !payload) return;
-      const paths = selectableVisibleSubtitleRepairItems(payload, payload.movies || [])
-        .filter(item => state.selectedReplacementPaths.has(item.path || ''))
-        .map(item => item.path)
-        .filter(Boolean);
+      const selectedItems = selectableVisibleSubtitleRepairItems(payload, payload.movies || [])
+        .filter(item => state.selectedReplacementPaths.has(item.path || ''));
+      const paths = selectedItems.map(item => item.path).filter(Boolean);
       if (!paths.length) return;
+      const issueCodes = {};
+      selectedItems.forEach(item => { if (item.path) issueCodes[item.path] = movieSubtitleReadinessIssueCode(item); });
       state.movieSubtitleFixBusy = true;
       renderMovieSubtitleReadiness(payload);
       setStatus(`Repairing subtitle defaults for ${paths.length} file${paths.length === 1 ? '' : 's'}…`, 'running');
@@ -6179,7 +6264,7 @@ INDEX_HTML = """<!doctype html>
         const response = await fetch('/api/movies/subtitle-readiness/fix', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, paths })
+          body: JSON.stringify({ source, paths, issue_codes: issueCodes })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Subtitle fix failed.');
@@ -6188,8 +6273,8 @@ INDEX_HTML = """<!doctype html>
           await refreshMovieDashboardHistogram(state.results.movies.profile);
         }
         state.selectedReplacementPaths.clear();
+        if (result.subtitle_history) state.subtitleHistory = result.subtitle_history;
         setStatus(summarizeSubtitleFixResult(result), 'idle');
-        renderMovieSubtitleReadiness(state.results.movies.profile);
       } catch (error) {
         setStatus(error.message, 'error');
       } finally {
@@ -6700,6 +6785,15 @@ def build_handler(
                 if route == "/api/movies/subtitle-readiness/fix":
                     self.handle_movies_subtitle_readiness_fix(payload)
                     return
+                if route == "/api/movies/subtitle-readiness/history":
+                    self.handle_movies_subtitle_readiness_history_list(payload)
+                    return
+                if route == "/api/movies/subtitle-readiness/history/sync":
+                    self.handle_movies_subtitle_readiness_history_sync(payload)
+                    return
+                if route == "/api/movies/subtitle-readiness/history/dismiss":
+                    self.handle_movies_subtitle_readiness_history_dismiss(payload)
+                    return
                 if route == "/api/music/replacement-queue/list":
                     self.handle_music_replacement_queue_list(payload)
                     return
@@ -7018,6 +7112,7 @@ def build_handler(
             paths = payload.get("paths")
             if not isinstance(paths, list):
                 raise ValueError("paths must be a list")
+            issue_codes: dict[str, str] = payload.get("issue_codes") or {}
             with ACTIVITY_TRACKER.track(source, "Movie subtitle fix: repair defaults", kind="remux") as activity_id:
                 result = fix_movie_subtitle_defaults(
                     source,
@@ -7034,7 +7129,28 @@ def build_handler(
                 profiled = build_movie_profile_item(source, movie_path, media_facts_from_dict(raw_facts))
                 updated_items.append(asdict(profiled))
             result["updated_items"] = updated_items
+            fixed_raw = [{"path": str(item["path"]), "issue_code": issue_codes.get(str(item["path"]), "")} for item in result["fixed"]]
+            if fixed_raw:
+                result["subtitle_history"] = upsert_subtitle_history_items(source, fixed_raw, entry_type="fixed")
             self.respond_json(result)
+
+        def handle_movies_subtitle_readiness_history_list(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            self.respond_json(subtitle_history_for_source(source))
+
+        def handle_movies_subtitle_readiness_history_sync(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            items = payload.get("items")
+            if not isinstance(items, list):
+                raise ValueError("items must be a list")
+            self.respond_json(upsert_subtitle_history_items(source, items, entry_type="review_only"))
+
+        def handle_movies_subtitle_readiness_history_dismiss(self, payload: dict[str, Any]) -> None:
+            source = resolve_source_path(payload.get("source"), default_source=default_source)
+            item_ids = payload.get("item_ids")
+            if not isinstance(item_ids, list):
+                raise ValueError("item_ids must be a list")
+            self.respond_json(dismiss_subtitle_history_items(source, item_ids))
 
         def handle_music_normalize(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)

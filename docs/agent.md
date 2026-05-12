@@ -21,6 +21,7 @@ normal/
 ├── movie_junk.py                # Movie junk: sample/featurette/short detection
 ├── movie_omdb.py                # Server-side OMDb rating lookups and cache
 ├── movie_replacement_queue.py   # Replacement queue: persistent state for movie triage families
+├── movie_subtitle_history.py    # Subtitle fix audit log: persistent history for fixed and review-only items
 ├── music_profile.py             # Music profile: format/fidelity classification for dashboard
 ├── music_replacement_queue.py   # Music replacement queue (parallel structure to movie queue)
 ├── quality_review.py            # Quality review helpers
@@ -40,9 +41,10 @@ docs/                            # User and agent documentation
 - **Movie normalization pipeline**: `movie_plan.py` → `movie_apply` (in `commands.py`)
 - **Movie quality pipeline**: `movie_scan.py` → `movie_profile.py` → `movie_inspect.py` → `movie_junk.py`
 - **Movie audio packaging repair**: `movie_profile.py` → `movie_audio_fix.py`
+- **Movie subtitle repair**: `movie_profile.py` → `movie_subtitle_fix.py` → `movie_subtitle_history.py`
 - **Web layer**: `web.py` — all HTTP routes in one file; stdlib `http.server`, no external framework
 - **Shared data contract**: `models.py` — `ProposedChange` is the core type crossing module boundaries
-- **Persistent state**: `movie_replacement_queue.py` writes to `~/.local/share/normal/movie-replacement-queue.json`
+- **Persistent state**: `movie_replacement_queue.py` writes to `~/.local/share/normal/movie-replacement-queue.json`; `movie_subtitle_history.py` writes to `~/.local/share/normal/subtitle-fix-history.json`
 
 ## Entry points
 
@@ -157,6 +159,16 @@ Keyed by source directory. Each item also carries `issue_family`, `issue_code`, 
 - `weak_encode` items complete when a future scan finds the same title/year and it is no longer a strict weak encode.
 - `audio_packaging` items complete when a future scan finds the same title/year and it no longer matches the queued audio-packaging issue family.
 
+### Subtitle fix history (JSON)
+
+Path: `~/.local/share/normal/subtitle-fix-history.json`
+
+Keyed by source directory. Each item carries `item_id` (SHA256[:16] of `source_root + path + entry_type`), `source_root`, `path`, `title`, `year`, `issue_code`, `entry_type` (`fixed` or `review_only`), `recorded_at`, `updated_at`, and `dismissed_at` (null until dismissed).
+
+- `review_only` items are upserted from the profile scan result each time the subtitle-readiness page loads; they represent files with subtitle issues that cannot be auto-repaired.
+- `fixed` items are written when the subtitle repair action completes successfully.
+- Dismissal sets `dismissed_at`; items are never deleted.
+
 ### Artwork provenance (JSON)
 
 Path: `Album Artist/artist.normal-artwork.json`
@@ -203,6 +215,9 @@ All routes in `web.py`. Key families:
 | `/api/movies/replacement-queue/dismiss` | POST | Mark deleted movie queue items as dismissed without touching media |
 | `/api/movies/audio-packaging/fix` | POST | Lossless MKV remux to fix English-default audio packaging when possible |
 | `/api/movies/subtitle-readiness/fix` | POST | Lossless MKV remux to repair embedded subtitle default flags without deleting files |
+| `/api/movies/subtitle-readiness/history` | POST | Load subtitle fix history for current source |
+| `/api/movies/subtitle-readiness/history/sync` | POST | Upsert review-only items into subtitle history (called after profile scan) |
+| `/api/movies/subtitle-readiness/history/dismiss` | POST | Mark subtitle history items as dismissed |
 
 ## Safety constraints
 
