@@ -20,6 +20,7 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 
 - IMDb rating availability on fresh web UI load.
 - Repair Subtitle Readiness table now shows movie title and year (e.g. `Alien (1979)`) instead of the raw file path.
+- Downstream Plex client subtitle-default changes are verified working without cache invalidation issues.
 
 ---
 
