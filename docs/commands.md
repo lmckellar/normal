@@ -168,6 +168,8 @@ Config source:
 Dashboard note:
 - `Movies / Dashboard View` now separates action cards from quality-profile cards. Inline definition controls live on the quality-profile cards and the Replacement Candidate card, write `movie_standards.json`, then rerun the dashboard so counts refresh against the new stance rules.
 - Standards persistence is repo-local rather than port-local. Browser cache is only a convenience snapshot, and stale dashboard saves are rejected if `movie_standards.json` changed since that view loaded.
+- Quality-profile edit controls intentionally omit per-profile allowed audio codec lists. Profile matching uses video floor, main-audio channel/bitrate floors, optional vintage channel exemption, hygiene toggles, and the lossless-audio toggle.
+- Dashboard movie profile scans report streamed progress in the activity bar as processed file count and current probe target. Percent/ETA appear only for workflows with a known total.
 
 The same `movie-profile` report also powers two separate web triage lanes:
 

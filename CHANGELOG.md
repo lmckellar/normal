@@ -12,6 +12,8 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 
 ### Changed
 
+- Quality Profile card editing no longer exposes per-profile allowed audio codecs, and quality-profile matching no longer gates on those per-profile codec lists.
+- Dashboard movie profile scans now show streamed forward progress in the activity bar: processed file count, current probe target, elapsed time, and ETA only when a bounded total is known.
 - Movie replacement-history IMDb ratings now use local title cleanup and search fallback, and no longer expose the OMDb key to the browser.
 
 ### Fixed

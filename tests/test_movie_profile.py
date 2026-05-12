@@ -13,6 +13,7 @@ from normal.movie_profile import (
     build_histogram_payload_from_items,
     choose_best_english_subtitle_stream,
     classify_profile_label,
+    classify_quality_stance,
     classify_standard_label,
     detect_plex_diagnostics,
     looks_like_absolute_numbering,
@@ -162,6 +163,9 @@ class MovieProfileTests(unittest.TestCase):
         )
         self.assertEqual(definitions[0]["fields"][0]["key"], "display_name")
         self.assertEqual(definitions[-1]["fields"][2]["key"], "video_1080p_kbps")
+        for definition in definitions:
+            self.assertNotIn("audio_codecs", [field["key"] for field in definition["fields"]])
+            self.assertNotIn("codecs:", definition["rule_summary"])
 
     def test_build_replacement_candidate_definition_exposes_quality_profile_cutoff(self) -> None:
         definition = build_replacement_candidate_definition(
@@ -184,6 +188,10 @@ class MovieProfileTests(unittest.TestCase):
     def test_update_movie_profile_definition_persists_reference_controls(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "movie_standards.json"
+            path.write_text(
+                json.dumps({"quality_stances": {"reference": {"audio_codecs": ["legacy"]}}}),
+                encoding="utf-8",
+            )
             with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", path):
                 standards = update_movie_profile_definition(
                     "reference",
@@ -194,7 +202,7 @@ class MovieProfileTests(unittest.TestCase):
                         "video_2160p_kbps": "26000",
                         "audio_channels": "6",
                         "audio_bitrate_kbps": "512",
-                        "audio_codecs": "truehd, dtshd, flac",
+                        "audio_codecs": "opus",
                         "require_audio_language_hygiene": True,
                         "require_subtitle_setup": True,
                         "require_folder_hygiene": True,
@@ -205,9 +213,96 @@ class MovieProfileTests(unittest.TestCase):
             reference = standards["quality_stances"]["reference"]
             self.assertEqual(reference["video_custom"]["1080p"], 18000)
             self.assertEqual(reference["video_custom"]["2160p"], 26000)
-            self.assertEqual(reference["audio_codecs"], ["truehd", "dtshd", "flac"])
+            self.assertEqual(reference["audio_codecs"], ["legacy"])
             self.assertTrue(reference["require_lossless_audio"])
             self.assertIn('"video_custom"', path.read_text(encoding="utf-8"))
+
+    def test_quality_stance_matching_ignores_profile_audio_codec_allowlists(self) -> None:
+        standards = {
+            "quality_stances": {
+                "collector_grade": {
+                    "video_custom": {"1080p": 8000, "2160p": 18000},
+                    "audio_channels": 6,
+                    "audio_bitrate_kbps": 384,
+                    "audio_codecs": ["ac3"],
+                    "require_audio_language_hygiene": True,
+                    "require_subtitle_setup": True,
+                },
+                "reference": {
+                    "video_custom": {"1080p": 16000, "2160p": 24000},
+                    "audio_channels": 6,
+                    "audio_bitrate_kbps": 640,
+                    "audio_codecs": ["truehd"],
+                    "require_lossless_audio": True,
+                },
+            }
+        }
+        domain_results = [
+            {"domain": "audio_language_hygiene", "status": "pass"},
+            {"domain": "subtitle_setup", "status": "pass"},
+        ]
+
+        label = classify_quality_stance(
+            Path("Movie (2001)/Movie (2001).mkv"),
+            MediaFacts(
+                width=1920,
+                height=1080,
+                video_bitrate_kbps=9000,
+                audio_codec="opus",
+                audio_channels=6,
+                audio_bitrate_kbps=640,
+            ),
+            domain_results,
+            standards,
+        )
+
+        self.assertEqual(label, "collector_grade")
+
+    def test_require_lossless_audio_still_gates_reference_profile(self) -> None:
+        standards = {
+            "quality_stances": {
+                "reference": {
+                    "video_custom": {"1080p": 16000, "2160p": 24000},
+                    "audio_channels": 6,
+                    "audio_bitrate_kbps": 640,
+                    "audio_codecs": ["opus"],
+                    "require_audio_language_hygiene": False,
+                    "require_subtitle_setup": False,
+                    "require_folder_hygiene": False,
+                    "require_lossless_audio": True,
+                }
+            }
+        }
+
+        weak_label = classify_quality_stance(
+            Path("Movie (2001)/Movie (2001).mkv"),
+            MediaFacts(
+                width=1920,
+                height=1080,
+                video_bitrate_kbps=18000,
+                audio_codec="opus",
+                audio_channels=6,
+                audio_bitrate_kbps=640,
+            ),
+            [],
+            standards,
+        )
+        reference_label = classify_quality_stance(
+            Path("Movie (2001)/Movie (2001).mkv"),
+            MediaFacts(
+                width=1920,
+                height=1080,
+                video_bitrate_kbps=18000,
+                audio_codec="truehd",
+                audio_channels=6,
+                audio_bitrate_kbps=640,
+            ),
+            [],
+            standards,
+        )
+
+        self.assertNotEqual(weak_label, "reference")
+        self.assertEqual(reference_label, "reference")
 
     def test_update_movie_profile_definition_persists_replacement_cutoff(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -343,6 +438,30 @@ class MovieProfileTests(unittest.TestCase):
             self.assertTrue(first_item.profile.weak_candidate)
             self.assertEqual(first_item.profile.percentile, 100.0)
             self.assertIn("playback_risk", first_item.profile.risk_counts)
+
+    def test_scan_movie_profiles_emits_streamed_progress_without_fake_total(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            first = source / "First.1999.1080p.mkv"
+            second = source / "Second.1999.1080p.mkv"
+            first.write_text("video", encoding="utf-8")
+            second.write_text("video", encoding="utf-8")
+            events = []
+
+            scan_movie_profiles(
+                source,
+                probe_media=lambda _: MediaFacts(width=1920, height=1080, video_bitrate_kbps=3500),
+                progress_callback=events.append,
+            )
+
+            self.assertEqual(events[0].status, "starting")
+            self.assertEqual(events[0].processed, 0)
+            self.assertEqual(events[0].total, 0)
+            self.assertEqual(events[1].processed, 1)
+            self.assertEqual(events[1].total, 0)
+            self.assertEqual(events[-1].status, "complete")
+            self.assertEqual(events[-1].processed, 2)
+            self.assertEqual(events[-1].total, 2)
 
     def test_build_histogram_payload_summarizes_bitrates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

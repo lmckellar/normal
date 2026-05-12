@@ -205,8 +205,8 @@ def scan_movie_profiles(
         return report
 
     started = time.monotonic()
-    total = 0
-    emit_progress(progress_callback, 0, total, None, started, "starting")
+    processed = 0
+    emit_progress(progress_callback, processed, 0, None, started, "starting")
 
     for index, movie_path in enumerate(chain([first_movie], movie_files), start=1):
         if should_cancel is not None and should_cancel():
@@ -229,12 +229,14 @@ def scan_movie_profiles(
                     path=str(movie_path),
                 )
             )
-            emit_progress(progress_callback, index, total, movie_path, started, "warning")
+            processed = index
+            emit_progress(progress_callback, processed, 0, movie_path, started, "warning")
             continue
 
         facts.resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
         report.movies.append(build_movie_profile_item(source_root, movie_path, facts, standards))
-        emit_progress(progress_callback, index, total, movie_path, started, "running")
+        processed = index
+        emit_progress(progress_callback, processed, 0, movie_path, started, "running")
 
     if (
         should_cancel is not None
@@ -252,7 +254,7 @@ def scan_movie_profiles(
 
     assign_percentiles(report.movies)
     report.movies.sort(key=lambda item: (total_risk_score(item.profile.diagnostics), item.profile.rank, item.path.lower()), reverse=True)
-    emit_progress(progress_callback, total, total, None, started, "complete")
+    emit_progress(progress_callback, processed, processed, None, started, "complete")
     return report
 
 
@@ -443,12 +445,6 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
                         ],
                     },
                     {
-                        "key": "audio_codecs",
-                        "label": "Allowed audio codecs",
-                        "type": "csv",
-                        "value": ", ".join(resolve_stance_audio_codecs(label, stance, active)),
-                    },
-                    {
                         "key": "require_audio_language_hygiene",
                         "label": "Require sensible default audio language",
                         "type": "toggle",
@@ -551,10 +547,6 @@ def update_movie_profile_definition(
             values.get("audio_bitrate_kbps"),
             int(resolve_stance_audio_bitrate(label, stance, active)),
         )
-        stance["audio_codecs"] = normalize_codec_list(
-            values.get("audio_codecs"),
-            list(resolve_stance_audio_codecs(label, stance, active)),
-        )
         stance["require_audio_language_hygiene"] = bool(values.get("require_audio_language_hygiene", False))
         stance["require_subtitle_setup"] = bool(values.get("require_subtitle_setup", False))
         stance["require_folder_hygiene"] = bool(values.get("require_folder_hygiene", False))
@@ -646,14 +638,11 @@ def human_quality_stance_label(label: str) -> str:
 
 
 def build_quality_stance_rule_summary(label: str, stance: dict[str, Any], standards: dict[str, Any]) -> str:
-    audio_codecs = ", ".join(resolve_stance_audio_codecs(label, stance, standards))
     parts = [
         f"1080p >= {resolve_stance_video_floor(label, stance, standards, '1080p')} kbps",
         f"4K >= {resolve_stance_video_floor(label, stance, standards, '2160p')} kbps",
         f"audio >= {resolve_stance_audio_channels(label, stance, standards)} ch / {resolve_stance_audio_bitrate(label, stance, standards)} kbps",
     ]
-    if audio_codecs:
-        parts.append(f"codecs: {audio_codecs}")
     if stance.get("require_lossless_audio"):
         parts.append("lossless audio required")
     return "; ".join(parts) + "."
@@ -934,9 +923,6 @@ def movie_matches_quality_stance(
     codec = (facts.audio_format_family or facts.audio_codec or "").casefold()
     channels = facts.audio_channels or 0
     bitrate = facts.audio_bitrate_kbps or 0
-    allowed_codecs = set(resolve_stance_audio_codecs(label, stance, standards))
-    if allowed_codecs and codec and codec not in allowed_codecs:
-        return False
     required_channels = resolve_stance_audio_channels(label, stance, standards)
     if required_channels and channels < required_channels:
         vintage_cutoff = int(stance.get("audio_channels_vintage_cutoff") or 0)
