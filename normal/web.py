@@ -4804,7 +4804,7 @@ INDEX_HTML = """<!doctype html>
       return `
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Title</th><th>Issue</th></tr></thead>
+            <thead><tr><th style="width:50%">Title</th><th style="width:50%">Issue</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
@@ -5597,7 +5597,10 @@ INDEX_HTML = """<!doctype html>
     }
 
     function subtitleReadinessMovies(payload) {
-      return (payload?.movies || []).filter(item => !!movieSubtitleReadinessIssueCode(item));
+      return (payload?.movies || []).filter(item => {
+        const result = movieSubtitleSetupResult(item);
+        return result && result.status !== 'pass';
+      });
     }
 
     function repairableSubtitleReadinessMovies(payload) {
