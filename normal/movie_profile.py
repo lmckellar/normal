@@ -435,13 +435,13 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
                         "type": "select",
                         "value": int(resolve_stance_audio_bitrate(label, stance, active)),
                         "options": [
-                            {"value": 128, "label": "128 kbps"},
-                            {"value": 192, "label": "192 kbps"},
-                            {"value": 256, "label": "256 kbps"},
                             {"value": 320, "label": "320 kbps"},
                             {"value": 384, "label": "384 kbps"},
                             {"value": 448, "label": "448 kbps"},
                             {"value": 640, "label": "640 kbps"},
+                            {"value": 768, "label": "768 kbps"},
+                            {"value": 1024, "label": "1024 kbps"},
+                            {"value": 1536, "label": "1536 kbps"},
                         ],
                     },
                     {
