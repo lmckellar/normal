@@ -260,7 +260,7 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 | `--host` | No | Bind address (default: `127.0.0.1`) |
 | `--port` | No | Port (default: `8765`) |
 | `--source` | No | Default source path pre-filled in the UI |
-| `--omdb-key` | No | OMDb API key for IMDb ratings in the replacement queue (falls back to `OMDB_KEY` env var) |
+| `--omdb-key` | No | OMDb API key for cached server-side IMDb ratings in the replacement queue (falls back to `OMDB_KEY` env var) |
 | `--tmdb-key` | No | TMDb API key for the Canonical Lists page (falls back to `TMDB_KEY` env var) |
 
 Movie pages currently exposed in the web UI:

@@ -5,7 +5,18 @@ This changelog is reconstructed from commit history. Package metadata is still
 
 ## [Unreleased]
 
-- No committed changes yet.
+### Added
+
+- Server-side OMDb rating cache and lookup endpoint for movie replacement history.
+- Repo-local agent guidance for the intended `unittest` test runner.
+
+### Changed
+
+- Movie replacement-history IMDb ratings now use local title cleanup and search fallback, and no longer expose the OMDb key to the browser.
+
+### Fixed
+
+- IMDb rating availability on fresh web UI load.
 
 ---
 

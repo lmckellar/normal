@@ -19,6 +19,7 @@ normal/
 ├── movie_audio_fix.py           # Movie audio packaging repair: lossless MKV remux helpers
 ├── movie_inspect.py             # Movie inspect: single-file diagnostic
 ├── movie_junk.py                # Movie junk: sample/featurette/short detection
+├── movie_omdb.py                # Server-side OMDb rating lookups and cache
 ├── movie_replacement_queue.py   # Replacement queue: persistent state for movie triage families
 ├── music_profile.py             # Music profile: format/fidelity classification for dashboard
 ├── music_replacement_queue.py   # Music replacement queue (parallel structure to movie queue)
@@ -187,6 +188,7 @@ All routes in `web.py`. Key families:
 | `/api/movies/dashboard/histogram` | POST | Rebuild movie dashboard histogram aggregates from the current in-memory `movies` payload after partial web mutations |
 | `/api/movies/standards/update` | POST | Persist repo-local movie-standards edits from dashboard quality-profile cards; rejects stale saves when the standards revision no longer matches |
 | `/api/movies/canonical-lists` | POST | Canonical title coverage payload from TMDb plus local cache |
+| `/api/movies/omdb/ratings` | POST | Batch IMDb rating lookup for replacement history using OMDb, local title cleanup, and cache |
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
 | `/api/movies/inspect` | POST | One-file movie diagnostic payload |
 | `/api/movies/normalize` | POST | Build movie normalize plan |
@@ -231,6 +233,7 @@ These are deliberate choices, not gaps:
 - **Do not trust stale dashboard state for writes.** The web save path now carries `movie_standards_revision` and rejects a save if another edit changed the file after that dashboard view loaded.
 - **Movie standards are dashboard-owned.** The card for each movie standards class now owns its label, count, summary, and inline definition editor. Edit the rule definition there; do not add a separate parallel settings surface unless the dashboard ownership model clearly breaks down.
 - **Replacement queue keeps audit history.** Items move forward through states and are never silently removed. Auto-completion (`completed`) happens on future scans when a replacement appears. Manual dismissal (`dismissed`) is explicit queue state, not media deletion.
+- **IMDb ratings are server-side.** Replacement-history ratings go through `/api/movies/omdb/ratings`; do not reintroduce browser-side OMDb key exposure or direct `www.omdbapi.com` calls.
 - **Probe cancellation is not fully hardened yet.** There is a known open issue where cancelling a movie scan and quickly starting another UI action can leave a background `ffprobe` running, and the activity indicator may miss it. Do not document cancellation as stronger than best-effort until that is fixed.
 - **Ubuntu GNOME risk is treated as operationally real.** Large recursive scans on drive-root style paths and NTFS/FUSE mounts have caused desktop instability. Keep the warning and same-source heavy-scan gate in place unless the underlying failure mode is disproven.
 - **Do not reintroduce up-front full-tree enumeration in heavy movie web scans.** Moving away from prebuilding the whole recursive path set was a key stability fix, not a cosmetic refactor. Preserve incremental traversal and cancellation checks unless there is a measured reason to change it.
