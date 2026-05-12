@@ -31,8 +31,10 @@ the broader scan/state split remains.
 Focus: finish proving the current 0.6-era workflows before starting the next
 feature line.
 
-- **Plex Artwork Repair testing** — test against real libraries and refine
-  poster previews.
+- **Plex Artwork Repair testing** — Plex-synced poster previews, title parsing,
+  and sort order landed in 0.6.4. Known remaining gap: numerical sort order has
+  a minor residual mismatch vs Plex for some multi-digit numeric titles (e.g.
+  48 Hrs. / 88 Minutes / 1917 ordering). Investigate and resolve.
 - **Subtitle Readiness validation** — confirm downstream Plex behavior and
   document any required Plex refresh/cache steps after repair.
 - **Minor UI polish** — fix twitchy button hover behavior, accidental

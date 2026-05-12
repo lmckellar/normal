@@ -20,6 +20,48 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 
 ---
 
+## [0.6.4] — 2026-05-12
+
+Plex-synced movie artwork repair.
+
+### Added
+
+- Plex API integration for movie artwork repair: scan now queries the local Plex
+  server (`localhost:32400`) and maps each movie folder to its Plex artwork via
+  `fetch_plex_movie_index`.
+- `--plex-token` and `--plex-url` CLI flags for `normal web`; both fall back to
+  `PLEX_TOKEN` / `PLEX_URL` environment variables.
+- Server-side Plex image proxy route (`GET /api/movies/artwork/plex-image`) keeps
+  the Plex token out of the browser and caches responses for 1 hour.
+- `display_name` field on poster items: clean "Title (Year)" derived via
+  `parse_movie_identity`, shown in tiles and detail panel instead of raw folder
+  names.
+- `plex_title_sort` field on poster items: Plex's own sort key used for grid
+  ordering, replicating Plex's article-dropping and numeric-aware alphabetisation.
+
+### Changed
+
+- Artwork grid status is now Plex-driven when a token is configured: "present"
+  means Plex has a thumb, "missing" means Plex knows the movie but has no art.
+  Falls back to local sidecar detection when Plex is unconfigured or the movie is
+  not indexed.
+- Grid sort order uses Plex `titleSort` when available, otherwise falls back to
+  article-stripped display name with numeric-aware comparison.
+- Tagline updates to reflect whether Plex sync is active.
+
+### Fixed
+
+- Resolution tokens (e.g. `1920x820`) in filenames no longer cause the year
+  parser to misidentify the resolution width as the release year. Fixed in both
+  `movie_identity.py` (shared `YEAR_PATTERN`) and the artwork-lane display-name
+  fallback.
+- Year-leading filenames (e.g. `1979.Mad.Max.…`) now parse to clean titles via a
+  dedicated fallback in `_parse_display_name`.
+- Apostrophe-free secondary index keys prevent lookup misses for titles like
+  "A Bug's Life" whose filesystem names drop the apostrophe.
+
+---
+
 ## [0.6.3] — 2026-05-12
 
 Hardening pass for movie dashboard state, profile persistence, and scan-derived

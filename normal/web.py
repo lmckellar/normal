@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.request
 from collections import Counter
 from contextlib import contextmanager
 from dataclasses import asdict
@@ -4082,8 +4083,35 @@ INDEX_HTML = """<!doctype html>
       });
     }
 
+    function movieDisplayName(item) {
+      return item.display_name || item.movie_name;
+    }
+
+    function movieSortKey(item) {
+      if (item.plex_title_sort) return item.plex_title_sort;
+      return (item.display_name || item.movie_name).replace(/^(?:The |A |An )/i, '');
+    }
+
+    function moviePosterSrc(item) {
+      if (item.plex_thumb) return '/api/movies/artwork/plex-image?path=' + encodeURIComponent(item.plex_thumb);
+      if (item.image_path || item.filename) return moviePosterImageUrl(item.image_path || (item.folder_path + '/' + item.filename), item);
+      return '';
+    }
+
+    function resolveMovieStatus(item, isMissing) {
+      if (item.plex_thumb !== undefined && item.plex_thumb !== null) {
+        // Plex data available: trust Plex
+        return item.plex_thumb ? 'present' : 'missing';
+      }
+      // Plex not configured or movie not indexed: fall back to filesystem
+      return isMissing ? 'missing' : 'present';
+    }
+
     function renderMovieArtwork(payload) {
-      mainTagline.textContent = 'Browse movie folders as Plex-compatible poster art. Missing poster.jpg files are shown in place.';
+      const plexConfigured = !!(window.PLEX_CONFIGURED || (payload && payload.plex_configured));
+      mainTagline.textContent = plexConfigured
+        ? 'Showing Plex artwork. Missing = Plex has no poster for this title.'
+        : 'Browse movie folders as Plex-compatible poster art. Missing poster.jpg files are shown in place. Add PLEX_TOKEN for Plex-synced view.';
 
       if (!payload) {
         renderMetrics([]);
@@ -4106,9 +4134,9 @@ INDEX_HTML = """<!doctype html>
       const approved = Object.values(state.approvedMoviePosterCandidates);
 
       const movies = [
-        ...present.map(item => ({ movie_name: item.movie_name, folder_path: item.folder_path, status: 'present', poster: item })),
-        ...missing.map(item => ({ movie_name: item.movie_name, folder_path: item.folder_path, status: 'missing', poster: null }))
-      ].sort((a, b) => a.movie_name.localeCompare(b.movie_name));
+        ...present.map(item => ({ movie_name: item.movie_name, display_name: movieDisplayName(item), sort_key: movieSortKey(item), folder_path: item.folder_path, status: resolveMovieStatus(item, false), poster: item, plex_thumb: item.plex_thumb || null })),
+        ...missing.map(item => ({ movie_name: item.movie_name, display_name: movieDisplayName(item), sort_key: movieSortKey(item), folder_path: item.folder_path, status: resolveMovieStatus(item, true), poster: null, plex_thumb: item.plex_thumb || null }))
+      ].sort((a, b) => a.sort_key.localeCompare(b.sort_key, undefined, { numeric: true, sensitivity: 'base' }));
 
       renderMetrics([
         { value: String(total), label: 'movie folders' },
@@ -4147,20 +4175,25 @@ INDEX_HTML = """<!doctype html>
 
       const movieTiles = visibleMovies.map(movie => {
         const item = movie.poster;
+        const isPresent = movie.status === 'present';
         const isLow = item && item.file_size_bytes > 0 && (item.file_size_bytes < LOW_SIZE || item.width < LOW_W || item.height < LOW_H);
-        const imgPath = item ? (item.image_path || (item.folder_path + '/' + item.filename)) : '';
-        const imgSrc = item ? moviePosterImageUrl(imgPath, item) : '';
+        const effectiveThumb = movie.plex_thumb;
+        const imgSrc = effectiveThumb
+          ? '/api/movies/artwork/plex-image?path=' + encodeURIComponent(effectiveThumb)
+          : (item ? moviePosterSrc(item) : '');
         const hasApproved = !!state.approvedMoviePosterCandidates[movie.movie_name];
+        const chipLabel = isPresent ? (effectiveThumb ? 'plex' : 'poster.jpg') : (hasApproved ? 'approved' : 'missing');
+        const chipClass = isPresent ? 'safe' : (hasApproved ? 'review' : 'high');
         return `
           <button class="artist-tile" data-movie="${escapeHtml(movie.movie_name)}" style="width:140px">
-            ${item ? `
+            ${isPresent || effectiveThumb ? `
               <div class="artist-art" style="aspect-ratio:2/3;${isLow ? 'outline:3px solid rgba(138,51,65,0.65);outline-offset:-3px' : ''}">
-                <img src="${imgSrc}" alt="${escapeHtml(movie.movie_name)}" loading="lazy" style="object-fit:cover;width:100%;height:100%">
+                <img src="${escapeHtml(imgSrc)}" alt="${escapeHtml(movie.display_name)}" loading="lazy" style="object-fit:cover;width:100%;height:100%">
               </div>
             ` : '<div class="artist-art missing" style="aspect-ratio:2/3">Missing poster</div>'}
             <div class="artist-meta">
-              <div class="artist-name">${escapeHtml(movie.movie_name)}</div>
-              <div>${item ? `<span class="chip safe" style="font-size:0.72em">poster.jpg</span>` : hasApproved ? '<span class="chip review" style="font-size:0.72em">approved</span>' : '<span class="chip high" style="font-size:0.72em">missing</span>'}${item ? posterQualityBadge(item) : ''}</div>
+              <div class="artist-name">${escapeHtml(movie.display_name)}</div>
+              <div><span class="chip ${chipClass}" style="font-size:0.72em">${chipLabel}</span>${item ? posterQualityBadge(item) : ''}</div>
             </div>
           </button>
         `;
@@ -4187,34 +4220,37 @@ INDEX_HTML = """<!doctype html>
     function showMoviePosterDetail(movieName, movies, presentByMovie) {
       const movie = movies.find(item => item.movie_name === movieName);
       if (!movie) return;
+      const displayName = movie.display_name || movieName;
       const item = presentByMovie.get(movieName);
-      const imgPath = item ? (item.image_path || (item.folder_path + '/' + item.filename)) : '';
-      const imgSrc = item ? moviePosterImageUrl(imgPath, item) : '';
+      const plexThumb = item ? item.plex_thumb : null;
+      const plexImgSrc = plexThumb ? '/api/movies/artwork/plex-image?path=' + encodeURIComponent(plexThumb) : '';
+      const localImgSrc = item ? moviePosterSrc(item) : '';
+      const imgSrc = plexImgSrc || localImgSrc;
+      const isPresent = movie.status === 'present';
       const approved = state.approvedMoviePosterCandidates[movieName];
       const previewSrc = approved ? (approved.preview_url || '') : imgSrc;
       detailPanel.innerHTML = `
         <div class="finding">
-          <h3>${escapeHtml(movieName)}</h3>
+          <h3>${escapeHtml(displayName)}</h3>
           <p class="mono">${escapeHtml(movie.folder_path)}</p>
-          ${item ? `
+          ${isPresent ? `
             <div style="width:100%;max-width:220px;aspect-ratio:2/3;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#eee6d8;margin:12px 0">
-              <img src="${escapeHtml(previewSrc)}" alt="${escapeHtml(movieName)}" style="width:100%;height:100%;object-fit:cover">
+              <img src="${escapeHtml(previewSrc)}" alt="${escapeHtml(displayName)}" style="width:100%;height:100%;object-fit:cover">
             </div>
             <div class="artwork-drop-zone" id="moviePosterDropZone">Drop poster image or image URL here</div>
             ${approved ? `
               <p><span class="chip review">approved replacement</span></p>
-              <p class="subtle">Current: <span class="mono">${escapeHtml(item.filename)}</span>${item.width && item.height ? ` &middot; ${item.width}\xd7${item.height}` : ''} &middot; ${Math.round((item.file_size_bytes || 0) / 1024)} KB</p>
+              ${item ? `<p class="subtle">Current: <span class="mono">${escapeHtml(item.filename)}</span>${item.width && item.height ? ` &middot; ${item.width}\xd7${item.height}` : ''} &middot; ${Math.round((item.file_size_bytes || 0) / 1024)} KB</p>` : ''}
               <button class="primary" id="saveMoviePosterBtn">Save Poster</button>
               <button class="secondary" id="clearMoviePosterBtn">Clear Approval</button>
             ` : `
-              <p><span class="chip safe">poster.jpg</span> ${escapeHtml(item.filename)}</p>
-              <p class="subtle">${item.width && item.height ? `${item.width}\xd7${item.height}` : 'dimensions unknown'} &middot; ${Math.round((item.file_size_bytes || 0) / 1024)} KB</p>
-              <p class="subtle">Drop a replacement image to update.</p>
+              ${plexThumb ? '<p><span class="chip safe">plex</span> artwork from Plex</p>' : item ? `<p><span class="chip safe">poster.jpg</span> ${escapeHtml(item.filename)}</p><p class="subtle">${item.width && item.height ? item.width + '\xd7' + item.height : 'dimensions unknown'} &middot; ${Math.round((item.file_size_bytes || 0) / 1024)} KB</p>` : ''}
+              <p class="subtle">Drop a replacement image to write a local poster.jpg.</p>
             `}
           ` : `
             ${approved ? `
               <div style="width:100%;max-width:220px;aspect-ratio:2/3;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#eee6d8;margin:12px 0">
-                <img src="${escapeHtml(approved.preview_url || '')}" alt="${escapeHtml(movieName)} poster" style="width:100%;height:100%;object-fit:cover">
+                <img src="${escapeHtml(approved.preview_url || '')}" alt="${escapeHtml(displayName)} poster" style="width:100%;height:100%;object-fit:cover">
               </div>
               <div class="artwork-drop-zone" id="moviePosterDropZone">Drop poster image or image URL here</div>
               <p><span class="chip review">approved</span></p>
@@ -4245,9 +4281,9 @@ INDEX_HTML = """<!doctype html>
       const missing = payload.missing || [];
       const presentByMovie = new Map(present.map(item => [item.movie_name, item]));
       const movies = [
-        ...present.map(item => ({ movie_name: item.movie_name, folder_path: item.folder_path, status: 'present', poster: item })),
-        ...missing.map(item => ({ movie_name: item.movie_name, folder_path: item.folder_path, status: 'missing', poster: null }))
-      ].sort((a, b) => a.movie_name.localeCompare(b.movie_name));
+        ...present.map(item => ({ movie_name: item.movie_name, display_name: movieDisplayName(item), sort_key: movieSortKey(item), folder_path: item.folder_path, status: resolveMovieStatus(item, false), poster: item, plex_thumb: item.plex_thumb || null })),
+        ...missing.map(item => ({ movie_name: item.movie_name, display_name: movieDisplayName(item), sort_key: movieSortKey(item), folder_path: item.folder_path, status: resolveMovieStatus(item, true), poster: null, plex_thumb: item.plex_thumb || null }))
+      ].sort((a, b) => a.sort_key.localeCompare(b.sort_key, undefined, { numeric: true, sensitivity: 'base' }));
       showMoviePosterDetail(movieName, movies, presentByMovie);
     }
 
@@ -6457,22 +6493,25 @@ def serve_web_ui(
     default_source: Path | None = None,
     omdb_key: str | None = None,
     tmdb_key: str | None = None,
+    plex_token: str | None = None,
+    plex_url: str = "http://localhost:32400",
 ) -> None:
-    handler = build_handler(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
+    handler = build_handler(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, plex_token=plex_token, plex_url=plex_url)
     server = ThreadingHTTPServer((host, port), handler)
     source_hint = f" default source {default_source}" if default_source else ""
     print(f"normal web UI listening on http://{host}:{port}/{source_hint}")
     server.serve_forever()
 
 
-def render_index_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
+def render_index_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None, plex_configured: bool = False) -> str:
     return INDEX_HTML.replace(
         "<script>",
         (
             "<script>\n"
             f"    window.DEFAULT_SOURCE = {json.dumps(str(default_source) if default_source else '')};\n"
             f"    window.OMDB_AVAILABLE = {json.dumps(bool(omdb_key))};\n"
-            f"    window.TMDB_KEY = {json.dumps(tmdb_key or '')};"
+            f"    window.TMDB_KEY = {json.dumps(tmdb_key or '')};\n"
+            f"    window.PLEX_CONFIGURED = {json.dumps(plex_configured)};"
         ),
         1,
     )
@@ -6482,6 +6521,8 @@ def build_handler(
     default_source: Path | None = None,
     omdb_key: str | None = None,
     tmdb_key: str | None = None,
+    plex_token: str | None = None,
+    plex_url: str = "http://localhost:32400",
 ):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
@@ -6503,10 +6544,13 @@ def build_handler(
             if self.path.startswith("/api/movies/artwork/image"):
                 self.handle_artwork_image()
                 return
+            if self.path.startswith("/api/movies/artwork/plex-image"):
+                self.handle_plex_image()
+                return
             if self.path not in {"/", "/index.html"}:
                 self.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
                 return
-            html = render_index_html(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
+            html = render_index_html(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, plex_configured=bool(plex_token))
             body = html.encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -7140,10 +7184,14 @@ def build_handler(
             self.respond_json({"ok": True, "folder_path": str(folder)})
 
         def handle_movies_artwork_scan(self, payload: dict[str, Any]) -> None:
+            from normal.movie_artwork import fetch_plex_movie_index
             source = resolve_source_path(payload.get("source"), default_source=default_source)
+            plex_index = fetch_plex_movie_index(plex_url, plex_token) if plex_token else None
             with ACTIVITY_TRACKER.track(source, "Movie poster scan"):
-                report = scan_movie_posters(source)
-            self.respond_json(report.to_dict())
+                report = scan_movie_posters(source, plex_index=plex_index)
+            result = report.to_dict()
+            result["plex_configured"] = bool(plex_token)
+            self.respond_json(result)
 
         def handle_movies_artwork_apply(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
@@ -7172,6 +7220,32 @@ def build_handler(
             self.send_header("Content-Type", mime)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+
+        def handle_plex_image(self) -> None:
+            from urllib.parse import parse_qs, urlparse
+            if not plex_token:
+                self.respond_json({"error": "plex not configured"}, status=HTTPStatus.NOT_FOUND)
+                return
+            qs = parse_qs(urlparse(self.path).query)
+            paths = qs.get("path", [])
+            if not paths or not paths[0].startswith("/library/"):
+                self.respond_json({"error": "invalid path"}, status=HTTPStatus.BAD_REQUEST)
+                return
+            thumb_url = f"{plex_url}{paths[0]}?X-Plex-Token={plex_token}"
+            try:
+                req = urllib.request.Request(thumb_url, headers={"Accept": "image/*"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = resp.read()
+                    content_type = resp.headers.get("Content-Type", "image/jpeg")
+            except Exception:
+                self.respond_json({"error": "plex fetch failed"}, status=HTTPStatus.BAD_GATEWAY)
+                return
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "max-age=3600")
             self.end_headers()
             self.wfile.write(data)
 
