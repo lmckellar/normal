@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 
-YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|2100)(?!\d)")
+YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|2100)(?!\d)(?![xX]\d)")
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
 RELEASE_GROUP_SUFFIX_PATTERN = re.compile(r"-(?P<group>[A-Za-z0-9]{2,12})$")
 BRACKET_CONTENT_PATTERN = re.compile(r"\[(?P<content>[^\]]+)\]")

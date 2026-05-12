@@ -74,8 +74,8 @@ A clean launch must:
 
 Current local env posture:
 
-- Keep durable local API config outside `.venv/bin/activate`.
-- Do not store or rely on secrets embedded in venv activation scripts; venv recreation can wipe them.
+- `OMDB_KEY`, `TMDB_KEY`, and `PLEX_TOKEN` are exported from `.venv/bin/activate`. Sourcing the venv is sufficient to load them.
+- `PLEX_TOKEN` is the Plex Media Server auth token (from `Preferences.xml`, owned by the `plex` system user — requires `sudo` to read). The Plex server runs at `http://localhost:32400`.
 - If the web UI is started by an agent, do not launch it via a bare venv interpreter path if that bypasses env loading.
 
 Minimum preflight before reporting success:

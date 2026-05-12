@@ -240,11 +240,13 @@ def run_web(
     source: Path | None = None,
     omdb_key: str | None = None,
     tmdb_key: str | None = None,
+    plex_token: str | None = None,
+    plex_url: str = "http://localhost:32400",
 ) -> int:
     default_source = None
     if source is not None:
         default_source = ensure_source_directory(source)
-    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
+    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, plex_token=plex_token, plex_url=plex_url)
     return 0
 
 
