@@ -102,7 +102,46 @@ Current scope is embedded subtitle streams already inside the container. Externa
 
 ## Repair artwork for Plex
 
-The **Repair Artwork for Plex** page scans each movie folder for a poster sidecar and shows the results as a portrait thumbnail gallery — 2:3 aspect ratio, matching how Plex renders movie posters. The thumbnails load from the same paths Plex reads, so the gallery is a direct preview of what Plex displays.
+The **Repair Artwork for Plex** page scans each movie folder and queries your local Plex server to show exactly what Plex has — or is missing — for each title. The gallery is a direct preview of what Plex displays, using Plex's own artwork via a server-side proxy.
+
+Without a Plex token the lane falls back to scanning local sidecar files only (`poster.jpg` etc.), which does not reflect Plex's actual artwork state.
+
+### Plex token setup
+
+The lane requires a `PLEX_TOKEN` to query your Plex server. Add it to `.venv/bin/activate` alongside the other API keys:
+
+```bash
+export PLEX_TOKEN="your_token_here"
+```
+
+**How to find your token:**
+
+1. In the Plex web UI, go to **Settings → Troubleshooting → Download logs**.
+2. Unzip the downloaded archive — it extracts to a folder named something like `Plex Media Server Logs_YYYY-MM-DD_HH-MM-SS`.
+3. Run this command against the extracted folder (substituting the actual folder name):
+
+```bash
+grep -rho 'X-Plex-Token=[A-Za-z0-9_-]\{10,\}' ~/Downloads/"Plex Media Server Logs_YYYY-MM-DD_HH-MM-SS"/ | head -1
+```
+
+Note: the token will display as `xxxxxxxxxxxxxxxxxxxx` in terminal output — this is Claude Code masking sensitive values. Copy the raw value directly from a text editor instead: open any `Plex Media Server.log` file from the extracted folder and search for `X-Plex-Token=`. The token is the alphanumeric string immediately after the `=`.
+
+Alternatively, if you have `sudo` access on the server machine, read it directly from Plex's preferences file:
+
+```bash
+sudo grep -o 'PlexOnlineToken="[^"]*"' "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Preferences.xml"
+```
+
+After adding the token, restart the `normal` web server for it to take effect.
+
+### How it works with a token
+
+- **Present (blue chip):** Plex has artwork for this title.
+- **Missing (red chip):** Plex knows the title but has no poster — this is the actionable case. Drop a poster image onto the tile to write `poster.jpg` to the folder; Plex will pick it up on its next scan.
+- Titles not yet indexed by Plex fall back to local sidecar detection.
+- Grid sort order mirrors Plex's own alphabetisation (articles dropped, numeric-aware).
+
+### Local sidecar detection (no token)
 
 Recognized poster filenames: `poster.jpg`, `poster.png`, `folder.jpg`, `folder.png`, and `{movie-filename}-poster.jpg` for flat libraries. Missing posters and low-quality images — under 30 KB or smaller than 400×600 px — are flagged.
 
