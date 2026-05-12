@@ -3386,12 +3386,12 @@ INDEX_HTML = """<!doctype html>
       ]);
       if (!payload) {
         mainContent.innerHTML = '<div class="empty">Run Movies / Repair Subtitle Readiness to review subtitle-default mistakes.</div>';
-        detailPanel.innerHTML = '<div class="empty">This page is non-destructive: it only repairs embedded subtitle default flags for supported MKVs.</div>';
+        detailPanel.innerHTML = '<div class="empty">No review-only items.</div>';
         return;
       }
       const items = sortedMovies(filteredSubtitleReadinessMovies(payload));
       mainContent.innerHTML = buildMovieSubtitleReadinessTable(payload, items);
-      detailPanel.innerHTML = '<div class="empty">This page is non-destructive: no delete or queue actions are available here.</div>';
+      renderSubtitleReadinessDetail(payload);
       attachMovieSubtitleReadinessHandlers(payload, items);
     }
 
@@ -4766,7 +4766,6 @@ INDEX_HTML = """<!doctype html>
             <td>${describeSubtitleStream(movieDefaultSubtitleStream(item))}</td>
             <td>${targetSummary}</td>
             <td>${englishSummary}</td>
-            <td>${subtitleRepairStatusChip(item)}</td>
           </tr>
         `;
       }).join('');
@@ -4785,10 +4784,42 @@ INDEX_HTML = """<!doctype html>
         </div>
         <div class="table-wrap">
           <table class="subtitle-table">
-            <thead><tr><th></th><th>Title</th><th>Issue</th><th>Default Audio</th><th>Current Default Subtitle</th><th>English Forced Subtitle</th><th>English Subtitle</th><th>Status</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="8" class="subtle">No files for this filter.</td></tr>'}</tbody>
+            <thead><tr><th></th><th>Title</th><th>Issue</th><th>Default Audio</th><th>Current Default Subtitle</th><th>English Forced Subtitle</th><th>English Subtitle</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="7" class="subtle">No files for this filter.</td></tr>'}</tbody>
           </table>
         </div>
+      `;
+    }
+
+    function buildSubtitleReviewOnlyTable(items) {
+      const rows = items.map(item => {
+        const path = item.path || '';
+        const stem = path.split('/').pop().replace(/\\.[^.]+$/, '');
+        const m = stem.match(/^(.+?)\\s*\\((\\d{4})\\)/);
+        const title = m ? `${m[1]} (${m[2]})` : stem || path;
+        const issueCode = movieSubtitleReadinessIssueCode(item);
+        const issueLabel = humanSubtitleReadinessIssueLabel(issueCode);
+        return `<tr><td>${escapeHtml(title)}</td><td>${escapeHtml(issueLabel)}</td></tr>`;
+      }).join('');
+      return `
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Title</th><th>Issue</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderSubtitleReadinessDetail(payload) {
+      const items = reviewOnlySubtitleReadinessMovies(payload);
+      if (!items.length) {
+        detailPanel.innerHTML = '<div class="empty">No review-only items.</div>';
+        return;
+      }
+      detailPanel.innerHTML = `
+        <div style="font-weight:600;margin:10px 0 6px">Review Only</div>
+        ${buildSubtitleReviewOnlyTable(items)}
       `;
     }
 
@@ -5569,13 +5600,21 @@ INDEX_HTML = """<!doctype html>
       return (payload?.movies || []).filter(item => !!movieSubtitleReadinessIssueCode(item));
     }
 
+    function repairableSubtitleReadinessMovies(payload) {
+      return subtitleReadinessMovies(payload).filter(item => movieSubtitleReadinessIsRepairable(item));
+    }
+
+    function reviewOnlySubtitleReadinessMovies(payload) {
+      return subtitleReadinessMovies(payload).filter(item => !movieSubtitleReadinessIsRepairable(item));
+    }
+
     function filteredSubtitleReadinessMovies(payload) {
-      const items = subtitleReadinessMovies(payload);
+      const items = repairableSubtitleReadinessMovies(payload);
       if (state.filter === 'forced_english') {
         return items.filter(item => ['english_forced_not_default', 'wrong_default_forced_subtitle'].includes(movieSubtitleReadinessIssueCode(item)));
       }
       if (state.filter === 'non_english_audio') {
-        return items.filter(item => ['missing_default_english_subtitle', 'wrong_default_subtitle_language'].includes(movieSubtitleReadinessIssueCode(item)));
+        return items.filter(item => ['wrong_default_subtitle_language'].includes(movieSubtitleReadinessIssueCode(item)));
       }
       if (state.filter === 'clear_default') {
         return items.filter(item => ['unnecessary_default_subtitle', 'multiple_default_subtitles'].includes(movieSubtitleReadinessIssueCode(item)));
