@@ -11,7 +11,7 @@ Contributions are welcome — happy to have them.
 ## Running tests
 
 ```bash
-python3 -m pytest tests/
+python3 -m unittest discover -s tests
 ```
 
 ## Code style

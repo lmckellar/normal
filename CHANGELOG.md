@@ -1,7 +1,7 @@
 # Changelog
 
-This changelog is reconstructed from commit history. Package metadata is still
-`0.1.0` until a real release is cut.
+This changelog was retroactively rebuilt from commit history and diff/change
+logs. Package metadata is still `0.1.0` until a real release is cut.
 
 ## [Unreleased]
 
@@ -20,7 +20,7 @@ This changelog is reconstructed from commit history. Package metadata is still
 
 ---
 
-## [0.6.3] — reconstructed — 2026-05-12
+## [0.6.3] — 2026-05-12
 
 Hardening pass for movie dashboard state, profile persistence, and scan-derived
 rendering.
@@ -45,7 +45,7 @@ rendering.
 
 ---
 
-## [0.6.2] — reconstructed — 2026-05-11
+## [0.6.2] — 2026-05-11
 
 Quality-profile editor refinement.
 
@@ -63,7 +63,7 @@ Quality-profile editor refinement.
 
 ---
 
-## [0.6.1] — reconstructed — 2026-05-11
+## [0.6.1] — 2026-05-11
 
 Movie dashboard quality-profile reframing.
 
@@ -75,7 +75,7 @@ Movie dashboard quality-profile reframing.
 
 ---
 
-## [0.6.0] — reconstructed — 2026-05-11
+## [0.6.0] — 2026-05-11
 
 Movie artwork repair lane.
 
@@ -87,7 +87,7 @@ Movie artwork repair lane.
 
 ---
 
-## [0.5.0] — reconstructed — 2026-05-11
+## [0.5.0] — 2026-05-11
 
 Subtitle readiness repair lane.
 
@@ -100,7 +100,7 @@ Subtitle readiness repair lane.
 
 ---
 
-## [0.4.0] — reconstructed — 2026-05-11
+## [0.4.0] — 2026-05-11
 
 Dashboard-owned movie standards.
 
@@ -113,7 +113,7 @@ Dashboard-owned movie standards.
 
 ---
 
-## [0.3.2] — reconstructed — 2026-05-11
+## [0.3.2] — 2026-05-11
 
 Movie audio summaries across outputs.
 
@@ -125,7 +125,7 @@ Movie audio summaries across outputs.
 
 ---
 
-## [0.3.1] — reconstructed — 2026-05-08
+## [0.3.1] — 2026-05-08
 
 Movie web UI and documentation refinement.
 
@@ -136,7 +136,7 @@ Movie web UI and documentation refinement.
 
 ---
 
-## [0.3.0] — reconstructed — 2026-05-07
+## [0.3.0] — 2026-05-07
 
 Canonical Lists coverage workflow.
 
@@ -148,7 +148,7 @@ Canonical Lists coverage workflow.
 
 ---
 
-## [0.2.2] — reconstructed — 2026-05-07
+## [0.2.2] — 2026-05-07
 
 Movie replacement queue hardening.
 
@@ -172,7 +172,7 @@ Movie replacement queue hardening.
 
 ---
 
-## [0.2.1] — reconstructed — 2026-05-06
+## [0.2.1] — 2026-05-06
 
 Movie audio remux repair.
 
@@ -184,7 +184,7 @@ Movie audio remux repair.
 
 ---
 
-## [0.2.0] — reconstructed — 2026-05-06
+## [0.2.0] — 2026-05-06
 
 Movie multi-audio packaging triage lane.
 
@@ -197,7 +197,7 @@ Movie multi-audio packaging triage lane.
 
 ---
 
-## [0.1.2] — reconstructed — 2026-05-05
+## [0.1.2] — 2026-05-05
 
 Movie replacement queue rating context.
 
@@ -208,7 +208,7 @@ Movie replacement queue rating context.
 
 ---
 
-## [0.1.1] — reconstructed — 2026-04-30
+## [0.1.1] — 2026-04-30
 
 Early documentation and UI polish.
 
