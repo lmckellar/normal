@@ -59,7 +59,7 @@ normal movie-plan --source /path/to/movies --plan movie-plan.json --summary movi
 normal movie-apply --source /path/to/movies --plan movie-plan.json --target /path/to/normalized-movies
 ```
 
-Parses title, year, and technical tokens from local paths only. Ambiguous parses are flagged as `review`. See [docs/commands.md](commands.md) for naming rules.
+Parses title, year, and technical tokens from local paths only. Concise `Title (Year)` naming is the default; verbose technical-token naming remains available with `--naming-style verbose`. Ambiguous parses and unresolved concise collisions are flagged as `review`. See [docs/commands.md](commands.md) for naming rules.
 
 ### Profile encode quality
 

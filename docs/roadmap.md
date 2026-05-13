@@ -4,7 +4,7 @@
 commit history and diff/change logs; package metadata stays at `0.1.0` until a
 real release is cut.
 
-## Where we are now — local current state after 0.6.3
+## Where we are now — local current state after 0.7.0 candidate
 
 The app has grown from a local music/movie cleanup tool into a feature-rich
 workbench with several movie repair and triage lanes.
@@ -13,23 +13,43 @@ Music lane: scan, plan, apply, artist deduplication, dashboard profile, weak
 encode triage, artwork repair for Jellyfin, CSV export, and replacement queue
 tracking.
 
-Movie lane: normalize names, encode quality profiling, dashboard standards
-controls, canonical-list coverage, weak encode triage, multi-audio packaging
-triage and repair, subtitle readiness repair, poster artwork repair for Plex,
-junk cleanup, shared replacement queue workflow, OMDb-backed replacement-history
-rating context, and XLSX catalogue export.
+Movie lane: concise-first name normalization with verbose compatibility mode,
+encode quality profiling, dashboard standards controls, canonical-list coverage,
+weak encode triage, multi-audio packaging triage and repair, subtitle readiness
+repair, poster artwork repair for Plex, junk cleanup, shared replacement queue
+workflow, OMDb-backed replacement-history rating context, and XLSX catalogue
+export.
 
 Current pressure: the lane set is useful, but scanning and UI state are
 fragmented. Movie profile already acts as a shared scan for Dashboard, weak
 encode, audio packaging, and subtitle readiness workflows; other areas still
-run separate scans and produce separate UI projections. Recent hardening moved
-IMDb rating lookup server-side with local title cleanup and fallback search, but
-the broader scan/state split remains.
+run separate scans and produce separate UI projections. Movie normalization has
+crossed the planned 0.7 threshold: the default is now concise `Title (Year)`,
+verbose naming remains available, duplicate concise targets get parsed
+differentiators when possible, and several real-world parser misses have been
+hardened. The broader scan/state split remains.
 
-## 0.6.x — existing-lane validation and polish
+## 0.7.0 — normalization controls landed
 
-Focus: finish proving the current 0.6-era workflows before starting the next
-feature line.
+Focus: make movie normalization output easier to steer without waiting for the
+larger UI overhaul.
+
+- **Movie normalization defaults** — default movie filepath output is now
+  concise: `Title (Year)/Title (Year).ext`.
+- **Normalization UI controls** — Movies / Normalize exposes `Concise Naming`
+  and `Verbose Naming - Include Extra Information`; the CLI mirrors this with
+  `--naming-style concise|verbose`.
+- **Duplicate concise output** — same-title/year copies are differentiated from
+  parsed local tokens, usually resolution, at both folder and file level; truly
+  indistinguishable collisions stay in review.
+- **Parser hardening** — trailing-year technical-token shapes, `BluRayRemux`,
+  mixed-script title prefixes, language tags, hyphenated release groups, and
+  common typo tokens are covered by focused tests.
+
+## 0.7.x — canonical-list actionability and normalization polish
+
+Focus: finish the remaining collection-decision work while polishing the new
+normalization defaults against real-library scans.
 
 - **Plex Artwork Repair testing** — Plex-synced poster previews, title parsing,
   and sort order landed in 0.6.4. Known remaining gap: numerical sort order has
@@ -37,25 +57,18 @@ feature line.
   48 Hrs. / 88 Minutes / 1917 ordering). Investigate and resolve.
 - **Subtitle Readiness validation** — confirm downstream Plex behavior and
   document any required Plex refresh/cache steps after repair.
-- **Minor UI polish** — fix twitchy button hover behavior, accidental
-  double-height buttons, theme contrast issues, typeface leaks, and rogue CSS
-  paths that do not fit the active theme.
-- **Movie dashboard hardening** — keep profile persistence, scan-derived
-  rendering, and replacement-history rating lookup stable while 0.6.x settles.
-
-## 0.7.x — normalization controls and canonical-list actionability
-
-Focus: make movie normalization output easier to steer and make Canonical Lists
-useful enough to guide collection decisions.
-
-- **Movie normalization defaults** — make default movie filepath output less
-  verbose.
-- **Normalization UI controls** — expose the core movie filepath output choices
-  without waiting for the larger UI overhaul.
 - **Canonical Lists calculation** — fix incomplete, noisy, or misleading
   coverage logic.
 - **Canonical Lists actionability** — show owned, missing, and
   owned-below-selected-quality titles as distinct states.
+- **Normalization scan review** — keep feeding real edge cases into the local
+  parser, especially duplicate-copy handling and trailing-year release naming,
+  without adding heavier scan requirements.
+- **Minor UI polish** — fix twitchy button hover behavior, accidental
+  double-height buttons, theme contrast issues, typeface leaks, and rogue CSS
+  paths that do not fit the active theme.
+- **Movie dashboard hardening** — keep profile persistence, scan-derived
+  rendering, and replacement-history rating lookup stable while 0.7.x settles.
 
 ## 0.8.x — music collection intelligence
 

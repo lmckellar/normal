@@ -108,6 +108,29 @@ class NormalCliTests(unittest.TestCase):
             payload = json.loads(plan_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["source_root"], str(source.resolve()))
             self.assertIn("proposed_changes", payload)
+            self.assertIn("The Matrix (1999).mkv", {change["proposed_value"] for change in payload["proposed_changes"]})
+
+    def test_movie_plan_can_write_verbose_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "movies"
+            folder = source / "Loose Folder"
+            folder.mkdir(parents=True)
+            (folder / "The.Matrix.1999.1080p.bluray.mkv").write_text("video", encoding="utf-8")
+            plan_path = Path(tmpdir) / "out" / "movie-plan.json"
+
+            result = self.run_cli(
+                "movie-plan",
+                "--source",
+                str(source),
+                "--plan",
+                str(plan_path),
+                "--naming-style",
+                "verbose",
+            )
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertIn("The Matrix (1999) [1080p BluRay].mkv", {change["proposed_value"] for change in payload["proposed_changes"]})
 
     def test_movie_profile_writes_report_and_histogram(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

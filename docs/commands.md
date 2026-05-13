@@ -85,6 +85,7 @@ Generate a movie rename plan from local path parsing.
 
 ```bash
 normal movie-plan --source /path/to/movies --plan out/plan.json --summary out/plan.md
+normal movie-plan --source /path/to/movies --plan out/plan.json --naming-style verbose
 ```
 
 | Flag | Required | Description |
@@ -92,8 +93,13 @@ normal movie-plan --source /path/to/movies --plan out/plan.json --summary out/pl
 | `--source` | Yes | Path to movie library root |
 | `--plan` | Yes | Output path for the JSON plan file |
 | `--summary` | No | Output path for a human-readable summary |
+| `--naming-style` | No | `concise` for `Title (Year)` output, or `verbose` to include technical tokens. Defaults to `concise`. |
 
-Target naming shape: `Title (Year) [technical tokens]/Title (Year) [technical tokens].ext`
+Default target naming shape: `Title (Year)/Title (Year).ext`
+
+Verbose target naming shape: `Title (Year) [technical tokens]/Title (Year) [technical tokens].ext`
+
+When concise naming would collapse multiple parsed copies of the same title/year, `movie-plan` adds the shortest available parsed differentiator, usually resolution, to both folder and file stem: `Title (Year) 2160p/Title (Year) 2160p.ext`. If no differentiator is available, the collision remains a `review` item.
 
 ---
 

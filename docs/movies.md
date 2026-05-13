@@ -29,12 +29,20 @@ Pass `--tmdb-key` to `normal web` or set `TMDB_KEY` before launch. Current badge
 Files named by whoever uploaded them tend to have inconsistent formatting — varying year placement, leftover technical tokens, mismatched folder names. `normal` parses each path locally (no network lookups) and proposes a clean, consistent target shape:
 
 ```
+Title (Year)/Title (Year).mkv
+```
+
+The web UI can switch between **Concise Naming** and **Verbose Naming - Include Extra Information** before applying selected changes. The CLI defaults to concise and supports `--naming-style verbose` for the older technical-token shape:
+
+```
 Title (Year) [technical tokens]/Title (Year) [technical tokens].mkv
 ```
 
-Ambiguous parses are flagged as `review`. Everything else is `safe`. You review the plan before anything moves.
+Ambiguous parses and target collisions are flagged as `review`. Everything else is `safe`. You review the plan before anything moves.
 
-The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it keeps concise release details such as `Director's Cut`, `BluRay Remux`, codec, language-count tags, and release group in the bracketed suffix.
+Concise duplicate handling is subtractive but not lossy when two local copies would otherwise collide. If the scan can distinguish them from parsed path tokens, it adds the shortest useful suffix to both folder and file stem, such as `Title (Year) 1080p` and `Title (Year) 2160p`. If no local differentiator is available, the proposal stays in review rather than inventing `(2)` names.
+
+The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it can split technical-token runs that appear before a trailing parenthesized year. In verbose mode, it keeps release details such as `Director's Cut`, `BluRay Remux`, codec, language-count tags, and release group in the bracketed suffix.
 
 ## Quality triage
 

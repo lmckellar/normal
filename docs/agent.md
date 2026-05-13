@@ -237,7 +237,7 @@ Hard rules — do not relax without explicit user instruction:
 
 These are deliberate choices, not gaps:
 
-- **Hardcoded preferences over UI controls (pre-1.0 posture).** Quality thresholds, replacement priority weights, normalization rules are mostly in code. The adjustment path is repo/agent edits until the roadmap's normalization controls and 1.0 UI work land.
+- **Hardcoded preferences remain the pre-1.0 default.** Quality thresholds and replacement priority weights are mostly in code or repo-local config. Movie normalization is the main exception: concise vs verbose naming is now exposed in the CLI and web UI.
 - **Movie triage now has separate lanes on one shared scan.** `Delete Weak Encodes` and `Fix Multi-Audio Packaging` are sibling workflows backed by the same `movie-profile` report and the same replacement queue substrate. Keep workflow/UI code shared where possible, but keep issue-family rules separate.
 - **Movie audio labels are centralized.** Main-audio display strings should come from the shared normalization path, not from per-surface ad hoc codec formatting. Keep scan JSON, CSV/XLSX export, and web tables aligned.
 - **`Movies > Plex Compatibility` is hidden in the current UI.** The heuristics live in `movie_profile.py`. The page is suppressed because the workflow isn't concrete enough. Do not re-expose it without a workflow design.

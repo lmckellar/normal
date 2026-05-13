@@ -29,6 +29,7 @@ LEADING_SITE_CREDIT_PATTERNS = (
 )
 CANONICAL_TOKEN_MAP = {
     "bluray": "BluRay",
+    "blauray": "BluRay",
     "blu-ray": "BluRay",
     "bdrip": "BDRip",
     "brrip": "BRRip",
@@ -66,6 +67,7 @@ TITLE_BOUNDARY_TOKENS = {
     "1080",
     "720",
     "480",
+    "2160",
     "2160p",
     "1080p",
     "720p",
@@ -75,10 +77,20 @@ TITLE_BOUNDARY_TOKENS = {
     "h265",
     "x264",
     "x265",
+    "bdrip",
+    "brrip",
     "bluray",
+    "blu-ray",
+    "dvdrip",
+    "dvd",
+    "uhd",
+    "remux",
+    "web",
     "webrip",
     "webdl",
+    "web-dl",
     "multi",
+    "multisub",
 }
 SKIP_TOKENS = {"sample"}
 COMPACT_TECH_MARKERS = (
@@ -147,8 +159,9 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
         match = parent_match
 
     year = int(match.group(1))
-    title_text = cleanup_title_text(prefer_ascii_title_segment(source_text[: match.start()]))
-    tail_text = source_text[match.end() :]
+    title_source, prefix_tail_text = split_title_prefix_tail(source_text[: match.start()])
+    title_text = cleanup_title_text(prefer_ascii_title_segment(title_source))
+    tail_text = f"{prefix_tail_text} {source_text[match.end() :]}".strip()
     compact_review = False
     compact_payload = parse_leading_number_compact_payload(source_text, match)
     if compact_payload is not None:
@@ -275,6 +288,18 @@ def parse_year_leading_bracket_payload(source_text: str, match: re.Match[str]) -
         return None
     tail_tokens = tokens[boundary:]
     return cleanup_title_text(" ".join(title_tokens)), " ".join(tail_tokens)
+
+
+def split_title_prefix_tail(prefix: str) -> tuple[str, str]:
+    for token_match in TOKEN_PATTERN.finditer(prefix):
+        if is_title_boundary_token(token_match.group(0)):
+            return prefix[: token_match.start()], prefix[token_match.start() :]
+    return prefix, ""
+
+
+def is_title_boundary_token(token: str) -> bool:
+    key = token.lower()
+    return key in TITLE_BOUNDARY_TOKENS or re.fullmatch(r"\d{3,4}p", key) is not None
 
 
 def cleanup_compact_title_text(value: str) -> str:
