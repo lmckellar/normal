@@ -2981,19 +2981,26 @@ INDEX_HTML = """<!doctype html>
       const applied = result.applied || [];
       const skipped = result.skipped || [];
       const failed = result.failed || [];
+      const remainingSafe = result.remaining_safe_count || 0;
+      const remainingReview = result.remaining_review_count || 0;
+      const complete = failed.length === 0 && remainingSafe === 0;
       const failedDetail = failed.length > 0 ? `
         <details style="margin-top:8px">
           <summary style="cursor:pointer;color:var(--danger)">${failed.length} failed — expand</summary>
           <div style="margin-top:6px">${failed.map(f => `<div class="mono" style="font-size:0.82em;color:var(--danger);margin-bottom:2px">${escapeHtml(f.path || f.item_id)}: ${escapeHtml(f.message)}</div>`).join('')}</div>
         </details>` : '';
+      const remainingDetail = remainingSafe || remainingReview
+        ? `<div style="margin-top:8px;color:${remainingSafe ? 'var(--danger)' : 'var(--muted)'}">${remainingSafe} safe rename${remainingSafe === 1 ? '' : 's'} and ${remainingReview} review rename${remainingReview === 1 ? '' : 's'} still pending.</div>`
+        : '';
       return `
         <div style="background:var(--accent-glow);border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);border-radius:12px;padding:14px 18px;margin-bottom:16px">
-          <div style="font-weight:600;margin-bottom:6px">Apply complete</div>
+          <div style="font-weight:600;margin-bottom:6px">${complete ? 'Apply complete' : 'Apply needs review'}</div>
           <div style="display:flex;gap:20px;flex-wrap:wrap">
             <span style="color:var(--accent)">&#10003; ${applied.length} applied</span>
             <span style="color:var(--muted)">${skipped.length} skipped</span>
             ${failed.length > 0 ? `<span style="color:var(--danger)">&#10007; ${failed.length} failed</span>` : ''}
           </div>
+          ${remainingDetail}
           ${failedDetail}
         </div>`;
     }
@@ -3468,13 +3475,16 @@ INDEX_HTML = """<!doctype html>
       renderFilters([
         ['all', 'All'],
         ['safe', 'Safe'],
-        ['review', 'Review'],
+        ['review', 'Flagged for review'],
         ['warnings', 'Warnings']
       ]);
 
       const changes = filteredMovieChanges(activePayload);
       const total = (activePayload.proposed_changes || []).length;
       const selectedCount = selectedProposedChanges(activePayload).length;
+      const visibleChangeIds = changes.map(c => c.item_id);
+      const visibleSelectedCount = changes.filter(c => state.selectedChangeIds.has(c.item_id)).length;
+      const allVisibleSelected = visibleChangeIds.length > 0 && visibleSelectedCount === visibleChangeIds.length;
       const rows = changes.map(change => `
         <tr>
           <td style="width:28px;text-align:center"><input type="checkbox" class="change-checkbox" data-item-id="${escapeHtml(change.item_id)}" ${state.selectedChangeIds.has(change.item_id) ? 'checked' : ''}></td>
@@ -3500,7 +3510,8 @@ INDEX_HTML = """<!doctype html>
         <div class="subtle" style="margin-bottom:10px;">Warnings: ${warningList || 'none'}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
           <button class="secondary" id="selAllSafe">All Safe</button>
-          <button class="secondary" id="selToggle">${selectedCount === total && total > 0 ? 'Deselect All' : 'Select All'}</button>
+          <button class="secondary" id="selFlaggedReview">Flagged for review</button>
+          <button class="secondary" id="selToggle">${allVisibleSelected ? 'Deselect All' : 'Select All'}</button>
           <span class="subtle" id="selCount" style="margin-left:4px">${selectedCount} of ${total} selected</span>
           <div style="flex:1"></div>
           <button class="primary" id="applyBtn" ${selectedCount === 0 ? 'disabled' : ''} style="min-width:160px">Apply ${selectedCount} Changes</button>
@@ -3517,12 +3528,14 @@ INDEX_HTML = """<!doctype html>
         state.selectedChangeIds = new Set((activePayload.proposed_changes || []).filter(c => c.confidence === 'safe').map(c => c.item_id));
         renderMovieNormalize(payload);
       });
+      document.getElementById('selFlaggedReview').addEventListener('click', () => {
+        state.selectedChangeIds = new Set((activePayload.proposed_changes || []).filter(c => c.confidence === 'review').map(c => c.item_id));
+        renderMovieNormalize(payload);
+      });
       document.getElementById('selToggle').addEventListener('click', () => {
-        const allChangeIds = (activePayload.proposed_changes || []).map(c => c.item_id);
-        const selectedActiveCount = selectedProposedChanges(activePayload).length;
-        state.selectedChangeIds = selectedActiveCount === allChangeIds.length && allChangeIds.length > 0
+        state.selectedChangeIds = allVisibleSelected
           ? new Set()
-          : new Set(allChangeIds);
+          : new Set(visibleChangeIds);
         renderMovieNormalize(payload);
       });
       document.getElementById('applyBtn').addEventListener('click', applySelectedMovieChanges);
@@ -3537,10 +3550,13 @@ INDEX_HTML = """<!doctype html>
           else state.selectedChangeIds.delete(cb.dataset.itemId);
           const nextPayload = activeMovieNormalizePayload(payload);
           const count = selectedProposedChanges(nextPayload).length;
+          const nextVisibleChanges = filteredMovieChanges(nextPayload);
+          const nextVisibleSelectedCount = nextVisibleChanges.filter(c => state.selectedChangeIds.has(c.item_id)).length;
+          const nextAllVisibleSelected = nextVisibleChanges.length > 0 && nextVisibleSelectedCount === nextVisibleChanges.length;
           const countEl = document.getElementById('selCount');
           if (countEl) countEl.textContent = `${count} of ${total} selected`;
           const toggle = document.getElementById('selToggle');
-          if (toggle) toggle.textContent = count === total && total > 0 ? 'Deselect All' : 'Select All';
+          if (toggle) toggle.textContent = nextAllVisibleSelected ? 'Deselect All' : 'Select All';
           const btn = document.getElementById('applyBtn');
           if (btn) { btn.disabled = count === 0; btn.textContent = `Apply ${count} Changes`; }
           showMovieNormalizeTreeDetail(nextPayload);
@@ -3563,15 +3579,17 @@ INDEX_HTML = """<!doctype html>
         const response = await fetch('/api/movies/apply', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, changes })
+          body: JSON.stringify({ source, changes, naming_style: payload.naming_style || state.movieNamingStyle || 'concise' })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Apply failed.');
         state.results.movies.apply = result;
-        state.results.movies.normalize = null;
+        state.results.movies.normalize = result.remaining_plan || null;
         state.selectedChangeIds = new Set();
-        setStatus(`Applied: ${result.applied.length}, skipped: ${result.skipped.length}, failed: ${result.failed.length}.`, 'idle');
-        renderMovieNormalize(null);
+        const remaining = result.remaining_safe_count || 0;
+        const suffix = remaining ? ` ${remaining} safe rename${remaining === 1 ? '' : 's'} still pending.` : '';
+        setStatus(`Applied: ${result.applied.length}, skipped: ${result.skipped.length}, failed: ${result.failed.length}.${suffix}`, remaining ? 'error' : 'idle');
+        renderMovieNormalize(state.results.movies.normalize);
       } catch (error) {
         setStatus(error.message, 'error');
         if (btn) btn.disabled = false;
@@ -7089,13 +7107,33 @@ def build_handler(
 
         def handle_movies_apply(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
+            requested_style = str(payload.get("naming_style") or DEFAULT_MOVIE_NAMING_STYLE)
+            if requested_style not in MOVIE_NAMING_STYLES:
+                raise ValueError(f"unknown movie naming style: {requested_style}")
             raw_changes = payload.get("changes", [])
             if not isinstance(raw_changes, list):
                 raise ValueError("changes must be a list")
             changes = [ProposedChange(**c) for c in raw_changes]
             with ACTIVITY_TRACKER.track(source, "Movie apply"):
                 report = apply_changes_in_place(source, changes)
-            self.respond_json(report.to_dict())
+                plans_by_style = {style: build_movie_plan(source, naming_style=style) for style in MOVIE_NAMING_STYLES}
+            response = report.to_dict()
+            remaining_payload = plans_by_style[requested_style].to_dict()
+            remaining_payload["naming_style"] = requested_style
+            remaining_payload["default_naming_style"] = DEFAULT_MOVIE_NAMING_STYLE
+            remaining_payload["proposed_changes_by_naming_style"] = {
+                style: plans_by_style[style].to_dict()["proposed_changes"] for style in MOVIE_NAMING_STYLES
+            }
+            remaining_payload["warnings_by_naming_style"] = {
+                style: plans_by_style[style].to_dict()["warnings"] for style in MOVIE_NAMING_STYLES
+            }
+            remaining_payload["movie_files"] = [str(path) for path in discover_video_files(source)]
+            remaining_changes = remaining_payload["proposed_changes"]
+            response["remaining_changes"] = remaining_changes
+            response["remaining_safe_count"] = len([change for change in remaining_changes if change["confidence"] == "safe"])
+            response["remaining_review_count"] = len([change for change in remaining_changes if change["confidence"] == "review"])
+            response["remaining_plan"] = remaining_payload if remaining_changes else None
+            self.respond_json(response)
 
         def handle_movies_junk(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
