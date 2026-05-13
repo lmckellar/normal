@@ -466,6 +466,11 @@ class WebTests(unittest.TestCase):
         self.assertIn("function applySelectedMovieChanges", INDEX_HTML)
         self.assertIn("showMovieNormalizeTreeDetail", INDEX_HTML)
         self.assertIn("All Safe", INDEX_HTML)
+        self.assertIn("Concise Naming", INDEX_HTML)
+        self.assertIn("Verbose Naming - Include Extra Information", INDEX_HTML)
+        self.assertIn("function activeMovieNormalizePayload(payload)", INDEX_HTML)
+        self.assertIn("proposed_changes_by_naming_style", INDEX_HTML)
+        self.assertIn("requestBody.naming_style = state.movieNamingStyle", INDEX_HTML)
 
     def test_music_artwork_page_is_album_artist_browser(self) -> None:
         self.assertIn("label: 'Repair Artwork for Jellyfin'", INDEX_HTML)

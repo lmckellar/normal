@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 import re
 
@@ -9,6 +10,8 @@ from normal.movie_identity import ParsedMovieIdentity, parse_movie_identity
 from normal.movie_scan import VIDEO_EXTENSIONS, discover_video_files
 
 
+MOVIE_NAMING_STYLES = ("concise", "verbose")
+DEFAULT_MOVIE_NAMING_STYLE = "concise"
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|2100)(?!\d)")
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
 RELEASE_GROUP_SUFFIX_PATTERN = re.compile(r"-(?P<group>[A-Za-z0-9]{2,12})$")
@@ -19,6 +22,7 @@ LEADING_SITE_CREDIT_PATTERNS = (
 )
 CANONICAL_TOKEN_MAP = {
     "bluray": "BluRay",
+    "blauray": "BluRay",
     "blu-ray": "BluRay",
     "bdrip": "BDRip",
     "brrip": "BRRip",
@@ -110,7 +114,16 @@ COMPACT_TITLE_WORDS = {
 ParsedMovieName = ParsedMovieIdentity
 
 
-def build_movie_plan(source_root: Path) -> ChangePlan:
+@dataclass(slots=True)
+class PlannedMovieFile:
+    folder_path: Path
+    movie_path: Path
+    loose_root_file: bool
+    parsed: ParsedMovieName
+
+
+def build_movie_plan(source_root: Path, naming_style: str = DEFAULT_MOVIE_NAMING_STYLE) -> ChangePlan:
+    naming_style = normalize_movie_naming_style(naming_style)
     plan = build_empty_plan(source_root)
     movie_files = discover_video_files(source_root)
 
@@ -128,10 +141,13 @@ def build_movie_plan(source_root: Path) -> ChangePlan:
     for movie_path in movie_files:
         files_by_folder[movie_path.parent].append(movie_path)
 
+    planned_files: list[PlannedMovieFile] = []
     for folder_path, folder_files in sorted(files_by_folder.items()):
         if folder_path.resolve() == source_root.resolve():
             for movie_path in sorted(folder_files):
-                append_movie_file_changes(plan, source_root, folder_path, movie_path, loose_root_file=True)
+                planned_file = parse_planned_movie_file(plan, folder_path, movie_path, loose_root_file=True)
+                if planned_file is not None:
+                    planned_files.append(planned_file)
             continue
 
         if len(folder_files) != 1:
@@ -145,21 +161,33 @@ def build_movie_plan(source_root: Path) -> ChangePlan:
             continue
 
         movie_path = folder_files[0]
-        append_movie_file_changes(plan, source_root, folder_path, movie_path, loose_root_file=False)
+        planned_file = parse_planned_movie_file(plan, folder_path, movie_path, loose_root_file=False)
+        if planned_file is not None:
+            planned_files.append(planned_file)
+
+    movie_bases = movie_bases_for_planned_files(planned_files, naming_style)
+    for planned_file in planned_files:
+        append_movie_file_changes(plan, source_root, planned_file, movie_bases[planned_file.movie_path])
 
     for folder_change in plan_collection_folder_cleanup(source_root, movie_files, files_by_folder):
         plan.proposed_changes.append(folder_change)
 
+    mark_movie_target_collisions(plan, source_root)
     return plan
 
 
-def append_movie_file_changes(
+def normalize_movie_naming_style(value: str) -> str:
+    if value in MOVIE_NAMING_STYLES:
+        return value
+    raise ValueError(f"unknown movie naming style: {value}")
+
+
+def parse_planned_movie_file(
     plan: ChangePlan,
-    source_root: Path,
     folder_path: Path,
     movie_path: Path,
     loose_root_file: bool,
-) -> None:
+) -> PlannedMovieFile | None:
     parsed = parse_movie_name(movie_path)
     for warning in parsed.warnings:
         plan.warnings.append(
@@ -178,10 +206,21 @@ def append_movie_file_changes(
                 path=str(movie_path),
             )
         )
-        return
+        return None
 
-    canonical_base = canonical_movie_base(parsed)
-    if loose_root_file:
+    return PlannedMovieFile(folder_path=folder_path, movie_path=movie_path, loose_root_file=loose_root_file, parsed=parsed)
+
+
+def append_movie_file_changes(
+    plan: ChangePlan,
+    source_root: Path,
+    planned_file: PlannedMovieFile,
+    canonical_base: str,
+) -> None:
+    parsed = planned_file.parsed
+    movie_path = planned_file.movie_path
+    folder_path = planned_file.folder_path
+    if planned_file.loose_root_file:
         file_move = build_loose_file_move_change(source_root, movie_path, canonical_base, parsed.confidence)
         if file_move is not None:
             plan.proposed_changes.append(file_move)
@@ -473,6 +512,101 @@ def canonical_movie_base(parsed: ParsedMovieName) -> str:
     if details:
         return f"{base} [{' '.join(details)}]"
     return base
+
+
+def concise_movie_base(parsed: ParsedMovieName) -> str:
+    return f"{parsed.title} ({parsed.year})"
+
+
+def movie_base_for_naming_style(parsed: ParsedMovieName, naming_style: str) -> str:
+    if normalize_movie_naming_style(naming_style) == "verbose":
+        return canonical_movie_base(parsed)
+    return concise_movie_base(parsed)
+
+
+def movie_bases_for_planned_files(planned_files: list[PlannedMovieFile], naming_style: str) -> dict[Path, str]:
+    bases = {planned_file.movie_path: movie_base_for_naming_style(planned_file.parsed, naming_style) for planned_file in planned_files}
+    grouped: dict[str, list[PlannedMovieFile]] = defaultdict(list)
+    for planned_file in planned_files:
+        grouped[bases[planned_file.movie_path]].append(planned_file)
+
+    for base, collisions in grouped.items():
+        if len(collisions) < 2:
+            continue
+        differentiators = concise_collision_differentiators(collisions)
+        if differentiators is None:
+            continue
+        for planned_file, differentiator in zip(collisions, differentiators, strict=True):
+            bases[planned_file.movie_path] = f"{base} {differentiator}"
+    return bases
+
+
+def concise_collision_differentiators(planned_files: list[PlannedMovieFile]) -> list[str] | None:
+    candidates = [movie_differentiator_candidates(planned_file.parsed) for planned_file in planned_files]
+    max_candidate_count = max((len(candidate) for candidate in candidates), default=0)
+    for count in range(1, max_candidate_count + 1):
+        labels = [" ".join(candidate[:count]) for candidate in candidates]
+        if all(labels) and len(set(label.casefold() for label in labels)) == len(labels):
+            return labels
+    return None
+
+
+def movie_differentiator_candidates(parsed: ParsedMovieName) -> list[str]:
+    tokens = list(parsed.tech_tokens)
+    if parsed.release_group:
+        tokens.append(parsed.release_group)
+
+    priority_groups = [
+        lambda token: re.fullmatch(r"\d{3,4}p", token) is not None,
+        lambda token: token in {"UHD", "BluRay", "WEB-DL", "WEBRip", "BDRip", "BRRip", "DVDRip", "DVD", "Remux"},
+        lambda token: token in {"x264", "x265", "H.264", "H.265", "HEVC", "AV1"},
+        lambda token: token in {"AAC", "AC3", "EAC3", "DDP", "DTS", "DTS-HD", "TrueHD", "Atmos"},
+        lambda token: True,
+    ]
+    ordered: list[str] = []
+    for predicate in priority_groups:
+        for token in tokens:
+            if predicate(token) and token not in ordered:
+                ordered.append(token)
+    return ordered
+
+
+def mark_movie_target_collisions(plan: ChangePlan, source_root: Path) -> None:
+    targets: dict[str, list[ProposedChange]] = defaultdict(list)
+    for change in plan.proposed_changes:
+        target = movie_change_target_key(change, source_root)
+        if target is not None:
+            targets[target].append(change)
+
+    for target, changes in sorted(targets.items()):
+        if len(changes) < 2:
+            continue
+        for change in changes:
+            change.confidence = "review"
+            if "Target path collides with another proposed movie normalization change." not in change.reason:
+                change.reason = f"{change.reason} Target path collides with another proposed movie normalization change."
+        plan.warnings.append(
+            WarningItem(
+                code="movie_name_target_collision",
+                message="Multiple movie normalization changes propose the same target path.",
+                path=target,
+            )
+        )
+
+
+def movie_change_target_key(change: ProposedChange, source_root: Path) -> str | None:
+    if change.change_type == "file_move":
+        return change.proposed_value
+    if change.change_type == "folder_rename":
+        return change.proposed_value
+    if change.change_type == "file_rename" and change.path is not None:
+        source_path = Path(change.path)
+        try:
+            relative_parent = source_path.parent.resolve().relative_to(source_root.resolve())
+        except ValueError:
+            return None
+        return str(relative_parent / change.proposed_value)
+    return None
 
 
 def plan_collection_folder_cleanup(

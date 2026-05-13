@@ -21,6 +21,7 @@ from normal.movie_profile import (
     load_movie_standards,
     MovieStandardsConflictError,
     movie_standards_revision,
+    path_matches_normalized_shape,
     scan_movie_profiles,
     update_movie_profile_definition,
     is_replacement_candidate_quality,
@@ -50,6 +51,9 @@ class MovieProfileTests(unittest.TestCase):
         )
 
         self.assertEqual(label, "minimum_acceptable_1080p")
+
+    def test_path_matches_normalized_shape_accepts_concise_movie_names(self) -> None:
+        self.assertTrue(path_matches_normalized_shape(Path("/movies/The Matrix (1999)/The Matrix (1999).mkv")))
 
     def test_classify_profile_label_uses_kind_floor_for_compressed_tiers(self) -> None:
         compressed_1080p = classify_profile_label(

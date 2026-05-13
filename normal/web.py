@@ -31,7 +31,7 @@ from normal.movie_junk import (
     scan_movie_promo_documents,
 )
 from normal.movie_omdb import lookup_omdb_ratings
-from normal.movie_plan import build_movie_plan
+from normal.movie_plan import DEFAULT_MOVIE_NAMING_STYLE, MOVIE_NAMING_STYLES, build_movie_plan
 from normal.movie_scan import MovieScanProgress
 from normal.movie_profile import (
     build_histogram_payload,
@@ -1198,6 +1198,7 @@ INDEX_HTML = """<!doctype html>
       selectedJunkPaths: new Set(),
       selectedReplacementPaths: new Set(),
       selectedChangeIds: new Set(),
+      movieNamingStyle: 'concise',
       selectedArtistNames: new Set(),
       approvedArtworkCandidates: {},
       approvedMoviePosterCandidates: {},
@@ -2138,6 +2139,9 @@ INDEX_HTML = """<!doctype html>
       refreshActivityState();
       try {
         const requestBody = { source };
+        if (state.lane === 'movies' && pageConfig.id === 'normalize') {
+          requestBody.naming_style = state.movieNamingStyle || 'concise';
+        }
         async function fetchPagePayload(body) {
           const response = await fetch(pageConfig.endpoint, {
             method: 'POST',
@@ -2236,6 +2240,7 @@ INDEX_HTML = """<!doctype html>
         if (page === 'normalize') {
           state.results.movies.normalize = payload;
           state.results.movies.apply = null;
+          state.movieNamingStyle = payload.naming_style || payload.default_naming_style || state.movieNamingStyle || 'concise';
           state.selectedChangeIds = new Set();
         }
         if (page === 'junk') {
@@ -3146,6 +3151,19 @@ INDEX_HTML = """<!doctype html>
         </div>`;
     }
 
+    function activeMovieNormalizePayload(payload) {
+      if (!payload) return payload;
+      const style = state.movieNamingStyle || payload.default_naming_style || payload.naming_style || 'concise';
+      const changesByStyle = payload.proposed_changes_by_naming_style || {};
+      const warningsByStyle = payload.warnings_by_naming_style || {};
+      return {
+        ...payload,
+        naming_style: style,
+        proposed_changes: changesByStyle[style] || payload.proposed_changes || [],
+        warnings: warningsByStyle[style] || payload.warnings || []
+      };
+    }
+
     function selectedProposedChanges(payload) {
       return (payload.proposed_changes || []).filter(c => state.selectedChangeIds.has(c.item_id));
     }
@@ -3435,10 +3453,11 @@ INDEX_HTML = """<!doctype html>
 
     function renderMovieNormalize(payload) {
       mainTagline.textContent = 'Review proposed movie file and folder renames, approve, and apply.';
-      renderMetrics(buildMovieNormalizeMetrics(payload));
-      renderBars(buildMovieNormalizeBars(payload));
+      const activePayload = activeMovieNormalizePayload(payload);
+      renderMetrics(buildMovieNormalizeMetrics(activePayload));
+      renderBars(buildMovieNormalizeBars(activePayload));
       const applyResult = state.results.movies.apply;
-      if (!payload) {
+      if (!activePayload) {
         filterBar.innerHTML = '';
         const applyBanner = applyResult ? buildApplyResultBanner(applyResult) : '';
         mainContent.innerHTML = applyBanner + '<div class="empty">Run Movies / Normalize to generate rename proposals.</div>';
@@ -3453,9 +3472,9 @@ INDEX_HTML = """<!doctype html>
         ['warnings', 'Warnings']
       ]);
 
-      const changes = filteredMovieChanges(payload);
-      const total = (payload.proposed_changes || []).length;
-      const selectedCount = state.selectedChangeIds.size;
+      const changes = filteredMovieChanges(activePayload);
+      const total = (activePayload.proposed_changes || []).length;
+      const selectedCount = selectedProposedChanges(activePayload).length;
       const rows = changes.map(change => `
         <tr>
           <td style="width:28px;text-align:center"><input type="checkbox" class="change-checkbox" data-item-id="${escapeHtml(change.item_id)}" ${state.selectedChangeIds.has(change.item_id) ? 'checked' : ''}></td>
@@ -3466,11 +3485,18 @@ INDEX_HTML = """<!doctype html>
           <td>${escapeHtml(change.proposed_value)}</td>
         </tr>
       `).join('');
-      const warningCounts = CounterFromArray((payload.warnings || []).map(w => w.code));
+      const warningCounts = CounterFromArray((activePayload.warnings || []).map(w => w.code));
       const warningList = Object.entries(warningCounts).map(([code, count]) => `<span class="chip review">${escapeHtml(code)}${count > 1 ? ` ×${count}` : ''}</span>`).join('');
       const applyBanner = applyResult ? buildApplyResultBanner(applyResult) : '';
       mainContent.innerHTML = `
         ${applyBanner}
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <label class="subtle" for="movieNamingStyleSelect">Naming</label>
+          <select id="movieNamingStyleSelect" style="min-width:280px">
+            <option value="concise" ${activePayload.naming_style === 'concise' ? 'selected' : ''}>Concise Naming</option>
+            <option value="verbose" ${activePayload.naming_style === 'verbose' ? 'selected' : ''}>Verbose Naming - Include Extra Information</option>
+          </select>
+        </div>
         <div class="subtle" style="margin-bottom:10px;">Warnings: ${warningList || 'none'}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
           <button class="secondary" id="selAllSafe">All Safe</button>
@@ -3488,38 +3514,44 @@ INDEX_HTML = """<!doctype html>
       `;
 
       document.getElementById('selAllSafe').addEventListener('click', () => {
-        state.selectedChangeIds = new Set((payload.proposed_changes || []).filter(c => c.confidence === 'safe').map(c => c.item_id));
+        state.selectedChangeIds = new Set((activePayload.proposed_changes || []).filter(c => c.confidence === 'safe').map(c => c.item_id));
         renderMovieNormalize(payload);
       });
       document.getElementById('selToggle').addEventListener('click', () => {
-        const allChangeIds = (payload.proposed_changes || []).map(c => c.item_id);
-        state.selectedChangeIds = state.selectedChangeIds.size === allChangeIds.length && allChangeIds.length > 0
+        const allChangeIds = (activePayload.proposed_changes || []).map(c => c.item_id);
+        const selectedActiveCount = selectedProposedChanges(activePayload).length;
+        state.selectedChangeIds = selectedActiveCount === allChangeIds.length && allChangeIds.length > 0
           ? new Set()
           : new Set(allChangeIds);
         renderMovieNormalize(payload);
       });
       document.getElementById('applyBtn').addEventListener('click', applySelectedMovieChanges);
+      document.getElementById('movieNamingStyleSelect').addEventListener('change', event => {
+        state.movieNamingStyle = event.target.value;
+        renderMovieNormalize(payload);
+      });
 
       mainContent.querySelectorAll('.change-checkbox').forEach(cb => {
         cb.addEventListener('change', () => {
           if (cb.checked) state.selectedChangeIds.add(cb.dataset.itemId);
           else state.selectedChangeIds.delete(cb.dataset.itemId);
-          const count = state.selectedChangeIds.size;
+          const nextPayload = activeMovieNormalizePayload(payload);
+          const count = selectedProposedChanges(nextPayload).length;
           const countEl = document.getElementById('selCount');
           if (countEl) countEl.textContent = `${count} of ${total} selected`;
           const toggle = document.getElementById('selToggle');
           if (toggle) toggle.textContent = count === total && total > 0 ? 'Deselect All' : 'Select All';
           const btn = document.getElementById('applyBtn');
           if (btn) { btn.disabled = count === 0; btn.textContent = `Apply ${count} Changes`; }
-          showMovieNormalizeTreeDetail(payload);
+          showMovieNormalizeTreeDetail(nextPayload);
         });
       });
 
-      showMovieNormalizeTreeDetail(payload);
+      showMovieNormalizeTreeDetail(activePayload);
     }
 
     async function applySelectedMovieChanges() {
-      const payload = state.results.movies.normalize;
+      const payload = activeMovieNormalizePayload(state.results.movies.normalize);
       const source = sourceInput.value.trim();
       if (!payload || !source) return;
       const changes = (payload.proposed_changes || []).filter(c => state.selectedChangeIds.has(c.item_id));
@@ -4793,6 +4825,7 @@ INDEX_HTML = """<!doctype html>
         <div class="junk-actions audio-packaging-actions">
           <button class="secondary" id="toggleSubtitleRepairButton" ${(selectableCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
           <button class="primary" id="fixSelectedSubtitleButton" ${(selectedCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>Repair Subtitle Defaults</button>
+          <span class="subtle">This page is non-destructive.</span>
           <span class="triage-action-note">${lockNote}</span>
         </div>
         <div class="table-wrap">
@@ -7036,10 +7069,21 @@ def build_handler(
 
         def handle_movies_normalize(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
+            requested_style = str(payload.get("naming_style") or DEFAULT_MOVIE_NAMING_STYLE)
+            if requested_style not in MOVIE_NAMING_STYLES:
+                raise ValueError(f"unknown movie naming style: {requested_style}")
             with guarded_heavy_scan(source, "Movie normalize plan"):
                 with ACTIVITY_TRACKER.track(source, "Movie normalize plan"):
-                    plan = build_movie_plan(source)
-                    response = plan.to_dict()
+                    plans_by_style = {style: build_movie_plan(source, naming_style=style) for style in MOVIE_NAMING_STYLES}
+                    response = plans_by_style[requested_style].to_dict()
+                    response["naming_style"] = requested_style
+                    response["default_naming_style"] = DEFAULT_MOVIE_NAMING_STYLE
+                    response["proposed_changes_by_naming_style"] = {
+                        style: plans_by_style[style].to_dict()["proposed_changes"] for style in MOVIE_NAMING_STYLES
+                    }
+                    response["warnings_by_naming_style"] = {
+                        style: plans_by_style[style].to_dict()["warnings"] for style in MOVIE_NAMING_STYLES
+                    }
                     response["movie_files"] = [str(path) for path in discover_video_files(source)]
             self.respond_json(response)
 
