@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from normal.movie_plan import build_movie_plan
+from normal.movie_plan import build_movie_plan, canonical_movie_base, parse_movie_name
 
 
 class MoviePlanTests(unittest.TestCase):
@@ -36,6 +36,61 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn("Dune (1984) [Extended 1080p BluRay ACE x264 ETRG].mkv", proposed_values)
             self.assertIn("Dune (1984) [Extended 1080p BluRay ACE x264 ETRG]", proposed_values)
             self.assertEqual([change.confidence for change in plan.proposed_changes], ["safe", "safe"])
+
+    def test_build_movie_plan_prefers_ascii_title_for_mixed_script_movie_name(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "Movies"
+            folder.mkdir()
+            movie = folder / "Коммандос.Commando.1985.Director's.Cut.BDRip-HEVC.1080p.mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(
+                (
+                    "Commando (1985) [Director's Cut BDRip HEVC 1080p].mkv",
+                    "safe",
+                ),
+                proposed,
+            )
+            self.assertIn(
+                (
+                    "Commando (1985) [Director's Cut BDRip HEVC 1080p]",
+                    "safe",
+                ),
+                proposed,
+            )
+            self.assertFalse(plan.warnings)
+
+    def test_build_movie_plan_splits_bluray_remux_and_preserves_language_tags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Land.of.the.Dead.2005.BluRayRemux.1080p.x264.3Rus.Eng.-CME-v0.mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(
+                (
+                    "Land Of The Dead (2005) [BluRay Remux 1080p x264 3RUS ENG CMEV0]/Land Of The Dead (2005) [BluRay Remux 1080p x264 3RUS ENG CMEV0].mkv",
+                    "safe",
+                ),
+                proposed,
+            )
+            self.assertFalse(plan.warnings)
+
+    def test_parse_movie_name_preserves_release_group_when_sample_has_no_extension(self) -> None:
+        parsed = parse_movie_name(Path("/mnt/media_storage/Movies/Land.of.the.Dead.2005.BluRayRemux.1080p.x264.3Rus.Eng.-CME-v0"))
+
+        self.assertEqual(
+            canonical_movie_base(parsed),
+            "Land Of The Dead (2005) [BluRay Remux 1080p x264 3RUS ENG CMEV0]",
+        )
+        self.assertEqual(parsed.confidence, "safe")
+        self.assertEqual(parsed.warnings, [])
 
     def test_build_movie_plan_cleans_dotted_collection_parent(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

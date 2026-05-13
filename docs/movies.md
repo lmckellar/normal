@@ -34,6 +34,8 @@ Title (Year) [technical tokens]/Title (Year) [technical tokens].mkv
 
 Ambiguous parses are flagged as `review`. Everything else is `safe`. You review the plan before anything moves.
 
+The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it keeps concise release details such as `Director's Cut`, `BluRay Remux`, codec, language-count tags, and release group in the bracketed suffix.
+
 ## Quality triage
 
 A full movie profile scan now separates **Action Based** cards from **Quality Profile** cards.

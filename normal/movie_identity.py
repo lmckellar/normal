@@ -3,12 +3,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import unicodedata
 
 
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|2100)(?!\d)(?![xX]\d)")
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
-RELEASE_GROUP_SUFFIX_PATTERN = re.compile(r"-(?P<group>[A-Za-z0-9]{2,12})$")
+RELEASE_GROUP_SUFFIX_PATTERN = re.compile(r"-(?P<group>[A-Za-z0-9][A-Za-z0-9-]{1,20})$")
 BRACKET_CONTENT_PATTERN = re.compile(r"\[(?P<content>[^\]]+)\]")
+VIDEO_NAME_EXTENSIONS = {
+    ".mkv",
+    ".mp4",
+    ".m4v",
+    ".avi",
+    ".mov",
+    ".wmv",
+    ".mpg",
+    ".mpeg",
+    ".ts",
+    ".m2ts",
+    ".webm",
+}
 LEADING_SITE_CREDIT_PATTERNS = (
     re.compile(r"^\s*www[._\s-]+[A-Za-z0-9]+[._\s-]+(?:org|com|net)\s*(?:[-:]+)?\s*", re.IGNORECASE),
     re.compile(r"^\s*www\.[A-Za-z0-9.-]+\s*(?:[-:]+)?\s*", re.IGNORECASE),
@@ -78,6 +92,7 @@ COMPACT_TECH_MARKERS = (
     "bdrip",
     "brrip",
     "dvdrip",
+    "remux",
     "x265",
     "x264",
     "h265",
@@ -121,7 +136,7 @@ class MovieIdentityKey:
 
 
 def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
-    stem = movie_path.stem
+    stem = movie_path.stem if movie_path.suffix.lower() in VIDEO_NAME_EXTENSIONS else movie_path.name
     match = find_movie_year_match(stem)
     source_text = stem
     if match is None:
@@ -132,7 +147,7 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
         match = parent_match
 
     year = int(match.group(1))
-    title_text = cleanup_title_text(strip_leading_collection_index(strip_leading_site_credit(source_text[: match.start()])))
+    title_text = cleanup_title_text(prefer_ascii_title_segment(source_text[: match.start()]))
     tail_text = source_text[match.end() :]
     compact_review = False
     compact_payload = parse_leading_number_compact_payload(source_text, match)
@@ -306,6 +321,38 @@ def cleanup_title_text(value: str) -> str:
     return " ".join(words)
 
 
+def prefer_ascii_title_segment(value: str) -> str:
+    cleaned = strip_leading_collection_index(strip_leading_site_credit(value))
+    if not has_non_latin_letter(cleaned):
+        return cleaned
+
+    ascii_segments = [
+        segment
+        for segment in re.split(r"[._]+", cleaned)
+        if has_ascii_letter(segment) and not has_non_latin_letter(segment)
+    ]
+    if not ascii_segments:
+        return cleaned
+    return " ".join(ascii_segments)
+
+
+def has_ascii_letter(value: str) -> bool:
+    return any(("A" <= char <= "Z") or ("a" <= char <= "z") for char in value)
+
+
+def has_non_latin_letter(value: str) -> bool:
+    for char in value:
+        if not char.isalpha() or char.isascii():
+            continue
+        try:
+            name = unicodedata.name(char)
+        except ValueError:
+            return True
+        if "LATIN" not in name:
+            return True
+    return False
+
+
 def fallback_parent_title(parent_name: str, year: int) -> str:
     year_index = parent_name.find(str(year))
     if year_index >= 0:
@@ -385,6 +432,8 @@ def should_mark_compact_split_for_review(token: str) -> bool:
         return False
     if re.fullmatch(r"(?i)h26[45]", token):
         return False
+    if re.fullmatch(r"(?i)blurayremux", token):
+        return False
     return True
 
 
@@ -419,6 +468,10 @@ def canonicalize_token_sequence(tokens: list[str]) -> list[str]:
         if current.upper() == "H" and next_token in {"264", "265"}:
             merged.append(f"H.{next_token}")
             index += 2
+            continue
+        if current.lower() == "director" and next_token == "S" and next_next and next_next.upper() == "CUT":
+            merged.append("Director's Cut")
+            index += 3
             continue
         if current.upper() in {"DD", "DDP"} and is_single_digit_token(next_token) and is_single_digit_token(next_next):
             merged.append(f"{current.upper()} {next_token}.{next_next}")
