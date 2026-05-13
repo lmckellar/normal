@@ -11,6 +11,7 @@ from normal.movie_profile import (
     build_replacement_candidate_definition,
     build_histogram_payload,
     build_histogram_payload_from_items,
+    build_movie_profile_item,
     choose_best_english_subtitle_stream,
     classify_profile_label,
     classify_quality_stance,
@@ -54,6 +55,37 @@ class MovieProfileTests(unittest.TestCase):
 
     def test_path_matches_normalized_shape_accepts_concise_movie_names(self) -> None:
         self.assertTrue(path_matches_normalized_shape(Path("/movies/The Matrix (1999)/The Matrix (1999).mkv")))
+
+    def test_path_matches_normalized_shape_rejects_verbose_tokenized_movie_names(self) -> None:
+        self.assertFalse(
+            path_matches_normalized_shape(
+                Path("/movies/The Matrix (1999) [1080p BluRay x264 GRP]/The Matrix (1999) [1080p BluRay x264 GRP].mkv")
+            )
+        )
+
+    def test_reference_profile_requires_concise_folder_hygiene(self) -> None:
+        facts = MediaFacts(
+            width=1920,
+            height=1080,
+            video_bitrate_kbps=18000,
+            audio_codec="truehd",
+            audio_channels=6,
+            audio_bitrate_kbps=4000,
+            audio_streams=[AudioStreamFacts(index=1, codec="truehd", bitrate_kbps=4000, channels=6, language="eng", is_default=True)],
+            default_audio_streams=1,
+            default_audio_stream_index=1,
+        )
+
+        item = build_movie_profile_item(
+            Path("/movies"),
+            Path("/movies/The Matrix (1999) [1080p BluRay x264 GRP]/The Matrix (1999) [1080p BluRay x264 GRP].mkv"),
+            facts,
+        )
+
+        self.assertNotEqual(item.profile.quality_label, "reference")
+        self.assertEqual(item.profile.label, "needs_review")
+        folder_hygiene = next(result for result in item.profile.domain_results if result["domain"] == "folder_hygiene")
+        self.assertEqual(folder_hygiene["code"], "path_not_normalized")
 
     def test_classify_profile_label_uses_kind_floor_for_compressed_tiers(self) -> None:
         compressed_1080p = classify_profile_label(

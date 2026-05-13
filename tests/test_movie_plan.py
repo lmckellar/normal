@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from normal.apply import apply_changes_in_place
 from normal.movie_plan import build_movie_plan, canonical_movie_base, parse_movie_name
 
 
@@ -21,6 +22,186 @@ class MoviePlanTests(unittest.TestCase):
             proposed_values = {change.proposed_value for change in plan.proposed_changes}
             self.assertIn("The Matrix (1999).mkv", proposed_values)
             self.assertIn("The Matrix (1999)", proposed_values)
+
+    def test_build_movie_plan_detects_verbose_folder_after_concise_file_rename(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "The Matrix (1999) [1080p BluRay x264 AAC GRP]"
+            folder.mkdir()
+            movie = folder / "The Matrix (1999).mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.current_value, change.proposed_value) for change in plan.proposed_changes}
+            self.assertEqual(
+                proposed,
+                {
+                    (
+                        "folder_rename",
+                        "The Matrix (1999) [1080p BluRay x264 AAC GRP]",
+                        "The Matrix (1999)",
+                    )
+                },
+            )
+
+    def test_build_movie_plan_detects_verbose_file_inside_concise_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "The Matrix (1999)"
+            folder.mkdir()
+            movie = folder / "The Matrix (1999) [1080p BluRay x264 AAC GRP].mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.current_value, change.proposed_value) for change in plan.proposed_changes}
+            self.assertEqual(
+                proposed,
+                {
+                    (
+                        "file_rename",
+                        "The Matrix (1999) [1080p BluRay x264 AAC GRP].mkv",
+                        "The Matrix (1999).mkv",
+                    )
+                },
+            )
+
+    def test_build_movie_plan_rescan_is_clean_after_concise_apply(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "The Matrix (1999) [1080p BluRay x264 AAC GRP]"
+            folder.mkdir()
+            movie = folder / "The Matrix (1999) [1080p BluRay x264 AAC GRP].mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+            report = apply_changes_in_place(source, plan.proposed_changes)
+            rescanned = build_movie_plan(source)
+
+            self.assertEqual(len(report.applied), 2)
+            self.assertEqual(rescanned.proposed_changes, [])
+            self.assertTrue((source / "The Matrix (1999)" / "The Matrix (1999).mkv").exists())
+
+    def test_build_movie_plan_marks_existing_concise_target_collision_for_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            concise = source / "Ace Ventura Pet Detective (1994)"
+            verbose = source / "Ace Ventura Pet Detective (1994) [BluRay 1080p DDP 5.1 x264 HALLOWED]"
+            concise.mkdir()
+            verbose.mkdir()
+            (concise / "Ace Ventura Pet Detective (1994).mkv").write_text("video", encoding="utf-8")
+            (verbose / "Ace.Ventura.Pet.Detective.1994.BluRay.1080p.DDP.5.1.x264-HALLOWED.mkv").write_text(
+                "video",
+                encoding="utf-8",
+            )
+
+            plan = build_movie_plan(source)
+
+            folder_change = next(change for change in plan.proposed_changes if change.change_type == "folder_rename")
+            file_change = next(change for change in plan.proposed_changes if change.change_type == "file_rename")
+            self.assertEqual(folder_change.proposed_value, "Ace Ventura Pet Detective (1994) 1080p")
+            self.assertEqual(file_change.proposed_value, "Ace Ventura Pet Detective (1994) 1080p.mkv")
+            self.assertEqual(folder_change.confidence, "safe")
+            self.assertEqual(file_change.confidence, "safe")
+            self.assertNotIn("movie_name_existing_target_collision", {warning.code for warning in plan.warnings})
+
+    def test_build_movie_plan_renames_no_video_movie_artifact_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            artifact = source / "A Few Good Men (1992) [1080p BluRay AC3 x264 ETRG]"
+            artifact.mkdir()
+            (artifact / "A.Few.Good.Men.1992.1080p.BluRay.AC3.x264-ETRG.nfo").write_text("metadata", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            self.assertIn("no_video_files", {warning.code for warning in plan.warnings})
+            self.assertEqual(len(plan.proposed_changes), 1)
+            change = plan.proposed_changes[0]
+            self.assertEqual(change.change_type, "folder_rename")
+            self.assertEqual(change.proposed_value, "A Few Good Men (1992)")
+            self.assertEqual(change.confidence, "safe")
+
+    def test_build_movie_plan_deletes_metadata_only_collection_artifact_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            artifact = source / "The Mummy 1, 2, 3, 4 - Collection 1999-2017 Eng Subs 1080p [H264-mp4]"
+            child = artifact / "The Mummy Collection 1999-2017 1080p"
+            child.mkdir(parents=True)
+            (artifact / ".DS_Store").write_text("metadata", encoding="utf-8")
+            (child / "01 The Mummy 1 - Action 1999 Eng Subs 1080p [H264-mp4].nfo").write_text(
+                "metadata",
+                encoding="utf-8",
+            )
+
+            plan = build_movie_plan(source)
+
+            self.assertEqual(len(plan.proposed_changes), 1)
+            change = plan.proposed_changes[0]
+            self.assertEqual(change.change_type, "folder_delete")
+            self.assertEqual(change.confidence, "safe")
+
+    def test_build_movie_plan_moves_loose_movie_with_sidecar_nfo_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Se7en [1080p, x264, dts ita, ac3 ita-eng, subs] by GuglielmoDaBaskerville.mkv"
+            movie.write_text("video", encoding="utf-8")
+            movie.with_suffix(".nfo").write_text("<movie><title>Se7en</title><year>1995</year></movie>", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            move = next(change for change in plan.proposed_changes if change.change_type == "file_move")
+            self.assertEqual(move.proposed_value, "Se7en (1995)/Se7en (1995).mkv")
+            self.assertEqual(move.confidence, "safe")
+
+    def test_build_movie_plan_deletes_root_appledouble_junk_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            (source / "._Movie.mkv").write_text("metadata", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            delete = next(change for change in plan.proposed_changes if change.change_type == "file_delete")
+            self.assertEqual(delete.current_value, "._Movie.mkv")
+            self.assertEqual(delete.confidence, "safe")
+
+    def test_build_movie_plan_normalizes_multi_part_movie_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "White Mischief (1987) Greta Scacchi 2CD 2160p H.264 ENG-GER (moviesbyrizzo) MULTISUB"
+            folder.mkdir()
+            (folder / "White Mischief (1987) Greta Scacchi 2160p CD1 H.264 ENG-GER (moviesbyrizzo).mkv").write_text(
+                "video",
+                encoding="utf-8",
+            )
+            (folder / "White Mischief (1987) Greta Scacchi 2160p CD2 H.264 ENG-GER (moviesbyrizzo).mkv").write_text(
+                "video",
+                encoding="utf-8",
+            )
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("folder_rename", "White Mischief (1987)", "safe"), proposed)
+            self.assertIn(("file_rename", "White Mischief (1987) CD1.mkv", "safe"), proposed)
+            self.assertIn(("file_rename", "White Mischief (1987) CD2.mkv", "safe"), proposed)
+
+    def test_build_movie_plan_merges_no_video_artifact_folder_into_existing_concise_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            concise = source / "A Few Good Men (1992)"
+            artifact = source / "A Few Good Men (1992) [1080p BluRay AC3 x264 ETRG]"
+            concise.mkdir()
+            artifact.mkdir()
+            (concise / "A Few Good Men (1992).mkv").write_text("video", encoding="utf-8")
+            (artifact / "A.Few.Good.Men.1992.1080p.BluRay.AC3.x264-ETRG.nfo").write_text("metadata", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            change = next(change for change in plan.proposed_changes if change.change_type == "folder_merge")
+            self.assertEqual(change.current_value, "A Few Good Men (1992) [1080p BluRay AC3 x264 ETRG]")
+            self.assertEqual(change.proposed_value, "A Few Good Men (1992)")
+            self.assertEqual(change.confidence, "safe")
 
     def test_build_movie_plan_splits_technical_tokens_before_trailing_year(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

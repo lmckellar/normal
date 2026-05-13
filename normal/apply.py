@@ -81,7 +81,7 @@ def apply_plan(
 
     proposed_changes = [ProposedChange(**change_data) for change_data in payload.get("proposed_changes", [])]
 
-    for change in [c for c in proposed_changes if c.change_type != "folder_rename"]:
+    for change in [c for c in proposed_changes if c.change_type not in {"folder_rename", "folder_merge", "folder_delete"}]:
         if change.confidence != "safe":
             report.skipped.append(
                 ApplyResult(
@@ -112,7 +112,7 @@ def apply_plan(
         collection.append(result)
 
     for change in sorted(
-        [c for c in proposed_changes if c.change_type == "folder_rename"],
+        [c for c in proposed_changes if c.change_type in {"folder_rename", "folder_merge", "folder_delete"}],
         key=lambda c: len(Path(c.current_value).parts),
         reverse=True,
     ):
@@ -197,10 +197,16 @@ def apply_change(source_root: Path, destination_root: Path, change: ProposedChan
 
     if change.change_type == "file_rename":
         return apply_file_rename(destination_path, change)
+    if change.change_type == "file_delete":
+        return apply_file_delete(destination_path, change)
     if change.change_type == "file_move":
         return apply_file_move(destination_path, destination_root, change)
     if change.change_type == "tag_edit":
         return apply_tag_edit(destination_path, change)
+    if change.change_type == "folder_merge":
+        return apply_folder_merge(source_root, destination_root, change)
+    if change.change_type == "folder_delete":
+        return apply_folder_delete(source_root, destination_root, change)
     if change.change_type == "folder_rename":
         return apply_folder_rename(source_root, destination_root, change)
     return ApplyResult(
@@ -272,6 +278,17 @@ def apply_file_move(destination_path: Path, destination_root: Path, change: Prop
         status="applied",
         path=str(moved_path),
         message=f"File moved{format_sidecar_count(sidecar_count)}.",
+    )
+
+
+def apply_file_delete(destination_path: Path, change: ProposedChange) -> ApplyResult:
+    destination_path.unlink()
+    return ApplyResult(
+        item_id=change.item_id,
+        change_type=change.change_type,
+        status="applied",
+        path=str(destination_path),
+        message="File deleted.",
     )
 
 
@@ -415,6 +432,97 @@ def apply_folder_rename(source_root: Path, destination_root: Path, change: Propo
     )
 
 
+def apply_folder_merge(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+    if change.path is None:
+        raise ValueError("folder merge is missing path")
+
+    source_dir = Path(change.path).resolve()
+    relative_current = source_dir.relative_to(source_root.resolve())
+    destination_dir = destination_root / relative_current
+    if not destination_dir.exists():
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_dir),
+            message="Folder path is missing.",
+        )
+    if str(relative_current) != change.current_value:
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_dir),
+            message="Folder path drifted from the plan current_value.",
+        )
+
+    target_dir = destination_root / change.proposed_value
+    if not target_dir.exists() or not target_dir.is_dir():
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(target_dir),
+            message="Folder merge target is missing.",
+        )
+
+    moved_count = 0
+    for entry in sorted(destination_dir.iterdir()):
+        target = target_dir / entry.name
+        if target.exists():
+            return ApplyResult(
+                item_id=change.item_id,
+                change_type=change.change_type,
+                status="skipped",
+                path=str(target),
+                message="Folder merge target already contains an entry with the same name.",
+            )
+        entry.rename(target)
+        moved_count += 1
+    prune_empty_parents(destination_root, destination_dir)
+    return ApplyResult(
+        item_id=change.item_id,
+        change_type=change.change_type,
+        status="applied",
+        path=str(target_dir),
+        message=f"Folder merged with {moved_count} entr{'y' if moved_count == 1 else 'ies'}.",
+    )
+
+
+def apply_folder_delete(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+    if change.path is None:
+        raise ValueError("folder delete is missing path")
+
+    source_dir = Path(change.path).resolve()
+    relative_current = source_dir.relative_to(source_root.resolve())
+    destination_dir = destination_root / relative_current
+    if not destination_dir.exists():
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_dir),
+            message="Folder path is missing.",
+        )
+    if str(relative_current) != change.current_value:
+        return ApplyResult(
+            item_id=change.item_id,
+            change_type=change.change_type,
+            status="skipped",
+            path=str(destination_dir),
+            message="Folder path drifted from the plan current_value.",
+        )
+    shutil.rmtree(destination_dir)
+    prune_empty_parents(destination_root, destination_dir.parent)
+    return ApplyResult(
+        item_id=change.item_id,
+        change_type=change.change_type,
+        status="applied",
+        path=str(destination_dir),
+        message="Folder deleted.",
+    )
+
+
 def move_wrapper_sidecars_after_collapse(
     destination_root: Path,
     relative_current: Path,
@@ -460,9 +568,9 @@ def apply_changes_in_place(source_root: Path, changes: list[ProposedChange]) -> 
         target_root=str(root),
         mode="in_place",
     )
-    non_folder = [c for c in changes if c.change_type != "folder_rename"]
+    non_folder = [c for c in changes if c.change_type not in {"folder_rename", "folder_merge", "folder_delete"}]
     folder_changes = sorted(
-        [c for c in changes if c.change_type == "folder_rename"],
+        [c for c in changes if c.change_type in {"folder_rename", "folder_merge", "folder_delete"}],
         key=lambda c: len(Path(c.current_value).parts),
         reverse=True,
     )

@@ -4,6 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 import re
+import xml.etree.ElementTree as ET
 
 from normal.models import ChangePlan, ProposedChange, WarningItem, build_empty_plan
 from normal.movie_identity import ParsedMovieIdentity, parse_movie_identity
@@ -75,6 +76,8 @@ TITLE_BOUNDARY_TOKENS = {
     "multi",
 }
 SKIP_TOKENS = {"sample"}
+SAFE_DELETE_ARTIFACT_EXTENSIONS = {".nfo", ".ds_store"}
+SAFE_DELETE_ARTIFACT_NAMES = {".ds_store"}
 COMPACT_TECH_MARKERS = (
     "2160p",
     "1080p",
@@ -135,6 +138,10 @@ def build_movie_plan(source_root: Path, naming_style: str = DEFAULT_MOVIE_NAMING
                 path=str(source_root),
             )
         )
+        for artifact_change in plan_movie_artifact_folder_cleanup(source_root, movie_files):
+            plan.proposed_changes.append(artifact_change)
+        for junk_change in plan_root_junk_file_cleanup(source_root):
+            plan.proposed_changes.append(junk_change)
         return plan
 
     files_by_folder: dict[Path, list[Path]] = defaultdict(list)
@@ -151,13 +158,17 @@ def build_movie_plan(source_root: Path, naming_style: str = DEFAULT_MOVIE_NAMING
             continue
 
         if len(folder_files) != 1:
-            plan.warnings.append(
-                WarningItem(
-                    code="movie_folder_multiple_videos",
-                    message="Folder contains multiple supported video files; movie normalization was skipped for safety.",
-                    path=str(folder_path),
+            multi_changes = plan_multi_part_movie_folder(source_root, folder_path, sorted(folder_files), naming_style)
+            if multi_changes:
+                plan.proposed_changes.extend(multi_changes)
+            else:
+                plan.warnings.append(
+                    WarningItem(
+                        code="movie_folder_multiple_videos",
+                        message="Folder contains multiple supported video files; movie normalization was skipped for safety.",
+                        path=str(folder_path),
+                    )
                 )
-            )
             continue
 
         movie_path = folder_files[0]
@@ -171,6 +182,12 @@ def build_movie_plan(source_root: Path, naming_style: str = DEFAULT_MOVIE_NAMING
 
     for folder_change in plan_collection_folder_cleanup(source_root, movie_files, files_by_folder):
         plan.proposed_changes.append(folder_change)
+
+    for artifact_change in plan_movie_artifact_folder_cleanup(source_root, movie_files):
+        plan.proposed_changes.append(artifact_change)
+
+    for junk_change in plan_root_junk_file_cleanup(source_root):
+        plan.proposed_changes.append(junk_change)
 
     mark_movie_target_collisions(plan, source_root)
     return plan
@@ -189,6 +206,8 @@ def parse_planned_movie_file(
     loose_root_file: bool,
 ) -> PlannedMovieFile | None:
     parsed = parse_movie_name(movie_path)
+    if parsed.title is None or parsed.year is None:
+        parsed = parsed_movie_identity_from_sidecar(movie_path) or parsed
     for warning in parsed.warnings:
         plan.warnings.append(
             WarningItem(
@@ -209,6 +228,21 @@ def parse_planned_movie_file(
         return None
 
     return PlannedMovieFile(folder_path=folder_path, movie_path=movie_path, loose_root_file=loose_root_file, parsed=parsed)
+
+
+def parsed_movie_identity_from_sidecar(movie_path: Path) -> ParsedMovieName | None:
+    nfo_path = movie_path.with_suffix(".nfo")
+    if not nfo_path.exists():
+        return None
+    try:
+        root = ET.fromstring(nfo_path.read_text(encoding="utf-8-sig", errors="ignore"))
+    except (OSError, ET.ParseError):
+        return None
+    title = (root.findtext("title") or root.findtext("originaltitle") or "").strip()
+    year_text = (root.findtext("year") or "").strip()
+    if not title or not re.fullmatch(r"(19\d{2}|20\d{2}|2100)", year_text):
+        return None
+    return ParsedMovieIdentity(title=title, year=int(year_text), tech_tokens=[], release_group=None, confidence="safe", warnings=[])
 
 
 def append_movie_file_changes(
@@ -237,6 +271,65 @@ def append_movie_file_changes(
 
 def parse_movie_name(movie_path: Path) -> ParsedMovieName:
     return parse_movie_identity(movie_path)
+
+
+def plan_multi_part_movie_folder(
+    source_root: Path,
+    folder_path: Path,
+    folder_files: list[Path],
+    naming_style: str,
+) -> list[ProposedChange]:
+    parsed_files = [(movie_path, parse_movie_name(movie_path)) for movie_path in folder_files]
+    if any(parsed.title is None or parsed.year is None for _, parsed in parsed_files):
+        return []
+    identities = {(parsed.title, parsed.year) for _, parsed in parsed_files}
+    if len(identities) != 1:
+        return []
+    part_labels = [movie_part_label(parsed) for _, parsed in parsed_files]
+    if any(label is None for label in part_labels):
+        return []
+    labels = [label or "" for label in part_labels]
+    if len(set(label.casefold() for label in labels)) != len(labels):
+        return []
+
+    first = parsed_files[0][1]
+    base = movie_base_for_naming_style(first, naming_style)
+    changes: list[ProposedChange] = []
+    for movie_path, parsed in parsed_files:
+        label = movie_part_label(parsed) or ""
+        proposed_name = f"{base} {label}{movie_path.suffix.lower()}"
+        if movie_path.name != proposed_name:
+            changes.append(
+                ProposedChange(
+                    item_id=f"{movie_path.relative_to(source_root)}#file",
+                    change_type="file_rename",
+                    current_value=movie_path.name,
+                    proposed_value=proposed_name,
+                    confidence="safe",
+                    reason="Multi-part movie filename was normalized with its parsed part label.",
+                    path=str(movie_path),
+                )
+            )
+    if folder_path.name != base:
+        changes.append(
+            ProposedChange(
+                item_id=f"{folder_path.relative_to(source_root)}#folder",
+                change_type="folder_rename",
+                current_value=str(folder_path.relative_to(source_root)),
+                proposed_value=str(folder_path.with_name(base).relative_to(source_root)),
+                confidence="safe",
+                reason="Multi-part movie folder was normalized to the shared movie title and year.",
+                path=str(folder_path),
+            )
+        )
+    return changes
+
+
+def movie_part_label(parsed: ParsedMovieName) -> str | None:
+    for token in parsed.tech_tokens:
+        if re.fullmatch(r"(?i)(?:cd|disc|disk|part)\d+", token):
+            return token.upper()
+    return None
 
 
 def find_movie_year_match(value: str) -> re.Match[str] | None:
@@ -537,18 +630,32 @@ def movie_bases_for_planned_files(planned_files: list[PlannedMovieFile], naming_
         if differentiators is None:
             continue
         for planned_file, differentiator in zip(collisions, differentiators, strict=True):
-            bases[planned_file.movie_path] = f"{base} {differentiator}"
+            if differentiator:
+                bases[planned_file.movie_path] = f"{base} {differentiator}"
     return bases
 
 
 def concise_collision_differentiators(planned_files: list[PlannedMovieFile]) -> list[str] | None:
-    candidates = [movie_differentiator_candidates(planned_file.parsed) for planned_file in planned_files]
+    candidates = [planned_movie_differentiator_candidates(planned_file) for planned_file in planned_files]
     max_candidate_count = max((len(candidate) for candidate in candidates), default=0)
     for count in range(1, max_candidate_count + 1):
         labels = [" ".join(candidate[:count]) for candidate in candidates]
         if all(labels) and len(set(label.casefold() for label in labels)) == len(labels):
             return labels
+        non_empty_labels = [label for label in labels if label]
+        if non_empty_labels and len(set(label.casefold() for label in non_empty_labels)) == len(non_empty_labels):
+            return labels
     return None
+
+
+def planned_movie_differentiator_candidates(planned_file: PlannedMovieFile) -> list[str]:
+    candidates = movie_differentiator_candidates(planned_file.parsed)
+    folder_parsed = parse_movie_name(planned_file.folder_path)
+    if folder_parsed.title == planned_file.parsed.title and folder_parsed.year == planned_file.parsed.year:
+        for token in movie_differentiator_candidates(folder_parsed):
+            if token not in candidates:
+                candidates.append(token)
+    return candidates
 
 
 def movie_differentiator_candidates(parsed: ParsedMovieName) -> list[str]:
@@ -592,6 +699,57 @@ def mark_movie_target_collisions(plan: ChangePlan, source_root: Path) -> None:
                 path=target,
             )
         )
+
+    mark_existing_movie_target_collisions(plan, source_root)
+
+
+def mark_existing_movie_target_collisions(plan: ChangePlan, source_root: Path) -> None:
+    source_resolved = source_root.resolve()
+    for change in plan.proposed_changes:
+        target = movie_change_target_key(change, source_root)
+        if target is None or change.path is None:
+            continue
+        target_path = source_resolved / target
+        if not target_path.exists():
+            continue
+        source_path = Path(change.path).resolve()
+        try:
+            if target_path.samefile(source_path):
+                continue
+        except OSError:
+            pass
+        mark_change_for_existing_target_collision(change)
+        if change.change_type == "folder_rename":
+            mark_related_folder_changes_for_existing_target_collision(plan, change)
+        plan.warnings.append(
+            WarningItem(
+                code="movie_name_existing_target_collision",
+                message="Movie normalization target already exists in the library.",
+                path=str(target_path),
+            )
+        )
+
+
+def mark_related_folder_changes_for_existing_target_collision(plan: ChangePlan, folder_change: ProposedChange) -> None:
+    current = folder_change.current_value
+    for change in plan.proposed_changes:
+        if change is folder_change or change.path is None:
+            continue
+        if change.change_type not in {"file_rename", "file_move"}:
+            continue
+        try:
+            relative_path = Path(change.path).resolve().relative_to(Path(folder_change.path or "").resolve())
+        except ValueError:
+            continue
+        if relative_path.parts:
+            mark_change_for_existing_target_collision(change)
+
+
+def mark_change_for_existing_target_collision(change: ProposedChange) -> None:
+    change.confidence = "review"
+    message = "Target path already exists in the library."
+    if message not in change.reason:
+        change.reason = f"{change.reason} {message}"
 
 
 def movie_change_target_key(change: ProposedChange, source_root: Path) -> str | None:
@@ -650,6 +808,139 @@ def plan_collection_folder_cleanup(
             )
         )
     return changes
+
+
+def plan_movie_artifact_folder_cleanup(source_root: Path, movie_files: list[Path]) -> list[ProposedChange]:
+    movie_file_roots = {movie_path.relative_to(source_root).parts[0] for movie_path in movie_files if movie_path.relative_to(source_root).parts}
+    changes: list[ProposedChange] = []
+    try:
+        entries = sorted(source_root.iterdir(), key=lambda path: path.name.casefold())
+    except OSError:
+        return changes
+
+    for folder_path in entries:
+        if not folder_path.is_dir() or folder_path.name.startswith("."):
+            continue
+        if folder_path.name in movie_file_roots:
+            continue
+        parsed = parse_movie_name(folder_path)
+        if parsed.title is None or parsed.year is None:
+            continue
+        concise_base = concise_movie_base(parsed)
+        if folder_path.name == concise_base:
+            continue
+        if is_safe_delete_artifact_collection_folder(folder_path):
+            changes.append(
+                ProposedChange(
+                    item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-delete",
+                    change_type="folder_delete",
+                    current_value=str(folder_path.relative_to(source_root)),
+                    proposed_value="",
+                    confidence="safe",
+                    reason="No-video collection artifact folder contained only metadata/system files and was deleted.",
+                    path=str(folder_path),
+                )
+            )
+            continue
+        target_path = source_root / concise_base
+        if target_path.exists():
+            if not target_path.is_dir() or folder_tree_has_relative_collisions(folder_path, target_path):
+                changes.append(
+                    ProposedChange(
+                        item_id=f"{folder_path.relative_to(source_root)}#artifact-folder",
+                        change_type="folder_rename",
+                        current_value=str(folder_path.relative_to(source_root)),
+                        proposed_value=str(target_path.relative_to(source_root)),
+                        confidence="review",
+                        reason="No-video movie artifact folder matched an existing concise target, but merge safety requires review.",
+                        path=str(folder_path),
+                    )
+                )
+                continue
+            changes.append(
+                ProposedChange(
+                    item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-merge",
+                    change_type="folder_merge",
+                    current_value=str(folder_path.relative_to(source_root)),
+                    proposed_value=str(target_path.relative_to(source_root)),
+                    confidence="safe",
+                    reason="No-video movie artifact folder was merged into the existing concise movie folder.",
+                    path=str(folder_path),
+                )
+            )
+            continue
+        changes.append(
+            ProposedChange(
+                item_id=f"{folder_path.relative_to(source_root)}#artifact-folder",
+                change_type="folder_rename",
+                current_value=str(folder_path.relative_to(source_root)),
+                proposed_value=str(target_path.relative_to(source_root)),
+                confidence=parsed.confidence,
+                reason="No-video movie artifact folder was normalized from its locally parsed title and year.",
+                path=str(folder_path),
+            )
+        )
+    return changes
+
+
+def plan_root_junk_file_cleanup(source_root: Path) -> list[ProposedChange]:
+    changes: list[ProposedChange] = []
+    try:
+        entries = sorted(source_root.iterdir(), key=lambda path: path.name.casefold())
+    except OSError:
+        return changes
+    for path in entries:
+        if not path.is_file():
+            continue
+        if not path.name.startswith("._"):
+            continue
+        changes.append(
+            ProposedChange(
+                item_id=f"{path.relative_to(source_root)}#junk-file-delete",
+                change_type="file_delete",
+                current_value=str(path.relative_to(source_root)),
+                proposed_value="",
+                confidence="safe",
+                reason="Root AppleDouble metadata file was deleted.",
+                path=str(path),
+            )
+        )
+    return changes
+
+
+def is_safe_delete_artifact_collection_folder(folder_path: Path) -> bool:
+    name = folder_path.name.casefold()
+    if "collection" not in name and re.search(r"\b19\d{2}\s*-\s*(?:19|20)\d{2}\b", name) is None:
+        return False
+    try:
+        files = [path for path in folder_path.rglob("*") if path.is_file()]
+    except OSError:
+        return False
+    if not files:
+        return True
+    return all(is_safe_delete_artifact_file(path) for path in files)
+
+
+def is_safe_delete_artifact_file(path: Path) -> bool:
+    name = path.name.casefold()
+    if name.startswith("._"):
+        return True
+    if name in SAFE_DELETE_ARTIFACT_NAMES:
+        return True
+    return path.suffix.casefold() in SAFE_DELETE_ARTIFACT_EXTENSIONS
+
+
+def folder_tree_has_relative_collisions(source_folder: Path, target_folder: Path) -> bool:
+    try:
+        source_entries = list(source_folder.rglob("*"))
+    except OSError:
+        return True
+    for source_entry in source_entries:
+        relative = source_entry.relative_to(source_folder)
+        target_entry = target_folder / relative
+        if target_entry.exists():
+            return True
+    return False
 
 
 def build_file_change(

@@ -99,13 +99,24 @@ Default target naming shape: `Title (Year)/Title (Year).ext`
 
 Verbose target naming shape: `Title (Year) [technical tokens]/Title (Year) [technical tokens].ext`
 
-When concise naming would collapse multiple parsed copies of the same title/year, `movie-plan` adds the shortest available parsed differentiator, usually resolution, to both folder and file stem: `Title (Year) 2160p/Title (Year) 2160p.ext`. If no differentiator is available, the collision remains a `review` item.
+When concise naming would collapse multiple parsed copies of the same title/year, `movie-plan` adds the shortest available parsed differentiator, usually resolution, to both folder and file stem: `Title (Year) 2160p/Title (Year) 2160p.ext`. Differentiators can come from the file or the containing folder, which keeps duplicate copies actionable after a partial previous cleanup. If no differentiator is available, the collision remains a `review` item.
+
+Movie plans can also include safe cleanup operations:
+
+| Change type | Meaning |
+|---|---|
+| `file_move` | Move a loose root movie into its concise folder |
+| `file_rename` | Rename a movie file in place |
+| `folder_rename` | Rename a movie or artifact folder |
+| `folder_merge` | Move non-conflicting artifact-folder contents into an existing concise movie folder |
+| `file_delete` | Delete high-confidence root junk such as AppleDouble `._*` files |
+| `folder_delete` | Delete high-confidence metadata-only collection artifact folders |
 
 ---
 
 ### movie-apply
 
-Apply a movie rename plan.
+Apply a movie normalize plan.
 
 ```bash
 normal movie-apply --source /path/to/movies --plan out/plan.json --target /path/to/output

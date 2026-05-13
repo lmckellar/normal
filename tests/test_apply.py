@@ -281,6 +281,101 @@ class ApplyTests(unittest.TestCase):
             self.assertTrue((target / "Full Stop Movie (2019)" / "movie.nfo").exists())
             self.assertFalse((target / "Full.Stop.Movie.2019").exists())
 
+    def test_apply_plan_merges_artifact_folder_into_existing_movie_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "source"
+            target = root / "target"
+            movie_dir = source / "Movie (2019)"
+            artifact_dir = source / "Movie (2019) [1080p BluRay x264 GRP]"
+            movie_dir.mkdir(parents=True)
+            artifact_dir.mkdir()
+            (movie_dir / "Movie (2019).mkv").write_text("video", encoding="utf-8")
+            (artifact_dir / "movie.nfo").write_text("metadata", encoding="utf-8")
+            plan_path = root / "plan.json"
+            write_plan(
+                plan_path,
+                source,
+                [
+                    {
+                        "item_id": "Movie (2019) [1080p BluRay x264 GRP]#artifact-folder-merge",
+                        "change_type": "folder_merge",
+                        "current_value": "Movie (2019) [1080p BluRay x264 GRP]",
+                        "proposed_value": "Movie (2019)",
+                        "confidence": "safe",
+                        "reason": "artifact folder merge",
+                        "path": str(artifact_dir),
+                    },
+                ],
+            )
+
+            report = apply_plan(source, plan_path, target, in_place=False)
+
+            self.assertEqual(len(report.applied), 1)
+            self.assertTrue((target / "Movie (2019)" / "Movie (2019).mkv").exists())
+            self.assertTrue((target / "Movie (2019)" / "movie.nfo").exists())
+            self.assertFalse((target / "Movie (2019) [1080p BluRay x264 GRP]").exists())
+
+    def test_apply_plan_deletes_safe_artifact_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "source"
+            target = root / "target"
+            artifact_dir = source / "Collection 1999-2017"
+            artifact_dir.mkdir(parents=True)
+            (artifact_dir / "movie.nfo").write_text("metadata", encoding="utf-8")
+            plan_path = root / "plan.json"
+            write_plan(
+                plan_path,
+                source,
+                [
+                    {
+                        "item_id": "Collection 1999-2017#artifact-folder-delete",
+                        "change_type": "folder_delete",
+                        "current_value": "Collection 1999-2017",
+                        "proposed_value": "",
+                        "confidence": "safe",
+                        "reason": "artifact folder delete",
+                        "path": str(artifact_dir),
+                    },
+                ],
+            )
+
+            report = apply_plan(source, plan_path, target, in_place=False)
+
+            self.assertEqual(len(report.applied), 1)
+            self.assertFalse((target / "Collection 1999-2017").exists())
+
+    def test_apply_plan_deletes_safe_junk_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "source"
+            target = root / "target"
+            source.mkdir()
+            junk = source / "._Movie.mkv"
+            junk.write_text("metadata", encoding="utf-8")
+            plan_path = root / "plan.json"
+            write_plan(
+                plan_path,
+                source,
+                [
+                    {
+                        "item_id": "._Movie.mkv#junk-file-delete",
+                        "change_type": "file_delete",
+                        "current_value": "._Movie.mkv",
+                        "proposed_value": "",
+                        "confidence": "safe",
+                        "reason": "junk file delete",
+                        "path": str(junk),
+                    },
+                ],
+            )
+
+            report = apply_plan(source, plan_path, target, in_place=False)
+
+            self.assertEqual(len(report.applied), 1)
+            self.assertFalse((target / "._Movie.mkv").exists())
+
     def test_apply_plan_moves_loose_file_into_new_folder(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -26,8 +26,11 @@ encode, audio packaging, and subtitle readiness workflows; other areas still
 run separate scans and produce separate UI projections. Movie normalization has
 crossed the planned 0.7 threshold: the default is now concise `Title (Year)`,
 verbose naming remains available, duplicate concise targets get parsed
-differentiators when possible, and several real-world parser misses have been
-hardened. The broader scan/state split remains.
+differentiators when possible, and the normalizer now handles several
+high-confidence library-chaos cleanup cases: loose root movies, no-video
+artifact folders, safe artifact merges, metadata-only collection remnants,
+root AppleDouble junk, and multi-part CD-style movie folders. The broader
+scan/state split remains.
 
 ## 0.7.0 — normalization controls landed
 
@@ -40,8 +43,11 @@ larger UI overhaul.
   and `Verbose Naming - Include Extra Information`; the CLI mirrors this with
   `--naming-style concise|verbose`.
 - **Duplicate concise output** — same-title/year copies are differentiated from
-  parsed local tokens, usually resolution, at both folder and file level; truly
-  indistinguishable collisions stay in review.
+  parsed local tokens or folder context, usually resolution, at both folder and
+  file level; truly indistinguishable collisions stay in review.
+- **One-shot cleanup behavior** — normalization can now safely include loose
+  root moves, artifact-folder renames/merges, metadata-only artifact deletes,
+  root AppleDouble junk deletes, and CD1/CD2-style multi-part normalization.
 - **Parser hardening** — trailing-year technical-token shapes, `BluRayRemux`,
   mixed-script title prefixes, language tags, hyphenated release groups, and
   common typo tokens are covered by focused tests.
