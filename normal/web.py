@@ -4787,6 +4787,11 @@ INDEX_HTML = """<!doctype html>
       if (bytes >= 1e9) return (bytes / 1e9).toFixed(2) + ' GB';
       return (bytes / 1e6).toFixed(1) + ' MB';
     }
+    function fmtAudioBitrate(facts) {
+      if (!facts?.audio_bitrate_kbps) return '<span class="subtle">—</span>';
+      const val = Math.round(facts.audio_bitrate_kbps).toLocaleString();
+      return facts.audio_bitrate_estimated ? `${val}+ kbps <span class="subtle">est.</span>` : `${val} kbps`;
+    }
 
     function humanProfileLabel(label) {
       if (label === 'standard_definition') return 'Standard Definition';
@@ -4821,7 +4826,7 @@ INDEX_HTML = """<!doctype html>
     function buildMovieTable(items) {
       const rows = items.map(item => {
         const videoBitrate = item.facts.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
-        const audioBitrate = item.facts.audio_bitrate_kbps ? `${Math.round(item.facts.audio_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
+        const audioBitrate = fmtAudioBitrate(item.facts);
         const audioSummary = item.facts.audio_summary ? escapeHtml(item.facts.audio_summary) : '<span class="subtle">—</span>';
         const diagnostics = item.profile.diagnostics.slice(0, 3).map(diag => {
           const categoryClass = diag.category === 'indexing_visibility_risk'
@@ -4888,7 +4893,7 @@ INDEX_HTML = """<!doctype html>
         const queueItem = replacementQueueItemForPath(payload, path, 'weak_encode');
         const checked = state.selectedReplacementPaths.has(path) ? 'checked' : '';
         const videoBitrate = item.facts.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
-        const audioBitrate = item.facts.audio_bitrate_kbps ? `${Math.round(item.facts.audio_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
+        const audioBitrate = fmtAudioBitrate(item.facts);
         const audioSummary = item.facts.audio_summary ? escapeHtml(item.facts.audio_summary) : '<span class="subtle">—</span>';
         const fileSize = item.facts.file_size_bytes ? fmtFileSize(item.facts.file_size_bytes) : '<span class="subtle">—</span>';
         const profileSummary = movieProfileInlineSummary(item);
@@ -5616,7 +5621,7 @@ INDEX_HTML = """<!doctype html>
         const title = item._parsed.title;
         const year = item._parsed.year ? escapeHtml(String(item._parsed.year)) : '<span class="subtle">—</span>';
         const vbr = item.facts?.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
-        const abr = item.facts?.audio_bitrate_kbps ? `${Math.round(item.facts.audio_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
+        const abr = fmtAudioBitrate(item.facts);
         const size = item.facts?.file_size_bytes ? fmtFileSize(item.facts.file_size_bytes) : '<span class="subtle">—</span>';
         return `<tr><td>${escapeHtml(title)}</td><td>${year}</td><td>${vbr}</td><td>${abr}</td><td>${size}</td></tr>`;
       }).join('');
