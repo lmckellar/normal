@@ -264,9 +264,7 @@ def parse_planned_movie_file(
     movie_path: Path,
     loose_root_file: bool,
 ) -> PlannedMovieFile | None:
-    parsed = parse_movie_name(movie_path)
-    if parsed.title is None or parsed.year is None:
-        parsed = parsed_movie_identity_from_sidecar(movie_path) or parsed
+    parsed = parse_movie_name_with_sidecar_fallback(movie_path)
     for warning in parsed.warnings:
         plan.warnings.append(
             WarningItem(
@@ -332,13 +330,20 @@ def parse_movie_name(movie_path: Path) -> ParsedMovieName:
     return parse_movie_identity(movie_path)
 
 
+def parse_movie_name_with_sidecar_fallback(movie_path: Path) -> ParsedMovieName:
+    parsed = parse_movie_name(movie_path)
+    if parsed.title is not None and parsed.year is not None:
+        return parsed
+    return parsed_movie_identity_from_sidecar(movie_path) or parsed
+
+
 def plan_multi_part_movie_folder(
     source_root: Path,
     folder_path: Path,
     folder_files: list[Path],
     naming_style: str,
 ) -> list[ProposedChange]:
-    parsed_files = [(movie_path, parse_movie_name(movie_path)) for movie_path in folder_files]
+    parsed_files = [(movie_path, parse_movie_name_with_sidecar_fallback(movie_path)) for movie_path in folder_files]
     if any(parsed.title is None or parsed.year is None for _, parsed in parsed_files):
         return []
     identities = {(parsed.title, parsed.year) for _, parsed in parsed_files}
@@ -393,8 +398,10 @@ def plan_multi_movie_package_folder(
     if not is_multi_movie_package_folder_name(folder_path.name.casefold()):
         return []
 
-    parsed_files = [(movie_path, parse_movie_name(movie_path)) for movie_path in folder_files]
+    parsed_files = [(movie_path, parse_movie_name_with_sidecar_fallback(movie_path)) for movie_path in folder_files]
     if any(parsed.title is None or parsed.year is None for _, parsed in parsed_files):
+        return []
+    if any(movie_title_contains_package_marker(parsed.title or "") for _, parsed in parsed_files):
         return []
 
     identities = {(parsed.title.casefold(), parsed.year) for _, parsed in parsed_files if parsed.title is not None}
@@ -977,6 +984,19 @@ def plan_movie_artifact_folder_cleanup(source_root: Path, movie_files: list[Path
             continue
         target_path = source_root / concise_base
         if target_path.exists():
+            if target_path.name in movie_file_roots and folder_contains_only_safe_delete_artifacts(folder_path):
+                changes.append(
+                    ProposedChange(
+                        item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-delete",
+                        change_type="folder_delete",
+                        current_value=str(folder_path.relative_to(source_root)),
+                        proposed_value="",
+                        confidence="safe",
+                        reason="No-video duplicate movie artifact folder contained only metadata/system files and was deleted.",
+                        path=str(folder_path),
+                    )
+                )
+                continue
             if not target_path.is_dir() or folder_tree_has_relative_collisions(folder_path, target_path):
                 changes.append(
                     ProposedChange(
@@ -1014,6 +1034,14 @@ def plan_movie_artifact_folder_cleanup(source_root: Path, movie_files: list[Path
             )
         )
     return changes
+
+
+def folder_contains_only_safe_delete_artifacts(folder_path: Path) -> bool:
+    try:
+        files = [path for path in folder_path.rglob("*") if path.is_file()]
+    except OSError:
+        return False
+    return all(is_safe_delete_artifact_file(path) for path in files)
 
 
 def plan_root_junk_file_cleanup(source_root: Path) -> list[ProposedChange]:
@@ -1065,6 +1093,11 @@ def is_multi_movie_package_folder_name(name: str) -> bool:
     if is_package_artifact_folder_name(name):
         return True
     return bool(re.search(r"\s(?:&|and)\s", name))
+
+
+def movie_title_contains_package_marker(title: str) -> bool:
+    tokens = set(TOKEN_PATTERN.findall(title.casefold()))
+    return bool(tokens & PACKAGE_FOLDER_MARKERS)
 
 
 def is_safe_delete_after_multi_movie_split(folder_path: Path, moved_files: set[Path]) -> bool:

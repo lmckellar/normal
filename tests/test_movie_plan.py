@@ -195,6 +195,7 @@ class MoviePlanTests(unittest.TestCase):
             artifact.mkdir()
             (concise / "A Few Good Men (1992).mkv").write_text("video", encoding="utf-8")
             (artifact / "A.Few.Good.Men.1992.1080p.BluRay.AC3.x264-ETRG.nfo").write_text("metadata", encoding="utf-8")
+            (artifact / "poster.jpg").write_text("artwork", encoding="utf-8")
 
             plan = build_movie_plan(source)
 
@@ -675,6 +676,44 @@ class MoviePlanTests(unittest.TestCase):
             self.assertFalse(report.failed)
             self.assertTrue((source / "The Shining (1980) 1072p" / "The Shining (1980) 1072p.mkv").exists())
 
+    def test_build_movie_plan_deletes_metadata_only_duplicate_movie_artifact_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            clean = source / "The Shining (1980)"
+            noisy = source / "The Shining (1980) [Extended 1072p BluRay 5.1 x264 NVEE]"
+            clean.mkdir()
+            noisy.mkdir()
+            (clean / "The Shining (1980).mkv").write_text("video", encoding="utf-8")
+            (noisy / "The Shining (1980) [Extended 1072p BluRay 5.1 x264 NVEE].nfo").write_text(
+                "metadata",
+                encoding="utf-8",
+            )
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.current_value, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("folder_delete", noisy.name, "", "safe"), proposed)
+            self.assertNotIn("folder_rename", {change.change_type for change in plan.proposed_changes})
+            self.assertNotIn("folder_merge", {change.change_type for change in plan.proposed_changes})
+
+    def test_build_movie_plan_deletes_metadata_only_duplicate_movie_artifact_folder_with_nfo_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            clean = source / "The Shining (1980)"
+            noisy = source / "The Shining (1980) [Extended 1072p BluRay 5.1 x264 NVEE]"
+            clean.mkdir()
+            noisy.mkdir()
+            (clean / "The Shining (1980).mkv").write_text("video", encoding="utf-8")
+            (clean / "The Shining (1980).nfo").write_text("metadata", encoding="utf-8")
+            (noisy / "The Shining (1980).nfo").write_text("metadata", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.current_value, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("folder_delete", noisy.name, "", "safe"), proposed)
+            self.assertNotIn("folder_rename", {change.change_type for change in plan.proposed_changes})
+            self.assertNotIn("folder_merge", {change.change_type for change in plan.proposed_changes})
+
     def test_build_movie_plan_deletes_empty_package_artifacts_without_year(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
@@ -704,6 +743,45 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn(("file_move", "Short Circuit 2 (1988)/Short Circuit 2 (1988).mkv", "safe"), proposed)
             self.assertIn(("folder_delete", "", "safe"), proposed)
 
+    def test_build_movie_plan_does_not_project_trilogy_marker_into_year_only_package_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "Mad Max Trilogy 1080p BluRay x264"
+            folder.mkdir()
+            for filename in [
+                "1979 1080p BluRay x264.mkv",
+                "1981 1080p BluRay x264.mkv",
+                "1985 1080p BluRay x264.mkv",
+            ]:
+                (folder / filename).write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed_values = {change.proposed_value for change in plan.proposed_changes}
+            self.assertFalse(any("Mad Max Trilogy" in proposed_value for proposed_value in proposed_values))
+            self.assertFalse(any(change.change_type == "file_move" for change in plan.proposed_changes))
+            self.assertIn("movie_folder_multiple_videos", {warning.code for warning in plan.warnings})
+
+    def test_build_movie_plan_splits_trilogy_package_when_child_titles_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "Mad Max Trilogy 1080p BluRay x264"
+            folder.mkdir()
+            for filename in [
+                "Mad Max 1979 1080p BluRay x264.mkv",
+                "Mad Max 2 1981 1080p BluRay x264.mkv",
+                "Mad Max Beyond Thunderdome 1985 1080p BluRay x264.mkv",
+            ]:
+                (folder / filename).write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("file_move", "Mad Max (1979)/Mad Max (1979).mkv", "safe"), proposed)
+            self.assertIn(("file_move", "Mad Max 2 (1981)/Mad Max 2 (1981).mkv", "safe"), proposed)
+            self.assertIn(("file_move", "Mad Max Beyond Thunderdome (1985)/Mad Max Beyond Thunderdome (1985).mkv", "safe"), proposed)
+            self.assertIn(("folder_delete", "", "safe"), proposed)
+
     def test_build_movie_plan_splits_ampersand_double_feature_when_files_parse(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
@@ -711,6 +789,31 @@ class MoviePlanTests(unittest.TestCase):
             folder.mkdir()
             (folder / "Planet Terror 2007 1080p Unrated mkvonly.mkv").write_text("video", encoding="utf-8")
             (folder / "Death Proof 2007 1080p Unrated mkvonly.mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("file_move", "Planet Terror (2007)/Planet Terror (2007).mkv", "safe"), proposed)
+            self.assertIn(("file_move", "Death Proof (2007)/Death Proof (2007).mkv", "safe"), proposed)
+            self.assertIn(("folder_delete", "", "safe"), proposed)
+
+    def test_build_movie_plan_splits_ampersand_double_feature_with_sidecar_nfo_years(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "Grindhouse Planet Terror & Death Proof 1080p Unrated [mkvonly]"
+            folder.mkdir()
+            planet_terror = folder / "Planet Terror 1080p Unrated mkvonly.mkv"
+            death_proof = folder / "Death Proof 1080p Unrated mkvonly.mkv"
+            planet_terror.write_text("video", encoding="utf-8")
+            death_proof.write_text("video", encoding="utf-8")
+            planet_terror.with_suffix(".nfo").write_text(
+                "<movie><title>Planet Terror</title><year>2007</year></movie>",
+                encoding="utf-8",
+            )
+            death_proof.with_suffix(".nfo").write_text(
+                "<movie><title>Death Proof</title><year>2007</year></movie>",
+                encoding="utf-8",
+            )
 
             plan = build_movie_plan(source)
 
