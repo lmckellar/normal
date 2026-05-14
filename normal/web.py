@@ -90,6 +90,74 @@ from normal.artwork import (
 )
 
 
+def build_movie_normalize_results(source_root: Path, movie_files: list[Path], plan_changes: list[ProposedChange]) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for movie_path in sorted(movie_files, key=lambda path: str(path.relative_to(source_root)).casefold()):
+        relative_path = movie_path.relative_to(source_root)
+        linked_changes = movie_normalize_changes_for_file(relative_path, movie_path, plan_changes)
+        projected_path = projected_movie_normalize_path(relative_path, movie_path, linked_changes)
+        confidence = "unchanged"
+        if linked_changes:
+            confidence = "review" if any(change.confidence == "review" for change in linked_changes) else "safe"
+        results.append(
+            {
+                "result_id": f"movie:{relative_path}",
+                "kind": "movie_file",
+                "path": str(movie_path),
+                "current_value": str(relative_path),
+                "proposed_value": str(projected_path),
+                "confidence": confidence,
+                "actionable": bool(linked_changes),
+                "change_ids": [change.item_id for change in linked_changes],
+            }
+        )
+    return results
+
+
+def movie_normalize_changes_for_file(
+    relative_path: Path,
+    movie_path: Path,
+    plan_changes: list[ProposedChange],
+) -> list[ProposedChange]:
+    linked: list[ProposedChange] = []
+    relative_text = str(relative_path)
+    relative_parent = str(relative_path.parent) if str(relative_path.parent) != "." else ""
+    for change in plan_changes:
+        if change.change_type in {"file_rename", "file_move"} and change.path and Path(change.path).resolve() == movie_path.resolve():
+            linked.append(change)
+            continue
+        if change.change_type == "folder_rename":
+            current = change.current_value or ""
+            if relative_parent == current or relative_parent.startswith(current + "/") or relative_text == current:
+                linked.append(change)
+    return linked
+
+
+def projected_movie_normalize_path(relative_path: Path, movie_path: Path, changes: list[ProposedChange]) -> Path:
+    for change in changes:
+        if change.change_type == "file_move" and change.path and Path(change.path).resolve() == movie_path.resolve():
+            return Path(change.proposed_value)
+
+    proposed_dir = relative_path.parent
+    if str(proposed_dir) == ".":
+        proposed_dir = Path("")
+    for change in sorted((change for change in changes if change.change_type == "folder_rename"), key=lambda item: len(item.current_value), reverse=True):
+        current = Path(change.current_value)
+        proposed = Path(change.proposed_value)
+        try:
+            suffix = proposed_dir.relative_to(current)
+        except ValueError:
+            continue
+        proposed_dir = proposed / suffix
+
+    proposed_filename = relative_path.name
+    for change in changes:
+        if change.change_type == "file_rename" and change.path and Path(change.path).resolve() == movie_path.resolve():
+            proposed_filename = change.proposed_value
+            break
+    return proposed_dir / proposed_filename
+
+
 @dataclass
 class ActivityItem:
     id: int
@@ -646,6 +714,7 @@ INDEX_HTML = """<!doctype html>
     .chip.safe { background: rgba(15,92,77,0.12); color: var(--accent); border-color: rgba(15,92,77,0.2); }
     .chip.high { background: rgba(138,51,65,0.12); color: var(--danger); border-color: rgba(138,51,65,0.22); }
     .chip.review { background: rgba(200,106,45,0.12); color: var(--accent-2); border-color: rgba(200,106,45,0.2); }
+    .chip.unchanged { background: color-mix(in srgb, var(--muted) 12%, transparent); color: var(--muted); border-color: color-mix(in srgb, var(--muted) 24%, transparent); }
     .chip.playback { background: rgba(15,92,77,0.12); color: var(--accent); border-color: rgba(15,92,77,0.2); }
     .chip.indexing { background: rgba(138,91,0,0.12); color: var(--warn); border-color: rgba(138,91,0,0.2); }
     .chip.meta { background: rgba(45,94,168,0.12); color: var(--music); border-color: rgba(45,94,168,0.2); }
@@ -1198,6 +1267,7 @@ INDEX_HTML = """<!doctype html>
       selectedJunkPaths: new Set(),
       selectedReplacementPaths: new Set(),
       selectedChangeIds: new Set(),
+      selectedNormalizeResultIds: new Set(),
       movieNamingStyle: 'concise',
       selectedArtistNames: new Set(),
       approvedArtworkCandidates: {},
@@ -2242,6 +2312,7 @@ INDEX_HTML = """<!doctype html>
           state.results.movies.apply = null;
           state.movieNamingStyle = payload.naming_style || payload.default_naming_style || state.movieNamingStyle || 'concise';
           state.selectedChangeIds = new Set();
+          state.selectedNormalizeResultIds = new Set();
         }
         if (page === 'junk') {
           state.results.movies.junk = payload;
@@ -3080,6 +3151,14 @@ INDEX_HTML = """<!doctype html>
     }
 
     function buildProposedMovieFileTree(payload) {
+      const selectedResults = selectedMovieNormalizeResults(payload);
+      if (selectedResults.length) {
+        const tree = {};
+        for (const result of selectedResults) {
+          addRelativeFileToTree(tree, result.proposed_value || result.current_value || '');
+        }
+        return tree;
+      }
       const source = payload.source_root || '';
       const sep = source.endsWith('/') ? source : source + '/';
       const changes = selectedProposedChanges(payload);
@@ -3132,12 +3211,28 @@ INDEX_HTML = """<!doctype html>
       return tree;
     }
 
+    function addRelativeFileToTree(tree, relPath) {
+      if (!relPath) return;
+      const slashIdx = relPath.lastIndexOf('/');
+      const relDir = slashIdx >= 0 ? relPath.slice(0, slashIdx) : '';
+      const filename = slashIdx >= 0 ? relPath.slice(slashIdx + 1) : relPath;
+      const parts = relDir ? relDir.split('/') : [];
+      let node = tree;
+      for (const part of parts) {
+        if (!node[part]) node[part] = {};
+        node = node[part];
+      }
+      if (!node._files) node._files = [];
+      node._files.push(filename);
+    }
+
     function showMovieNormalizeTreeDetail(payload) {
       if (!payload) {
         detailPanel.innerHTML = '<div class="empty">Run Movies / Normalize to preview the proposed structure.</div>';
         return;
       }
       const selectedChanges = selectedProposedChanges(payload);
+      const selectedResults = selectedMovieNormalizeResults(payload);
       const tree = buildProposedMovieFileTree(payload);
       const lines = [];
       flattenTree(tree, lines, 0);
@@ -3148,13 +3243,17 @@ INDEX_HTML = """<!doctype html>
       }).join('');
       const folderMoves = selectedChanges.filter(c => c.change_type === 'folder_rename').length;
       const fileRenames = selectedChanges.filter(c => c.change_type === 'file_rename' || c.change_type === 'file_move').length;
+      const resultCount = selectedResults.length;
+      const summary = resultCount
+        ? `${resultCount} result${resultCount === 1 ? '' : 's'} selected &middot; ${folderMoves} folder move${folderMoves !== 1 ? 's' : ''} &middot; ${fileRenames} file rename${fileRenames !== 1 ? 's' : ''}`
+        : `${folderMoves} folder move${folderMoves !== 1 ? 's' : ''} &middot; ${fileRenames} file rename${fileRenames !== 1 ? 's' : ''}`;
       detailPanel.innerHTML = `
         <div style="margin-bottom:10px">
           <div style="font-weight:600;margin-bottom:3px">Proposed Structure</div>
-          <div class="subtle" style="font-size:0.83em">${folderMoves} folder move${folderMoves !== 1 ? 's' : ''} &middot; ${fileRenames} file rename${fileRenames !== 1 ? 's' : ''}</div>
+          <div class="subtle" style="font-size:0.83em">${summary}</div>
         </div>
         <div class="mono" style="font-size:0.8em;line-height:1.75;overflow:auto;max-height:62vh">
-          ${selectedChanges.length ? html : '<span class="subtle">Select changes to preview the proposed structure.</span>'}
+          ${selectedChanges.length || selectedResults.length ? html : '<span class="subtle">Select results to preview the proposed structure.</span>'}
         </div>`;
     }
 
@@ -3163,16 +3262,74 @@ INDEX_HTML = """<!doctype html>
       const style = state.movieNamingStyle || payload.default_naming_style || payload.naming_style || 'concise';
       const changesByStyle = payload.proposed_changes_by_naming_style || {};
       const warningsByStyle = payload.warnings_by_naming_style || {};
+      const resultsByStyle = payload.movie_results_by_naming_style || {};
       return {
         ...payload,
         naming_style: style,
         proposed_changes: changesByStyle[style] || payload.proposed_changes || [],
-        warnings: warningsByStyle[style] || payload.warnings || []
+        warnings: warningsByStyle[style] || payload.warnings || [],
+        movie_results: resultsByStyle[style] || payload.movie_results || []
       };
     }
 
     function selectedProposedChanges(payload) {
       return (payload.proposed_changes || []).filter(c => state.selectedChangeIds.has(c.item_id));
+    }
+
+    function selectedMovieNormalizeResults(payload) {
+      return (payload.movie_results || []).filter(result => state.selectedNormalizeResultIds.has(result.result_id));
+    }
+
+    function isMovieNormalizeResultSelected(result) {
+      return state.selectedNormalizeResultIds.has(result.result_id)
+        || (!!result.actionable && (result.change_ids || []).every(id => state.selectedChangeIds.has(id)));
+    }
+
+    function movieNormalizeResultForChange(payload, change) {
+      return (payload.movie_results || []).find(result => (result.change_ids || []).includes(change.item_id));
+    }
+
+    function movieNormalizeResultsForConfidence(payload, confidence) {
+      return (payload.movie_results || []).filter(result => result.actionable && result.confidence === confidence);
+    }
+
+    function updateMovieNormalizeSelection(payload, rowType, resultId, changeId, checked) {
+      if (rowType === 'result') {
+        const result = (payload.movie_results || []).find(item => item.result_id === resultId);
+        if (!result) return;
+        if (checked) {
+          state.selectedNormalizeResultIds.add(result.result_id);
+          (result.change_ids || []).forEach(id => state.selectedChangeIds.add(id));
+        } else {
+          state.selectedNormalizeResultIds.delete(result.result_id);
+          removeMovieNormalizeResultChangeIds(payload, result);
+        }
+        return;
+      }
+      if (!changeId) return;
+      if (checked) state.selectedChangeIds.add(changeId);
+      else state.selectedChangeIds.delete(changeId);
+    }
+
+    function removeMovieNormalizeResultChangeIds(payload, result) {
+      for (const changeId of (result.change_ids || [])) {
+        const stillSelected = (payload.movie_results || []).some(item =>
+          item.result_id !== result.result_id
+          && state.selectedNormalizeResultIds.has(item.result_id)
+          && (item.change_ids || []).includes(changeId)
+        );
+        if (!stillSelected) state.selectedChangeIds.delete(changeId);
+      }
+    }
+
+    function toggleVisibleMovieNormalizeRows(payload, rows, deselect) {
+      for (const row of rows) {
+        if (row.type === 'result') {
+          updateMovieNormalizeSelection(payload, 'result', row.result.result_id, '', !deselect);
+        } else {
+          updateMovieNormalizeSelection(payload, 'change', '', row.change.item_id, !deselect);
+        }
+      }
     }
 
     function isPathAffectedBySelectedChanges(absPath, relPath, changes) {
@@ -3471,30 +3628,46 @@ INDEX_HTML = """<!doctype html>
         showMovieNormalizeTreeDetail(null);
         return;
       }
+      if (state.filter === 'all') state.filter = 'all_results';
 
       renderFilters([
-        ['all', 'All'],
+        ['all_results', 'All Results'],
         ['safe', 'Safe'],
         ['review', 'Flagged for review'],
         ['warnings', 'Warnings']
       ]);
 
-      const changes = filteredMovieChanges(activePayload);
-      const total = (activePayload.proposed_changes || []).length;
+      const rowsPayload = filteredMovieNormalizeRows(activePayload);
       const selectedCount = selectedProposedChanges(activePayload).length;
-      const visibleChangeIds = changes.map(c => c.item_id);
-      const visibleSelectedCount = changes.filter(c => state.selectedChangeIds.has(c.item_id)).length;
-      const allVisibleSelected = visibleChangeIds.length > 0 && visibleSelectedCount === visibleChangeIds.length;
-      const rows = changes.map(change => `
+      const selectedResultCount = selectedMovieNormalizeResults(activePayload).length;
+      const visibleKeys = rowsPayload.map(row => row.type === 'result' ? row.result.result_id : row.change.item_id);
+      const visibleSelectedCount = rowsPayload.filter(row => row.type === 'result'
+        ? isMovieNormalizeResultSelected(row.result)
+        : state.selectedChangeIds.has(row.change.item_id)
+      ).length;
+      const allVisibleSelected = visibleKeys.length > 0 && visibleSelectedCount === visibleKeys.length;
+      const rows = rowsPayload.map(row => {
+        const result = row.result || null;
+        const change = row.change || null;
+        const rowId = result?.result_id || '';
+        const changeId = change?.item_id || '';
+        const checked = result ? isMovieNormalizeResultSelected(result) : state.selectedChangeIds.has(changeId);
+        const confidence = change?.confidence || result?.confidence || 'unchanged';
+        const typeLabel = change?.change_type || (result?.actionable ? 'movie_file' : 'no_change');
+        const path = change?.path || result?.path || '';
+        const currentValue = change?.current_value || result?.current_value || '';
+        const proposedValue = change?.proposed_value || result?.proposed_value || '';
+        const chipLabel = confidence === 'unchanged' ? 'no change' : confidence;
+        return `
         <tr>
-          <td style="width:28px;text-align:center"><input type="checkbox" class="change-checkbox" data-item-id="${escapeHtml(change.item_id)}" ${state.selectedChangeIds.has(change.item_id) ? 'checked' : ''}></td>
-          <td><span class="chip ${change.confidence}">${escapeHtml(change.confidence)}</span></td>
-          <td>${escapeHtml(change.change_type)}</td>
-          <td><div class="mono">${escapeHtml(change.path || '')}</div></td>
-          <td>${escapeHtml(change.current_value)}</td>
-          <td>${escapeHtml(change.proposed_value)}</td>
+          <td style="width:28px;text-align:center"><input type="checkbox" class="movie-normalize-checkbox" data-row-type="${row.type}" data-result-id="${escapeHtml(rowId)}" data-item-id="${escapeHtml(changeId)}" ${checked ? 'checked' : ''}></td>
+          <td><span class="chip ${escapeHtml(confidence)}">${escapeHtml(chipLabel)}</span></td>
+          <td>${escapeHtml(typeLabel)}</td>
+          <td><div class="mono">${escapeHtml(path)}</div></td>
+          <td>${escapeHtml(currentValue)}</td>
+          <td>${escapeHtml(proposedValue)}</td>
         </tr>
-      `).join('');
+      `}).join('');
       const warningCounts = CounterFromArray((activePayload.warnings || []).map(w => w.code));
       const warningList = Object.entries(warningCounts).map(([code, count]) => `<span class="chip review">${escapeHtml(code)}${count > 1 ? ` ×${count}` : ''}</span>`).join('');
       const applyBanner = applyResult ? buildApplyResultBanner(applyResult) : '';
@@ -3509,33 +3682,21 @@ INDEX_HTML = """<!doctype html>
         </div>
         <div class="subtle" style="margin-bottom:10px;">Warnings: ${warningList || 'none'}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-          <button class="secondary" id="selAllSafe">All Safe</button>
-          <button class="secondary" id="selFlaggedReview">Flagged for review</button>
           <button class="secondary" id="selToggle">${allVisibleSelected ? 'Deselect All' : 'Select All'}</button>
-          <span class="subtle" id="selCount" style="margin-left:4px">${selectedCount} of ${total} selected</span>
+          <span class="subtle" id="selCount" style="margin-left:4px">${selectedCount} actionable${selectedResultCount ? `, ${selectedResultCount} result${selectedResultCount === 1 ? '' : 's'}` : ''} selected</span>
           <div style="flex:1"></div>
           <button class="primary" id="applyBtn" ${selectedCount === 0 ? 'disabled' : ''} style="min-width:160px">Apply ${selectedCount} Changes</button>
         </div>
         <div class="table-wrap">
           <table>
             <thead><tr><th></th><th>Confidence</th><th>Type</th><th>Path</th><th>Current</th><th>Proposed</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="6" class="subtle">No rename proposals for this filter.</td></tr>'}</tbody>
+            <tbody>${rows || '<tr><td colspan="6" class="subtle">No normalize results for this filter.</td></tr>'}</tbody>
           </table>
         </div>
       `;
 
-      document.getElementById('selAllSafe').addEventListener('click', () => {
-        state.selectedChangeIds = new Set((activePayload.proposed_changes || []).filter(c => c.confidence === 'safe').map(c => c.item_id));
-        renderMovieNormalize(payload);
-      });
-      document.getElementById('selFlaggedReview').addEventListener('click', () => {
-        state.selectedChangeIds = new Set((activePayload.proposed_changes || []).filter(c => c.confidence === 'review').map(c => c.item_id));
-        renderMovieNormalize(payload);
-      });
       document.getElementById('selToggle').addEventListener('click', () => {
-        state.selectedChangeIds = allVisibleSelected
-          ? new Set()
-          : new Set(visibleChangeIds);
+        toggleVisibleMovieNormalizeRows(activePayload, rowsPayload, allVisibleSelected);
         renderMovieNormalize(payload);
       });
       document.getElementById('applyBtn').addEventListener('click', applySelectedMovieChanges);
@@ -3544,17 +3705,20 @@ INDEX_HTML = """<!doctype html>
         renderMovieNormalize(payload);
       });
 
-      mainContent.querySelectorAll('.change-checkbox').forEach(cb => {
+      mainContent.querySelectorAll('.movie-normalize-checkbox').forEach(cb => {
         cb.addEventListener('change', () => {
-          if (cb.checked) state.selectedChangeIds.add(cb.dataset.itemId);
-          else state.selectedChangeIds.delete(cb.dataset.itemId);
+          updateMovieNormalizeSelection(activePayload, cb.dataset.rowType, cb.dataset.resultId, cb.dataset.itemId, cb.checked);
           const nextPayload = activeMovieNormalizePayload(payload);
           const count = selectedProposedChanges(nextPayload).length;
-          const nextVisibleChanges = filteredMovieChanges(nextPayload);
-          const nextVisibleSelectedCount = nextVisibleChanges.filter(c => state.selectedChangeIds.has(c.item_id)).length;
-          const nextAllVisibleSelected = nextVisibleChanges.length > 0 && nextVisibleSelectedCount === nextVisibleChanges.length;
+          const resultCount = selectedMovieNormalizeResults(nextPayload).length;
+          const nextVisibleRows = filteredMovieNormalizeRows(nextPayload);
+          const nextVisibleSelectedCount = nextVisibleRows.filter(row => row.type === 'result'
+            ? isMovieNormalizeResultSelected(row.result)
+            : state.selectedChangeIds.has(row.change.item_id)
+          ).length;
+          const nextAllVisibleSelected = nextVisibleRows.length > 0 && nextVisibleSelectedCount === nextVisibleRows.length;
           const countEl = document.getElementById('selCount');
-          if (countEl) countEl.textContent = `${count} of ${total} selected`;
+          if (countEl) countEl.textContent = `${count} actionable${resultCount ? `, ${resultCount} result${resultCount === 1 ? '' : 's'}` : ''} selected`;
           const toggle = document.getElementById('selToggle');
           if (toggle) toggle.textContent = nextAllVisibleSelected ? 'Deselect All' : 'Select All';
           const btn = document.getElementById('applyBtn');
@@ -3586,6 +3750,7 @@ INDEX_HTML = """<!doctype html>
         state.results.movies.apply = result;
         state.results.movies.normalize = result.remaining_plan || null;
         state.selectedChangeIds = new Set();
+        state.selectedNormalizeResultIds = new Set();
         const remaining = result.remaining_safe_count || 0;
         const suffix = remaining ? ` ${remaining} safe rename${remaining === 1 ? '' : 's'} still pending.` : '';
         setStatus(`Applied: ${result.applied.length}, skipped: ${result.skipped.length}, failed: ${result.failed.length}.${suffix}`, remaining ? 'error' : 'idle');
@@ -6605,10 +6770,10 @@ INDEX_HTML = """<!doctype html>
       const safe = (payload.proposed_changes || []).filter(change => change.confidence === 'safe').length;
       const review = (payload.proposed_changes || []).filter(change => change.confidence === 'review').length;
       return [
+        { value: String((payload.movie_results || []).length), label: 'all results' },
         { value: String((payload.proposed_changes || []).length), label: 'rename proposals' },
         { value: String(safe), label: 'safe renames' },
-        { value: String(review), label: 'review renames' },
-        { value: String((payload.warnings || []).length), label: 'warnings' }
+        { value: String(review), label: 'review renames' }
       ];
     }
 
@@ -6625,6 +6790,25 @@ INDEX_HTML = """<!doctype html>
       const changes = payload.proposed_changes || [];
       if (state.filter === 'all') return changes;
       return changes.filter(change => change.confidence === state.filter);
+    }
+
+    function movieNormalizeFilter() {
+      return state.page === 'normalize' && state.lane === 'movies' && state.filter === 'all' ? 'all_results' : state.filter;
+    }
+
+    function filteredMovieNormalizeRows(payload) {
+      if (!payload) return [];
+      const filter = movieNormalizeFilter();
+      if (filter === 'warnings') return [];
+      if (filter === 'all_results') {
+        return (payload.movie_results || []).map(result => ({ type: 'result', result }));
+      }
+      const resultRows = movieNormalizeResultsForConfidence(payload, filter).map(result => ({ type: 'result', result }));
+      const resultChangeIds = new Set(resultRows.flatMap(row => row.result.change_ids || []));
+      const orphanChangeRows = (payload.proposed_changes || [])
+        .filter(change => change.confidence === filter && !resultChangeIds.has(change.item_id))
+        .map(change => ({ type: 'change', change, result: movieNormalizeResultForChange(payload, change) }));
+      return [...resultRows, ...orphanChangeRows];
     }
 
     function buildMovieJunkMetrics(payload) {
@@ -7096,13 +7280,18 @@ def build_handler(
                     response = plans_by_style[requested_style].to_dict()
                     response["naming_style"] = requested_style
                     response["default_naming_style"] = DEFAULT_MOVIE_NAMING_STYLE
+                    movie_files = discover_video_files(source)
                     response["proposed_changes_by_naming_style"] = {
                         style: plans_by_style[style].to_dict()["proposed_changes"] for style in MOVIE_NAMING_STYLES
                     }
                     response["warnings_by_naming_style"] = {
                         style: plans_by_style[style].to_dict()["warnings"] for style in MOVIE_NAMING_STYLES
                     }
-                    response["movie_files"] = [str(path) for path in discover_video_files(source)]
+                    response["movie_results_by_naming_style"] = {
+                        style: build_movie_normalize_results(source, movie_files, plans_by_style[style].proposed_changes)
+                        for style in MOVIE_NAMING_STYLES
+                    }
+                    response["movie_files"] = [str(path) for path in movie_files]
             self.respond_json(response)
 
         def handle_movies_apply(self, payload: dict[str, Any]) -> None:
@@ -7117,6 +7306,7 @@ def build_handler(
             with ACTIVITY_TRACKER.track(source, "Movie apply"):
                 report = apply_changes_in_place(source, changes)
                 plans_by_style = {style: build_movie_plan(source, naming_style=style) for style in MOVIE_NAMING_STYLES}
+                movie_files = discover_video_files(source)
             response = report.to_dict()
             remaining_payload = plans_by_style[requested_style].to_dict()
             remaining_payload["naming_style"] = requested_style
@@ -7127,7 +7317,11 @@ def build_handler(
             remaining_payload["warnings_by_naming_style"] = {
                 style: plans_by_style[style].to_dict()["warnings"] for style in MOVIE_NAMING_STYLES
             }
-            remaining_payload["movie_files"] = [str(path) for path in discover_video_files(source)]
+            remaining_payload["movie_results_by_naming_style"] = {
+                style: build_movie_normalize_results(source, movie_files, plans_by_style[style].proposed_changes)
+                for style in MOVIE_NAMING_STYLES
+            }
+            remaining_payload["movie_files"] = [str(path) for path in movie_files]
             remaining_changes = remaining_payload["proposed_changes"]
             response["remaining_changes"] = remaining_changes
             response["remaining_safe_count"] = len([change for change in remaining_changes if change["confidence"] == "safe"])

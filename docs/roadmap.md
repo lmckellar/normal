@@ -70,6 +70,9 @@ normalization defaults against real-library scans.
 - **Normalization scan review** — keep feeding real edge cases into the local
   parser, especially duplicate-copy handling and trailing-year release naming,
   without adding heavier scan requirements.
+- **Normalization output preview polish** — review the Movies / Normalize
+  selected-output preview against larger partially-normalized libraries and keep
+  the All Results / Safe / review filter chain aligned with checked rows.
 - **Minor UI polish** — fix twitchy button hover behavior, accidental
   double-height buttons, theme contrast issues, typeface leaks, and rogue CSS
   paths that do not fit the active theme.

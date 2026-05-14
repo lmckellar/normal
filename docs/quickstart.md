@@ -125,7 +125,7 @@ The Library Switcher in the top right selects the active lane. The source path i
 
 **Movie pages**
 - Dashboard View — quality tier distribution, bitrate histograms, resolution breakdown
-- Normalize Movie Files & Folders — interactive rename plan review and apply
+- Normalize Movie Files & Folders — interactive rename plan review and apply; All Results includes already-normalized videos as no-change rows for full selected-output preview
 - Delete Weak Encodes — quality triage with replacement queue tracking; deleted queue items can be dismissed later if they are not worth replacing; tables now show a separate main-audio column alongside audio bitrate
 - Fix Multi-Audio Packaging — triage MKVs where default audio language/track choice is likely wrong, then either flip English to default in place, drop tagged foreign-language audio, or queue the file for replacement. The delete-foreign-audio variant is currently untested on real libraries.
 - Delete Junk Videos — checkbox select and confirm to delete

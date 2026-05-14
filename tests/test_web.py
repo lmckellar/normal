@@ -465,10 +465,14 @@ class WebTests(unittest.TestCase):
         self.assertIn("'/api/movies/apply'", INDEX_HTML)
         self.assertIn("function applySelectedMovieChanges", INDEX_HTML)
         self.assertIn("showMovieNormalizeTreeDetail", INDEX_HTML)
-        self.assertIn("All Safe", INDEX_HTML)
         self.assertIn("Flagged for review", INDEX_HTML)
-        self.assertIn("id=\"selFlaggedReview\"", INDEX_HTML)
-        self.assertIn("c.confidence === 'review'", INDEX_HTML)
+        self.assertIn("movieNormalizeResultsForConfidence(payload, filter)", INDEX_HTML)
+        movie_normalize_section = INDEX_HTML.split("function renderMovieNormalize(payload) {", 1)[1].split(
+            "async function applySelectedMovieChanges()",
+            1,
+        )[0]
+        self.assertNotIn("id=\"selAllSafe\"", movie_normalize_section)
+        self.assertNotIn("id=\"selFlaggedReview\"", movie_normalize_section)
         self.assertIn("Concise Naming", INDEX_HTML)
         self.assertIn("Verbose Naming - Include Extra Information", INDEX_HTML)
         self.assertIn("function activeMovieNormalizePayload(payload)", INDEX_HTML)
