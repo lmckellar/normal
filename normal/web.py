@@ -1259,6 +1259,9 @@ INDEX_HTML = """<!doctype html>
       subtitleHistoryFilter: 'all',
       movieStandardsEditorLabel: '',
       movieStandardsSaveBusy: false,
+      movieProfileInspectorLabel: '',
+      movieProfileInspectorType: '',
+      movieProfileInspectorSort: { col: 'title', dir: 'asc' },
       movieStandardsPendingDraft: null,
       replacementHistoryFilter: 'deleted',
       replacementHistorySort: { col: null, dir: 'asc' },
@@ -2134,6 +2137,8 @@ INDEX_HTML = """<!doctype html>
       state.subtitleSort = { col: null, dir: 'asc' };
       state.replacementHistoryFilter = 'deleted';
       state.replacementHistorySort = { col: null, dir: 'asc' };
+      state.movieProfileInspectorLabel = '';
+      state.movieProfileInspectorType = '';
       renderPageNav();
       renderCurrentPage();
     }
@@ -3434,6 +3439,12 @@ INDEX_HTML = """<!doctype html>
       renderMetrics(buildMovieMetrics(payload));
       renderBars(buildMovieBars(payload));
       filterBar.innerHTML = '';
+      if (state.movieProfileInspectorLabel && payload) {
+        mainContent.innerHTML = buildMovieProfileInspector(payload, state.movieProfileInspectorLabel, state.movieProfileInspectorType);
+        attachMovieProfileInspectorHandlers(payload);
+        detailPanel.innerHTML = buildBitrateBellCurve(payload);
+        return;
+      }
       mainContent.innerHTML = buildMovieDashboard(payload);
       attachMovieDashboardHandlers(payload);
       if (!payload) {
@@ -3446,6 +3457,14 @@ INDEX_HTML = """<!doctype html>
     function attachMovieDashboardHandlers(payload) {
       const exportBtn = document.getElementById('exportCatalogueButton');
       if (exportBtn) exportBtn.addEventListener('click', () => generateCatalogue(exportBtn));
+      document.querySelectorAll('.movie-profile-view-btn').forEach(button => {
+        button.addEventListener('click', () => {
+          state.movieProfileInspectorLabel = button.dataset.profileLabel || '';
+          state.movieProfileInspectorType = button.dataset.profileType || 'quality';
+          state.movieProfileInspectorSort = { col: 'title', dir: 'asc' };
+          renderMovieLibrary(payload);
+        });
+      });
       document.querySelectorAll('.movie-profile-definition-toggle').forEach(button => {
         button.addEventListener('click', () => {
           const label = button.dataset.profileLabel || '';
@@ -5469,7 +5488,10 @@ INDEX_HTML = """<!doctype html>
                 <div class="profile-card-group">${escapeHtml(options?.group || 'Action Based')}</div>
                 <div class="profile-card-name">${escapeHtml(options?.display_name || options?.name || humanProfileLabel(label))}</div>
               </div>
-              ${isEditable ? `<button class="secondary movie-profile-definition-toggle" data-profile-label="${escapeHtml(label)}">${isEditorOpen ? 'Close' : 'Edit'}</button>` : ''}
+              <div style="display:flex;gap:6px;align-items:center">
+                ${count > 0 ? `<button class="secondary movie-profile-view-btn" data-profile-label="${escapeHtml(label)}" data-profile-type="action">View</button>` : ''}
+                ${isEditable ? `<button class="secondary movie-profile-definition-toggle" data-profile-label="${escapeHtml(label)}">${isEditorOpen ? 'Close' : 'Edit'}</button>` : ''}
+              </div>
             </div>
             <div class="profile-card-count">${count.toLocaleString()}</div>
             <div class="profile-card-pct">${escapeHtml(options?.pctLabel || `${pct}% of library`)}</div>
@@ -5496,7 +5518,10 @@ INDEX_HTML = """<!doctype html>
                 <div class="profile-card-group">${escapeHtml(options?.group || 'Quality Profile')}</div>
                 <div class="profile-card-name">${escapeHtml(options?.display_name || options?.name || humanProfileLabel(label))}</div>
               </div>
-              ${isEditable ? `<button class="secondary movie-profile-definition-toggle" data-profile-label="${escapeHtml(label)}">${isEditorOpen ? 'Close' : 'Edit definition'}</button>` : ''}
+              <div style="display:flex;gap:6px;align-items:center">
+                ${count > 0 ? `<button class="secondary movie-profile-view-btn" data-profile-label="${escapeHtml(label)}" data-profile-type="quality">View</button>` : ''}
+                ${isEditable ? `<button class="secondary movie-profile-definition-toggle" data-profile-label="${escapeHtml(label)}">${isEditorOpen ? 'Close' : 'Edit'}</button>` : ''}
+              </div>
             </div>
             <div class="profile-card-count">${count.toLocaleString()}</div>
             <div class="profile-card-pct">${escapeHtml(options?.pctLabel || `${pct}% of library`)}</div>
@@ -5543,6 +5568,96 @@ INDEX_HTML = """<!doctype html>
         <div class="dash-res-bars bars">${resBarsHtml || '<div class="subtle">No resolution data.</div>'}</div>
         ${riskHtml}
       `;
+    }
+
+    function buildMovieProfileInspector(payload, label, profileType) {
+      const movies = payload.movies || [];
+      const definitions = Array.isArray(payload.quality_profile_definitions) ? payload.quality_profile_definitions : [];
+      const definition = definitions.find(d => d.label === label);
+      const displayName = definition?.display_name || humanProfileLabel(label);
+
+      if (!movies.length) {
+        return `
+          <div style="margin-bottom:12px">
+            <button class="secondary movie-profile-inspector-back">← Back to Dashboard</button>
+            <span style="margin-left:12px;font-weight:700">${escapeHtml(displayName)}</span>
+          </div>
+          <div class="empty">Run a fresh Movies / Dashboard scan to browse titles in this profile.</div>
+        `;
+      }
+
+      function parseStem(item) {
+        const stem = (item.path || '').split('/').pop().replace(/\.[^.]+$/, '');
+        const m = stem.match(/^(.+?)\s*\((\d{4})\)/);
+        return m ? { title: m[1].trim(), year: parseInt(m[2], 10) } : { title: stem, year: null };
+      }
+
+      const filtered = movies
+        .filter(m => profileType === 'action' ? m.profile?.label === label : m.profile?.quality_label === label)
+        .map(m => ({ ...m, _parsed: parseStem(m) }));
+
+      const sort = state.movieProfileInspectorSort;
+      const mult = sort.dir === 'asc' ? 1 : -1;
+      const sorted = filtered.slice().sort((a, b) => {
+        if (sort.col === 'year') return mult * ((a._parsed.year || 0) - (b._parsed.year || 0));
+        if (sort.col === 'video_bitrate') return mult * ((a.facts?.video_bitrate_kbps || 0) - (b.facts?.video_bitrate_kbps || 0));
+        if (sort.col === 'audio_bitrate') return mult * ((a.facts?.audio_bitrate_kbps || 0) - (b.facts?.audio_bitrate_kbps || 0));
+        if (sort.col === 'file_size') return mult * ((a.facts?.file_size_bytes || 0) - (b.facts?.file_size_bytes || 0));
+        return mult * a._parsed.title.localeCompare(b._parsed.title, undefined, { sensitivity: 'base' });
+      });
+
+      function sortTh(col, label) {
+        const active = sort.col === col;
+        const ind = active ? (sort.dir === 'asc' ? '↑' : '↓') : '↕';
+        return `<th class="sortable-th movie-inspector-th" data-sort-col="${col}">${escapeHtml(label)}<span class="sort-ind${active ? ' on' : ''}">${ind}</span></th>`;
+      }
+
+      const rows = sorted.map(item => {
+        const title = item._parsed.title;
+        const year = item._parsed.year ? escapeHtml(String(item._parsed.year)) : '<span class="subtle">—</span>';
+        const vbr = item.facts?.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
+        const abr = item.facts?.audio_bitrate_kbps ? `${Math.round(item.facts.audio_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
+        const size = item.facts?.file_size_bytes ? fmtFileSize(item.facts.file_size_bytes) : '<span class="subtle">—</span>';
+        return `<tr><td>${escapeHtml(title)}</td><td>${year}</td><td>${vbr}</td><td>${abr}</td><td>${size}</td></tr>`;
+      }).join('');
+
+      return `
+        <div style="margin-bottom:12px;display:flex;align-items:center;gap:16px">
+          <button class="secondary movie-profile-inspector-back">← Back to Dashboard</button>
+          <span style="font-weight:700">${escapeHtml(displayName)}</span>
+          <span class="subtle">${filtered.length.toLocaleString()} title${filtered.length === 1 ? '' : 's'}</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed" class="subtitle-table">
+          <colgroup><col style="width:20%"><col style="width:20%"><col style="width:20%"><col style="width:20%"><col style="width:20%"></colgroup>
+          <thead><tr>
+            ${sortTh('title', 'Title')}
+            ${sortTh('year', 'Year')}
+            ${sortTh('video_bitrate', 'Video Bitrate')}
+            ${sortTh('audio_bitrate', 'Audio Bitrate')}
+            ${sortTh('file_size', 'File Size')}
+          </tr></thead>
+          <tbody>${rows || '<tr><td colspan="5" class="subtle" style="text-align:center;padding:16px">No titles in this profile.</td></tr>'}</tbody>
+        </table>
+      `;
+    }
+
+    function attachMovieProfileInspectorHandlers(payload) {
+      document.querySelector('.movie-profile-inspector-back')?.addEventListener('click', () => {
+        state.movieProfileInspectorLabel = '';
+        state.movieProfileInspectorType = '';
+        renderMovieLibrary(payload);
+      });
+      document.querySelectorAll('.movie-inspector-th[data-sort-col]').forEach(th => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.sortCol;
+          if (state.movieProfileInspectorSort.col === col) {
+            state.movieProfileInspectorSort.dir = state.movieProfileInspectorSort.dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            state.movieProfileInspectorSort = { col, dir: 'asc' };
+          }
+          renderMovieLibrary(payload);
+        });
+      });
     }
 
     function movieProfileDefinitionDraft(label) {
