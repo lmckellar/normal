@@ -78,6 +78,63 @@ TITLE_BOUNDARY_TOKENS = {
 SKIP_TOKENS = {"sample"}
 SAFE_DELETE_ARTIFACT_EXTENSIONS = {".nfo", ".ds_store"}
 SAFE_DELETE_ARTIFACT_NAMES = {".ds_store"}
+PACKAGE_FOLDER_MARKERS = {
+    "collection",
+    "duology",
+    "pack",
+    "saga",
+    "series",
+    "trilogy",
+}
+VERBOSE_KEEP_TOKENS = {
+    "Extended",
+    "Final Cut",
+    "Director's Cut",
+    "Open Matte",
+    "Remastered",
+    "Unrated",
+    "BluRay",
+    "BDRip",
+    "BRRip",
+    "DVD",
+    "DVDRip",
+    "HDR",
+    "HDR10",
+    "HEVC",
+    "H.264",
+    "H.265",
+    "Remux",
+    "SDR",
+    "UHD",
+    "WEB",
+    "WEB-DL",
+    "WEBRip",
+    "x264",
+    "x265",
+}
+VERBOSE_DROP_TOKENS = {
+    "AAC",
+    "AC3",
+    "Atmos",
+    "Commentary",
+    "DDP",
+    "DTS",
+    "DTS-HD",
+    "EAC3",
+    "MULTI",
+    "MULTISUB",
+    "TrueHD",
+}
+LANGUAGE_TOKEN_PATTERN = re.compile(
+    r"(?i)(?:"
+    r"eng|english|fre|french|ger|german|ita|italian|spa|spanish|rus|russian|"
+    r"jpn|japanese|hin|hindi|ukr|ukrainian|telugu|korean|portuguese|mandarin|"
+    r"chinese|persian"
+    r"|[2-9](?:rus|eng|fre|ger|ita|spa|jpn|hin|ukr)"
+    r"|multi(?:lang|sub)?"
+    r")"
+)
+UPLOADER_TOKEN_PATTERN = re.compile(r"(?i)(?:gerald99|mkvonly|moviesbyrizzo|anoxmous|hon3y|gprs?|etrg|evo|nvee|shiv|tigo?le)")
 COMPACT_TECH_MARKERS = (
     "2160p",
     "1080p",
@@ -159,6 +216,8 @@ def build_movie_plan(source_root: Path, naming_style: str = DEFAULT_MOVIE_NAMING
 
         if len(folder_files) != 1:
             multi_changes = plan_multi_part_movie_folder(source_root, folder_path, sorted(folder_files), naming_style)
+            if not multi_changes:
+                multi_changes = plan_multi_movie_package_folder(source_root, folder_path, sorted(folder_files), naming_style)
             if multi_changes:
                 plan.proposed_changes.extend(multi_changes)
             else:
@@ -319,6 +378,56 @@ def plan_multi_part_movie_folder(
                 proposed_value=str(folder_path.with_name(base).relative_to(source_root)),
                 confidence="safe",
                 reason="Multi-part movie folder was normalized to the shared movie title and year.",
+                path=str(folder_path),
+            )
+        )
+    return changes
+
+
+def plan_multi_movie_package_folder(
+    source_root: Path,
+    folder_path: Path,
+    folder_files: list[Path],
+    naming_style: str,
+) -> list[ProposedChange]:
+    if not is_multi_movie_package_folder_name(folder_path.name.casefold()):
+        return []
+
+    parsed_files = [(movie_path, parse_movie_name(movie_path)) for movie_path in folder_files]
+    if any(parsed.title is None or parsed.year is None for _, parsed in parsed_files):
+        return []
+
+    identities = {(parsed.title.casefold(), parsed.year) for _, parsed in parsed_files if parsed.title is not None}
+    if len(identities) != len(parsed_files):
+        return []
+
+    changes: list[ProposedChange] = []
+    for movie_path, parsed in parsed_files:
+        base = movie_base_for_naming_style(parsed, naming_style)
+        proposed_path = Path(base) / f"{base}{movie_path.suffix.lower()}"
+        if movie_path.relative_to(source_root) == proposed_path:
+            continue
+        changes.append(
+            ProposedChange(
+                item_id=f"{movie_path.relative_to(source_root)}#file-move",
+                change_type="file_move",
+                current_value=movie_path.name,
+                proposed_value=str(proposed_path),
+                confidence=parsed.confidence,
+                reason="Multi-movie package file was split into its parsed movie folder.",
+                path=str(movie_path),
+            )
+        )
+
+    if changes and is_safe_delete_after_multi_movie_split(folder_path, set(folder_files)):
+        changes.append(
+            ProposedChange(
+                item_id=f"{folder_path.relative_to(source_root)}#package-folder-delete",
+                change_type="folder_delete",
+                current_value=str(folder_path.relative_to(source_root)),
+                proposed_value="",
+                confidence="safe",
+                reason="Multi-movie package folder was deleted after its movies were split out.",
                 path=str(folder_path),
             )
         )
@@ -567,6 +676,10 @@ def canonicalize_token_sequence(tokens: list[str]) -> list[str]:
             merged.append(f"H.{next_token}")
             index += 2
             continue
+        if current.upper() == "OPEN" and next_token and next_token.upper() == "MATTE":
+            merged.append("Open Matte")
+            index += 2
+            continue
         if current.upper() in {"DD", "DDP"} and is_single_digit_token(next_token) and is_single_digit_token(next_next):
             merged.append(f"{current.upper()} {next_token}.{next_next}")
             index += 3
@@ -599,12 +712,32 @@ def dedupe_preserve_order(tokens: list[str]) -> list[str]:
 
 def canonical_movie_base(parsed: ParsedMovieName) -> str:
     base = f"{parsed.title} ({parsed.year})"
-    details = list(parsed.tech_tokens)
-    if parsed.release_group:
-        details.append(parsed.release_group)
+    details = verbose_technical_tokens(parsed.tech_tokens)
     if details:
         return f"{base} [{' '.join(details)}]"
     return base
+
+
+def verbose_technical_tokens(tokens: list[str]) -> list[str]:
+    return [token for token in tokens if should_keep_verbose_token(token)]
+
+
+def should_keep_verbose_token(token: str) -> bool:
+    if token in VERBOSE_DROP_TOKENS:
+        return False
+    if LANGUAGE_TOKEN_PATTERN.fullmatch(token):
+        return False
+    if UPLOADER_TOKEN_PATTERN.fullmatch(token):
+        return False
+    if re.fullmatch(r"\d\.\d", token):
+        return False
+    if re.fullmatch(r"\d{3,4}p", token):
+        return True
+    if re.fullmatch(r"\d+bit", token):
+        return True
+    if re.fullmatch(r"(?i)v\d+", token):
+        return True
+    return token in VERBOSE_KEEP_TOKENS
 
 
 def concise_movie_base(parsed: ParsedMovieName) -> str:
@@ -823,12 +956,6 @@ def plan_movie_artifact_folder_cleanup(source_root: Path, movie_files: list[Path
             continue
         if folder_path.name in movie_file_roots:
             continue
-        parsed = parse_movie_name(folder_path)
-        if parsed.title is None or parsed.year is None:
-            continue
-        concise_base = concise_movie_base(parsed)
-        if folder_path.name == concise_base:
-            continue
         if is_safe_delete_artifact_collection_folder(folder_path):
             changes.append(
                 ProposedChange(
@@ -841,6 +968,12 @@ def plan_movie_artifact_folder_cleanup(source_root: Path, movie_files: list[Path
                     path=str(folder_path),
                 )
             )
+            continue
+        parsed = parse_movie_name(folder_path)
+        if parsed.title is None or parsed.year is None:
+            continue
+        concise_base = concise_movie_base(parsed)
+        if folder_path.name == concise_base:
             continue
         target_path = source_root / concise_base
         if target_path.exists():
@@ -910,7 +1043,7 @@ def plan_root_junk_file_cleanup(source_root: Path) -> list[ProposedChange]:
 
 def is_safe_delete_artifact_collection_folder(folder_path: Path) -> bool:
     name = folder_path.name.casefold()
-    if "collection" not in name and re.search(r"\b19\d{2}\s*-\s*(?:19|20)\d{2}\b", name) is None:
+    if not is_package_artifact_folder_name(name):
         return False
     try:
         files = [path for path in folder_path.rglob("*") if path.is_file()]
@@ -919,6 +1052,33 @@ def is_safe_delete_artifact_collection_folder(folder_path: Path) -> bool:
     if not files:
         return True
     return all(is_safe_delete_artifact_file(path) for path in files)
+
+
+def is_package_artifact_folder_name(name: str) -> bool:
+    if re.search(r"\b19\d{2}\s*-\s*(?:19|20)\d{2}\b", name):
+        return True
+    tokens = set(TOKEN_PATTERN.findall(name.casefold()))
+    return bool(tokens & PACKAGE_FOLDER_MARKERS)
+
+
+def is_multi_movie_package_folder_name(name: str) -> bool:
+    if is_package_artifact_folder_name(name):
+        return True
+    return bool(re.search(r"\s(?:&|and)\s", name))
+
+
+def is_safe_delete_after_multi_movie_split(folder_path: Path, moved_files: set[Path]) -> bool:
+    try:
+        files = [path for path in folder_path.rglob("*") if path.is_file()]
+    except OSError:
+        return False
+    moved_resolved = {path.resolve() for path in moved_files}
+    for path in files:
+        if path.resolve() in moved_resolved:
+            continue
+        if not is_safe_delete_artifact_file(path):
+            return False
+    return True
 
 
 def is_safe_delete_artifact_file(path: Path) -> bool:

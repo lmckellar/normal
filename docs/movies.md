@@ -32,7 +32,9 @@ Files named by whoever uploaded them tend to have inconsistent formatting — va
 Title (Year)/Title (Year).mkv
 ```
 
-The web UI can switch between **Concise Naming** and **Verbose Naming - Include Extra Information** before applying selected changes. Its default **All Results** review shows every scanned video file, including already-normalized items as no-change rows, so the proposed structure preview can show the full selected downstream library shape. Use the **Safe** and **Flagged for review** list filters with **Select All / Deselect All** to narrow or bulk-select the actionable rows. The CLI defaults to concise and supports `--naming-style verbose` for the older technical-token shape:
+The production normalizer is concise-first and now considered product-complete for movie libraries. Its default **All Results** review shows every scanned video file, including already-normalized items as no-change rows, so the proposed structure preview can show the full selected downstream library shape. Use the **Safe** and **Flagged for review** list filters with **Select All / Deselect All** to narrow or bulk-select the actionable rows.
+
+Verbose naming still exists temporarily in the web UI and CLI as a parser-hardening leftover, but it is scheduled for removal before the broader refactor. The CLI currently supports `--naming-style verbose` for this older technical-token shape:
 
 ```
 Title (Year) [technical tokens]/Title (Year) [technical tokens].mkv
@@ -46,10 +48,11 @@ Normalize also handles common library-chaos cleanup when the evidence is local a
 
 - loose root movie files move into `Title (Year)/Title (Year).ext`, including cases where a sibling `.nfo` provides the title/year
 - no-video movie-shaped artifact folders can be renamed, merged into an existing concise folder, or flagged for review when merge safety is unclear
-- metadata-only collection artifact folders and root AppleDouble `._*` files can be deleted as safe cleanup proposals
+- metadata-only collection/series/trilogy package artifact folders and root AppleDouble `._*` files can be deleted as safe cleanup proposals
 - multi-part movie folders such as CD1/CD2 normalize to one movie folder with part labels preserved in filenames
+- multi-movie package folders can be split into individual movie folders when each video file locally parses to its own title/year
 
-The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it can split technical-token runs that appear before a trailing parenthesized year. In verbose mode, it keeps release details such as `Director's Cut`, `BluRay Remux`, codec, language-count tags, and release group in the bracketed suffix.
+The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it can split technical-token runs that appear before a trailing parenthesized year. In verbose mode, it keeps selected edition/video details such as `Director's Cut`, `BluRay Remux`, codec, resolution, and HDR tokens while dropping uploader, language, and audio-packaging noise.
 
 ## Quality triage
 

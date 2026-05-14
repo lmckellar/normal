@@ -219,9 +219,9 @@ class MoviePlanTests(unittest.TestCase):
             verbose_values = {change.proposed_value for change in verbose_plan.proposed_changes}
             self.assertIn("Hooligans (2005)/Hooligans (2005).mkv", concise_values)
             self.assertIn("Spaceballs (1987)/Spaceballs (1987).mkv", concise_values)
-            self.assertIn("Hooligans (2005) [BDRip 1080p ITA ENG x264 BluRay]/Hooligans (2005) [BDRip 1080p ITA ENG x264 BluRay].mkv", verbose_values)
+            self.assertIn("Hooligans (2005) [BDRip 1080p x264 BluRay]/Hooligans (2005) [BDRip 1080p x264 BluRay].mkv", verbose_values)
             self.assertIn(
-                "Spaceballs (1987) [BDRip 1080p ENG ITA FRE GER SPA MULTISUB x264 BluRay]/Spaceballs (1987) [BDRip 1080p ENG ITA FRE GER SPA MULTISUB x264 BluRay].mkv",
+                "Spaceballs (1987) [BDRip 1080p x264 BluRay]/Spaceballs (1987) [BDRip 1080p x264 BluRay].mkv",
                 verbose_values,
             )
 
@@ -282,8 +282,8 @@ class MoviePlanTests(unittest.TestCase):
             plan = build_movie_plan(source, naming_style="verbose")
 
             proposed_values = {change.proposed_value for change in plan.proposed_changes}
-            self.assertIn("The Matrix (1999) [1080p BluRay x264 AAC GRP].mkv", proposed_values)
-            self.assertIn("The Matrix (1999) [1080p BluRay x264 AAC GRP]", proposed_values)
+            self.assertIn("The Matrix (1999) [1080p BluRay x264].mkv", proposed_values)
+            self.assertIn("The Matrix (1999) [1080p BluRay x264]", proposed_values)
 
     def test_build_movie_plan_handles_dotted_edition_resolution_and_release_group(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -296,8 +296,8 @@ class MoviePlanTests(unittest.TestCase):
             plan = build_movie_plan(source, naming_style="verbose")
 
             proposed_values = {change.proposed_value for change in plan.proposed_changes}
-            self.assertIn("Dune (1984) [Extended 1080p BluRay ACE x264 ETRG].mkv", proposed_values)
-            self.assertIn("Dune (1984) [Extended 1080p BluRay ACE x264 ETRG]", proposed_values)
+            self.assertIn("Dune (1984) [Extended 1080p BluRay x264].mkv", proposed_values)
+            self.assertIn("Dune (1984) [Extended 1080p BluRay x264]", proposed_values)
             self.assertEqual([change.confidence for change in plan.proposed_changes], ["safe", "safe"])
 
     def test_build_movie_plan_prefers_ascii_title_for_mixed_script_movie_name(self) -> None:
@@ -338,7 +338,7 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "Land Of The Dead (2005) [BluRay Remux 1080p x264 3RUS ENG CMEV0]/Land Of The Dead (2005) [BluRay Remux 1080p x264 3RUS ENG CMEV0].mkv",
+                    "Land Of The Dead (2005) [BluRay Remux 1080p x264]/Land Of The Dead (2005) [BluRay Remux 1080p x264].mkv",
                     "safe",
                 ),
                 proposed,
@@ -350,7 +350,7 @@ class MoviePlanTests(unittest.TestCase):
 
         self.assertEqual(
             canonical_movie_base(parsed),
-            "Land Of The Dead (2005) [BluRay Remux 1080p x264 3RUS ENG CMEV0]",
+            "Land Of The Dead (2005) [BluRay Remux 1080p x264]",
         )
         self.assertEqual(parsed.confidence, "safe")
         self.assertEqual(parsed.warnings, [])
@@ -368,7 +368,7 @@ class MoviePlanTests(unittest.TestCase):
 
             proposed_values = {change.proposed_value for change in plan.proposed_changes}
             self.assertIn(
-                "The.Godfather.Trilogy.[ I. II. III ].1080p.BluRay.x264.anoXmous/The Godfather (1972) [1080p BluRay x264 anoXmous]",
+                "The.Godfather.Trilogy.[ I. II. III ].1080p.BluRay.x264.anoXmous/The Godfather (1972) [1080p BluRay x264]",
                 proposed_values,
             )
             self.assertIn(
@@ -393,7 +393,7 @@ class MoviePlanTests(unittest.TestCase):
 
             proposed_values = {change.proposed_value for change in plan.proposed_changes}
             self.assertIn(
-                "A Dangerous Method (2011) [1080p MKV x264 AC3 DTS MultiSubs]",
+                "A Dangerous Method (2011) [1080p x264]",
                 proposed_values,
             )
             self.assertNotIn(
@@ -401,7 +401,7 @@ class MoviePlanTests(unittest.TestCase):
                 proposed_values,
             )
             self.assertNotIn(
-                "A.Dangerous.Method.2011.1080p.MKV.x264.AC3.DTS.MultiSubs/A Dangerous Method (2011) [1080p MKV x264 AC3 DTS MultiSubs]",
+                "A.Dangerous.Method.2011.1080p.MKV.x264.AC3.DTS.MultiSubs/A Dangerous Method (2011) [1080p x264]",
                 proposed_values,
             )
 
@@ -417,14 +417,14 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn(
                 (
                     "file_move",
-                    "Dune (1984) [Extended 1080p BluRay AC3 x264 ETRG]/Dune (1984) [Extended 1080p BluRay AC3 x264 ETRG].mkv",
+                    "Dune (1984) [Extended 1080p BluRay x264]/Dune (1984) [Extended 1080p BluRay x264].mkv",
                 ),
                 proposed,
             )
             self.assertIn(
                 (
                     "file_move",
-                    "Zootopia (2016) [2160p UHD BluRay x265 TERMINAL]/Zootopia (2016) [2160p UHD BluRay x265 TERMINAL].mkv",
+                    "Zootopia (2016) [2160p UHD BluRay x265]/Zootopia (2016) [2160p UHD BluRay x265].mkv",
                 ),
                 proposed,
             )
@@ -440,7 +440,7 @@ class MoviePlanTests(unittest.TestCase):
 
             proposed_values = {change.proposed_value for change in plan.proposed_changes}
             self.assertIn(
-                "John Wick Chapter 2 (2017) [BluRay 1080p HDR HEVC DD 5.1 DDR]/John Wick Chapter 2 (2017) [BluRay 1080p HDR HEVC DD 5.1 DDR].mkv",
+                "John Wick Chapter 2 (2017) [BluRay 1080p HDR HEVC]/John Wick Chapter 2 (2017) [BluRay 1080p HDR HEVC].mkv",
                 proposed_values,
             )
             self.assertNotIn(
@@ -461,14 +461,14 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "2001 A Space Odyssey (1968) [V2 2160p BluRay x265 10bit HDR TIGOLE].mkv",
+                    "2001 A Space Odyssey (1968) [V2 2160p BluRay x265 10bit HDR].mkv",
                     "review",
                 ),
                 proposed,
             )
             self.assertIn(
                 (
-                    "2001 A Space Odyssey (1968) [V2 2160p BluRay x265 10bit HDR TIGOLE]",
+                    "2001 A Space Odyssey (1968) [V2 2160p BluRay x265 10bit HDR]",
                     "review",
                 ),
                 proposed,
@@ -487,14 +487,14 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "2001 A Space Odyssey (1968) [V2 2160p BluRay x265 10bit HDR TIGOLE].mkv",
+                    "2001 A Space Odyssey (1968) [V2 2160p BluRay x265 10bit HDR].mkv",
                     "safe",
                 ),
                 proposed,
             )
             self.assertIn(
                 (
-                    "2001 A Space Odyssey (1968) [V2 2160p BluRay x265 10bit HDR TIGOLE]",
+                    "2001 A Space Odyssey (1968) [V2 2160p BluRay x265 10bit HDR]",
                     "safe",
                 ),
                 proposed,
@@ -513,14 +513,14 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "1917 (2019) [1080p BluRay Atmos TrueHD 7.1 x264 EVO].mkv",
+                    "1917 (2019) [1080p BluRay x264].mkv",
                     "safe",
                 ),
                 proposed,
             )
             self.assertIn(
                 (
-                    "1917 (2019) [1080p BluRay Atmos TrueHD 7.1 x264 EVO]",
+                    "1917 (2019) [1080p BluRay x264]",
                     "safe",
                 ),
                 proposed,
@@ -537,7 +537,7 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "1917 (2019) [1080p BluRay Atmos TrueHD 7.1 x264 EVO]/1917 (2019) [1080p BluRay Atmos TrueHD 7.1 x264 EVO].mkv",
+                    "1917 (2019) [1080p BluRay x264]/1917 (2019) [1080p BluRay x264].mkv",
                     "safe",
                 ),
                 proposed,
@@ -554,7 +554,7 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "A Nightmare On Elm Street (1984) [Remastered 1080p BluRay x265 HEVC 10bit AAC 7.1 Commentary HEVK]/A Nightmare On Elm Street (1984) [Remastered 1080p BluRay x265 HEVC 10bit AAC 7.1 Commentary HEVK].mkv",
+                    "A Nightmare On Elm Street (1984) [Remastered 1080p BluRay x265 HEVC 10bit]/A Nightmare On Elm Street (1984) [Remastered 1080p BluRay x265 HEVC 10bit].mkv",
                     "safe",
                 ),
                 proposed,
@@ -572,7 +572,7 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "Wings Of Desire (1987) [1080p MAX WEB-DL DDP 5.1 H.264 GPRS]/Wings Of Desire (1987) [1080p MAX WEB-DL DDP 5.1 H.264 GPRS].mkv",
+                    "Wings Of Desire (1987) [1080p WEB-DL H.264]/Wings Of Desire (1987) [1080p WEB-DL H.264].mkv",
                     "safe",
                 ),
                 proposed,
@@ -589,7 +589,7 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "Hachi A Dog's Tale (2009) [BluRay 1080p x264 AAC 5.1 HON3Y]/Hachi A Dog's Tale (2009) [BluRay 1080p x264 AAC 5.1 HON3Y].mkv",
+                    "Hachi A Dog's Tale (2009) [BluRay 1080p x264]/Hachi A Dog's Tale (2009) [BluRay 1080p x264].mkv",
                     "safe",
                 ),
                 proposed,
@@ -606,7 +606,7 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "Boundary (1999) [NineChars 1080p]/Boundary (1999) [NineChars 1080p].mkv",
+                    "Boundary (1999) [1080p]/Boundary (1999) [1080p].mkv",
                     "safe",
                 ),
                 proposed,
@@ -626,14 +626,14 @@ class MoviePlanTests(unittest.TestCase):
             proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
             self.assertIn(
                 (
-                    "Basic Instinct (1992) [Unrated 1080p ENG ITA MULTISUB x264 BluRay SHIV].mkv",
+                    "Basic Instinct (1992) [Unrated 1080p x264 BluRay].mkv",
                     "review",
                 ),
                 proposed,
             )
             self.assertIn(
                 (
-                    "Basic Instinct (1992) [Unrated 1080p ENG ITA MULTISUB x264 BluRay SHIV]",
+                    "Basic Instinct (1992) [Unrated 1080p x264 BluRay]",
                     "review",
                 ),
                 proposed,
@@ -651,6 +651,99 @@ class MoviePlanTests(unittest.TestCase):
 
             self.assertEqual(plan.proposed_changes, [])
             self.assertEqual(plan.warnings[0].code, "movie_folder_multiple_videos")
+
+    def test_build_movie_plan_uses_resolution_differentiator_for_shining_duplicate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            clean = source / "The Shining (1980)"
+            noisy = source / "The Shining (1980) [Extended 1072p BluRay 5.1 x264 NVEE]"
+            clean.mkdir()
+            noisy.mkdir()
+            (clean / "The Shining (1980).mkv").write_text("video", encoding="utf-8")
+            (noisy / "The Shining (1980) [Extended 1072p BluRay 5.1 x264 NVEE].mkv").write_text(
+                "video",
+                encoding="utf-8",
+            )
+
+            plan = build_movie_plan(source)
+            report = apply_changes_in_place(source, plan.proposed_changes)
+
+            proposed = {(change.change_type, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("file_rename", "The Shining (1980) 1072p.mkv", "safe"), proposed)
+            self.assertIn(("folder_rename", "The Shining (1980) 1072p", "safe"), proposed)
+            self.assertEqual(len(report.applied), 2)
+            self.assertFalse(report.failed)
+            self.assertTrue((source / "The Shining (1980) 1072p" / "The Shining (1980) 1072p.mkv").exists())
+
+    def test_build_movie_plan_deletes_empty_package_artifacts_without_year(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            godfather = source / "The Godfather Trilogy [I II III] 1080p BluRay x264 anoXmous"
+            apes = source / "Planet of the Apes Legends The Collection 1080p H 264 ENG-FRE-SPA (moviesbyrizzo)"
+            godfather.mkdir()
+            apes.mkdir()
+
+            plan = build_movie_plan(source)
+
+            deletes = {(change.current_value, change.change_type, change.confidence) for change in plan.proposed_changes}
+            self.assertIn((godfather.name, "folder_delete", "safe"), deletes)
+            self.assertIn((apes.name, "folder_delete", "safe"), deletes)
+
+    def test_build_movie_plan_splits_distinct_movies_from_package_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "Short Circuit Duology (1986-1988) BDRip 1080p HighCode"
+            folder.mkdir()
+            (folder / "Short Circuit 1986 BDRip 1080p HighCode.mkv").write_text("video", encoding="utf-8")
+            (folder / "Short Circuit 2 1988 BDRip 1080p HighCode.mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("file_move", "Short Circuit (1986)/Short Circuit (1986).mkv", "safe"), proposed)
+            self.assertIn(("file_move", "Short Circuit 2 (1988)/Short Circuit 2 (1988).mkv", "safe"), proposed)
+            self.assertIn(("folder_delete", "", "safe"), proposed)
+
+    def test_build_movie_plan_splits_ampersand_double_feature_when_files_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "Grindhouse Planet Terror & Death Proof 1080p Unrated [mkvonly]"
+            folder.mkdir()
+            (folder / "Planet Terror 2007 1080p Unrated mkvonly.mkv").write_text("video", encoding="utf-8")
+            (folder / "Death Proof 2007 1080p Unrated mkvonly.mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("file_move", "Planet Terror (2007)/Planet Terror (2007).mkv", "safe"), proposed)
+            self.assertIn(("file_move", "Death Proof (2007)/Death Proof (2007).mkv", "safe"), proposed)
+            self.assertIn(("folder_delete", "", "safe"), proposed)
+
+    def test_build_movie_plan_trims_reported_verbose_parser_slips(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            for filename in [
+                "Star Trek III The Search for Spock 1984 BDRip 2160p UHD HDR Multilang TrueHD DD5 1 gerald99.mkv",
+                "Man on Fire 2004 WEBRip 2160p HEVC Open Matte Eng DTS DDP5 1 gerald99.mkv",
+                "Land of the Dead 2005 BluRayRemux 1080p x264 3Rus Eng -CME.mkv",
+            ]:
+                (source / filename).write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source, naming_style="verbose")
+
+            proposed = {change.proposed_value for change in plan.proposed_changes}
+            self.assertIn(
+                "Star Trek III The Search For Spock (1984) [BDRip 2160p UHD HDR]/Star Trek III The Search For Spock (1984) [BDRip 2160p UHD HDR].mkv",
+                proposed,
+            )
+            self.assertIn(
+                "Man On Fire (2004) [WEBRip 2160p HEVC Open Matte]/Man On Fire (2004) [WEBRip 2160p HEVC Open Matte].mkv",
+                proposed,
+            )
+            self.assertIn(
+                "Land Of The Dead (2005) [BluRay Remux 1080p x264]/Land Of The Dead (2005) [BluRay Remux 1080p x264].mkv",
+                proposed,
+            )
 
 
 if __name__ == "__main__":
