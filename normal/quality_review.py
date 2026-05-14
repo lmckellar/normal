@@ -88,6 +88,7 @@ class MediaFacts:
     name_resolution_hint: str | None = None
     resolution_bucket: str | None = None
     video_bitrate_approximate: bool = False
+    audio_bitrate_estimated: bool = False
     video_profile: str | None = None
     video_level: int | None = None
     pixel_format: str | None = None

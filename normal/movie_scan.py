@@ -204,6 +204,24 @@ def run_ffprobe(path: Path) -> dict[str, Any]:
     return json.loads(result.stdout)
 
 
+def codec_bitrate_floor(codec: str | None, profile: str | None, channels: int | None) -> int | None:
+    codec_lower = (codec or "").casefold()
+    profile_lower = (profile or "").casefold()
+    ch = channels or 2
+    if codec_lower == "truehd":
+        return 3000 if ch >= 6 else 1500
+    if codec_lower == "dts":
+        if "master audio" in profile_lower or re.search(r"\bma\b", profile_lower):
+            return 3000 if ch >= 6 else 1500
+        if "high resolution" in profile_lower or re.search(r"\bhra\b", profile_lower):
+            return 2000 if ch >= 6 else 1000
+    if codec_lower == "flac":
+        return ch * 300
+    if codec_lower.startswith("pcm"):
+        return ch * 768  # 16-bit 48 kHz = 768 kbps/channel
+    return None
+
+
 def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> MediaFacts:
     streams = payload.get("streams", [])
     format_payload = payload.get("format", {})
@@ -214,8 +232,12 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
     video_stream = video_streams[0] if video_streams else {}
     audio_stream = audio_streams[0] if audio_streams else {}
     total_bitrate_kbps = parse_bitrate_kbps(format_payload.get("bit_rate"))
-    audio_bitrates = [bitrate for bitrate in (parse_stream_bitrate_kbps(stream) for stream in audio_streams) if bitrate]
-    primary_audio_bitrate = parse_stream_bitrate_kbps(audio_stream) or (audio_bitrates[0] if audio_bitrates else None)
+    detailed_audio_streams = [audio_stream_facts_from_ffprobe_stream(stream) for stream in audio_streams]
+    detailed_subtitle_streams = [subtitle_stream_facts_from_ffprobe_stream(stream) for stream in subtitle_streams]
+    display_audio_stream = choose_display_audio_stream(detailed_audio_streams)
+    default_audio_stream = choose_default_audio_stream(detailed_audio_streams)
+    audio_bitrates = [s.bitrate_kbps for s in detailed_audio_streams if s.bitrate_kbps is not None]
+    primary_audio_bitrate = display_audio_stream.bitrate_kbps if display_audio_stream else None
     video_bitrate_kbps = parse_stream_bitrate_kbps(video_stream)
     video_bitrate_approximate = False
     if video_bitrate_kbps is None and total_bitrate_kbps is not None:
@@ -223,10 +245,24 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         if estimated > 0:
             video_bitrate_kbps = estimated
             video_bitrate_approximate = True
-    detailed_audio_streams = [audio_stream_facts_from_ffprobe_stream(stream) for stream in audio_streams]
-    detailed_subtitle_streams = [subtitle_stream_facts_from_ffprobe_stream(stream) for stream in subtitle_streams]
-    display_audio_stream = choose_display_audio_stream(detailed_audio_streams)
-    default_audio_stream = choose_default_audio_stream(detailed_audio_streams)
+    if primary_audio_bitrate is None and total_bitrate_kbps is not None and video_bitrate_kbps is not None and not video_bitrate_approximate:
+        other_audio = sum(
+            s.bitrate_kbps for s in detailed_audio_streams
+            if s.bitrate_kbps is not None and s is not display_audio_stream
+        )
+        estimated_audio = total_bitrate_kbps - video_bitrate_kbps - other_audio
+        if estimated_audio > 0:
+            primary_audio_bitrate = estimated_audio
+    audio_bitrate_estimated = False
+    if primary_audio_bitrate is None and display_audio_stream is not None:
+        floor = codec_bitrate_floor(
+            display_audio_stream.codec,
+            display_audio_stream.profile,
+            display_audio_stream.channels,
+        )
+        if floor is not None:
+            primary_audio_bitrate = floor
+            audio_bitrate_estimated = True
     default_subtitle_stream = choose_default_subtitle_stream(detailed_subtitle_streams)
     (
         audio_format_family,
@@ -263,6 +299,7 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         name_resolution_hint=None,
         resolution_bucket=None,
         video_bitrate_approximate=video_bitrate_approximate,
+        audio_bitrate_estimated=audio_bitrate_estimated,
         video_profile=video_stream.get("profile"),
         video_level=parse_int(video_stream.get("level")),
         pixel_format=video_stream.get("pix_fmt"),

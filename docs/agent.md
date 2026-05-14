@@ -123,6 +123,8 @@ Movie `facts` now also carry normalized main-audio display fields for scan/expor
 
 `audio_summary` is the user-facing label for the playback-relevant stream, usually the sole default audio stream or else the first audio stream. Typical values: `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`.
 
+`audio_bitrate_kbps` is always sourced from the display stream (chosen by `choose_display_audio_stream`), not stream index 0. When the display stream has no per-stream bitrate in the container, `media_facts_from_ffprobe_payload` falls back in order: (1) container-level estimate (`total − video − other_audio`), valid only when video bitrate is per-stream; (2) `codec_bitrate_floor` — a conservative minimum for known lossless codecs (TrueHD, DTS-HD MA, DTS-HD HRA, FLAC, PCM). When the floor is used, `audio_bitrate_estimated = True` is set on `MediaFacts` and the UI renders the value as `3,000+ kbps est.` Lossy codecs (AAC, AC3, EAC3, plain DTS) return `None` from the floor and display `—` if no container bitrate is available. Do not regress to stream-index-0 selection; the display stream and the bitrate must remain aligned.
+
 Replacement priority by decade:
 
 | Year range | Multiplier |
