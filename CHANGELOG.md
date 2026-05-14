@@ -10,10 +10,13 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 - Server-side OMDb rating cache and lookup endpoint for movie replacement history.
 - Repo-local agent guidance for the intended `unittest` test runner.
 - Movie normalization naming-style controls: concise `Title (Year)` output is now the default, with verbose technical-token naming retained as an option in the web UI and CLI.
+- Movie normalization can split locally-evidenced multi-movie package folders into individual movie folders.
 
 ### Changed
 
 - Movie normalization now resolves concise same-title/year duplicates with the shortest parsed differentiator available, usually resolution, at both folder and file level.
+- Movie normalization is now treated as product-complete for movie libraries; verbose naming is documented as temporary parser-hardening scaffolding scheduled for removal.
+- Roadmap now tracks the two pre-refactor paths: remove verbose movie naming, then add a TV Show Normalization lane.
 - Quality Profile card editing no longer exposes per-profile allowed audio codecs, and quality-profile matching no longer gates on those per-profile codec lists.
 - Dashboard movie profile scans now show streamed forward progress in the activity bar: processed file count, current probe target, elapsed time, and ETA only when a bounded total is known.
 - Movie replacement-history IMDb ratings now use local title cleanup and search fallback, and no longer expose the OMDb key to the browser.
@@ -22,6 +25,7 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 
 - IMDb rating availability on fresh web UI load.
 - Movie name normalization now handles mixed-script title prefixes, `Director's Cut`, compact `BluRayRemux` tokens, language tags like `3Rus Eng`, hyphenated release groups like `CME-v0`, technical tokens before trailing parenthesized years, and the `Blauray` typo.
+- Movie name normalization now deletes empty package artifact folders, handles nonstandard resolution differentiators such as `1072p`, trims verbose uploader/language/audio noise, and preserves useful edition/video tokens such as `Open Matte`.
 - Repair Subtitle Readiness table now shows movie title and year (e.g. `Alien (1979)`) instead of the raw file path.
 - Downstream Plex client subtitle-default changes are verified working without cache invalidation issues.
 
