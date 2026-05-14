@@ -494,6 +494,10 @@ def canonicalize_token_sequence(tokens: list[str]) -> list[str]:
             merged.append(f"H.{next_token}")
             index += 2
             continue
+        if current.upper() == "OPEN" and next_token and next_token.upper() == "MATTE":
+            merged.append("Open Matte")
+            index += 2
+            continue
         if current.lower() == "director" and next_token == "S" and next_next and next_next.upper() == "CUT":
             merged.append("Director's Cut")
             index += 3

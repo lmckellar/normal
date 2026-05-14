@@ -4,7 +4,7 @@
 commit history and diff/change logs; package metadata stays at `0.1.0` until a
 real release is cut.
 
-## Where we are now — local current state after 0.7.0 candidate
+## Where we are now — movie normalization product-complete
 
 The app has grown from a local music/movie cleanup tool into a feature-rich
 workbench with several movie repair and triage lanes.
@@ -13,24 +13,20 @@ Music lane: scan, plan, apply, artist deduplication, dashboard profile, weak
 encode triage, artwork repair for Jellyfin, CSV export, and replacement queue
 tracking.
 
-Movie lane: concise-first name normalization with verbose compatibility mode,
-encode quality profiling, dashboard standards controls, canonical-list coverage,
-weak encode triage, multi-audio packaging triage and repair, subtitle readiness
-repair, poster artwork repair for Plex, junk cleanup, shared replacement queue
-workflow, OMDb-backed replacement-history rating context, and XLSX catalogue
-export.
+Movie lane: product-complete concise name normalization, encode quality
+profiling, dashboard standards controls, canonical-list coverage, weak encode
+triage, multi-audio packaging triage and repair, subtitle readiness repair,
+poster artwork repair for Plex, junk cleanup, shared replacement queue workflow,
+OMDb-backed replacement-history rating context, and XLSX catalogue export.
 
-Current pressure: the lane set is useful, but scanning and UI state are
-fragmented. Movie profile already acts as a shared scan for Dashboard, weak
-encode, audio packaging, and subtitle readiness workflows; other areas still
-run separate scans and produce separate UI projections. Movie normalization has
-crossed the planned 0.7 threshold: the default is now concise `Title (Year)`,
-verbose naming remains available, duplicate concise targets get parsed
-differentiators when possible, and the normalizer now handles several
-high-confidence library-chaos cleanup cases: loose root movies, no-video
-artifact folders, safe artifact merges, metadata-only collection remnants,
-root AppleDouble junk, and multi-part CD-style movie folders. The broader
-scan/state split remains.
+Current pressure: movie normalization now does the important job end to end. It
+scans a movie directory, proposes a full local restructure, handles duplicate
+concise targets with parsed differentiators, splits locally-evidenced
+multi-movie packages, deletes high-confidence package artifacts, and applies the
+result from the web UI. The remaining pre-refactor work is product trimming and
+lane expansion: remove verbose naming as a production option, then build a TV
+Show Normalization lane from the movie-normalization structure. The broader
+scan/state split remains after those moves.
 
 ## 0.7.0 — normalization controls landed
 
@@ -52,34 +48,45 @@ larger UI overhaul.
   mixed-script title prefixes, language tags, hyphenated release groups, and
   common typo tokens are covered by focused tests.
 
-## 0.7.x — canonical-list actionability and normalization polish
+## 0.7.x — normalize product completion
 
-Focus: finish the remaining collection-decision work while polishing the new
-normalization defaults against real-library scans.
+Focus: lock movie normalization as a product-complete workflow, then remove the
+temporary verbose naming path before broader refactor work.
 
-- **Plex Artwork Repair testing** — Plex-synced poster previews, title parsing,
-  and sort order landed in 0.6.4. Known remaining gap: numerical sort order has
-  a minor residual mismatch vs Plex for some multi-digit numeric titles (e.g.
-  48 Hrs. / 88 Minutes / 1917 ordering). Investigate and resolve.
-- **Subtitle Readiness validation** — confirm downstream Plex behavior and
-  document any required Plex refresh/cache steps after repair.
-- **Canonical Lists calculation** — fix incomplete, noisy, or misleading
-  coverage logic.
-- **Canonical Lists actionability** — show owned, missing, and
-  owned-below-selected-quality titles as distinct states.
-- **Normalization scan review** — keep feeding real edge cases into the local
-  parser, especially duplicate-copy handling and trailing-year release naming,
-  without adding heavier scan requirements.
-- **Normalization output preview polish** — review the Movies / Normalize
-  selected-output preview against larger partially-normalized libraries and keep
-  the All Results / Safe / review filter chain aligned with checked rows.
-- **Minor UI polish** — fix twitchy button hover behavior, accidental
-  double-height buttons, theme contrast issues, typeface leaks, and rogue CSS
-  paths that do not fit the active theme.
-- **Movie dashboard hardening** — keep profile persistence, scan-derived
-  rendering, and replacement-history rating lookup stable while 0.7.x settles.
+- **Movie Normalization complete** — concise `Title (Year)/Title (Year).ext`
+  output is the production path. Duplicate copies receive local differentiators
+  when possible; truly unresolved collisions stay in review.
+- **One-shot cleanup complete** — normalization covers loose root movies,
+  no-video artifact renames/merges/deletes, metadata-only package artifacts,
+  root AppleDouble junk, CD-style multi-part movies, and locally-evidenced
+  multi-movie package splits.
+- **Remove verbose naming** — drop `--naming-style verbose`, the web naming
+  selector, and verbose-only preview payloads. Keep the parser hardening earned
+  from verbose-mode tests, but make concise the only normalization output.
+- **Keep docs local-first** — document the production workflow and the removal
+  of verbose naming internally before the next public push.
 
-## 0.8.x — music collection intelligence
+## 0.8.x — TV show normalization lane
+
+Focus: port the movie-normalization concept to TV show libraries while
+respecting TV-specific folder and episode naming conventions.
+
+- **TV Show Normalize page** — add a dedicated lane/page that scans a TV source
+  and proposes a complete restructure before apply.
+- **Series and season structure** — target a stable local shape such as
+  `Show Name (Year)/Season NN/Show Name - SNNENN - Episode Title.ext` when the
+  evidence is local enough; use the smallest safe default when episode titles
+  are unavailable.
+- **Episode parsing** — handle common `S01E02`, `1x02`, season-folder, absolute
+  anime-style, specials, multi-episode, and messy release-token inputs without
+  remote metadata as a hard dependency.
+- **Package cleanup** — adapt movie artifact cleanup for TV extras, samples,
+  empty packaging folders, duplicate wrappers, and season-pack folders.
+- **Apply safety** — reuse the movie normalizer’s preview/apply discipline:
+  no destructive defaults, review for ambiguity, and source-root validation for
+  every moved or deleted path.
+
+## 0.9.x — music collection intelligence
 
 Focus: carry the Canonical Lists pattern into Music and turn the Music
 Recommendation lane into a complete useful workflow.
@@ -95,7 +102,7 @@ Recommendation lane into a complete useful workflow.
 
 Movie recommendations are out of scope. IMDb already handles that use case well.
 
-## 0.9.0 — collection intelligence complete
+## 1.0.0 — collection intelligence complete
 
 Focus: mark the point where Canonical Lists and the Music Recommendation lane
 passes are complete enough to stop expanding collection-intelligence scope.
@@ -106,7 +113,7 @@ passes are complete enough to stop expanding collection-intelligence scope.
 - Remaining recommendation work is limited to minor tuning before refactor
   slices begin.
 
-## 0.9.x — recommendation tuning and refactor slices
+## 1.0.x — recommendation tuning and refactor slices
 
 Focus: make minor Recommendation Engine tweaks, then begin the scan/domain
 refactor in coherent slices.
@@ -122,7 +129,7 @@ refactor in coherent slices.
 - Tighten replacement queue state boundaries and performance.
 - Keep existing destructive workflow safety constraints intact.
 
-## 1.0.0 — final refactor slice
+## 1.1.0 — final refactor slice
 
 Focus: land the final refactor slice and make the architecture stable enough
 for 1.x product work.
