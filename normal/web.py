@@ -5603,8 +5603,10 @@ INDEX_HTML = """<!doctype html>
 
       const sort = state.movieProfileInspectorSort;
       const mult = sort.dir === 'asc' ? 1 : -1;
+      const RES_RANK = { '2160p': 4, '1080p': 3, '720p': 2, 'sd': 1 };
       const sorted = filtered.slice().sort((a, b) => {
         if (sort.col === 'year') return mult * ((a._parsed.year || 0) - (b._parsed.year || 0));
+        if (sort.col === 'resolution') return mult * ((RES_RANK[a.facts?.resolution_bucket] || 0) - (RES_RANK[b.facts?.resolution_bucket] || 0));
         if (sort.col === 'video_bitrate') return mult * ((a.facts?.video_bitrate_kbps || 0) - (b.facts?.video_bitrate_kbps || 0));
         if (sort.col === 'audio_bitrate') return mult * ((a.facts?.audio_bitrate_kbps || 0) - (b.facts?.audio_bitrate_kbps || 0));
         if (sort.col === 'file_size') return mult * ((a.facts?.file_size_bytes || 0) - (b.facts?.file_size_bytes || 0));
@@ -5620,10 +5622,11 @@ INDEX_HTML = """<!doctype html>
       const rows = sorted.map(item => {
         const title = item._parsed.title;
         const year = item._parsed.year ? escapeHtml(String(item._parsed.year)) : '<span class="subtle">—</span>';
+        const res = item.facts?.resolution_bucket ? escapeHtml(item.facts.resolution_bucket) : '<span class="subtle">—</span>';
         const vbr = item.facts?.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
         const abr = fmtAudioBitrate(item.facts);
         const size = item.facts?.file_size_bytes ? fmtFileSize(item.facts.file_size_bytes) : '<span class="subtle">—</span>';
-        return `<tr><td>${escapeHtml(title)}</td><td>${year}</td><td>${vbr}</td><td>${abr}</td><td>${size}</td></tr>`;
+        return `<tr><td>${escapeHtml(title)}</td><td>${year}</td><td>${res}</td><td>${vbr}</td><td>${abr}</td><td>${size}</td></tr>`;
       }).join('');
 
       return `
@@ -5633,15 +5636,16 @@ INDEX_HTML = """<!doctype html>
           <span class="subtle">${filtered.length.toLocaleString()} title${filtered.length === 1 ? '' : 's'}</span>
         </div>
         <table style="width:100%;border-collapse:collapse;table-layout:fixed" class="subtitle-table">
-          <colgroup><col style="width:20%"><col style="width:20%"><col style="width:20%"><col style="width:20%"><col style="width:20%"></colgroup>
+          <colgroup><col style="width:30%"><col style="width:8%"><col style="width:10%"><col style="width:17%"><col style="width:17%"><col style="width:18%"></colgroup>
           <thead><tr>
             ${sortTh('title', 'Title')}
             ${sortTh('year', 'Year')}
+            ${sortTh('resolution', 'Resolution')}
             ${sortTh('video_bitrate', 'Video Bitrate')}
             ${sortTh('audio_bitrate', 'Audio Bitrate')}
             ${sortTh('file_size', 'File Size')}
           </tr></thead>
-          <tbody>${rows || '<tr><td colspan="5" class="subtle" style="text-align:center;padding:16px">No titles in this profile.</td></tr>'}</tbody>
+          <tbody>${rows || '<tr><td colspan="6" class="subtle" style="text-align:center;padding:16px">No titles in this profile.</td></tr>'}</tbody>
         </table>
       `;
     }

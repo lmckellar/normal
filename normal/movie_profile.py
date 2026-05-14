@@ -427,6 +427,19 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
                             {"value": 1980, "label": "Pre-1980 films exempt"},
                             {"value": 1985, "label": "Pre-1985 films exempt"},
                             {"value": 1990, "label": "Pre-1990 films exempt"},
+                            {"value": 1999, "label": "Pre-1999 films exempt"},
+                        ],
+                    },
+                    {
+                        "key": "audio_channels_atmos_cutoff",
+                        "label": "Exempt pre-Atmos era films from 8-channel minimum",
+                        "type": "select",
+                        "value": int(stance.get("audio_channels_atmos_cutoff", 0)),
+                        "options": [
+                            {"value": 0, "label": "Off — apply 8-channel minimum to all films"},
+                            {"value": 2005, "label": "Pre-2005 films exempt"},
+                            {"value": 2010, "label": "Pre-2010 films exempt"},
+                            {"value": 2015, "label": "Pre-2015 films exempt"},
                         ],
                     },
                     {
@@ -543,6 +556,8 @@ def update_movie_profile_definition(
         )
         cutoff_raw = values.get("audio_channels_vintage_cutoff")
         stance["audio_channels_vintage_cutoff"] = int(cutoff_raw) if cutoff_raw is not None and str(cutoff_raw).isdigit() else 0
+        atmos_raw = values.get("audio_channels_atmos_cutoff")
+        stance["audio_channels_atmos_cutoff"] = int(atmos_raw) if atmos_raw is not None and str(atmos_raw).isdigit() else 0
         stance["audio_bitrate_kbps"] = normalize_positive_int(
             values.get("audio_bitrate_kbps"),
             int(resolve_stance_audio_bitrate(label, stance, active)),
@@ -926,10 +941,14 @@ def movie_matches_quality_stance(
     required_channels = resolve_stance_audio_channels(label, stance, standards)
     if required_channels and channels < required_channels:
         vintage_cutoff = int(stance.get("audio_channels_vintage_cutoff") or 0)
+        atmos_cutoff = int(stance.get("audio_channels_atmos_cutoff") or 0)
         exempt = False
-        if vintage_cutoff:
+        if vintage_cutoff or atmos_cutoff:
             parsed_identity = parse_movie_name(path)
-            if parsed_identity.year and parsed_identity.year < vintage_cutoff:
+            year = parsed_identity.year
+            if vintage_cutoff and year and year < vintage_cutoff:
+                exempt = True
+            if not exempt and atmos_cutoff and required_channels > 6 and channels >= 6 and year and year < atmos_cutoff:
                 exempt = True
         if not exempt:
             return False
