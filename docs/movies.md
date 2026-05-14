@@ -47,10 +47,10 @@ Concise duplicate handling is subtractive but not lossy when two local copies wo
 Normalize also handles common library-chaos cleanup when the evidence is local and high confidence:
 
 - loose root movie files move into `Title (Year)/Title (Year).ext`, including cases where a sibling `.nfo` provides the title/year
-- no-video movie-shaped artifact folders can be renamed, merged into an existing concise folder, or flagged for review when merge safety is unclear
+- no-video movie-shaped artifact folders can be renamed, merged into an existing concise folder, deleted when they are duplicate metadata-only remnants, or flagged for review when merge safety is unclear
 - metadata-only collection/series/trilogy package artifact folders and root AppleDouble `._*` files can be deleted as safe cleanup proposals
 - multi-part movie folders such as CD1/CD2 normalize to one movie folder with part labels preserved in filenames
-- multi-movie package folders can be split into individual movie folders when each video file locally parses to its own title/year
+- multi-movie package folders can be split into individual movie folders when each video file, or a same-stem NFO, locally parses to its own title/year; package marker words such as `trilogy` are not treated as movie titles
 
 The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it can split technical-token runs that appear before a trailing parenthesized year. In verbose mode, it keeps selected edition/video details such as `Director's Cut`, `BluRay Remux`, codec, resolution, and HDR tokens while dropping uploader, language, and audio-packaging noise.
 

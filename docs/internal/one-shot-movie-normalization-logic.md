@@ -40,6 +40,10 @@ but left technical tokens in the folder.
 - If a no-video artifact folder matches an existing concise target and its
   contents do not collide, merge it into the concise folder. If paths collide,
   keep it review-only.
+- If a no-video duplicate artifact folder matches an existing concise target
+  that already has a movie file, and the duplicate contains only safe metadata
+  or system files, delete the duplicate artifact folder instead of merging or
+  proposing a review rename.
 - Metadata-only collection remnants can be deleted when they contain only
   `.nfo`, `.DS_Store`, or AppleDouble `._*` files. Example:
   `The Mummy 1, 2, 3, 4 - Collection 1999-2017 Eng Subs 1080p [H264-mp4]`
@@ -51,6 +55,10 @@ but left technical tokens in the folder.
   `White Mischief ... CD1 ... .mkv` and `... CD2 ... .mkv` become
   `White Mischief (1987) CD1.mkv` and `White Mischief (1987) CD2.mkv` inside
   `White Mischief (1987)/`.
+- Multi-movie package folders can split into one folder per movie when each
+  child file has local title/year evidence from its filename or same-stem NFO.
+  Package marker words such as `trilogy`, `duology`, `collection`, `saga`,
+  `series`, and `pack` are never accepted as child movie-title evidence.
 
 ## Review Boundary
 
@@ -64,6 +72,8 @@ Keep review when:
 - a no-video folder contains substantive extras such as screenshots or subtitle
   packs and no clear merge target
 - title/year cannot be recovered from filename, folder, or local sidecar
+- a package folder has year-only child filenames and no local title evidence for
+  each child movie
 
 Canonical examples:
 
