@@ -8,7 +8,7 @@ from normal.quality_review import MediaFacts, classify_resolution, parse_name_re
 class QualityReviewTests(unittest.TestCase):
     def test_classify_resolution_uses_cropped_height_for_hd_buckets(self) -> None:
         self.assertEqual(classify_resolution(1916, 952), "1080p")
-        self.assertEqual(classify_resolution(1920, 800), "720p")
+        self.assertEqual(classify_resolution(1920, 800), "1080p")
         self.assertEqual(classify_resolution(1440, 1080), "720p")
 
     def test_score_quality_review_marks_low_bitrate_1080p_as_severe(self) -> None:

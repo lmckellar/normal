@@ -32,7 +32,7 @@ Files named by whoever uploaded them tend to have inconsistent formatting — va
 Title (Year)/Title (Year).mkv
 ```
 
-The web UI can switch between **Concise Naming** and **Verbose Naming - Include Extra Information** before applying selected changes. The CLI defaults to concise and supports `--naming-style verbose` for the older technical-token shape:
+The web UI can switch between **Concise Naming** and **Verbose Naming - Include Extra Information** before applying selected changes. Its default **All Results** review shows every scanned video file, including already-normalized items as no-change rows, so the proposed structure preview can show the full selected downstream library shape. Use the **Safe** and **Flagged for review** list filters with **Select All / Deselect All** to narrow or bulk-select the actionable rows. The CLI defaults to concise and supports `--naming-style verbose` for the older technical-token shape:
 
 ```
 Title (Year) [technical tokens]/Title (Year) [technical tokens].mkv
