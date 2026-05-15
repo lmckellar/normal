@@ -103,12 +103,12 @@ class CanonicalListsReport:
 CANONICAL_LISTS: tuple[CanonicalListConfig, ...] = (
     CanonicalListConfig("top_100", "Top 100", 100, "TOP 100", 75.0, "#f94144", "top_rated"),
     CanonicalListConfig("top_250", "Top 250", 250, "TOP 250", 65.0, "#f3722c", "top_rated"),
-    CanonicalListConfig("top_1000", "Top 1000", 1000, "TOP 1000", 40.0, "#f8961e", "top_rated"),
+    CanonicalListConfig("animation", "Top 50 Animation", 50, "ANIMATION", 60.0, "#f8961e", "genre", (16,)),
     CanonicalListConfig("sci_fi", "Sci-Fi", 100, "SCI-FI", 60.0, "#f9c74f", "genre", (878,)),
     CanonicalListConfig("fantasy", "Fantasy", 100, "FANTASY", 60.0, "#90be6d", "genre", (14,)),
     CanonicalListConfig("action", "Action", 100, "ACTION", 60.0, "#43aa8b", "genre", (28,)),
     CanonicalListConfig("thriller_mystery", "Thriller / Mystery", 100, "THRILLER", 60.0, "#577590", "genre", (53, 9648)),
-    CanonicalListConfig("suspense_horror", "Suspense / Horror", 100, "HORROR", 60.0, "#277da1", "genre", (27, 53)),
+    CanonicalListConfig("documentary", "Top 50 Documentary", 50, "DOCUMENTARY", 60.0, "#277da1", "genre", (99,)),
     CanonicalListConfig("comedy", "Comedy", 100, "COMEDY", 60.0, "#4d908e", "genre", (35,)),
 )
 

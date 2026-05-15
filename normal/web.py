@@ -1370,7 +1370,7 @@ INDEX_HTML = """<!doctype html>
     })();
     let _movieCanonicalListsCache = (() => {
       try {
-        const cache = JSON.parse(localStorage.getItem('n_movie_canonical_lists_cache_v2') || '{}');
+        const cache = JSON.parse(localStorage.getItem('n_movie_canonical_lists_cache_v3') || '{}');
         return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
       } catch {
         return {};
@@ -1586,7 +1586,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function persistMovieCanonicalListsCache() {
-      try { localStorage.setItem('n_movie_canonical_lists_cache_v2', JSON.stringify(_movieCanonicalListsCache)); } catch {}
+      try { localStorage.setItem('n_movie_canonical_lists_cache_v3', JSON.stringify(_movieCanonicalListsCache)); } catch {}
     }
 
     function persistMovieReplacementQueueCache() {
@@ -3576,7 +3576,17 @@ INDEX_HTML = """<!doctype html>
       const listSummary = lists.find(item => item.id === listId);
       if (!listSummary) return '<div class="empty">List not found.</div>';
       const allEntries = Array.isArray(listSummary.all_entries) ? listSummary.all_entries : [];
-      if (!allEntries.length) return '<div class="empty">Run Movies / Canonical Lists to populate the inspector.</div>';
+      if (!allEntries.length) {
+        const hint = (listSummary.total_count || 0) > 0
+          ? `Re-run Movies / Canonical Lists to load ${listSummary.total_count} titles for this list.`
+          : 'Run Movies / Canonical Lists to compare your library against this list.';
+        return `
+          <div style="margin-bottom:1em">
+            <button class="secondary movie-canonical-inspector-back">← Back to Dashboard</button>
+          </div>
+          <div class="empty">${escapeHtml(hint)}</div>
+        `;
+      }
       const profileMovies = Array.isArray(state.results.movies.profile?.movies) ? state.results.movies.profile.movies : [];
       const qualityByPath = {};
       for (const m of profileMovies) {
