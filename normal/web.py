@@ -411,10 +411,10 @@ INDEX_HTML = """<!doctype html>
       font-weight: 700;
       color: var(--ink);
       cursor: pointer;
-      transition: transform 120ms ease, opacity 120ms ease;
+      transition: filter 120ms ease, opacity 120ms ease;
     }
-    button:hover { transform: translateY(-1px); }
-    button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    button:hover { filter: brightness(0.92); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
     .primary { background: var(--accent); color: white; }
     .secondary { background: var(--btn-secondary); color: var(--ink); }
     .danger { background: var(--danger); color: white; }
@@ -432,7 +432,9 @@ INDEX_HTML = """<!doctype html>
       font-size: 13px;
       color: var(--ink);
       cursor: pointer;
+      transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
     }
+    .sel-toggle { padding: 8px 12px; font-size: 13px; }
     .page-button.active, .filter-button.active {
       color: white;
       border-color: transparent;
@@ -1845,6 +1847,7 @@ INDEX_HTML = """<!doctype html>
               <div class="library-root-path">${escapeHtml(source || 'Not set')}</div>
             </div>
             <div class="library-root-actions">
+              ${lane === 'movies' && source ? `<button class="secondary" data-catalogue-source="${escapeHtml(source)}">Export</button>` : ''}
               <button class="${isCurrent ? 'primary' : 'secondary'}" data-library-lane="${lane}" ${source ? '' : 'disabled'}>${isCurrent ? 'Using' : 'Use'}</button>
             </div>
           </div>
@@ -1865,6 +1868,7 @@ INDEX_HTML = """<!doctype html>
               <div class="library-root-path">${escapeHtml(item.source)}</div>
             </div>
             <div class="library-root-actions">
+              ${item.lane === 'movies' ? `<button class="secondary" data-catalogue-source="${escapeHtml(item.source)}">Export</button>` : ''}
               <button class="${isCurrent ? 'primary' : 'secondary'}" data-recent-library-index="${item.index}">${isCurrent ? 'Using' : 'Use'}</button>
               ${isCurrent ? `<button class="secondary" data-promote-library-index="${item.index}">Make Main ${escapeHtml(CONFIG[item.lane].title)} Library</button>` : ''}
               <button class="secondary" data-remove-recent-library-index="${item.index}">Remove</button>
@@ -1888,6 +1892,9 @@ INDEX_HTML = """<!doctype html>
       });
       libraryRoots.querySelectorAll('[data-remove-recent-library-index]').forEach(button => {
         button.addEventListener('click', () => removeRecentLibrary(Number(button.dataset.removeRecentLibraryIndex)));
+      });
+      libraryRoots.querySelectorAll('[data-catalogue-source]').forEach(btn => {
+        btn.addEventListener('click', () => generateCatalogue(btn, btn.dataset.catalogueSource));
       });
     }
 
@@ -2153,8 +2160,8 @@ INDEX_HTML = """<!doctype html>
       pageNav.querySelectorAll('.page-button').forEach(button => button.addEventListener('click', () => setPage(button.dataset.page)));
     }
 
-    async function generateCatalogue(btn) {
-      const source = sourceInput.value.trim();
+    async function generateCatalogue(btn, sourceOverride) {
+      const source = sourceOverride || sourceInput.value.trim();
       if (!source) { setStatus('Enter a source path first.', 'error'); return; }
       if (!await confirmSourceScope(source)) return;
       const original = btn.textContent;
@@ -2984,7 +2991,7 @@ INDEX_HTML = """<!doctype html>
         <div class="subtle" style="margin-bottom:10px;">Warnings: ${warningList || 'none'}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
           <button class="secondary" id="selAllSafe">All Safe</button>
-          <button class="secondary" id="selToggle">${selectedCount === total && total > 0 ? 'Deselect All' : 'Select All'}</button>
+          <button class="secondary sel-toggle" id="selToggle">${selectedCount === total && total > 0 ? 'Deselect All' : 'Select All'}</button>
           <span class="subtle" id="selCount" style="margin-left:4px">${selectedCount} of ${total} selected</span>
           <div style="flex:1"></div>
           <button class="primary" id="applyBtn" ${selectedCount === 0 ? 'disabled' : ''} style="min-width:160px">Apply ${selectedCount} Changes</button>
@@ -3458,8 +3465,6 @@ INDEX_HTML = """<!doctype html>
     }
 
     function attachMovieDashboardHandlers(payload) {
-      const exportBtn = document.getElementById('exportCatalogueButton');
-      if (exportBtn) exportBtn.addEventListener('click', () => generateCatalogue(exportBtn));
       document.querySelectorAll('.movie-profile-view-btn').forEach(button => {
         button.addEventListener('click', () => {
           state.movieProfileInspectorLabel = button.dataset.profileLabel || '';
@@ -3797,7 +3802,7 @@ INDEX_HTML = """<!doctype html>
         </div>
         <div class="subtle" style="margin-bottom:10px;">Warnings: ${warningList || 'none'}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-          <button class="secondary" id="selToggle">${allVisibleSelected ? 'Deselect All' : 'Select All'}</button>
+          <button class="secondary sel-toggle" id="selToggle">${allVisibleSelected ? 'Deselect All' : 'Select All'}</button>
           <span class="subtle" id="selCount" style="margin-left:4px">${selectedCount} actionable${selectedResultCount ? `, ${selectedResultCount} result${selectedResultCount === 1 ? '' : 's'}` : ''} selected</span>
           <div style="flex:1"></div>
           <button class="primary" id="applyBtn" ${selectedCount === 0 ? 'disabled' : ''} style="min-width:160px">Apply ${selectedCount} Changes</button>
@@ -5051,7 +5056,7 @@ INDEX_HTML = """<!doctype html>
       return `
         ${queueSummary}
         <div class="junk-actions">
-          <button class="secondary" id="toggleAllReplacementButton" ${selectableCount ? '' : 'disabled'}>${toggleLabel}</button>
+          <button class="secondary sel-toggle" id="toggleAllReplacementButton" ${selectableCount ? '' : 'disabled'}>${toggleLabel}</button>
           <button class="danger" id="deleteSelectedFilesButton" ${selectedCount ? '' : 'disabled'}>Delete Selected Files</button>
           <span class="subtle">${selectedCount} of ${selectableCount} selected</span>
         </div>
@@ -5115,7 +5120,7 @@ INDEX_HTML = """<!doctype html>
       return `
         ${queueSummary}
         <div class="junk-actions audio-packaging-actions">
-          <button class="secondary" id="toggleAllReplacementButton" ${(selectableCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
+          <button class="secondary sel-toggle" id="toggleAllReplacementButton" ${(selectableCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
           <button class="primary" id="fixSelectedAudioButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Make English Default</button>
           <button class="primary" id="fixSelectedAudioAndDropForeignButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Make English Default + Delete Foreign Audio</button>
           <span class="triage-action-spacer"></span>
@@ -5162,7 +5167,7 @@ INDEX_HTML = """<!doctype html>
         : `<span class="subtle">${selectedCount} of ${selectableCount} selected</span>`;
       return `
         <div class="junk-actions audio-packaging-actions">
-          <button class="secondary" id="toggleSubtitleRepairButton" ${(selectableCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
+          <button class="secondary sel-toggle" id="toggleSubtitleRepairButton" ${(selectableCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
           <button class="primary" id="fixSelectedSubtitleButton" ${(selectedCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>Repair Subtitle Defaults</button>
           <span class="subtle">This page is non-destructive.</span>
           <span class="triage-action-note">${lockNote}</span>
@@ -5530,13 +5535,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function buildMovieDashboard(payload) {
-      const actionsHtml = `
-        <div class="dash-actions">
-          <button class="secondary" id="exportCatalogueButton">Export Catalogue</button>
-          <span class="subtle">Downloads movie-catalogue.xlsx for the selected library.</span>
-        </div>
-      `;
-      if (!payload) return `${actionsHtml}<div class="empty">Run Movies / Dashboard to see the dashboard.</div>`;
+      if (!payload) return `<div class="empty">Run Movies / Dashboard to see the dashboard.</div>`;
       const histogram = payload.histogram || {};
       const total = histogram.movie_count ?? (payload.movies || []).length;
 
@@ -5682,20 +5681,7 @@ INDEX_HTML = """<!doctype html>
         </div>
       `).join('');
 
-      const riskCounts = histogram.risk_counts || {};
-      const totalRisks = Object.values(riskCounts).reduce((a, b) => a + b, 0);
-      const riskHtml = totalRisks > 0 ? `
-        <div class="dash-section-label">Risks</div>
-        <div class="dash-risk-row">
-          ${Object.entries(riskCounts).map(([k, v]) => {
-            const cls = k === 'indexing_visibility_risk' ? 'indexing' : 'playback';
-            return `<span class="chip ${cls}">${escapeHtml(k.replace(/_/g, ' '))}: ${v}</span>`;
-          }).join('')}
-        </div>
-      ` : '';
-
       return `
-        ${actionsHtml}
         ${statsHtml}
         <div class="dash-section-label">Action Based</div>
         <div class="profile-grid">${actionCardsHtml || '<div class="subtle">No action data.</div>'}</div>
@@ -5703,7 +5689,6 @@ INDEX_HTML = """<!doctype html>
         <div class="profile-grid">${qualityCardsHtml || '<div class="subtle">No quality profile data.</div>'}</div>
         <div class="dash-section-label">Resolution Breakdown</div>
         <div class="dash-res-bars bars">${resBarsHtml || '<div class="subtle">No resolution data.</div>'}</div>
-        ${riskHtml}
       `;
     }
 
