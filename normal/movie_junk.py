@@ -96,6 +96,8 @@ def scan_movie_junk(
         cheap_reasons = detect_movie_junk_reasons(movie_path, facts=None)
         if cheap_reasons:
             file_size_bytes = safe_file_size(movie_path)
+            if file_size_bytes is not None and file_size_bytes >= PROBE_SIZE_CEILING:
+                continue
             report.junk.append(
                 MovieJunkItem(
                     movie_id=movie_id_for(movie_path, source_root),
