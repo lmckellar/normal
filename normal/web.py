@@ -1262,6 +1262,8 @@ INDEX_HTML = """<!doctype html>
       movieProfileInspectorLabel: '',
       movieProfileInspectorType: '',
       movieProfileInspectorSort: { col: 'title', dir: 'asc' },
+      movieCanonicalInspectorId: '',
+      movieCanonicalInspectorSort: { col: 'rank', dir: 'asc' },
       movieStandardsPendingDraft: null,
       replacementHistoryFilter: 'deleted',
       replacementHistorySort: { col: null, dir: 'asc' },
@@ -2139,6 +2141,7 @@ INDEX_HTML = """<!doctype html>
       state.replacementHistorySort = { col: null, dir: 'asc' };
       state.movieProfileInspectorLabel = '';
       state.movieProfileInspectorType = '';
+      state.movieCanonicalInspectorId = '';
       renderPageNav();
       renderCurrentPage();
     }
@@ -3488,12 +3491,25 @@ INDEX_HTML = """<!doctype html>
       renderMetrics([]);
       renderBars([]);
       filterBar.innerHTML = '';
+      if (state.movieCanonicalInspectorId && payload) {
+        mainContent.innerHTML = buildMovieCanonicalInspector(payload, state.movieCanonicalInspectorId);
+        attachMovieCanonicalInspectorHandlers(payload);
+        detailPanel.innerHTML = buildMovieCanonicalBadgePanel(payload);
+        return;
+      }
       mainContent.innerHTML = buildMovieCanonicalListsDashboard(payload);
       if (!payload) {
         detailPanel.innerHTML = '<div class="empty">Run Movies / Canonical Lists to see badge progress.</div>';
         return;
       }
       detailPanel.innerHTML = buildMovieCanonicalBadgePanel(payload);
+      document.querySelectorAll('.movie-canonical-view-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.movieCanonicalInspectorId = btn.dataset.canonicalListId || '';
+          state.movieCanonicalInspectorSort = { col: 'rank', dir: 'asc' };
+          renderMovieCanonicalLists(payload);
+        });
+      });
     }
 
     function buildMovieCanonicalListsDashboard(payload) {
@@ -3521,6 +3537,7 @@ INDEX_HTML = """<!doctype html>
             <div class="profile-card-pct">${escapeHtml(formatPercent(item.coverage_percent || 0))} coverage</div>
             <div class="profile-card-bar"><span style="width:${barWidth}%"></span></div>
             <div class="coverage-card-note">${escapeHtml(item.missing_count ? `${item.missing_count} missing${missingPreview ? ` · ${missingPreview}` : ''}` : 'Complete or near-complete coverage.')}</div>
+            <button class="secondary movie-canonical-view-btn" data-canonical-list-id="${escapeHtml(item.id || '')}">View</button>
           </div>
         `;
       }).join('');
@@ -3552,6 +3569,75 @@ INDEX_HTML = """<!doctype html>
           <div class="badge-grid">${badgeHtml || '<div class="subtle">No badges yet.</div>'}</div>
         </div>
       `;
+    }
+
+    function buildMovieCanonicalInspector(payload, listId) {
+      const lists = Array.isArray(payload?.list_summaries) ? payload.list_summaries : [];
+      const listSummary = lists.find(item => item.id === listId);
+      if (!listSummary) return '<div class="empty">List not found.</div>';
+      const allEntries = Array.isArray(listSummary.all_entries) ? listSummary.all_entries : [];
+      if (!allEntries.length) return '<div class="empty">Run Movies / Canonical Lists to populate the inspector.</div>';
+      const profileMovies = Array.isArray(state.results.movies.profile?.movies) ? state.results.movies.profile.movies : [];
+      const qualityByPath = {};
+      for (const m of profileMovies) {
+        if (m.path) qualityByPath[m.path] = { label: m.profile?.quality_label || '', res: m.facts?.resolution_bucket || '' };
+      }
+      const sort = state.movieCanonicalInspectorSort;
+      const mul = sort.dir === 'asc' ? 1 : -1;
+      const indexed = allEntries.map((entry, i) => ({ ...entry, rank: i + 1 }));
+      indexed.sort((a, b) => {
+        if (sort.col === 'year') return (a.year - b.year) * mul;
+        if (sort.col === 'status') return ((a.owned ? 0 : 1) - (b.owned ? 0 : 1)) * mul;
+        if (sort.col === 'rank') return (a.rank - b.rank) * mul;
+        return a.title.localeCompare(b.title) * mul;
+      });
+      function ind(col) {
+        if (sort.col !== col) return '<span class="sort-ind">↕</span>';
+        return `<span class="sort-ind on">${sort.dir === 'asc' ? '↑' : '↓'}</span>`;
+      }
+      const ownedCount = allEntries.filter(e => e.owned).length;
+      const missingCount = allEntries.length - ownedCount;
+      const rows = indexed.map(entry => `
+        <tr>
+          <td class="mono" style="width:5%;text-align:right;padding-right:1em">${entry.rank}</td>
+          <td style="width:55%">${escapeHtml(entry.title)}</td>
+          <td style="width:10%">${escapeHtml(String(entry.year))}</td>
+          <td style="width:30%">${(() => { if (!entry.owned) return '<span class="subtle">Missing</span>'; const q = entry.path ? qualityByPath[entry.path] : null; if (!q || (!q.label && !q.res)) return 'Owned'; return `Owned <span class="subtle">· ${escapeHtml([q.label, q.res].filter(Boolean).join(' · '))}</span>`; })()}</td>
+        </tr>
+      `).join('');
+      return `
+        <div style="margin-bottom:1em">
+          <button class="secondary movie-canonical-inspector-back">← Back to Dashboard</button>
+          <span style="margin-left:1em">${escapeHtml(listSummary.label)} — ${allEntries.length} titles · ${ownedCount} owned · ${missingCount} missing</span>
+        </div>
+        <table class="subtitle-table" style="width:100%">
+          <thead><tr>
+            <th class="movie-inspector-th sortable-th" data-sort-col="rank" style="width:5%;text-align:right;padding-right:1em"># ${ind('rank')}</th>
+            <th class="movie-inspector-th sortable-th" data-sort-col="title" style="width:55%">Title ${ind('title')}</th>
+            <th class="movie-inspector-th sortable-th" data-sort-col="year" style="width:10%">Year ${ind('year')}</th>
+            <th class="movie-inspector-th sortable-th" data-sort-col="status" style="width:30%">Status ${ind('status')}</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    function attachMovieCanonicalInspectorHandlers(payload) {
+      document.querySelector('.movie-canonical-inspector-back')?.addEventListener('click', () => {
+        state.movieCanonicalInspectorId = '';
+        renderMovieCanonicalLists(payload);
+      });
+      document.querySelectorAll('.movie-inspector-th[data-sort-col]').forEach(th => {
+        th.addEventListener('click', () => {
+          const col = th.dataset.sortCol;
+          if (state.movieCanonicalInspectorSort.col === col) {
+            state.movieCanonicalInspectorSort.dir = state.movieCanonicalInspectorSort.dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            state.movieCanonicalInspectorSort = { col, dir: 'asc' };
+          }
+          renderMovieCanonicalLists(payload);
+        });
+      });
     }
 
     function renderMovieQuality(payload) {
