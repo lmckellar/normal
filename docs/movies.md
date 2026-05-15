@@ -8,6 +8,8 @@ The movie lane handles five practical problems in a pirated library: inconsisten
 
 A library-wide view of encode quality — resolution breakdown, quality tier distribution, and bitrate histograms. A good first stop to understand the shape of your collection before deciding what to clean up.
 
+To export a formatted XLSX catalogue of the current library, use the **Export** button on the Movies library card in the Library Switcher (top-left). The button is visible whenever a Movies library path is configured.
+
 Theme examples:
 
 ![Movies dashboard, Win95 theme](assets/movies_dashboard_win95.png)
@@ -209,7 +211,7 @@ The `Audio` column uses the same normalized main-audio summary as the scan and w
 
 | Page | What it does |
 |---|---|
-| Dashboard | Quality overview — tiers, histograms, resolution breakdown |
+| Dashboard | Quality overview — tiers, histograms, resolution breakdown. Export XLSX catalogue via Library Switcher. |
 | Normalize | Review and apply rename plans |
 | Delete Weak Encodes | Triage and queue replacements |
 | Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |
