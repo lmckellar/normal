@@ -241,6 +241,7 @@ Hard rules — do not relax without explicit user instruction:
 4. `apply --in-place` is explicitly opt-in — never infer it from context.
 5. Web UI delete routes validate each path against the current source root before unlinking; outside-root paths are rejected.
 6. Junk deletion revalidates each candidate as junk immediately before deletion.
+7. Junk token matches (path contains `sample`, `featurette`, etc.) are suppressed for files ≥ 500 MB — no legitimate sample is that large, and parent folder names like `Movie and Sample` would otherwise cause false positives on full-length features.
 7. No remote metadata fetching — all data comes from local files only.
 8. Heavy recursive web scans are single-flight per source; same-source overlaps are rejected.
 9. Heavy movie-side recursive discovery is intentionally streamed rather than fully enumerated up front, because that change was central to reducing the earlier CPU spike and improving cancellation behavior.
