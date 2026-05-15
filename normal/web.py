@@ -27,8 +27,7 @@ from normal.movie_inspect import inspect_movie_file
 from normal.movie_junk import (
     detect_movie_junk_document_reasons,
     detect_movie_junk_reasons,
-    scan_movie_junk,
-    scan_movie_promo_documents,
+    scan_movie_cleanup,
 )
 from normal.movie_omdb import lookup_omdb_ratings
 from normal.movie_plan import DEFAULT_MOVIE_NAMING_STYLE, MOVIE_NAMING_STYLES, build_movie_plan
@@ -1283,7 +1282,7 @@ INDEX_HTML = """<!doctype html>
       artworkImageSearchOffsets: {},
       results: {
         music: { profile: null, normalize: null, apply: null, artwork: null, replacementQueue: null, replacementQueueSource: '' },
-        movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null, promo: null, artwork: null, replacementQueue: null, replacementQueueSource: '' }
+        movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null, artwork: null, replacementQueue: null, replacementQueueSource: '' }
       }
     };
 
@@ -1311,8 +1310,7 @@ INDEX_HTML = """<!doctype html>
           { id: 'audio_packaging', label: 'Fix Multi-Audio Packaging', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'subtitle_readiness', label: 'Repair Subtitle Readiness', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'movie_artwork', label: 'Repair Artwork for Plex', action: 'scan', endpoint: '/api/movies/artwork/scan' },
-          { id: 'junk', label: 'Delete Junk Videos', action: 'scan', endpoint: '/api/movies/junk' },
-          { id: 'promo', label: 'Delete Junk Sidecar & Spam Files', action: 'scan', endpoint: '/api/movies/promo-docs' },
+          { id: 'junk', label: 'Delete Junk & Spam Files', action: 'scan', endpoint: '/api/movies/junk' },
           { id: 'canonical_lists', label: 'Canonical Lists', action: 'scan', endpoint: '/api/movies/canonical-lists' }
         ]
       }
@@ -2333,10 +2331,6 @@ INDEX_HTML = """<!doctype html>
           state.results.movies.junk = payload;
           state.selectedJunkPaths.clear();
         }
-        if (page === 'promo') {
-          state.results.movies.promo = payload;
-          state.selectedJunkPaths.clear();
-        }
         if (page === 'movie_artwork') {
           state.results.movies.artwork = payload;
           state.approvedMoviePosterCandidates = {};
@@ -2358,8 +2352,7 @@ INDEX_HTML = """<!doctype html>
         movie_artwork: 'Repair Artwork for Plex',
         music_quality: 'Delete Weak Encodes',
         compatibility: 'Compatibility',
-        junk: 'Delete Junk Videos',
-        promo: 'Delete Junk Sidecar & Spam Files',
+        junk: 'Delete Junk & Spam Files',
         library: 'Dashboard'
       };
       mainTitle.textContent = `${CONFIG[lane].title} / ${titleMap[page]}`;
@@ -2405,10 +2398,6 @@ INDEX_HTML = """<!doctype html>
       }
       if (page === 'junk') {
         renderMovieJunk(state.results.movies.junk);
-        return;
-      }
-      if (page === 'promo') {
-        renderMovieJunk(state.results.movies.promo);
         return;
       }
       if (page === 'library') {
@@ -5954,9 +5943,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function renderMovieJunk(payload) {
-      mainTagline.textContent = state.page === 'promo'
-        ? 'Review likely promotional .txt and .html sidecar files before deletion.'
-        : 'Review likely sample, featurette, short, and tiny video files before deletion.';
+      mainTagline.textContent = 'High-confidence junk videos and spam sidecar files ready for deletion.';
       renderMetrics(buildMovieJunkMetrics(payload));
       renderBars(buildMovieJunkBars(payload));
       renderFilters([
@@ -5965,7 +5952,7 @@ INDEX_HTML = """<!doctype html>
         ['review', 'Review']
       ]);
       if (!payload) {
-        mainContent.innerHTML = `<div class="empty">Run Movies / ${state.page === 'promo' ? 'Delete Junk Sidecar & Spam Files' : 'Delete Junk Videos'} to build a review list.</div>`;
+        mainContent.innerHTML = `<div class="empty">Run Movies / Delete Junk &amp; Spam Files to build a review list.</div>`;
         return;
       }
       const rows = filteredMovieJunk(payload).map(item => {
@@ -5974,7 +5961,7 @@ INDEX_HTML = """<!doctype html>
         return `
           <tr>
             <td><input type="checkbox" class="junk-select" data-path="${encodeURIComponent(path)}" ${checked}></td>
-            <td>${escapeHtml(item.file_name || '')}</td>
+            <td><span class="badge">${item.runtime_seconds == null ? 'Doc' : 'Vid'}</span> ${escapeHtml(item.file_name || '')}</td>
             <td><div class="mono">${escapeHtml(item.relative_path || item.path || '')}</div></td>
             <td>${escapeHtml(item.file_size_label || '')}</td>
           </tr>
@@ -6044,12 +6031,11 @@ INDEX_HTML = """<!doctype html>
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Delete failed.');
-        const resultKey = state.page === 'promo' ? 'promo' : 'junk';
-        state.results.movies[resultKey] = removeDeletedJunk(state.results.movies[resultKey], payload.deleted || []);
+        state.results.movies.junk = removeDeletedJunk(state.results.movies.junk, payload.deleted || []);
         state.selectedJunkPaths.clear();
         const skipped = payload.skipped?.length || 0;
         statusText.textContent = `Deleted ${payload.deleted.length} file${payload.deleted.length === 1 ? '' : 's'}${skipped ? `; skipped ${skipped}` : ''}.`;
-        renderMovieJunk(state.results.movies[resultKey]);
+        renderMovieJunk(state.results.movies.junk);
       } catch (error) {
         statusText.textContent = error.message;
       }
@@ -7068,7 +7054,7 @@ INDEX_HTML = """<!doctype html>
       const high = junk.filter(item => item.confidence === 'high').length;
       const review = junk.filter(item => item.confidence === 'review').length;
       return [
-        { value: String(junk.length), label: state.page === 'promo' ? 'misc junk' : 'junk videos' },
+        { value: String(junk.length), label: 'junk files' },
         { value: String(high), label: 'high confidence' },
         { value: String(review), label: 'review' },
         { value: String((payload.warnings || []).length), label: 'warnings' }
@@ -7276,9 +7262,6 @@ def build_handler(
                     return
                 if route == "/api/movies/junk":
                     self.handle_movies_junk(payload)
-                    return
-                if route == "/api/movies/promo-docs":
-                    self.handle_movies_promo_docs(payload)
                     return
                 if route == "/api/movies/junk/delete":
                     self.handle_movies_junk_delete(payload)
@@ -7584,14 +7567,7 @@ def build_handler(
             source = resolve_source_path(payload.get("source"), default_source=default_source)
             with guarded_heavy_scan(source, "Movie junk scan"):
                 with ACTIVITY_TRACKER.track(source, "Movie junk scan"):
-                    report = scan_movie_junk(source, probe_media=tracked_probe(source, "ffprobe junk scan"))
-            self.respond_json(report.to_dict())
-
-        def handle_movies_promo_docs(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with guarded_heavy_scan(source, "Movie misc junk scan"):
-                with ACTIVITY_TRACKER.track(source, "Movie misc junk scan"):
-                    report = scan_movie_promo_documents(source)
+                    report = scan_movie_cleanup(source, probe_media=tracked_probe(source, "ffprobe junk scan"))
             self.respond_json(report.to_dict())
 
         def handle_movies_junk_delete(self, payload: dict[str, Any]) -> None:

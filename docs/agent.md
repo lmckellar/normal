@@ -219,8 +219,7 @@ All routes in `web.py`. Key families:
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
 | `/api/movies/inspect` | POST | One-file movie diagnostic payload |
 | `/api/movies/normalize` | POST | Build movie normalize plan |
-| `/api/movies/junk` | POST | Junk video scan |
-| `/api/movies/promo-docs` | POST | Sidecar and spam-file scan |
+| `/api/movies/junk` | POST | Combined junk scan: short/sample videos + sidecar spam docs |
 | `/api/movies/junk/delete` | POST | Delete selected junk files |
 | `/api/movies/replacement-queue/list` | POST | Queue state for current source, optionally filtered by issue family |
 | `/api/movies/replacement-queue/add` | POST | Add movie triage items to the queue |

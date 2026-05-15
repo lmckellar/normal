@@ -12,6 +12,7 @@ from normal.quality_review import MediaFacts
 
 SHORT_VIDEO_SECONDS = 5 * 60
 SMALL_VIDEO_BYTES = 100 * 1024 * 1024
+PROBE_SIZE_CEILING = 500 * 1024 * 1024  # skip ffprobe for files above this; too large to be a 5-min clip
 JUNK_DOCUMENT_EXTENSIONS = {".txt", ".html", ".htm"}
 JUNK_TOKEN_PATTERN = re.compile(
     r"(?<![A-Za-z0-9])("
@@ -91,6 +92,31 @@ def scan_movie_junk(
         return report
 
     for movie_path in movie_files:
+        # Cheap pre-filter: path token (regex) + file size (stat) — no ffprobe needed.
+        cheap_reasons = detect_movie_junk_reasons(movie_path, facts=None)
+        if cheap_reasons:
+            file_size_bytes = safe_file_size(movie_path)
+            report.junk.append(
+                MovieJunkItem(
+                    movie_id=movie_id_for(movie_path, source_root),
+                    path=str(movie_path),
+                    relative_path=movie_id_for(movie_path, source_root),
+                    file_name=movie_path.name,
+                    file_size_bytes=file_size_bytes,
+                    file_size_label=format_file_size(file_size_bytes),
+                    runtime_seconds=None,
+                    runtime_label=None,
+                    confidence=highest_confidence(cheap_reasons),
+                    reasons=cheap_reasons,
+                )
+            )
+            continue
+
+        # No cheap hit — skip large files (can't be a 5-min clip), probe small ones for runtime.
+        file_size = safe_file_size(movie_path)
+        if file_size is None or file_size >= PROBE_SIZE_CEILING:
+            continue
+
         facts: MediaFacts | None = None
         try:
             facts = probe_media(movie_path)
@@ -102,6 +128,7 @@ def scan_movie_junk(
                     path=str(movie_path),
                 )
             )
+            continue
 
         reasons = detect_movie_junk_reasons(movie_path, facts)
         if not reasons:
@@ -164,6 +191,22 @@ def scan_movie_promo_documents(source_root: Path) -> MovieJunkReport:
 
     report.junk.sort(key=lambda item: (confidence_rank(item.confidence), item.path.lower()))
     return report
+
+
+def scan_movie_cleanup(
+    source_root: Path,
+    probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
+) -> MovieJunkReport:
+    video_report = scan_movie_junk(source_root, probe_media)
+    doc_report = scan_movie_promo_documents(source_root)
+    merged = MovieJunkReport(
+        source_root=str(source_root.resolve()),
+        generated_at=utc_now_iso(),
+        junk=video_report.junk + doc_report.junk,
+        warnings=video_report.warnings + doc_report.warnings,
+    )
+    merged.junk.sort(key=lambda item: (confidence_rank(item.confidence), item.path.lower()))
+    return merged
 
 
 def discover_junk_document_files(source_root: Path) -> list[Path]:
