@@ -4793,6 +4793,42 @@ INDEX_HTML = """<!doctype html>
       return facts.audio_bitrate_estimated ? `${val}+ kbps <span class="subtle">est.</span>` : `${val} kbps`;
     }
 
+    const LOSSLESS_FAMILIES = new Set(['truehd', 'dtshd', 'flac', 'pcm']);
+    const NORM_MULT = { aac: 1.30, eac3: 1.12, dts: 0.95, ac3: 1.00 };
+    const TAPER_START_PER_CH = 75;
+    const TAPER_END_PER_CH = 110;
+
+    function normalizeAudioBitrate(facts) {
+      const family = (facts?.audio_format_family || '').toLowerCase();
+      if (LOSSLESS_FAMILIES.has(family)) return { lossless: true };
+      const raw = facts?.audio_bitrate_kbps;
+      if (!raw) return { missing: true };
+      const mult = NORM_MULT[family] ?? 1.00;
+      const channels = facts?.audio_channels || 6;
+      const taperStart = TAPER_START_PER_CH * channels;
+      const taperEnd = TAPER_END_PER_CH * channels;
+      const normalizedRaw = raw * mult;
+      if (normalizedRaw >= taperEnd) return { nearTransparent: true, threshold: Math.round(taperEnd) };
+      let normalized;
+      if (normalizedRaw >= taperStart) {
+        const t = (normalizedRaw - taperStart) / (taperEnd - taperStart);
+        const effectiveMult = mult + t * (1.0 - mult);
+        normalized = Math.round(raw * effectiveMult);
+      } else {
+        normalized = Math.round(normalizedRaw);
+      }
+      return { normalized, raw };
+    }
+
+    function fmtNormAudioBitrate(facts) {
+      const n = normalizeAudioBitrate(facts);
+      if (!n || n.missing) return '<span class="subtle">—</span>';
+      if (n.lossless) return '<span class="subtle">Lossless</span>';
+      const ch = facts?.audio_channels || 6;
+      if (n.nearTransparent) return `<span title="Near transparent for ${ch}-channel audio">≥${n.threshold.toLocaleString()} kbps eq. <span class="subtle">~</span></span>`;
+      return `${n.normalized.toLocaleString()} kbps eq. <span class="subtle" title="AC3-equivalent estimate">~</span>`;
+    }
+
     function humanProfileLabel(label) {
       if (label === 'standard_definition') return 'Standard Definition';
       if (label === 'library_grade') return 'Library Grade';
@@ -5599,16 +5635,20 @@ INDEX_HTML = """<!doctype html>
 
       const filtered = movies
         .filter(m => profileType === 'action' ? m.profile?.label === label : m.profile?.quality_label === label)
-        .map(m => ({ ...m, _parsed: parseStem(m) }));
+        .map(m => ({ ...m, _parsed: parseStem(m), _normAudio: normalizeAudioBitrate(m.facts) }));
 
       const sort = state.movieProfileInspectorSort;
       const mult = sort.dir === 'asc' ? 1 : -1;
       const RES_RANK = { '2160p': 4, '1080p': 3, '720p': 2, 'sd': 1 };
+      function normSortVal(n) { return n?.lossless ? 999999 : (n?.nearTransparent ? n.threshold : (n?.normalized || 0)); }
       const sorted = filtered.slice().sort((a, b) => {
         if (sort.col === 'year') return mult * ((a._parsed.year || 0) - (b._parsed.year || 0));
         if (sort.col === 'resolution') return mult * ((RES_RANK[a.facts?.resolution_bucket] || 0) - (RES_RANK[b.facts?.resolution_bucket] || 0));
+        if (sort.col === 'codec') return mult * (a.facts?.audio_format_family || '').localeCompare(b.facts?.audio_format_family || '');
+        if (sort.col === 'channels') return mult * ((a.facts?.audio_channels || 0) - (b.facts?.audio_channels || 0));
         if (sort.col === 'video_bitrate') return mult * ((a.facts?.video_bitrate_kbps || 0) - (b.facts?.video_bitrate_kbps || 0));
         if (sort.col === 'audio_bitrate') return mult * ((a.facts?.audio_bitrate_kbps || 0) - (b.facts?.audio_bitrate_kbps || 0));
+        if (sort.col === 'norm_bitrate') return mult * (normSortVal(a._normAudio) - normSortVal(b._normAudio));
         if (sort.col === 'file_size') return mult * ((a.facts?.file_size_bytes || 0) - (b.facts?.file_size_bytes || 0));
         return mult * a._parsed.title.localeCompare(b._parsed.title, undefined, { sensitivity: 'base' });
       });
@@ -5623,10 +5663,13 @@ INDEX_HTML = """<!doctype html>
         const title = item._parsed.title;
         const year = item._parsed.year ? escapeHtml(String(item._parsed.year)) : '<span class="subtle">—</span>';
         const res = item.facts?.resolution_bucket ? escapeHtml(item.facts.resolution_bucket) : '<span class="subtle">—</span>';
-        const vbr = item.facts?.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
+        const codec = item.facts?.audio_summary ? escapeHtml(item.facts.audio_summary) : (item.facts?.audio_format_family ? escapeHtml(item.facts.audio_format_family.toUpperCase()) : '<span class="subtle">—</span>');
+        const ch = item.facts?.audio_channels != null ? String(item.facts.audio_channels) : '<span class="subtle">—</span>';
         const abr = fmtAudioBitrate(item.facts);
+        const nabr = fmtNormAudioBitrate(item.facts);
+        const vbr = item.facts?.video_bitrate_kbps ? `${Math.round(item.facts.video_bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
         const size = item.facts?.file_size_bytes ? fmtFileSize(item.facts.file_size_bytes) : '<span class="subtle">—</span>';
-        return `<tr><td>${escapeHtml(title)}</td><td>${year}</td><td>${res}</td><td>${vbr}</td><td>${abr}</td><td>${size}</td></tr>`;
+        return `<tr><td>${escapeHtml(title)}</td><td>${year}</td><td>${res}</td><td>${codec}</td><td>${ch}</td><td>${abr}</td><td>${nabr}</td><td>${vbr}</td><td>${size}</td></tr>`;
       }).join('');
 
       return `
@@ -5636,16 +5679,19 @@ INDEX_HTML = """<!doctype html>
           <span class="subtle">${filtered.length.toLocaleString()} title${filtered.length === 1 ? '' : 's'}</span>
         </div>
         <table style="width:100%;border-collapse:collapse;table-layout:fixed" class="subtitle-table">
-          <colgroup><col style="width:30%"><col style="width:8%"><col style="width:10%"><col style="width:17%"><col style="width:17%"><col style="width:18%"></colgroup>
+          <colgroup><col style="width:26%"><col style="width:6%"><col style="width:7%"><col style="width:13%"><col style="width:4%"><col style="width:9%"><col style="width:10%"><col style="width:10%"><col style="width:8%"></colgroup>
           <thead><tr>
             ${sortTh('title', 'Title')}
             ${sortTh('year', 'Year')}
             ${sortTh('resolution', 'Resolution')}
+            ${sortTh('codec', 'Codec')}
+            ${sortTh('channels', 'Ch')}
+            ${sortTh('audio_bitrate', 'Raw Audio')}
+            ${sortTh('norm_bitrate', 'Norm. Audio')}
             ${sortTh('video_bitrate', 'Video Bitrate')}
-            ${sortTh('audio_bitrate', 'Audio Bitrate')}
             ${sortTh('file_size', 'File Size')}
           </tr></thead>
-          <tbody>${rows || '<tr><td colspan="6" class="subtle" style="text-align:center;padding:16px">No titles in this profile.</td></tr>'}</tbody>
+          <tbody>${rows || '<tr><td colspan="9" class="subtle" style="text-align:center;padding:16px">No titles in this profile.</td></tr>'}</tbody>
         </table>
       `;
     }
