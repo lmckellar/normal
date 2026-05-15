@@ -63,6 +63,7 @@ class CanonicalListSummary:
     missing_count: int
     owned_titles: list[dict[str, Any]] = field(default_factory=list)
     missing_titles: list[dict[str, Any]] = field(default_factory=list)
+    all_entries: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -112,6 +113,36 @@ CANONICAL_LISTS: tuple[CanonicalListConfig, ...] = (
 )
 
 
+def _build_suffix_index(inventory: dict) -> dict[tuple[str, int], MovieIdentityKey | None]:
+    """Maps (title_suffix, year) -> inv_key for word-boundary suffixes of each inventory title.
+    Value is None when two inventory movies share the same suffix+year (ambiguous)."""
+    index: dict[tuple[str, int], MovieIdentityKey | None] = {}
+    for inv_key in inventory:
+        words = inv_key.title.split()
+        for i in range(1, len(words)):
+            tag = (" ".join(words[i:]), inv_key.year)
+            index[tag] = None if tag in index else inv_key
+    return index
+
+
+def _find_inventory_match(
+    entry: CanonicalListEntry,
+    inventory: dict,
+    suffix_index: dict,
+) -> MovieIdentityKey | None:
+    primary = entry.to_key()
+    if primary in inventory:
+        return primary
+    if ": " in entry.title:
+        subtitle_key = canonical_identity_key(entry.title.split(": ", 1)[1], entry.year)
+        if subtitle_key in inventory:
+            return subtitle_key
+    inv_key = suffix_index.get((primary.title, entry.year))
+    if inv_key is not None:
+        return inv_key
+    return None
+
+
 def build_canonical_lists_report(
     source_root: Path,
     tmdb_key: str | None,
@@ -124,6 +155,7 @@ def build_canonical_lists_report(
 
     cache_states: list[str] = []
     inventory, unparsed_files, duplicate_files = build_movie_inventory(source_root, should_cancel=should_cancel)
+    suffix_index = _build_suffix_index(inventory)
     provider = TMDbCanonicalProvider(tmdb_key=tmdb_key, http_get=http_get, now=now)
     list_summaries: list[CanonicalListSummary] = []
     badges: list[CanonicalBadge] = []
@@ -132,12 +164,17 @@ def build_canonical_lists_report(
     for config in CANONICAL_LISTS:
         entries, cache_state = provider.list_entries(config)
         cache_states.append(cache_state)
-        reference_keys = {entry.to_key() for entry in entries}
-        covered_keys = sorted(reference_keys & set(inventory), key=lambda item: (inventory[item].title, inventory[item].year))
-        missing_keys = sorted(reference_keys - set(inventory), key=lambda item: (item.title, item.year))
-        matched_keys.update(covered_keys)
-        total_count = len(reference_keys)
-        covered_count = len(covered_keys)
+        entry_inv_key: dict[CanonicalListEntry, MovieIdentityKey] = {}
+        for entry in entries:
+            inv_key = _find_inventory_match(entry, inventory, suffix_index)
+            if inv_key is not None:
+                entry_inv_key[entry] = inv_key
+        covered_entries_set = set(entry_inv_key)
+        covered_inv_keys = sorted(set(entry_inv_key.values()), key=lambda k: (inventory[k].title, inventory[k].year))
+        missing_entries = sorted((e for e in entries if e not in covered_entries_set), key=lambda e: (e.title, e.year))
+        matched_keys.update(entry_inv_key.values())
+        total_count = len(entries)
+        covered_count = len(covered_entries_set)
         coverage_percent = round((covered_count / total_count) * 100, 1) if total_count else 0.0
         list_summaries.append(
             CanonicalListSummary(
@@ -147,9 +184,10 @@ def build_canonical_lists_report(
                 total_count=total_count,
                 covered_count=covered_count,
                 coverage_percent=coverage_percent,
-                missing_count=len(missing_keys),
-                owned_titles=[{"title": inventory[key].title, "year": inventory[key].year} for key in covered_keys[:12]],
-                missing_titles=[{"title": key.title, "year": key.year} for key in missing_keys[:12]],
+                missing_count=len(missing_entries),
+                owned_titles=[{"title": inventory[k].title, "year": inventory[k].year} for k in covered_inv_keys[:12]],
+                missing_titles=[{"title": e.title, "year": e.year} for e in missing_entries[:12]],
+                all_entries=[{"title": e.title, "year": e.year, "owned": e in covered_entries_set, "path": inventory[entry_inv_key[e]].path if e in covered_entries_set else ""} for e in entries],
             )
         )
         badges.append(

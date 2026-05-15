@@ -135,5 +135,68 @@ class MovieCanonicalListsTests(unittest.TestCase):
             self.assertEqual(stale_report.cache_state, "stale")
 
 
+    def test_franchise_prefix_and_subtitle_matching(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            # File has franchise prefix; TMDb has no colon prefix (real ESB case)
+            (source / "Star Wars Episode V The Empire Strikes Back (1980).mkv").write_text("video", encoding="utf-8")
+            # TMDb uses "Franchise: Subtitle"; local file has exact match via colon normalization
+            (source / "The Lord of the Rings The Return of the King (2003).mkv").write_text("video", encoding="utf-8")
+            # TMDb uses "Franchise: Subtitle"; local file is subtitle-only
+            (source / "The Fellowship of the Ring (2001).mkv").write_text("video", encoding="utf-8")
+
+            top_entries = [
+                # TMDb has no colon; file has franchise prefix words before the title
+                {"title": "The Empire Strikes Back", "year": 1980},
+                # TMDb colon normalizes away; file title matches exactly
+                {"title": "The Lord of the Rings: The Return of the King", "year": 2003},
+                # TMDb colon subtitle; file is subtitle-only
+                {"title": "The Lord of the Rings: The Fellowship of the Ring", "year": 2001},
+            ] + [{"title": f"Filler {i}", "year": 2000 + i} for i in range(97)]
+
+            def fake_http_get(url: str) -> dict[str, object]:
+                if "/movie/top_rated" in url:
+                    page = int(url.split("page=")[1].split("&")[0])
+                    start = (page - 1) * 20
+                    return {
+                        "page": page,
+                        "total_pages": 50,
+                        "results": [
+                            {"title": item["title"], "release_date": f"{item['year']}-01-01"}
+                            for item in top_entries[start : start + 20]
+                        ],
+                    }
+                if "/discover/movie" in url:
+                    return {"page": 1, "total_pages": 1, "results": []}
+                raise AssertionError(url)
+
+            with tempfile.TemporaryDirectory() as data_home:
+                import os
+
+                previous = os.environ.get("XDG_DATA_HOME")
+                os.environ["XDG_DATA_HOME"] = data_home
+                try:
+                    report = build_canonical_lists_report(source, tmdb_key="test-key", http_get=fake_http_get)
+                finally:
+                    if previous is None:
+                        os.environ.pop("XDG_DATA_HOME", None)
+                    else:
+                        os.environ["XDG_DATA_HOME"] = previous
+
+            top_100 = next(item for item in report.list_summaries if item.id == "top_100")
+            self.assertEqual(top_100.covered_count, 3)
+            self.assertEqual(top_100.missing_count, 97)
+
+            empire = next(e for e in top_100.all_entries if "Empire" in e["title"])
+            rotk = next(e for e in top_100.all_entries if "Return of the King" in e["title"])
+            fellowship = next(e for e in top_100.all_entries if "Fellowship" in e["title"])
+            self.assertTrue(empire["owned"], "ESB should match via suffix (file has franchise prefix, TMDb does not)")
+            self.assertTrue(rotk["owned"], "LOTR ROTK should match via colon normalization")
+            self.assertTrue(fellowship["owned"], "LOTR Fellowship should match via TMDb subtitle fallback")
+            self.assertIn("Empire Strikes Back", empire["path"])
+            self.assertIn("Return of the King", rotk["path"])
+            self.assertIn("Fellowship", fellowship["path"])
+
+
 if __name__ == "__main__":
     unittest.main()
