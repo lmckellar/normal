@@ -7,6 +7,14 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 
 ### Added
 
+- Server-side movie profile cache (`MovieProfileCache`, 15-minute TTL) in `web.py`. Dashboard, Delete Weak Encodes, Fix Multi-Audio Packaging, and Repair Subtitle Readiness all draw from a single cached `MovieProfileReport` per source root. Subsequent navigations between these four pages return in under a second instead of re-running a full ffprobe sweep each time. The cache is explicitly invalidated after file-mutating operations: `handle_movies_apply` (renames), `handle_movies_audio_packaging_fix` (when files were fixed), and `handle_movies_subtitle_readiness_fix` (when files were fixed). TTL expiry handles external changes and server restarts.
+- `reclassify_report_with_standards(report, standards)` added to `movie_profile.py`. Rebuilds all `MovieProfileItem` objects from their cached `MediaFacts` against a new standards dict without running ffprobe. Not currently called from the web layer (standards saves are now instant and defer reclassification to the next scan), but available for future use.
+
+### Changed
+
+- Quality profile definition saves are now instant and trigger no scan. `POST /api/movies/standards/update` writes `movie_standards.json` and returns the updated definitions; the browser patches `state.results.movies.profile` in-memory and re-renders immediately. Profile counts and classifications remain as of the last scan and update the next time the user initiates one. The previous behaviour — a full 300-second ffprobe rescan triggered by every save, including cosmetic edits like removing a full stop from a description — is removed.
+- Movie profile scan activity indicator now correctly terminates when the last file is probed. Response serialisation (`asdict` on the full `MovieProfileReport`, histogram aggregation, replacement queue reconciliation) was moved outside the `ActivityTracker` context, eliminating the previous "stuck with no filename" appearance during the post-scan serialisation phase.
+- `build_movie_plan` now accepts an optional `movie_files: list[Path] | None` keyword argument. When provided, internal `discover_video_files` call is skipped. `handle_movies_normalize` and `handle_movies_apply` pass a single pre-discovered file list to all per-style plan builds, reducing the previous three redundant directory walks to one. Observed normalize scan time dropped from ~2 minutes to ~42 seconds on the reference library.
 - Server-side OMDb rating cache and lookup endpoint for movie replacement history.
 - Repo-local agent guidance for the intended `unittest` test runner.
 - Movie normalization naming-style controls: concise `Title (Year)` output is now the default, with verbose technical-token naming retained as an option in the web UI and CLI.
