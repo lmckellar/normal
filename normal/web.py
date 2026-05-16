@@ -66,7 +66,8 @@ from normal.music_replacement_queue import (
     queue_for_source as music_queue_for_source,
     reconcile_replacement_queue as music_reconcile_replacement_queue,
 )
-from normal.movie_scan import discover_video_files, probe_media_facts, scan_movie_library
+from normal.movie_scan import discover_video_files, media_facts_from_dict, probe_media_facts, scan_movie_library
+from normal.probe_cache import ProbeCache
 from normal.output import write_movie_register_xlsx
 from normal.apply import apply_changes_in_place
 from normal.models import ProposedChange, utc_now_iso
@@ -291,12 +292,9 @@ class HeavyScanRegistry:
 @dataclass
 class _ProfileCacheEntry:
     report: MovieProfileReport
-    captured_at: float
 
 
 class MovieProfileCache:
-    _TTL = 900.0  # 15 minutes
-
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._entries: dict[str, _ProfileCacheEntry] = {}
@@ -305,17 +303,12 @@ class MovieProfileCache:
         key = str(source.resolve())
         with self._lock:
             entry = self._entries.get(key)
-            if entry is None:
-                return None
-            if time.monotonic() - entry.captured_at > self._TTL:
-                del self._entries[key]
-                return None
-            return entry.report
+            return entry.report if entry is not None else None
 
     def put(self, source: Path, report: MovieProfileReport) -> None:
         key = str(source.resolve())
         with self._lock:
-            self._entries[key] = _ProfileCacheEntry(report=report, captured_at=time.monotonic())
+            self._entries[key] = _ProfileCacheEntry(report=report)
 
     def invalidate(self, source: Path) -> None:
         key = str(source.resolve())
@@ -323,24 +316,11 @@ class MovieProfileCache:
             self._entries.pop(key, None)
 
 
-def media_facts_from_dict(payload: dict[str, Any]) -> MediaFacts:
-    audio_streams = []
-    for raw_stream in payload.get("audio_streams", []):
-        if isinstance(raw_stream, dict):
-            audio_streams.append(AudioStreamFacts(**raw_stream))
-    subtitle_streams = []
-    for raw_stream in payload.get("subtitle_streams", []):
-        if isinstance(raw_stream, dict):
-            subtitle_streams.append(SubtitleStreamFacts(**raw_stream))
-    normalized = dict(payload)
-    normalized["audio_streams"] = audio_streams
-    normalized["subtitle_streams"] = subtitle_streams
-    return MediaFacts(**normalized)
-
 
 ACTIVITY_TRACKER = ActivityTracker()
 HEAVY_SCAN_REGISTRY = HeavyScanRegistry()
 MOVIE_PROFILE_CACHE = MovieProfileCache()
+PROBE_CACHE = ProbeCache()
 
 
 INDEX_HTML = """<!doctype html>
@@ -7452,7 +7432,7 @@ def build_handler(
 
                     report = scan_movie_profiles(
                         source,
-                        probe_media=tracked_probe(source, "ffprobe movie metadata"),
+                        probe_media=tracked_probe(source, "ffprobe movie metadata", cache=PROBE_CACHE),
                         progress_callback=update_profile_activity,
                         should_cancel=self.client_disconnected,
                     )
@@ -7553,7 +7533,7 @@ def build_handler(
             source = resolve_source_path(payload.get("source"), default_source=default_source)
             with guarded_heavy_scan(source, "Movie catalogue export"):
                 with ACTIVITY_TRACKER.track(source, "Movie catalogue export"):
-                    scan_report = scan_movie_library(source, probe_media=tracked_probe(source, "ffprobe movie catalogue"))
+                    scan_report = scan_movie_library(source, probe_media=tracked_probe(source, "ffprobe movie catalogue", cache=PROBE_CACHE))
                     with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as jf:
                         json.dump(scan_report.to_dict(), jf)
                         report_path = Path(jf.name)
@@ -7584,7 +7564,7 @@ def build_handler(
                 self.respond_json(
                     inspect_movie_file(
                         resolved,
-                        probe_media=tracked_probe(source, "ffprobe movie inspect"),
+                        probe_media=tracked_probe(source, "ffprobe movie inspect", cache=PROBE_CACHE),
                     ).to_dict()
                 )
 
@@ -7653,7 +7633,7 @@ def build_handler(
             source = resolve_source_path(payload.get("source"), default_source=default_source)
             with guarded_heavy_scan(source, "Movie junk scan"):
                 with ACTIVITY_TRACKER.track(source, "Movie junk scan"):
-                    report = scan_movie_cleanup(source, probe_media=tracked_probe(source, "ffprobe junk scan"))
+                    report = scan_movie_cleanup(source, probe_media=tracked_probe(source, "ffprobe junk scan", cache=PROBE_CACHE))
             self.respond_json(report.to_dict())
 
         def handle_movies_junk_delete(self, payload: dict[str, Any]) -> None:
@@ -7662,7 +7642,7 @@ def build_handler(
             if not isinstance(paths, list):
                 raise ValueError("paths must be a list")
             with ACTIVITY_TRACKER.track(source, "Movie junk delete"):
-                result = delete_movie_junk_files(source, paths, probe_media=tracked_probe(source, "ffprobe junk delete check"))
+                result = delete_movie_junk_files(source, paths, probe_media=tracked_probe(source, "ffprobe junk delete check", cache=PROBE_CACHE))
             self.respond_json(result)
 
         def handle_movies_replacement_queue_list(self, payload: dict[str, Any]) -> None:
@@ -7704,7 +7684,7 @@ def build_handler(
                 result = fix_english_audio_defaults(
                     source,
                     [str(path) for path in paths],
-                    probe_media=tracked_probe(source, "ffprobe audio packaging fix"),
+                    probe_media=tracked_probe(source, "ffprobe audio packaging fix", cache=PROBE_CACHE),
                     drop_foreign_audio=drop_foreign_audio,
                     progress_callback=lambda update: ACTIVITY_TRACKER.update(activity_id, **update),
                 )
@@ -7738,7 +7718,7 @@ def build_handler(
                 result = fix_movie_subtitle_defaults(
                     source,
                     [str(path) for path in paths],
-                    probe_media=tracked_probe(source, "ffprobe subtitle readiness fix"),
+                    probe_media=tracked_probe(source, "ffprobe subtitle readiness fix", cache=PROBE_CACHE),
                     progress_callback=lambda update: ACTIVITY_TRACKER.update(activity_id, **update),
                 )
             updated_items = []
@@ -8128,10 +8108,17 @@ def source_paths_overlap(left: Path, right: Path) -> bool:
     return path_is_under(left_resolved, right_resolved) or path_is_under(right_resolved, left_resolved)
 
 
-def tracked_probe(source: Path, label: str) -> Callable[[Path], Any]:
+def tracked_probe(source: Path, label: str, cache: ProbeCache | None = None) -> Callable[[Path], Any]:
     def probe(path: Path) -> Any:
+        if cache is not None:
+            cached = cache.get(path)
+            if cached is not None:
+                return cached
         with ACTIVITY_TRACKER.track(source, label, kind="probe", current_path=path):
-            return probe_media_facts(path)
+            facts = probe_media_facts(path)
+        if cache is not None:
+            cache.put(path, facts)
+        return facts
 
     return probe
 

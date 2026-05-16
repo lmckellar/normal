@@ -7,7 +7,8 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 
 ### Added
 
-- Server-side movie profile cache (`MovieProfileCache`, 15-minute TTL) in `web.py`. Dashboard, Delete Weak Encodes, Fix Multi-Audio Packaging, and Repair Subtitle Readiness all draw from a single cached `MovieProfileReport` per source root. Subsequent navigations between these four pages return in under a second instead of re-running a full ffprobe sweep each time. The cache is explicitly invalidated after file-mutating operations: `handle_movies_apply` (renames), `handle_movies_audio_packaging_fix` (when files were fixed), and `handle_movies_subtitle_readiness_fix` (when files were fixed). TTL expiry handles external changes and server restarts.
+- Persistent file-level probe cache (`ProbeCache` in `probe_cache.py`). All ffprobe results are cached to `~/.local/share/normal/probe-cache.json`, keyed by `(path, mtime_ns, size_bytes)`. Shared across all scan workflows (profile, junk, catalogue export, inspect). After a cold first scan, subsequent scans re-read from disk instead of spawning ffprobe, reducing a ~330s full-library walk to ~5s on the next server start. Automatically invalidates per file when mtime changes (e.g. after an audio or subtitle fix).
+- Server-side movie profile cache (`MovieProfileCache`) in `web.py`. Dashboard, Delete Weak Encodes, Fix Multi-Audio Packaging, and Repair Subtitle Readiness all draw from a single cached `MovieProfileReport` per source root. Subsequent navigations between these four pages return in under a second instead of re-running a full ffprobe sweep each time. The cache is explicitly invalidated after file-mutating operations: `handle_movies_apply` (renames), `handle_movies_audio_packaging_fix` (when files were fixed), and `handle_movies_subtitle_readiness_fix` (when files were fixed). No TTL — cache persists for the server session and is only cleared by explicit invalidation.
 - `reclassify_report_with_standards(report, standards)` added to `movie_profile.py`. Rebuilds all `MovieProfileItem` objects from their cached `MediaFacts` against a new standards dict without running ffprobe. Not currently called from the web layer (standards saves are now instant and defer reclassification to the next scan), but available for future use.
 
 ### Changed
@@ -31,6 +32,7 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 
 ### Fixed
 
+- `reconcile_replacement_queue` was calling `replacement_identities` (an O(library-size) walk with `path.resolve()` per file) once per replacement-queue item rather than once per issue family, due to Python's eager evaluation of `dict.setdefault` defaults. On a 973-movie library with a large queue this added ~194s to every profile response. Fixed by guarding with an explicit `if family not in` check.
 - IMDb rating availability on fresh web UI load.
 - Movie name normalization now handles mixed-script title prefixes, `Director's Cut`, compact `BluRayRemux` tokens, language tags like `3Rus Eng`, hyphenated release groups like `CME-v0`, technical tokens before trailing parenthesized years, and the `Blauray` typo.
 - Movie name normalization now deletes empty package artifact folders, handles nonstandard resolution differentiators such as `1072p`, trims verbose uploader/language/audio noise, and preserves useful edition/video tokens such as `Open Matte`.
