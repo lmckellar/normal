@@ -182,10 +182,16 @@ class PlannedMovieFile:
     parsed: ParsedMovieName
 
 
-def build_movie_plan(source_root: Path, naming_style: str = DEFAULT_MOVIE_NAMING_STYLE) -> ChangePlan:
+def build_movie_plan(
+    source_root: Path,
+    naming_style: str = DEFAULT_MOVIE_NAMING_STYLE,
+    *,
+    movie_files: list[Path] | None = None,
+) -> ChangePlan:
     naming_style = normalize_movie_naming_style(naming_style)
     plan = build_empty_plan(source_root)
-    movie_files = discover_video_files(source_root)
+    if movie_files is None:
+        movie_files = discover_video_files(source_root)
 
     if not movie_files:
         plan.warnings.append(

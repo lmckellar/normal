@@ -258,6 +258,20 @@ def scan_movie_profiles(
     return report
 
 
+def reclassify_report_with_standards(report: MovieProfileReport, standards: dict[str, Any]) -> MovieProfileReport:
+    source_root = Path(report.source_root)
+    new_report = MovieProfileReport(source_root=report.source_root, generated_at=utc_now_iso())
+    new_report.warnings = list(report.warnings)
+    for item in report.movies:
+        new_report.movies.append(build_movie_profile_item(source_root, Path(item.path), item.facts, standards))
+    assign_percentiles(new_report.movies)
+    new_report.movies.sort(
+        key=lambda m: (total_risk_score(m.profile.diagnostics), m.profile.rank, m.path.lower()),
+        reverse=True,
+    )
+    return new_report
+
+
 def build_movie_profile_item(
     source_root: Path,
     movie_path: Path,
