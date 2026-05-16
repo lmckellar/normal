@@ -288,6 +288,41 @@ class HeavyScanRegistry:
                 self._active.discard(key)
 
 
+@dataclass
+class _ProfileCacheEntry:
+    report: MovieProfileReport
+    captured_at: float
+
+
+class MovieProfileCache:
+    _TTL = 900.0  # 15 minutes
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, _ProfileCacheEntry] = {}
+
+    def get(self, source: Path) -> MovieProfileReport | None:
+        key = str(source.resolve())
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            if time.monotonic() - entry.captured_at > self._TTL:
+                del self._entries[key]
+                return None
+            return entry.report
+
+    def put(self, source: Path, report: MovieProfileReport) -> None:
+        key = str(source.resolve())
+        with self._lock:
+            self._entries[key] = _ProfileCacheEntry(report=report, captured_at=time.monotonic())
+
+    def invalidate(self, source: Path) -> None:
+        key = str(source.resolve())
+        with self._lock:
+            self._entries.pop(key, None)
+
+
 def media_facts_from_dict(payload: dict[str, Any]) -> MediaFacts:
     audio_streams = []
     for raw_stream in payload.get("audio_streams", []):
@@ -305,6 +340,7 @@ def media_facts_from_dict(payload: dict[str, Any]) -> MediaFacts:
 
 ACTIVITY_TRACKER = ActivityTracker()
 HEAVY_SCAN_REGISTRY = HeavyScanRegistry()
+MOVIE_PROFILE_CACHE = MovieProfileCache()
 
 
 INDEX_HTML = """<!doctype html>
@@ -5911,27 +5947,10 @@ INDEX_HTML = """<!doctype html>
           state.results.movies.profile.replacement_candidate_definition = result.replacement_candidate_definition || null;
           cacheMovieDashboard(state.results.movies.profile);
         }
-        setStatus(`Saved ${humanProfileLabel(label)} definition. Re-running dashboard…`, 'running');
-        if (!source) {
-          state.movieStandardsPendingDraft = null;
-          state.movieStandardsEditorLabel = '';
-          state.movieStandardsSaveBusy = false;
-          renderMovieLibrary(state.results.movies.profile);
-          setStatus(`Saved ${humanProfileLabel(label)} definition.`, 'idle');
-          return;
-        }
-        const rerunResponse = await fetch('/api/movies/profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source })
-        });
-        const rerunPayload = await rerunResponse.json();
-        if (!rerunResponse.ok) throw new Error(rerunPayload.error || 'Movie dashboard refresh failed.');
-        storePayload('library', rerunPayload);
         state.movieStandardsPendingDraft = null;
         state.movieStandardsEditorLabel = '';
-        setStatus(`Saved ${humanProfileLabel(label)} definition and refreshed ${rerunPayload.source_root}.`, 'idle');
-        renderMovieLibrary(rerunPayload);
+        setStatus(`Saved ${humanProfileLabel(label)} definition.`, 'idle');
+        renderMovieLibrary(state.results.movies.profile);
       } catch (error) {
         setStatus(error.message, 'error');
       } finally {
@@ -7346,6 +7365,10 @@ def build_handler(
 
         def handle_movies_profile(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
+            cached = MOVIE_PROFILE_CACHE.get(source)
+            if cached is not None:
+                self.respond_json(_build_profile_response(source, cached, load_movie_standards()))
+                return
             with guarded_heavy_scan(source, "Movie profile scan"):
                 with ACTIVITY_TRACKER.track(source, "Movie profile scan") as activity_id:
                     def update_profile_activity(progress: MovieScanProgress) -> None:
@@ -7366,14 +7389,9 @@ def build_handler(
                         progress_callback=update_profile_activity,
                         should_cancel=self.client_disconnected,
                     )
-                    response = report.to_dict()
-                    response["histogram"] = build_histogram_payload(report)
-                    response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
-                    standards = load_movie_standards()
-                    response["movie_standards"] = standards
-                    response["movie_standards_revision"] = movie_standards_revision(standards)
-                    response["quality_profile_definitions"] = build_movie_profile_definitions(standards)
-                    response["replacement_candidate_definition"] = build_replacement_candidate_definition(standards)
+                MOVIE_PROFILE_CACHE.put(source, report)
+                standards = load_movie_standards()
+                response = _build_profile_response(source, report, standards)
             self.respond_json(response)
 
         def handle_movies_dashboard_histogram(self, payload: dict[str, Any]) -> None:
@@ -7510,11 +7528,11 @@ def build_handler(
                 raise ValueError(f"unknown movie naming style: {requested_style}")
             with guarded_heavy_scan(source, "Movie normalize plan"):
                 with ACTIVITY_TRACKER.track(source, "Movie normalize plan"):
-                    plans_by_style = {style: build_movie_plan(source, naming_style=style) for style in MOVIE_NAMING_STYLES}
+                    movie_files = discover_video_files(source)
+                    plans_by_style = {style: build_movie_plan(source, naming_style=style, movie_files=movie_files) for style in MOVIE_NAMING_STYLES}
                     response = plans_by_style[requested_style].to_dict()
                     response["naming_style"] = requested_style
                     response["default_naming_style"] = DEFAULT_MOVIE_NAMING_STYLE
-                    movie_files = discover_video_files(source)
                     response["proposed_changes_by_naming_style"] = {
                         style: plans_by_style[style].to_dict()["proposed_changes"] for style in MOVIE_NAMING_STYLES
                     }
@@ -7539,8 +7557,9 @@ def build_handler(
             changes = [ProposedChange(**c) for c in raw_changes]
             with ACTIVITY_TRACKER.track(source, "Movie apply"):
                 report = apply_changes_in_place(source, changes)
-                plans_by_style = {style: build_movie_plan(source, naming_style=style) for style in MOVIE_NAMING_STYLES}
+                MOVIE_PROFILE_CACHE.invalidate(source)
                 movie_files = discover_video_files(source)
+                plans_by_style = {style: build_movie_plan(source, naming_style=style, movie_files=movie_files) for style in MOVIE_NAMING_STYLES}
             response = report.to_dict()
             remaining_payload = plans_by_style[requested_style].to_dict()
             remaining_payload["naming_style"] = requested_style
@@ -7623,6 +7642,8 @@ def build_handler(
                     progress_callback=lambda update: ACTIVITY_TRACKER.update(activity_id, **update),
                 )
             fixed_paths = [str(item.get("path") or "") for item in result["fixed"]]
+            if fixed_paths:
+                MOVIE_PROFILE_CACHE.invalidate(source)
             queue = (
                 clear_pending_queue_items(source, fixed_paths, issue_family="audio_packaging")
                 if fixed_paths
@@ -7661,6 +7682,8 @@ def build_handler(
                 movie_path = Path(str(item["path"]))
                 profiled = build_movie_profile_item(source, movie_path, media_facts_from_dict(raw_facts))
                 updated_items.append(asdict(profiled))
+            if updated_items:
+                MOVIE_PROFILE_CACHE.invalidate(source)
             result["updated_items"] = updated_items
             fixed_raw = [{"path": str(item["path"]), "issue_code": issue_codes.get(str(item["path"]), "")} for item in result["fixed"]]
             if fixed_raw:
@@ -8201,6 +8224,17 @@ def looks_like_drive_directory(path: Path) -> bool:
 def guarded_heavy_scan(source: Path, label: str, *, category: str = "heavy_scan") -> Iterator[None]:
     with HEAVY_SCAN_REGISTRY.claim(source, category, label):
         yield
+
+
+def _build_profile_response(source: Path, report: MovieProfileReport, standards: dict[str, Any]) -> dict[str, Any]:
+    response = report.to_dict()
+    response["histogram"] = build_histogram_payload(report)
+    response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
+    response["movie_standards"] = standards
+    response["movie_standards_revision"] = movie_standards_revision(standards)
+    response["quality_profile_definitions"] = build_movie_profile_definitions(standards)
+    response["replacement_candidate_definition"] = build_replacement_candidate_definition(standards)
+    return response
 
 
 def format_storage_size(size_bytes: int) -> str:
