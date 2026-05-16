@@ -1,6 +1,6 @@
 # Movies
 
-The movie lane handles five practical problems in a pirated library: inconsistent naming, uneven encode quality, bad multi-audio packaging, messy subtitle defaults, and missing poster artwork.
+The movie lane handles four practical problems in a pirated library: inconsistent naming, uneven encode quality, bad multi-audio packaging, and messy subtitle defaults.
 
 ![Movies dashboard](assets/movies_dashboard_default.png)
 
@@ -124,70 +124,6 @@ This workflow is non-destructive: it does not delete media files or subtitle fil
 
 Current scope is embedded subtitle streams already inside the container. External `.srt` / `.ass` sidecars are not modified.
 
-## Repair artwork for Plex
-
-The **Repair Artwork for Plex** page scans each movie folder and queries your local Plex server to show exactly what Plex has — or is missing — for each title. The gallery is a direct preview of what Plex displays, using Plex's own artwork via a server-side proxy.
-
-Without a Plex token the lane falls back to scanning local sidecar files only (`poster.jpg` etc.), which does not reflect Plex's actual artwork state.
-
-### Plex token setup
-
-The lane requires a `PLEX_TOKEN` to query your Plex server. Add it to `.venv/bin/activate` alongside the other API keys:
-
-```bash
-export PLEX_TOKEN="your_token_here"
-```
-
-**How to find your token:**
-
-1. In the Plex web UI, go to **Settings → Troubleshooting → Download logs**.
-2. Unzip the downloaded archive — it extracts to a folder named something like `Plex Media Server Logs_YYYY-MM-DD_HH-MM-SS`.
-3. Run this command against the extracted folder (substituting the actual folder name):
-
-```bash
-grep -rho 'X-Plex-Token=[A-Za-z0-9_-]\{10,\}' ~/Downloads/"Plex Media Server Logs_YYYY-MM-DD_HH-MM-SS"/ | head -1
-```
-
-Note: the token will display as `xxxxxxxxxxxxxxxxxxxx` in terminal output — this is Claude Code masking sensitive values. Copy the raw value directly from a text editor instead: open any `Plex Media Server.log` file from the extracted folder and search for `X-Plex-Token=`. The token is the alphanumeric string immediately after the `=`.
-
-Alternatively, if you have `sudo` access on the server machine, read it directly from Plex's preferences file:
-
-```bash
-sudo grep -o 'PlexOnlineToken="[^"]*"' "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Preferences.xml"
-```
-
-After adding the token, restart the `normal` web server for it to take effect.
-
-### How it works with a token
-
-- **Present (blue chip):** Plex has artwork for this title.
-- **Missing (red chip):** Plex knows the title but has no poster — this is the actionable case. Drop a poster image onto the tile to write `poster.jpg` to the folder; Plex will pick it up on its next scan.
-- Titles not yet indexed by Plex fall back to local sidecar detection.
-- Grid sort order mirrors Plex's own alphabetisation (articles dropped, numeric-aware).
-
-### Local sidecar detection (no token)
-
-Recognized poster filenames: `poster.jpg`, `poster.png`, `folder.jpg`, `folder.png`, and `{movie-filename}-poster.jpg` for flat libraries. Missing posters and low-quality images — under 30 KB or smaller than 400×600 px — are flagged.
-
-The write target is always `poster.jpg` in the movie folder.
-
-### Finding and dragging poster art
-
-The recommended workflow: open `normal` on one half of your screen and an image source — Google Images, a movie database site, or your file manager — on the other half. Drag poster images directly onto a movie tile or into the drop zone in the detail panel.
-
-The image must be a real image resource that the browser has loaded, not an HTML-framed thumbnail. The practical distinction:
-
-- **Works:** The large preview image in Google Images' right-side panel (after clicking a result). An image URL opened directly in its own browser tab. An image file dragged from your file manager.
-- **May not work:** Small thumbnails in a search result grid. Images inside complex page layouts where the dragged element is a styled `div`, not an `<img>` tag.
-
-A quick test: right-click the image → **Open Image in New Tab**. If the browser shows it as a standalone image with no surrounding page chrome, that image is draggable. Drag from that tab.
-
-Accepted formats: JPEG and PNG. All sources are converted to JPEG on write.
-
-### What gets written
-
-`poster.jpg` in the movie folder. Plex reads this path directly. The preview in `normal` loads from the same location, so what you see in the gallery is what Plex shows.
-
 ## Junk cleanup
 
 Two pages handle library noise:
@@ -216,7 +152,6 @@ The `Audio` column uses the same normalized main-audio summary as the scan and w
 | Delete Weak Encodes | Triage and queue replacements |
 | Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |
 | Repair Subtitle Readiness | Repair embedded subtitle defaults for supported MKVs without deleting files |
-| Repair Artwork for Plex | Movie poster gallery with drag-and-drop apply; writes poster.jpg to each movie folder |
 | Delete Junk Videos | Remove samples and featurettes |
 | Delete Junk Sidecar & Spam Files | Remove sidecar and spam files |
 | Canonical Lists | Compare owned titles against live all-time movie lists and unlock simple coverage badges |

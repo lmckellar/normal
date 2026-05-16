@@ -5,7 +5,7 @@ Local workbench for taming pirated music and movie libraries.
 Two lanes:
 
 - **Music** — normalize FLAC tags, filenames, and folder structure; repair artist artwork for Jellyfin
-- **Movies** — normalize file and folder names; profile encode quality; compare owned titles against canonical movie lists; triage weak encodes; repair multi-audio packaging, subtitle defaults, and poster artwork for Plex
+- **Movies** — normalize file and folder names; profile encode quality; compare owned titles against canonical movie lists; triage weak encodes; repair multi-audio packaging and subtitle defaults
 
 No cloud. No transcoding. No destructive defaults.
 
