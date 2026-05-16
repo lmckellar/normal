@@ -452,6 +452,8 @@ INDEX_HTML = """<!doctype html>
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     .primary { background: var(--accent); color: white; }
     .secondary { background: var(--btn-secondary); color: var(--ink); }
+    .warn { background: var(--warn); color: white; }
+    .caution { background: var(--accent-2); color: white; }
     .danger { background: var(--danger); color: white; }
     .page-nav {
       display: flex;
@@ -3696,7 +3698,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function renderMovieAudioPackaging(payload) {
-      mainTagline.textContent = 'Multi-audio packaging mistakes where the default track is the wrong language or the English fallback is materially weaker.';
+      mainTagline.textContent = 'Files where the default audio is the wrong language, or the English track is weaker than expected.';
       renderMetrics(buildMovieMetrics(payload));
       renderBars(buildMovieBars(payload));
       renderFilters([
@@ -5116,8 +5118,8 @@ INDEX_HTML = """<!doctype html>
         const locked = state.movieAudioFixBusy ? 'disabled' : '';
         const issueCode = movieAudioPackagingIssueCode(item);
         const issueLabel = issueCode === 'default_non_english_audio_with_weak_english'
-          ? 'wrong default + weak English'
-          : 'wrong default language';
+          ? '<span class="chip high">wrong language · weak English</span>'
+          : '<span class="chip review">wrong language</span>';
         const audioSummary = item.facts.audio_summary ? escapeHtml(item.facts.audio_summary) : '<span class="subtle">—</span>';
         const profileSummary = movieProfileInlineSummary(item);
         const defaultStream = describeAudioStream(movieDefaultAudioStream(item));
@@ -5127,7 +5129,7 @@ INDEX_HTML = """<!doctype html>
           <tr>
             <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="replacement-select" data-path="${encodeURIComponent(path)}" ${checked} ${locked}>` : ''}</td>
             <td><div class="mono">${escapeHtml(path)}</div></td>
-            <td>${escapeHtml(issueLabel)}${profileSummary ? `<div class="subtle">${escapeHtml(profileSummary)}</div>` : ''}</td>
+            <td>${issueLabel}${profileSummary ? `<div class="subtle">${escapeHtml(profileSummary)}</div>` : ''}</td>
             <td>${audioSummary}</td>
             <td>${defaultStream}</td>
             <td>${englishStream}</td>
@@ -5142,19 +5144,25 @@ INDEX_HTML = """<!doctype html>
       const lockNote = state.movieAudioFixBusy
         ? '<span class="subtle">Selection locked while ffmpeg remux is running.</span>'
         : `<span class="subtle">${selectedCount} of ${selectableCount} selected</span>`;
+      const wrongLangCount = items.filter(i => movieAudioPackagingIssueCode(i) === 'default_non_english_audio').length;
+      const weakEnglishCount = items.filter(i => movieAudioPackagingIssueCode(i) === 'default_non_english_audio_with_weak_english').length;
+      const issueSummary = items.length
+        ? `<div class="subtle" style="margin-bottom:8px;">${wrongLangCount} wrong language · ${weakEnglishCount} weak English fallback</div>`
+        : '';
       return `
         ${queueSummary}
+        ${issueSummary}
         <div class="junk-actions audio-packaging-actions">
           <button class="secondary sel-toggle" id="toggleAllReplacementButton" ${(selectableCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
-          <button class="primary" id="fixSelectedAudioButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Make English Default</button>
-          <button class="primary" id="fixSelectedAudioAndDropForeignButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Make English Default + Delete Foreign Audio</button>
+          <button class="warn sel-toggle" id="fixSelectedAudioButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Set English Default</button>
+          <button class="caution sel-toggle" id="fixSelectedAudioAndDropForeignButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Set English Default + Drop Foreign</button>
           <span class="triage-action-spacer"></span>
-          <button class="danger" id="deleteSelectedFilesButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Delete Selected Files</button>
+          <button class="danger sel-toggle" id="deleteSelectedFilesButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Delete Selected Files</button>
           <span class="triage-action-note">${lockNote}</span>
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th></th><th>File</th><th>Issue</th><th>Main Audio</th><th>Default Audio</th><th>English Audio</th><th>Status</th></tr></thead>
+            <thead><tr><th></th><th>File</th><th>Issue</th><th>Audio</th><th>Current Default</th><th>English Track</th><th>Status</th></tr></thead>
             <tbody>${rows || '<tr><td colspan="7" class="subtle">No files for this filter.</td></tr>'}</tbody>
           </table>
         </div>
@@ -6694,7 +6702,7 @@ INDEX_HTML = """<!doctype html>
         .map(item => item.path)
         .filter(Boolean);
       if (!paths.length) return;
-      const actionLabel = dropForeignAudio ? 'Repairing and pruning foreign audio' : 'Repairing';
+      const actionLabel = dropForeignAudio ? 'Setting English default and dropping foreign' : 'Setting English default';
       state.movieAudioFixBusy = true;
       rerenderActiveMovieTriagePage(payload);
       renderReplacementQueueDetail(payload);
