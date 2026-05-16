@@ -22,8 +22,8 @@ originally planned for 1.0.x–1.x happened early. Live today:
   in-memory state and rerenders immediately.
 
 The remaining pre-TV work is trimming and hardening: fork and remove the Music
-lane, drop Plex artwork, remove verbose naming, tighten UI consistency, and
-finish outstanding parser edge cases.
+lane, remove verbose naming, tighten UI consistency, and finish outstanding
+parser edge cases.
 
 ### Product identity going forward
 
@@ -72,8 +72,6 @@ Once the fork is made, all music code and traces are stripped from `normal`.
 
 - Fork Music lane to its own project; strip all music code and references from
   `normal`.
-- Remove Plex movie artwork feature (added in 0.6.4; workflow duplicates
-  what the Plex browser UI already provides).
 - Remove verbose naming option — drop `--naming-style verbose`, the web naming
   selector, and verbose-only preview payloads; retain the parser hardening the
   verbose-mode tests produced.
