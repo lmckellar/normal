@@ -1292,6 +1292,7 @@ INDEX_HTML = """<!doctype html>
       filter: 'all',
       qualitySort: { col: null, dir: 'asc' },
       musicQualitySort: { col: null, dir: 'asc' },
+      fixDefaultsTab: 'audio',
       movieAudioFixBusy: false,
       movieSubtitleFixBusy: false,
       subtitleHistory: null,
@@ -1346,8 +1347,7 @@ INDEX_HTML = """<!doctype html>
           { id: 'library', label: 'Dashboard View', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'normalize', label: 'Normalize Movie Files & Folders', action: 'plan', endpoint: '/api/movies/normalize' },
           { id: 'quality', label: 'Delete Weak Encodes', action: 'scan', endpoint: '/api/movies/profile' },
-          { id: 'audio_packaging', label: 'Fix Multi-Audio Packaging', action: 'scan', endpoint: '/api/movies/profile' },
-          { id: 'subtitle_readiness', label: 'Repair Subtitle Readiness', action: 'scan', endpoint: '/api/movies/profile' },
+          { id: 'fix_defaults', label: 'Repair Defaults', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'movie_artwork', label: 'Repair Artwork for Plex', action: 'scan', endpoint: '/api/movies/artwork/scan' },
           { id: 'junk', label: 'Delete Junk & Spam Files', action: 'scan', endpoint: '/api/movies/junk' },
           { id: 'canonical_lists', label: 'Canonical Lists', action: 'scan', endpoint: '/api/movies/canonical-lists' }
@@ -2178,6 +2178,7 @@ INDEX_HTML = """<!doctype html>
     function setPage(page) {
       state.page = page;
       state.filter = page === 'quality' ? 'strict_weak' : 'all';
+      state.fixDefaultsTab = 'audio';
       state.qualitySort = { col: null, dir: 'asc' };
       state.musicQualitySort = { col: null, dir: 'asc' };
       state.subtitleSort = { col: null, dir: 'asc' };
@@ -2340,7 +2341,7 @@ INDEX_HTML = """<!doctype html>
           state.selectedChangeIds = new Set();
         }
       } else {
-        if (['library', 'quality', 'audio_packaging', 'subtitle_readiness', 'compatibility'].includes(page)) {
+        if (['library', 'quality', 'fix_defaults', 'compatibility'].includes(page)) {
           state.results.movies.profile = payload;
           cacheMovieDashboard(payload);
           if (payload.replacement_queue) {
@@ -2349,7 +2350,7 @@ INDEX_HTML = """<!doctype html>
             cacheMovieReplacementQueue(payload.replacement_queue);
           }
           state.selectedReplacementPaths.clear();
-          if (page === 'subtitle_readiness') {
+          if (page === 'fix_defaults' && state.fixDefaultsTab === 'subtitle') {
             state.subtitleHistory = null;
             state.subtitleHistoryFilter = 'all';
             syncSubtitleReviewOnlyHistory(payload);
@@ -2386,8 +2387,7 @@ INDEX_HTML = """<!doctype html>
         recommend: 'Recommend',
         canonical_lists: 'Canonical Lists',
         quality: 'Delete Weak Encodes',
-        audio_packaging: 'Fix Multi-Audio Packaging',
-        subtitle_readiness: 'Repair Subtitle Readiness',
+        fix_defaults: 'Repair Defaults',
         movie_artwork: 'Repair Artwork for Plex',
         music_quality: 'Delete Weak Encodes',
         compatibility: 'Compatibility',
@@ -2452,13 +2452,10 @@ INDEX_HTML = """<!doctype html>
         renderMovieQuality(profile);
         return;
       }
-      if (page === 'audio_packaging') {
-        loadMovieReplacementQueue();
-        renderMovieAudioPackaging(profile);
-        return;
-      }
-      if (page === 'subtitle_readiness') {
-        renderMovieSubtitleReadiness(profile);
+      if (page === 'fix_defaults') {
+        if (state.fixDefaultsTab === 'audio') loadMovieReplacementQueue();
+        else if (!state.subtitleHistory) syncSubtitleReviewOnlyHistory(profile);
+        renderMovieFixDefaults(profile);
         return;
       }
       if (page === 'movie_artwork') {
@@ -2497,8 +2494,7 @@ INDEX_HTML = """<!doctype html>
         cacheMovieReplacementQueue(result);
         if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
         if (state.page === 'quality' && state.results.movies.profile) renderMovieQuality(state.results.movies.profile);
-        else if (state.page === 'audio_packaging' && state.results.movies.profile) renderMovieAudioPackaging(state.results.movies.profile);
-        else if (state.page === 'subtitle_readiness' && state.results.movies.profile) renderMovieSubtitleReadiness(state.results.movies.profile);
+        else if (state.page === 'fix_defaults' && state.results.movies.profile) renderMovieFixDefaults(state.results.movies.profile);
         else renderReplacementQueueDetail(state.results.movies.profile);
       } catch (error) {
         detailPanel.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
@@ -3698,44 +3694,65 @@ INDEX_HTML = """<!doctype html>
       attachMovieReplacementHandlers(payload, items);
     }
 
-    function renderMovieAudioPackaging(payload) {
-      mainTagline.textContent = 'Files where the default audio is the wrong language, or the English track is weaker than expected.';
+    function renderMovieFixDefaults(payload) {
+      const tab = state.fixDefaultsTab;
+      mainTagline.textContent = tab === 'audio'
+        ? 'Files where the default audio is the wrong language, or the English track is weaker than expected.'
+        : 'Repair subtitle defaults without deleting files: no subtitle by default when appropriate, forced English when needed, and English subtitles for non-English default audio.';
       renderMetrics(buildMovieMetrics(payload));
       renderBars(buildMovieBars(payload));
-      renderFilters([
-        ['all', 'All'],
-        ['weak_english', 'Weak English Fallback'],
-        ['wrong_default', 'Wrong Default Language']
-      ]);
+      if (tab === 'audio') {
+        renderFilters([
+          ['all', 'All'],
+          ['weak_english', 'Weak English Fallback'],
+          ['wrong_default', 'Wrong Default Language']
+        ]);
+      } else {
+        renderFilters([
+          ['all', 'All'],
+          ['forced_english', 'Forced English'],
+          ['non_english_audio', 'Non-English Audio'],
+          ['clear_default', 'Clear Default']
+        ]);
+      }
       if (!payload) {
-        mainContent.innerHTML = '<div class="empty">Run Movies / Fix Multi-Audio Packaging to review language-default mistakes.</div>';
+        mainContent.innerHTML = tab === 'audio'
+          ? '<div class="empty">Run Movies / Repair Defaults to review language-default mistakes.</div>'
+          : '<div class="empty">Run Movies / Repair Defaults to review subtitle-default mistakes.</div>';
+        if (tab === 'subtitle') detailPanel.innerHTML = '<div class="empty">No review-only items.</div>';
         return;
       }
-      const items = sortedMovies(filteredAudioPackagingMovies(payload));
-      mainContent.innerHTML = buildMovieAudioPackagingTable(payload, items);
-      renderReplacementQueueDetail(payload);
-      attachMovieReplacementHandlers(payload, items);
+      if (tab === 'audio') {
+        const items = sortedMovies(filteredAudioPackagingMovies(payload));
+        mainContent.innerHTML = buildMovieFixDefaultsTabs(tab) + buildMovieAudioPackagingTable(payload, items);
+        renderReplacementQueueDetail(payload);
+        attachMovieReplacementHandlers(payload, items);
+      } else {
+        const items = sortedSubtitleItems(filteredSubtitleReadinessMovies(payload));
+        mainContent.innerHTML = buildMovieFixDefaultsTabs(tab) + buildMovieSubtitleReadinessTable(payload, items);
+        renderSubtitleReadinessDetail(payload);
+        attachMovieSubtitleReadinessHandlers(payload, items);
+      }
+      document.querySelectorAll('.fix-defaults-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (btn.dataset.tab === state.fixDefaultsTab) return;
+          state.fixDefaultsTab = btn.dataset.tab;
+          state.filter = 'all';
+          state.qualitySort = { col: null, dir: 'asc' };
+          state.subtitleSort = { col: null, dir: 'asc' };
+          state.selectedReplacementPaths.clear();
+          if (state.fixDefaultsTab === 'audio') loadMovieReplacementQueue();
+          else syncSubtitleReviewOnlyHistory(payload);
+          renderMovieFixDefaults(payload);
+        });
+      });
     }
 
-    function renderMovieSubtitleReadiness(payload) {
-      mainTagline.textContent = 'Repair subtitle defaults without deleting files: no subtitle by default when appropriate, forced English when needed, and English subtitles for non-English default audio.';
-      renderMetrics(buildMovieMetrics(payload));
-      renderBars(buildMovieBars(payload));
-      renderFilters([
-        ['all', 'All'],
-        ['forced_english', 'Forced English'],
-        ['non_english_audio', 'Non-English Audio'],
-        ['clear_default', 'Clear Default']
-      ]);
-      if (!payload) {
-        mainContent.innerHTML = '<div class="empty">Run Movies / Repair Subtitle Readiness to review subtitle-default mistakes.</div>';
-        detailPanel.innerHTML = '<div class="empty">No review-only items.</div>';
-        return;
-      }
-      const items = sortedSubtitleItems(filteredSubtitleReadinessMovies(payload));
-      mainContent.innerHTML = buildMovieSubtitleReadinessTable(payload, items);
-      renderSubtitleReadinessDetail(payload);
-      attachMovieSubtitleReadinessHandlers(payload, items);
+    function buildMovieFixDefaultsTabs(activeTab) {
+      return `<div class="page-nav" style="margin-bottom:12px;">
+        <button class="filter-button fix-defaults-tab${activeTab === 'audio' ? ' active' : ''}" data-tab="audio">Audio Packaging</button>
+        <button class="filter-button fix-defaults-tab${activeTab === 'subtitle' ? ' active' : ''}" data-tab="subtitle">Subtitle Readiness</button>
+      </div>`;
     }
 
 
@@ -5023,7 +5040,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function activeMovieTriageFamily() {
-      if (state.page === 'audio_packaging') return 'audio_packaging';
+      if (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio') return 'audio_packaging';
       return 'weak_encode';
     }
 
@@ -6133,7 +6150,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function isMovieTriagePage() {
-      return state.page === 'quality' || state.page === 'audio_packaging';
+      return state.page === 'quality' || (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio');
     }
 
     function movieAudioPackagingIssueCode(item) {
@@ -6368,7 +6385,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function selectableVisibleReplacementItems(payload, items) {
-      if (state.page === 'audio_packaging') {
+      if (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio') {
         return items.filter(item => item.path && movieMatchesActiveTriageFamily(item));
       }
       return items.filter(item => item.path && movieMatchesActiveTriageFamily(item) && !replacementQueueItemForPath(payload, item.path));
@@ -6383,22 +6400,21 @@ INDEX_HTML = """<!doctype html>
     }
 
     function movieMatchesActiveTriageFamily(item) {
-      if (state.page === 'audio_packaging') return !!movieAudioPackagingIssueCode(item);
+      if (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio') return !!movieAudioPackagingIssueCode(item);
       return isStrictWeakMovie(item);
     }
 
     function rerenderActiveMovieTriagePage(payload) {
-      if (state.page === 'audio_packaging') renderMovieAudioPackaging(payload);
-      else if (state.page === 'subtitle_readiness') renderMovieSubtitleReadiness(payload);
+      if (state.page === 'fix_defaults') renderMovieFixDefaults(payload);
       else renderMovieQuality(payload);
     }
 
     function movieAudioFixSelectionLocked() {
-      return state.page === 'audio_packaging' && state.movieAudioFixBusy;
+      return state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio' && state.movieAudioFixBusy;
     }
 
     function movieSubtitleFixSelectionLocked() {
-      return state.page === 'subtitle_readiness' && state.movieSubtitleFixBusy;
+      return state.page === 'fix_defaults' && state.fixDefaultsTab === 'subtitle' && state.movieSubtitleFixBusy;
     }
 
     function attachMovieReplacementHandlers(payload, items) {
@@ -6462,7 +6478,7 @@ INDEX_HTML = """<!doctype html>
           const path = decodeURIComponent(checkbox.dataset.path);
           if (checkbox.checked) state.selectedReplacementPaths.add(path);
           else state.selectedReplacementPaths.delete(path);
-          renderMovieSubtitleReadiness(payload);
+          renderMovieFixDefaults(payload);
         });
       });
       const toggleButton = document.getElementById('toggleSubtitleRepairButton');
@@ -6476,7 +6492,7 @@ INDEX_HTML = """<!doctype html>
             if (allVisibleSelected) state.selectedReplacementPaths.delete(item.path);
             else state.selectedReplacementPaths.add(item.path);
           });
-          renderMovieSubtitleReadiness(payload);
+          renderMovieFixDefaults(payload);
         });
       }
       const fixButton = document.getElementById('fixSelectedSubtitleButton');
@@ -6489,7 +6505,7 @@ INDEX_HTML = """<!doctype html>
           } else {
             state.subtitleSort = { col, dir: 'asc' };
           }
-          renderMovieSubtitleReadiness(payload);
+          renderMovieFixDefaults(payload);
         });
       });
     }
@@ -6793,7 +6809,7 @@ INDEX_HTML = """<!doctype html>
       const issueCodes = {};
       selectedItems.forEach(item => { if (item.path) issueCodes[item.path] = movieSubtitleReadinessIssueCode(item); });
       state.movieSubtitleFixBusy = true;
-      renderMovieSubtitleReadiness(payload);
+      renderMovieFixDefaults(payload);
       setStatus(`Repairing subtitle defaults for ${paths.length} file${paths.length === 1 ? '' : 's'}…`, 'running');
       try {
         const response = await fetch('/api/movies/subtitle-readiness/fix', {
@@ -6814,7 +6830,7 @@ INDEX_HTML = """<!doctype html>
         setStatus(error.message, 'error');
       } finally {
         state.movieSubtitleFixBusy = false;
-        renderMovieSubtitleReadiness(state.results.movies.profile || payload);
+        renderMovieFixDefaults(state.results.movies.profile || payload);
       }
     }
 
@@ -6853,7 +6869,7 @@ INDEX_HTML = """<!doctype html>
         const folders = result.removed_folders?.length || 0;
         const cleanup = sidecars || folders ? `; cleaned ${sidecars} sidecar${sidecars === 1 ? '' : 's'}${folders ? ` and ${folders} folder${folders === 1 ? '' : 's'}` : ''}` : '';
         setStatus(`Deleted ${result.deleted.length} item${result.deleted.length === 1 ? '' : 's'}${cleanup}${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
-        if (state.page === 'quality' || state.page === 'audio_packaging') rerenderActiveMovieTriagePage(state.results.movies.profile);
+        if (state.page === 'quality' || (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio')) rerenderActiveMovieTriagePage(state.results.movies.profile);
         else renderReplacementQueueDetail(state.results.movies.profile);
       } catch (error) {
         setStatus(error.message, 'error');
@@ -6888,7 +6904,7 @@ INDEX_HTML = """<!doctype html>
         if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
         const skipped = result.skipped?.length || 0;
         setStatus(`Removed ${result.dismissed.length} item${result.dismissed.length === 1 ? '' : 's'} from the replacement queue${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
-        if (state.page === 'quality' || state.page === 'audio_packaging') rerenderActiveMovieTriagePage(state.results.movies.profile);
+        if (state.page === 'quality' || (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio')) rerenderActiveMovieTriagePage(state.results.movies.profile);
         else renderReplacementQueueDetail(state.results.movies.profile);
       } catch (error) {
         setStatus(error.message, 'error');
