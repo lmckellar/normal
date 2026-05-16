@@ -1309,6 +1309,7 @@ INDEX_HTML = """<!doctype html>
       omdbRatings: new Map(),
       omdbStatus: '',
       selectedJunkPaths: new Set(),
+      junkDeleteHistory: [],
       selectedReplacementPaths: new Set(),
       selectedChangeIds: new Set(),
       selectedNormalizeResultIds: new Set(),
@@ -5969,6 +5970,37 @@ INDEX_HTML = """<!doctype html>
       }
     }
 
+    function renderJunkDeleteHistory() {
+      const items = state.junkDeleteHistory;
+      if (!items.length) {
+        detailPanel.innerHTML = '<div class="empty">No files deleted yet this session.</div>';
+        return;
+      }
+      const rows = items.map(item => {
+        const ext = (item.file_name || '').split('.').pop().toLowerCase();
+        const isDoc = ext === 'txt' || ext === 'html' || ext === 'htm';
+        const time = item.deleted_at ? new Date(item.deleted_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+        return `<tr>
+          <td><span class="chip ${isDoc ? 'meta' : 'review'}" style="font-size:0.7em;padding:2px 7px">${isDoc ? 'Doc' : 'Vid'}</span></td>
+          <td style="word-break:break-word;overflow-wrap:anywhere">${escapeHtml(item.file_name || '')}</td>
+          <td style="white-space:nowrap;color:var(--muted);font-size:0.85em">${escapeHtml(item.file_size_label || '')}</td>
+          <td style="white-space:nowrap;color:var(--muted);font-size:0.85em">${escapeHtml(time)}</td>
+        </tr>`;
+      }).join('');
+      detailPanel.innerHTML = `
+        <div style="font-weight:600;margin:10px 0 6px">Deleted This Session</div>
+        <table style="width:100%;border-collapse:collapse;font-size:0.9em">
+          <thead><tr>
+            <th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);width:52px">Type</th>
+            <th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)">File</th>
+            <th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);width:80px">Size</th>
+            <th style="text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);width:60px">Time</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
     function renderMovieJunk(payload) {
       mainTagline.textContent = 'High-confidence junk videos and spam sidecar files ready for deletion.';
       renderMetrics(buildMovieJunkMetrics(payload));
@@ -5980,15 +6012,19 @@ INDEX_HTML = """<!doctype html>
       ]);
       if (!payload) {
         mainContent.innerHTML = `<div class="empty">Run Movies / Delete Junk &amp; Spam Files to build a review list.</div>`;
+        renderJunkDeleteHistory();
         return;
       }
+      renderJunkDeleteHistory();
       const rows = filteredMovieJunk(payload).map(item => {
         const path = item.path || '';
         const checked = state.selectedJunkPaths.has(path) ? 'checked' : '';
+        const ext = (item.file_name || '').split('.').pop().toLowerCase();
+        const isDoc = ext === 'txt' || ext === 'html' || ext === 'htm';
         return `
           <tr>
             <td><input type="checkbox" class="junk-select" data-path="${encodeURIComponent(path)}" ${checked}></td>
-            <td><span class="badge">${item.runtime_seconds == null ? 'Doc' : 'Vid'}</span> ${escapeHtml(item.file_name || '')}</td>
+            <td><span class="chip ${isDoc ? 'meta' : 'review'}" style="font-size:0.7em;padding:2px 7px;margin-right:5px">${isDoc ? 'Doc' : 'Vid'}</span>${escapeHtml(item.file_name || '')}</td>
             <td><div class="mono">${escapeHtml(item.relative_path || item.path || '')}</div></td>
             <td>${escapeHtml(item.file_size_label || '')}</td>
           </tr>
@@ -6058,6 +6094,13 @@ INDEX_HTML = """<!doctype html>
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'Delete failed.');
+        const deletedSet = new Set(payload.deleted || []);
+        const deletedAt = new Date().toISOString();
+        (state.results.movies.junk?.junk || []).forEach(item => {
+          if (deletedSet.has(item.path || '')) {
+            state.junkDeleteHistory.unshift({ ...item, deleted_at: deletedAt });
+          }
+        });
         state.results.movies.junk = removeDeletedJunk(state.results.movies.junk, payload.deleted || []);
         state.selectedJunkPaths.clear();
         const skipped = payload.skipped?.length || 0;
