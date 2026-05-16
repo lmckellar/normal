@@ -352,7 +352,9 @@ def reconcile_replacement_queue(
             continue
         family = normalize_issue_family(item.get("issue_family"))
         identity = (item.get("title_key"), item.get("year"))
-        replacements = replacements_by_family.setdefault(family, replacement_identities(source, raw_movies, family))
+        if family not in replacements_by_family:
+            replacements_by_family[family] = replacement_identities(source, raw_movies, family)
+        replacements = replacements_by_family[family]
         matched_path = replacements.get(identity)
         if matched_path is None:
             continue

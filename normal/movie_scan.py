@@ -480,6 +480,21 @@ def first_csv_value(value: Any) -> str | None:
     return str(value).split(",", 1)[0].strip() or None
 
 
+def media_facts_from_dict(payload: dict[str, Any]) -> MediaFacts:
+    audio_streams = []
+    for raw_stream in payload.get("audio_streams", []):
+        if isinstance(raw_stream, dict):
+            audio_streams.append(AudioStreamFacts(**raw_stream))
+    subtitle_streams = []
+    for raw_stream in payload.get("subtitle_streams", []):
+        if isinstance(raw_stream, dict):
+            subtitle_streams.append(SubtitleStreamFacts(**raw_stream))
+    normalized = dict(payload)
+    normalized["audio_streams"] = audio_streams
+    normalized["subtitle_streams"] = subtitle_streams
+    return MediaFacts(**normalized)
+
+
 def scan_movie_library(
     source_root: Path,
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
