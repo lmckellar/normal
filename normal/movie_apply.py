@@ -6,10 +6,6 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from mutagen import MutagenError
-from mutagen.flac import FLAC, FLACNoHeaderError
-from mutagen.id3 import ID3NoHeaderError
-
 from normal.models import ProposedChange
 
 
@@ -201,8 +197,6 @@ def apply_change(source_root: Path, destination_root: Path, change: ProposedChan
         return apply_file_delete(destination_path, change)
     if change.change_type == "file_move":
         return apply_file_move(destination_path, destination_root, change)
-    if change.change_type == "tag_edit":
-        return apply_tag_edit(destination_path, change)
     if change.change_type == "folder_merge":
         return apply_folder_merge(source_root, destination_root, change)
     if change.change_type == "folder_delete":
@@ -329,7 +323,7 @@ def is_matching_sidecar_stem(sidecar_stem: str, media_stem: str) -> bool:
 
 def renamed_sidecar_name(sidecar_name: str, old_stem: str, new_stem: str) -> str:
     if sidecar_name.startswith(old_stem):
-        return new_stem + sidecar_name[len(old_stem) :]
+        return new_stem + sidecar_name[len(old_stem):]
     return sidecar_name
 
 
@@ -337,43 +331,6 @@ def format_sidecar_count(count: int) -> str:
     if count == 0:
         return ""
     return f" with {count} sidecar{'s' if count != 1 else ''}"
-
-
-def apply_tag_edit(destination_path: Path, change: ProposedChange) -> ApplyResult:
-    field = change.item_id.rsplit(":", 1)[-1]
-    try:
-        audio = FLAC(destination_path)
-    except (FLACNoHeaderError, ID3NoHeaderError, MutagenError, OSError) as exc:
-        return ApplyResult(
-            item_id=change.item_id,
-            change_type=change.change_type,
-            status="skipped",
-            path=str(destination_path),
-            message=f"Tag edit skipped because FLAC metadata could not be opened: {exc}",
-        )
-
-    current_value = ""
-    existing = audio.get(field, [])
-    if existing:
-        current_value = str(existing[0])
-    if current_value != change.current_value:
-        return ApplyResult(
-            item_id=change.item_id,
-            change_type=change.change_type,
-            status="skipped",
-            path=str(destination_path),
-            message="Tag value drifted from the plan current_value.",
-        )
-
-    audio[field] = [change.proposed_value]
-    audio.save()
-    return ApplyResult(
-        item_id=change.item_id,
-        change_type=change.change_type,
-        status="applied",
-        path=str(destination_path),
-        message=f"Updated tag: {field}",
-    )
 
 
 def apply_folder_rename(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:

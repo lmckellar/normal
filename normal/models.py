@@ -28,41 +28,10 @@ class ProposedChange:
 
 
 @dataclass(slots=True)
-class TrackReport:
-    track_id: str
-    path: str
-    tags: dict[str, str] = field(default_factory=dict)
-    issues: list[WarningItem] = field(default_factory=list)
-
-
-@dataclass(slots=True)
-class AlbumReport:
-    album_id: str
-    path: str
-    track_count: int
-    warnings: list[WarningItem] = field(default_factory=list)
-
-
-@dataclass(slots=True)
-class AnalysisReport:
-    source_root: str
-    generated_at: str
-    ruleset_version: str = RULESET_VERSION
-    tracks: list[TrackReport] = field(default_factory=list)
-    albums: list[AlbumReport] = field(default_factory=list)
-    warnings: list[WarningItem] = field(default_factory=list)
-
-    def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass(slots=True)
 class ChangePlan:
     source_root: str
     generated_at: str
     ruleset_version: str = RULESET_VERSION
-    tracks: list[TrackReport] = field(default_factory=list)
-    albums: list[AlbumReport] = field(default_factory=list)
     proposed_changes: list[ProposedChange] = field(default_factory=list)
     warnings: list[WarningItem] = field(default_factory=list)
 
@@ -72,13 +41,6 @@ class ChangePlan:
 
 def utc_now_iso() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat()
-
-
-def build_empty_report(source_root: Path) -> AnalysisReport:
-    return AnalysisReport(
-        source_root=str(source_root.resolve()),
-        generated_at=utc_now_iso(),
-    )
 
 
 def build_empty_plan(source_root: Path) -> ChangePlan:

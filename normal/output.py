@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-from collections import Counter
 import json
 from pathlib import Path
 
@@ -11,68 +10,9 @@ from openpyxl.utils import get_column_letter
 
 from normal.movie_plan import parse_movie_name
 from normal.quality_review import build_audio_summary
-from normal.scan import analyze_library, infer_album_root
 
 
 MOVIE_STATUS_PRIORITY = {"severe": 0, "review": 1, "ok": 2, "unscored": 3}
-
-
-def write_collection_csv(source_root: Path, csv_path: Path) -> None:
-    report = analyze_library(source_root)
-    rows = build_collection_rows(report)
-    csv_path.parent.mkdir(parents=True, exist_ok=True)
-    with csv_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(["album_artist", "album", "date", "genre", "track_count", "path"])
-        writer.writerows(rows)
-
-
-def build_collection_rows(report) -> list[list[str]]:
-    rows: list[list[str]] = []
-    for album in report.albums:
-        album_path = Path(album.path)
-        tracks = [track for track in report.tracks if infer_album_root(Path(track.path)) == album_path]
-        if not tracks:
-            continue
-        first_track = tracks[0]
-        album_artist = first_track.tags.get("albumartist") or first_track.tags.get("artist", "")
-        album_title = first_track.tags.get("album", "")
-        release_date = consensus_year_or_date([track.tags.get("date", "") for track in tracks])
-        genre = consensus_genre([track.tags.get("genre", "") for track in tracks])
-        rows.append(
-            [
-                album_artist,
-                album_title,
-                release_date,
-                genre,
-                str(album.track_count),
-                album.path,
-            ]
-        )
-
-    rows.sort(key=lambda row: (row[0], row[2], row[1], row[5]))
-    return rows
-
-
-def consensus_year_or_date(values: list[str]) -> str:
-    normalized = [value.strip() for value in values if value.strip()]
-    if not normalized:
-        return ""
-    counts = Counter(value[:4] if len(value) >= 4 and value[:4].isdigit() else value for value in normalized)
-    return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
-
-
-def consensus_genre(values: list[str]) -> str:
-    normalized = [value.strip() for value in values if value.strip()]
-    if not normalized:
-        return ""
-
-    counts = Counter(normalized)
-    top_count = max(counts.values())
-    leaders = sorted(genre for genre, count in counts.items() if count == top_count)
-    if len(leaders) == 1:
-        return leaders[0]
-    return ";".join(sorted(counts))
 
 
 def write_movie_review_csv(report_path: Path, csv_path: Path, minimum_status: str = "review") -> None:

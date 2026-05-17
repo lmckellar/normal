@@ -22,22 +22,6 @@ class NormalCliTests(unittest.TestCase):
             check=False,
         )
 
-    def test_scan_writes_report_with_expected_shape(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir) / "library"
-            source.mkdir()
-            report_path = Path(tmpdir) / "out" / "scan.json"
-
-            result = self.run_cli("scan", "--source", str(source), "--report", str(report_path))
-
-            self.assertEqual(result.returncode, 0, msg=result.stderr)
-            payload = json.loads(report_path.read_text(encoding="utf-8"))
-            self.assertEqual(payload["source_root"], str(source.resolve()))
-            self.assertEqual(payload["ruleset_version"], "1")
-            self.assertIn("tracks", payload)
-            self.assertIn("albums", payload)
-            self.assertIn("warnings", payload)
-
     def test_movie_scan_writes_report_with_expected_shape(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "movies"
@@ -167,110 +151,6 @@ class NormalCliTests(unittest.TestCase):
             self.assertEqual(payload["source_root"], str(source.resolve()))
             self.assertIn("junk", payload)
             self.assertIn("warnings", payload)
-
-    def test_plan_writes_plan_and_optional_summary(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir) / "library"
-            album_dir = source / "Artist" / "Album"
-            album_dir.mkdir(parents=True)
-            (album_dir / "01 Song.flac").write_text("not a flac", encoding="utf-8")
-            plan_path = Path(tmpdir) / "out" / "plan.json"
-            summary_path = Path(tmpdir) / "out" / "plan.md"
-
-            result = self.run_cli(
-                "plan",
-                "--source",
-                str(source),
-                "--plan",
-                str(plan_path),
-                "--summary",
-                str(summary_path),
-            )
-
-            self.assertEqual(result.returncode, 0, msg=result.stderr)
-            payload = json.loads(plan_path.read_text(encoding="utf-8"))
-            self.assertEqual(payload["source_root"], str(source.resolve()))
-            self.assertIn("proposed_changes", payload)
-            self.assertIn("warnings", payload)
-            self.assertTrue(summary_path.exists())
-
-    def test_apply_requires_exactly_one_destination_mode(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir) / "library"
-            source.mkdir()
-            plan_path = Path(tmpdir) / "plan.json"
-            plan_path.write_text("{}", encoding="utf-8")
-
-            result = self.run_cli("apply", "--source", str(source), "--plan", str(plan_path))
-
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("one of the arguments --target --in-place is required", result.stderr)
-
-    def test_output_writes_csv_header(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir) / "library"
-            artist_dir = source / "Artist" / "Album"
-            artist_dir.mkdir(parents=True)
-            (artist_dir / "01 Song.flac").write_text("not a flac", encoding="utf-8")
-            csv_path = Path(tmpdir) / "out" / "collection.csv"
-
-            result = self.run_cli("output", "--source", str(source), "--csv", str(csv_path))
-
-            self.assertEqual(result.returncode, 0, msg=result.stderr)
-            with csv_path.open(newline="", encoding="utf-8") as handle:
-                rows = list(csv.reader(handle))
-            self.assertEqual(
-                rows[0],
-                ["album_artist", "album", "date", "genre", "track_count", "path"],
-            )
-
-    def test_apply_writes_report_into_target(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            source = root / "source"
-            target = root / "target"
-            source.mkdir()
-            source_file = source / "01 Old.flac"
-            source_file.write_text("audio", encoding="utf-8")
-            plan_path = root / "plan.json"
-            plan_path.write_text(
-                json.dumps(
-                    {
-                        "source_root": str(source.resolve()),
-                        "generated_at": "2024-01-01T00:00:00+00:00",
-                        "ruleset_version": "1",
-                        "tracks": [],
-                        "albums": [],
-                        "proposed_changes": [
-                            {
-                                "item_id": "01 Old.flac#file",
-                                "change_type": "file_rename",
-                                "current_value": "01 Old.flac",
-                                "proposed_value": "01 New.flac",
-                                "confidence": "safe",
-                                "reason": "rename",
-                                "path": str(source_file),
-                            }
-                        ],
-                        "warnings": [],
-                    }
-                ),
-                encoding="utf-8",
-            )
-
-            result = self.run_cli(
-                "apply",
-                "--source",
-                str(source),
-                "--plan",
-                str(plan_path),
-                "--target",
-                str(target),
-            )
-
-            self.assertEqual(result.returncode, 0, msg=result.stderr)
-            self.assertTrue((target / "01 New.flac").exists())
-            self.assertTrue((target / "normal-apply-report.json").exists())
 
     def test_movie_apply_writes_movie_report_into_target(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

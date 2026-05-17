@@ -50,7 +50,6 @@ from normal.movie_subtitle_history import (
     history_for_source as subtitle_history_for_source,
     upsert_items as upsert_subtitle_history_items,
 )
-from normal.music_profile import build_music_histogram_payload, scan_music_profiles
 from normal.movie_replacement_queue import (
     add_profile_items_to_queue,
     clear_pending_queue_items,
@@ -59,34 +58,11 @@ from normal.movie_replacement_queue import (
     queue_for_source,
     reconcile_replacement_queue,
 )
-from normal.music_replacement_queue import (
-    add_profile_items_to_queue as music_add_profile_items_to_queue,
-    delete_replacement_queue_media as music_delete_replacement_queue_media,
-    queue_for_source as music_queue_for_source,
-    reconcile_replacement_queue as music_reconcile_replacement_queue,
-)
 from normal.movie_scan import discover_video_files, media_facts_from_dict, probe_media_facts, scan_movie_library
 from normal.probe_cache import ProbeCache
 from normal.output import write_movie_register_xlsx
-from normal.apply import apply_changes_in_place
 from normal.models import ProposedChange, utc_now_iso
-from normal.plan import build_plan
 from normal.quality_review import AudioStreamFacts, MediaFacts, SubtitleStreamFacts
-from normal.artwork import (
-    PROVENANCE_FILENAME,
-    ArtworkGapItem,
-    apply_artwork,
-    backfill_jellyfin_artist_artwork,
-    find_album_artwork_candidates,
-    find_image_search_artist_candidates,
-    find_web_artist_candidates,
-    resolve_cached_artwork,
-    resolve_data_url_artwork,
-    resolve_file_artwork,
-    resolve_remote_artwork,
-    scan_artist_artwork,
-    search_wikimedia_artist_candidates,
-)
 
 
 def build_movie_normalize_results(source_root: Path, movie_files: list[Path], plan_changes: list[ProposedChange]) -> list[dict[str, Any]]:
@@ -338,7 +314,6 @@ INDEX_HTML = """<!doctype html>
       --line: #d7cbb8;
       --accent: #0f5c4d;
       --accent-2: #c86a2d;
-      --music: #2d5ea8;
       --movies: #0f5c4d;
       --danger: #8a3341;
       --warn: #8a5b00;
@@ -735,7 +710,7 @@ INDEX_HTML = """<!doctype html>
     .chip.unchanged { background: color-mix(in srgb, var(--muted) 12%, transparent); color: var(--muted); border-color: color-mix(in srgb, var(--muted) 24%, transparent); }
     .chip.playback { background: rgba(15,92,77,0.12); color: var(--accent); border-color: rgba(15,92,77,0.2); }
     .chip.indexing { background: rgba(138,91,0,0.12); color: var(--warn); border-color: rgba(138,91,0,0.2); }
-    .chip.meta { background: rgba(45,94,168,0.12); color: var(--music); border-color: rgba(45,94,168,0.2); }
+    .chip.meta { background: rgba(45,94,168,0.12); color: var(--muted); border-color: rgba(45,94,168,0.2); }
     .queue-inline-remove {
       border: 0;
       background: transparent;
@@ -1099,73 +1074,6 @@ INDEX_HTML = """<!doctype html>
     .candidate-section-heading h4 {
       margin: 0;
     }
-    .artwork-drop-zone {
-      width: 100%;
-      max-width: 340px;
-      border: 1px dashed var(--line);
-      border-radius: 8px;
-      padding: 10px 12px;
-      color: var(--muted);
-      background: var(--surface);
-      font-size: 13px;
-      margin: 10px 0 12px;
-    }
-    .artwork-drop-zone.dragover {
-      border-color: var(--accent);
-      background: var(--accent-glow);
-      color: var(--ink);
-    }
-    .artist-tile {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
-      overflow: hidden;
-      cursor: pointer;
-      min-width: 0;
-      padding: 0;
-      text-align: left;
-      color: var(--ink);
-      font-family: inherit;
-    }
-    .artist-tile:hover { border-color: color-mix(in srgb, var(--music) 45%, var(--line)); }
-    .artist-art {
-      aspect-ratio: 1 / 1;
-      width: 100%;
-      background: var(--bar-track);
-      display: grid;
-      place-items: center;
-      overflow: hidden;
-    }
-    .artist-art img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .artist-art.missing {
-      border-bottom: 1px dashed var(--line);
-      color: var(--muted);
-      font-size: 12px;
-      text-align: center;
-      padding: 12px;
-    }
-    .artist-meta {
-      padding: 9px 10px 10px;
-      min-height: 74px;
-    }
-    .artist-name {
-      font-size: 13px;
-      font-weight: 700;
-      line-height: 1.25;
-      overflow-wrap: anywhere;
-      margin-bottom: 7px;
-    }
-    .artist-path {
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 1.25;
-      overflow-wrap: anywhere;
-    }
     .subtle {
       color: var(--muted);
       font-size: 13px;
@@ -1216,8 +1124,8 @@ INDEX_HTML = """<!doctype html>
     <section class="masthead">
       <div class="card mast-main">
         <div class="eyebrow">normal workbench</div>
-        <h1 id="heroTitle">Music + Movies</h1>
-        <p class="lede" id="heroLede">Two operational lanes: one curatorial for music, one diagnostic for movies. Same shell, different semantics.</p>
+        <h1 id="heroTitle">Movies</h1>
+        <p class="lede" id="heroLede">Local workbench for diagnosing and cleaning movie libraries.</p>
         <div class="controls">
           <input id="sourcePath" type="text" placeholder="/path/to/library">
           <button id="runButton" class="primary">Run</button>
@@ -1270,7 +1178,6 @@ INDEX_HTML = """<!doctype html>
       page: 'library',
       filter: 'all',
       qualitySort: { col: null, dir: 'asc' },
-      musicQualitySort: { col: null, dir: 'asc' },
       fixDefaultsTab: 'audio',
       movieAudioFixBusy: false,
       movieSubtitleFixBusy: false,
@@ -1294,29 +1201,12 @@ INDEX_HTML = """<!doctype html>
       selectedChangeIds: new Set(),
       selectedNormalizeResultIds: new Set(),
       movieNamingStyle: 'concise',
-      selectedArtistNames: new Set(),
-      approvedArtworkCandidates: {},
-      artworkCandidates: {},
-      artworkImageSearchOffsets: {},
       results: {
-        music: { profile: null, normalize: null, apply: null, artwork: null, replacementQueue: null, replacementQueueSource: '' },
         movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null, replacementQueue: null, replacementQueueSource: '' }
       }
     };
 
     const CONFIG = {
-      music: {
-        title: 'Music',
-        lede: 'Clean, complete, and browse your FLAC library. Diagnostics here are about metadata, artwork readiness, and safe normalization work.',
-        sourceLabel: '/path/to/music library',
-        pages: [
-          { id: 'library', label: 'Dashboard View', action: 'scan', endpoint: '/api/music/profile' },
-          { id: 'normalize', label: 'Normalize Music Files & Folders', action: 'plan', endpoint: '/api/music/normalize' },
-          { id: 'music_quality', label: 'Delete Weak Encodes', action: 'scan', endpoint: '/api/music/profile' },
-          { id: 'artwork', label: 'Repair Artwork for Jellyfin', action: 'scan', endpoint: '/api/music/artwork/scan' },
-          { id: 'recommend', label: 'Music Recommendation Engine', action: 'scan' }
-        ]
-      },
       movies: {
         title: 'Movies',
         lede: 'Assess, fix, and standardize your movie and TV library. Diagnostics here focus on quality, compatibility, and repairable playback or visibility issues.',
@@ -1358,11 +1248,10 @@ INDEX_HTML = """<!doctype html>
       try {
         const roots = JSON.parse(localStorage.getItem('n_library_roots') || '{}');
         return {
-          music: typeof roots.music === 'string' ? roots.music : '',
           movies: typeof roots.movies === 'string' ? roots.movies : ''
         };
       } catch {
-        return { music: '', movies: '' };
+        return { movies: '' };
       }
     })();
     let _recentLibraries = (() => {
@@ -1370,7 +1259,7 @@ INDEX_HTML = """<!doctype html>
         const recent = JSON.parse(localStorage.getItem('n_recent_libraries') || '[]');
         if (!Array.isArray(recent)) return [];
         return recent
-          .filter(item => item && ['music', 'movies'].includes(item.lane) && typeof item.source === 'string' && item.source)
+          .filter(item => item && item.lane === 'movies' && typeof item.source === 'string' && item.source)
           .slice(0, 2);
       } catch {
         return [];
@@ -1400,15 +1289,6 @@ INDEX_HTML = """<!doctype html>
         return {};
       }
     })();
-    let _musicDashboardCache = (() => {
-      try {
-        const cache = JSON.parse(localStorage.getItem('n_music_dashboard_cache') || '{}');
-        return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
-      } catch {
-        return {};
-      }
-    })();
-
     function setStatus(text, mode) {
       const dot = document.getElementById('statusDot');
       const fill = document.getElementById('statusFill');
@@ -1584,7 +1464,7 @@ INDEX_HTML = """<!doctype html>
       fetch('/api/library-roots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ music: _libraryRoots.music, movies: _libraryRoots.movies, recent: _recentLibraries })
+        body: JSON.stringify({ movies: _libraryRoots.movies, recent: _recentLibraries })
       }).catch(() => {});
     }
 
@@ -1593,7 +1473,7 @@ INDEX_HTML = """<!doctype html>
       fetch('/api/library-roots', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ music: _libraryRoots.music, movies: _libraryRoots.movies, recent: _recentLibraries })
+        body: JSON.stringify({ movies: _libraryRoots.movies, recent: _recentLibraries })
       }).catch(() => {});
     }
 
@@ -1609,10 +1489,6 @@ INDEX_HTML = """<!doctype html>
       try { localStorage.setItem('n_movie_replacement_queue_cache', JSON.stringify(_movieReplacementQueueCache)); } catch {}
     }
 
-    function persistMusicDashboardCache() {
-      try { localStorage.setItem('n_music_dashboard_cache', JSON.stringify(_musicDashboardCache)); } catch {}
-    }
-
     function dashboardCacheKey(source) {
       return source || '';
     }
@@ -1623,40 +1499,6 @@ INDEX_HTML = """<!doctype html>
       return Object.fromEntries(entries
         .sort((a, b) => String(b[1].cached_at || '').localeCompare(String(a[1].cached_at || '')))
         .slice(0, 8));
-    }
-
-    function cacheMusicDashboard(payload) {
-      if (!payload || !payload.source_root || !payload.histogram) return;
-      _musicDashboardCache[dashboardCacheKey(payload.source_root)] = {
-        source_root: payload.source_root,
-        histogram: payload.histogram,
-        cached_at: new Date().toISOString()
-      };
-      _musicDashboardCache = trimDashboardCache(_musicDashboardCache);
-      persistMusicDashboardCache();
-    }
-
-    function cachedMusicDashboard(source) {
-      const cached = _musicDashboardCache[dashboardCacheKey(source)];
-      if (!cached || !cached.histogram) return null;
-      return {
-        source_root: cached.source_root || source,
-        histogram: cached.histogram,
-        tracks: []
-      };
-    }
-
-    function currentMusicProfileForSource() {
-      const source = sourceInput.value.trim();
-      const profile = state.results.music.profile;
-      return profile && profile.source_root === source ? profile : null;
-    }
-
-    function restoreCachedMusicDashboard(source) {
-      const cached = cachedMusicDashboard(source);
-      if (!cached) return null;
-      state.results.music.profile = cached;
-      return cached;
     }
 
     function cacheMovieDashboard(payload) {
@@ -1820,7 +1662,6 @@ INDEX_HTML = """<!doctype html>
       if (lane === 'movies') {
         restoreCachedMovieDashboard(source);
       }
-      if (lane === 'music') restoreCachedMusicDashboard(source);
       setStatus(`Using saved ${CONFIG[lane].title} library.`, 'idle');
       renderCurrentPage();
     }
@@ -1832,7 +1673,6 @@ INDEX_HTML = """<!doctype html>
       if (item.lane === 'movies') {
         restoreCachedMovieDashboard(item.source);
       }
-      if (item.lane === 'music') restoreCachedMusicDashboard(item.source);
       setStatus(`Using recent ${CONFIG[item.lane].title} library.`, 'idle');
       renderCurrentPage();
     }
@@ -1848,7 +1688,7 @@ INDEX_HTML = """<!doctype html>
 
     function renderLibraryRoots() {
       const currentSource = sourceInput.value.trim();
-      const rootRows = ['movies', 'music'].map(lane => {
+      const rootRows = ['movies'].map(lane => {
         const source = _libraryRoots[lane] || '';
         const isCurrent = state.lane === lane && source && source === currentSource;
         return `
@@ -1917,7 +1757,6 @@ INDEX_HTML = """<!doctype html>
 
     fetch('/api/library-roots').then(r => r.json()).then(data => {
       let changed = false;
-      if (data.music && data.music !== _libraryRoots.music) { _libraryRoots.music = data.music; changed = true; }
       if (data.movies && data.movies !== _libraryRoots.movies) { _libraryRoots.movies = data.movies; changed = true; }
       if (Array.isArray(data.recent) && JSON.stringify(data.recent) !== JSON.stringify(_recentLibraries)) {
         _recentLibraries = data.recent; changed = true;
@@ -1931,14 +1770,7 @@ INDEX_HTML = """<!doctype html>
     runButton.addEventListener('click', runCurrentPage);
 
     sourceInput.addEventListener('input', () => {
-      const p = sourceInput.value;
-      const lower = p.toLowerCase();
-      const musicIdx = lower.lastIndexOf('music');
-      const moviesIdx = lower.lastIndexOf('movie');
       refreshActivityState();
-      if (musicIdx === -1 && moviesIdx === -1) return;
-      const detectedLane = moviesIdx > musicIdx ? 'movies' : 'music';
-      if (detectedLane !== state.lane) setLane(detectedLane);
     });
 
     const THEMES = {
@@ -1954,7 +1786,6 @@ INDEX_HTML = """<!doctype html>
             --line: #e5e5ea;
             --accent: #007aff;
             --accent-2: #5856d6;
-            --music: #5856d6;
             --movies: #007aff;
             --danger: #ff3b30;
             --warn: #ff9500;
@@ -1992,7 +1823,6 @@ INDEX_HTML = """<!doctype html>
             --line: #808080;
             --accent: #000080;
             --accent-2: #800000;
-            --music: #000080;
             --movies: #000080;
             --danger: #800000;
             --warn: #808000;
@@ -2045,7 +1875,6 @@ INDEX_HTML = """<!doctype html>
             --line: #282828;
             --accent: #1db954;
             --accent-2: #1ed760;
-            --music: #1db954;
             --movies: #1db954;
             --danger: #e91429;
             --warn: #e38b28;
@@ -2081,7 +1910,6 @@ INDEX_HTML = """<!doctype html>
             --line: #003a10;
             --accent: #00ff41;
             --accent-2: #00c832;
-            --music: #00ff41;
             --movies: #00ff41;
             --danger: #ff3a00;
             --warn: #c8a000;
@@ -2157,7 +1985,6 @@ INDEX_HTML = """<!doctype html>
       state.filter = page === 'quality' ? 'strict_weak' : 'all';
       state.fixDefaultsTab = 'audio';
       state.qualitySort = { col: null, dir: 'asc' };
-      state.musicQualitySort = { col: null, dir: 'asc' };
       state.subtitleSort = { col: null, dir: 'asc' };
       state.replacementHistoryFilter = 'deleted';
       state.replacementHistorySort = { col: null, dir: 'asc' };
@@ -2291,33 +2118,7 @@ INDEX_HTML = """<!doctype html>
     }
 
     function storePayload(page, payload) {
-      if (state.lane === 'music') {
-        if (page === 'library') {
-          state.results.music.profile = payload;
-          cacheMusicDashboard(payload);
-        }
-        if (page === 'music_quality') {
-          state.results.music.profile = payload;
-          cacheMusicDashboard(payload);
-          if (payload.replacement_queue) {
-            state.results.music.replacementQueue = payload.replacement_queue;
-            state.results.music.replacementQueueSource = payload.source_root || '';
-          }
-          state.selectedReplacementPaths.clear();
-        }
-        if (page === 'artwork') {
-          state.results.music.artwork = payload;
-          state.approvedArtworkCandidates = {};
-          state.artworkCandidates = {};
-          state.artworkImageSearchOffsets = {};
-          state.selectedArtistNames = new Set((payload.present || []).filter(item => item.source === 'jellyfin').map(item => item.artist_name));
-        }
-        if (page === 'normalize') {
-          state.results.music.normalize = payload;
-          state.results.music.apply = null;
-          state.selectedChangeIds = new Set();
-        }
-      } else {
+      {
         if (['library', 'quality', 'fix_defaults', 'compatibility'].includes(page)) {
           state.results.movies.profile = payload;
           cacheMovieDashboard(payload);
@@ -2356,46 +2157,15 @@ INDEX_HTML = """<!doctype html>
       const page = state.page;
       const titleMap = {
         normalize: 'Normalize',
-        artwork: 'Artwork',
-        recommend: 'Recommend',
         canonical_lists: 'Canonical Lists',
         quality: 'Delete Weak Encodes',
         fix_defaults: 'Repair Defaults',
-        music_quality: 'Delete Weak Encodes',
         compatibility: 'Compatibility',
         junk: 'Delete Junk & Spam Files',
         library: 'Dashboard'
       };
       mainTitle.textContent = `${CONFIG[lane].title} / ${titleMap[page]}`;
-      if (lane === 'music') renderMusicPage(page);
-      else renderMoviePage(page);
-    }
-
-    function renderMusicPage(page) {
-      const source = sourceInput.value.trim();
-      const profile = currentMusicProfileForSource();
-      const normalize = state.results.music.normalize;
-      if (page === 'library') {
-        renderMusicLibrary(profile || restoreCachedMusicDashboard(source));
-        return;
-      }
-      if (page === 'normalize') {
-        renderMusicNormalize(normalize);
-        return;
-      }
-      if (page === 'artwork') {
-        renderMusicArtwork(state.results.music.artwork);
-        return;
-      }
-      if (page === 'music_quality') {
-        loadMusicReplacementQueue();
-        renderMusicQuality(profile);
-        return;
-      }
-      renderPlaceholder(
-        'Recommendation workflow next',
-        ['artist/album recommendation sets', 'related release clusters', 'curatorial discovery tools']
-      );
+      renderMoviePage(page);
     }
 
     function renderMoviePage(page) {
@@ -2467,973 +2237,6 @@ INDEX_HTML = """<!doctype html>
       } catch (error) {
         detailPanel.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
       }
-    }
-
-    async function loadMusicReplacementQueue(force = false) {
-      const source = sourceInput.value.trim();
-      if (!source) {
-        renderMusicReplacementQueueDetail(state.results.music.profile);
-        return;
-      }
-      if (!force && state.results.music.replacementQueue && state.results.music.replacementQueueSource === source) {
-        renderMusicReplacementQueueDetail(state.results.music.profile);
-        return;
-      }
-      try {
-        const response = await fetch('/api/music/replacement-queue/list', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Queue load failed.');
-        state.results.music.replacementQueue = result;
-        state.results.music.replacementQueueSource = source;
-        if (state.results.music.profile) state.results.music.profile.replacement_queue = result;
-        if (state.page === 'music_quality' && state.results.music.profile) renderMusicQuality(state.results.music.profile);
-        else renderMusicReplacementQueueDetail(state.results.music.profile);
-      } catch (error) {
-        detailPanel.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
-      }
-    }
-
-    function renderMusicQuality(payload) {
-      mainTagline.textContent = 'Weak encodes in the music library. Shows mp3_trash and unknown_unreadable tracks for removal.';
-      renderMetrics(buildMusicQualityMetrics(payload));
-      renderBars(buildMusicQualityBars(payload));
-      filterBar.innerHTML = '';
-      if (!payload) {
-        mainContent.innerHTML = '<div class="empty">Run Music / Delete Weak Encodes to see profile results.</div>';
-        return;
-      }
-      mainContent.innerHTML = buildMusicQualityTable(payload, sortedMusicTracks(strictWeakTracks(payload)));
-      renderMusicReplacementQueueDetail(payload);
-      attachMusicReplacementHandlers(payload);
-    }
-
-    function buildMusicQualityMetrics(payload) {
-      if (!payload) return [];
-      const tracks = payload.tracks || [];
-      const weak = tracks.filter(isStrictWeakTrack);
-      const queue = currentMusicReplacementQueue(payload);
-      const queueItems = queue?.items || [];
-      const pending = queueItems.filter(i => i.status === 'pending').length;
-      const deleted = queueItems.filter(i => i.status === 'deleted').length;
-      return [
-        { value: String(tracks.length), label: 'total tracks' },
-        { value: String(weak.length), label: 'weak tracks' },
-        { value: String(pending), label: 'pending delete' },
-        { value: String(deleted), label: 'deleted' },
-      ];
-    }
-
-    function buildMusicQualityBars(payload) {
-      if (!payload) return [];
-      const tracks = payload.tracks || [];
-      const total = Math.max(tracks.length, 1);
-      const weak = tracks.filter(isStrictWeakTrack).length;
-      return [
-        { label: 'weak tracks', value: String(weak), width: (weak / total) * 100 },
-      ];
-    }
-
-    function buildMusicQualityTable(payload, items) {
-      const queue = currentMusicReplacementQueue(payload);
-      const queueItems = queue?.items || [];
-      const qPending = queueItems.filter(i => i.status === 'pending').length;
-      const qDeleted = queueItems.filter(i => i.status === 'deleted').length;
-      const qCompleted = queueItems.filter(i => i.status === 'completed').length;
-      const qSource = sourceInput.value.trim() || queue?.source_root || '';
-      const queueSummary = (qPending || qDeleted || qCompleted || qDismissed) ? `
-        <div class="finding">
-          <h3>Replacement Queue</h3>
-          <p>${qPending} pending delete · ${qDeleted} deleted and waiting replacement · ${qCompleted} successfully replaced</p>
-          ${qSource ? `<p><strong>Directory:</strong> <span class="mono">${escapeHtml(qSource)}</span></p>` : ''}
-        </div>
-      ` : '';
-      const rows = items.map(item => {
-        const path = item.path || '';
-        const isWeak = isStrictWeakTrack(item);
-        const queueItem = musicReplacementQueueItemForPath(payload, path);
-        const checked = state.selectedReplacementPaths.has(path) ? 'checked' : '';
-        const bitrate = item.facts.bitrate_kbps ? `${Math.round(item.facts.bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
-        const sampleRate = item.facts.sample_rate_hz ? `${(item.facts.sample_rate_hz / 1000).toLocaleString()} kHz` : '<span class="subtle">—</span>';
-        const fileSize = item.facts.file_size_bytes ? fmtFileSize(item.facts.file_size_bytes) : '<span class="subtle">—</span>';
-        const format = item.facts.format ? item.facts.format.toUpperCase() : '<span class="subtle">—</span>';
-        const selectable = isWeak && !queueItem;
-        return `
-          <tr>
-            <td style="width:28px;text-align:center">${selectable ? `<input type="checkbox" class="music-replacement-select" data-path="${encodeURIComponent(path)}" ${checked}>` : ''}</td>
-            <td><div class="mono">${escapeHtml(path)}</div></td>
-            <td>${escapeHtml(humanMusicProfileLabel(item.profile.label))}</td>
-            <td>${format}</td>
-            <td>${bitrate}</td>
-            <td>${sampleRate}</td>
-            <td>${fileSize}</td>
-            <td>${musicReplacementQueueStatusChip(queueItem)}</td>
-          </tr>
-        `;
-      }).join('');
-      const selectedCount = selectedVisibleMusicReplacementCount(payload, items);
-      const selectableCount = selectableMusicReplacementItems(payload, items).length;
-      const allVisibleSelected = selectableCount > 0 && selectedCount === selectableCount;
-      const toggleLabel = allVisibleSelected ? 'Deselect All' : 'Select All';
-      return `
-        ${queueSummary}
-        <div class="junk-actions">
-          <button class="secondary" id="toggleAllMusicReplacementButton" ${selectableCount ? '' : 'disabled'}>${toggleLabel}</button>
-          <button class="danger" id="deleteMusicSelectedFilesButton" ${selectedCount ? '' : 'disabled'}>Delete Selected Files</button>
-          <span class="subtle">${selectedCount} of ${selectableCount} selected</span>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th></th>${['file','profile','format','bitrate','sample_rate','file_size'].map(col => { const active = state.musicQualitySort.col === col; const ind = active ? (state.musicQualitySort.dir === 'asc' ? '↑' : '↓') : '↕'; const label = {file:'File',profile:'Profile',format:'Format',bitrate:'Bitrate',sample_rate:'Sample Rate',file_size:'File Size'}[col]; return `<th class="music-sortable-th sortable-th" data-sort-col="${col}">${label}<span class="sort-ind${active?' on':''}">${ind}</span></th>`; }).join('')}<th>Status</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="8" class="subtle">No weak tracks found.</td></tr>'}</tbody>
-          </table>
-        </div>
-      `;
-    }
-
-    function currentMusicReplacementQueue(payload) {
-      return payload?.replacement_queue || state.results.music.replacementQueue || null;
-    }
-
-    function musicReplacementQueueItemForPath(payload, path) {
-      if (!path) return null;
-      return (currentMusicReplacementQueue(payload)?.items || []).find(item =>
-        item.original_path === path && ['pending', 'deleted', 'completed'].includes(item.status)
-      ) || null;
-    }
-
-    function musicReplacementQueueStatusChip(item) {
-      if (!item) return '<span class="subtle">—</span>';
-      if (item.status === 'pending') return '<span class="chip meta">queued</span>';
-      if (item.status === 'deleted') return '<span class="chip review">deleted, waiting replacement</span>';
-      if (item.status === 'completed') return '<span class="chip safe">replaced</span>';
-      return '<span class="subtle">—</span>';
-    }
-
-    function isStrictWeakTrack(item) {
-      return ['mp3_trash', 'unknown_unreadable'].includes(item?.profile?.label || '');
-    }
-
-    function strictWeakTracks(payload) {
-      return (payload?.tracks || []).filter(isStrictWeakTrack);
-    }
-
-    function selectedVisibleMusicReplacementCount(payload, items) {
-      return selectableMusicReplacementItems(payload, items).filter(item => state.selectedReplacementPaths.has(item.path)).length;
-    }
-
-    function selectableMusicReplacementItems(payload, items) {
-      return items.filter(item => isStrictWeakTrack(item) && item.path && !musicReplacementQueueItemForPath(payload, item.path));
-    }
-
-    function sortedMusicTracks(items) {
-      const { col, dir } = state.musicQualitySort;
-      if (!col) return items;
-      const mult = dir === 'asc' ? 1 : -1;
-      return [...items].sort((a, b) => {
-        if (col === 'file') return mult * (a.path || '').split('/').pop().localeCompare((b.path || '').split('/').pop(), undefined, { sensitivity: 'base' });
-        if (col === 'profile') return mult * ((a.profile?.rank || 0) - (b.profile?.rank || 0));
-        if (col === 'format') return mult * (a.facts?.format || '').localeCompare(b.facts?.format || '', undefined, { sensitivity: 'base' });
-        if (col === 'bitrate') return mult * ((a.facts?.bitrate_kbps || 0) - (b.facts?.bitrate_kbps || 0));
-        if (col === 'sample_rate') return mult * ((a.facts?.sample_rate_hz || 0) - (b.facts?.sample_rate_hz || 0));
-        if (col === 'file_size') return mult * ((a.facts?.file_size_bytes || 0) - (b.facts?.file_size_bytes || 0));
-        return 0;
-      });
-    }
-
-    function attachMusicReplacementHandlers(payload) {
-      const items = selectableMusicReplacementItems(payload, sortedMusicTracks(strictWeakTracks(payload)));
-      document.querySelectorAll('.music-replacement-select').forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
-          const path = decodeURIComponent(checkbox.dataset.path);
-          if (checkbox.checked) state.selectedReplacementPaths.add(path);
-          else state.selectedReplacementPaths.delete(path);
-          renderMusicQuality(payload);
-          renderMusicReplacementQueueDetail(payload);
-        });
-      });
-      const toggleAllButton = document.getElementById('toggleAllMusicReplacementButton');
-      if (toggleAllButton) {
-        toggleAllButton.addEventListener('click', () => {
-          const selectedCount = selectedVisibleMusicReplacementCount(payload, items);
-          const allVisibleSelected = items.length > 0 && selectedCount === items.length;
-          items.forEach(item => {
-            if (!item.path) return;
-            if (allVisibleSelected) state.selectedReplacementPaths.delete(item.path);
-            else state.selectedReplacementPaths.add(item.path);
-          });
-          renderMusicQuality(payload);
-          renderMusicReplacementQueueDetail(payload);
-        });
-      }
-      const fileButton = document.getElementById('deleteMusicSelectedFilesButton');
-      if (fileButton) fileButton.addEventListener('click', () => deleteMusicSelectedFiles());
-      document.querySelectorAll('.music-sortable-th').forEach(th => {
-        th.addEventListener('click', () => {
-          const col = th.dataset.sortCol;
-          if (state.musicQualitySort.col === col) {
-            state.musicQualitySort.dir = state.musicQualitySort.dir === 'asc' ? 'desc' : 'asc';
-          } else {
-            state.musicQualitySort = { col, dir: 'asc' };
-          }
-          renderMusicQuality(payload);
-          renderMusicReplacementQueueDetail(payload);
-        });
-      });
-    }
-
-    function renderMusicReplacementQueueDetail(payload) {
-      const queue = currentMusicReplacementQueue(payload);
-      const queueItems = queue?.items || [];
-      const pending = queueItems.filter(item => item.status === 'pending');
-      const deleted = queueItems.filter(item => item.status === 'deleted');
-      const completed = queueItems.filter(item => item.status === 'completed');
-      const pendingRows = pending.length ? buildMusicPendingReplacementTable(pending) : '';
-      const deletedRows = deleted.slice(0, 8).map(item => {
-        const label = [item.album_artist || item.artist, item.album].filter(Boolean).join(' — ') || item.original_path || '';
-        return `
-          <div class="finding">
-            <h3>${escapeHtml(label)}</h3>
-            <p>deleted, waiting replacement</p>
-            <p class="mono">${escapeHtml(item.original_path || '')}</p>
-          </div>
-        `;
-      }).join('');
-      const completedRows = completed.slice(0, 8).map(item => {
-        const label = [item.album_artist || item.artist, item.album].filter(Boolean).join(' — ') || item.original_path || '';
-        return `
-          <div class="finding">
-            <h3>${escapeHtml(label)}</h3>
-            <p>successfully replaced</p>
-            <p class="mono">${escapeHtml(item.completed_by_path || '')}</p>
-          </div>
-        `;
-      }).join('');
-      detailPanel.innerHTML = `
-        ${pendingRows ? `<div style="font-weight:600;margin:10px 0 6px">Pending Delete</div>${pendingRows}` : ''}
-        ${deletedRows ? `<div style="font-weight:600;margin:10px 0 6px">Deleted, Waiting Replacement</div>${deletedRows}` : ''}
-        ${completedRows ? `<div style="font-weight:600;margin:10px 0 6px">Successfully Replaced</div>${completedRows}` : ''}
-        ${!pendingRows && !deletedRows && !completedRows ? '<div class="empty">No items in the music replacement queue.</div>' : ''}
-      `;
-      attachMusicReplacementQueueDetailHandlers();
-    }
-
-    function buildMusicPendingReplacementTable(items) {
-      const rows = items.slice(0, 8).map(item => {
-        const label = [item.album_artist || item.artist, item.album].filter(Boolean).join(' — ') || item.original_path || '';
-        const bitrate = item.bitrate_kbps ? `${Math.round(item.bitrate_kbps).toLocaleString()} kbps` : '<span class="subtle">—</span>';
-        return `
-          <tr>
-            <td>${escapeHtml(label)}</td>
-            <td>${escapeHtml(humanMusicProfileLabel(item.original_profile_label || ''))}</td>
-            <td>${bitrate}</td>
-            <td><button class="danger music-replacement-delete" data-item-id="${escapeHtml(item.item_id)}">Delete media</button></td>
-          </tr>
-        `;
-      }).join('');
-      return `
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Album</th><th>Profile</th><th>Bitrate</th><th>Action</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="4" class="subtle">No pending delete items.</td></tr>'}</tbody>
-          </table>
-        </div>
-      `;
-    }
-
-    function attachMusicReplacementQueueDetailHandlers() {
-      document.querySelectorAll('.music-replacement-delete').forEach(button => {
-        button.addEventListener('click', () => deleteMusicReplacementMedia([button.dataset.itemId]));
-      });
-    }
-
-    async function deleteMusicSelectedFiles() {
-      const source = sourceInput.value.trim();
-      const payload = state.results.music.profile;
-      if (!source || !payload) return;
-      const items = (payload.tracks || []).filter(item =>
-        state.selectedReplacementPaths.has(item.path || '') &&
-        isStrictWeakTrack(item) &&
-        !musicReplacementQueueItemForPath(payload, item.path || '')
-      );
-      if (!items.length) return;
-      const message = `Permanently delete ${items.length} file${items.length === 1 ? '' : 's'}? This cannot be undone.`;
-      if (!window.confirm(message)) return;
-      setStatus(`Deleting ${items.length} file${items.length === 1 ? '' : 's'}…`, 'running');
-      try {
-        const addResponse = await fetch('/api/music/replacement-queue/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, items })
-        });
-        const addResult = await addResponse.json();
-        if (!addResponse.ok) throw new Error(addResult.error || 'Queue failed.');
-        const itemIds = (addResult.added || []).map(i => i.item_id).filter(Boolean);
-        if (!itemIds.length) { setStatus('Nothing to delete.', 'idle'); return; }
-        const delResponse = await fetch('/api/music/replacement-queue/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, item_ids: itemIds })
-        });
-        const delResult = await delResponse.json();
-        if (!delResponse.ok) throw new Error(delResult.error || 'Delete failed.');
-        state.results.music.replacementQueue = delResult;
-        state.results.music.replacementQueueSource = source;
-        if (state.results.music.profile) state.results.music.profile.replacement_queue = delResult;
-        state.selectedReplacementPaths.clear();
-        const skipped = delResult.skipped?.length || 0;
-        const sidecars = delResult.cleaned_sidecars?.length || 0;
-        const folders = delResult.removed_folders?.length || 0;
-        const cleanup = sidecars || folders ? `; cleaned ${sidecars} sidecar${sidecars === 1 ? '' : 's'}${folders ? ` and ${folders} folder${folders === 1 ? '' : 's'}` : ''}` : '';
-        setStatus(`Deleted ${delResult.deleted.length} file${delResult.deleted.length === 1 ? '' : 's'}${cleanup}${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
-        renderMusicQuality(state.results.music.profile);
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    }
-
-    async function deleteMusicReplacementMedia(itemIds) {
-      const queue = currentMusicReplacementQueue(state.results.music.profile);
-      const source = sourceInput.value.trim() || queue?.source_root || '';
-      if (!source) {
-        setStatus('Choose a source directory before deleting replacement media.', 'error');
-        return;
-      }
-      if (!itemIds.length) {
-        setStatus('No pending replacement media is selected for deletion.', 'error');
-        return;
-      }
-      const message = `Delete media for ${itemIds.length} replacement queue item${itemIds.length === 1 ? '' : 's'}? This cannot be undone.`;
-      if (!window.confirm(message)) return;
-      setStatus(`Deleting ${itemIds.length} replacement queue item${itemIds.length === 1 ? '' : 's'}…`, 'running');
-      try {
-        const response = await fetch('/api/music/replacement-queue/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, item_ids: itemIds })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Delete failed.');
-        state.results.music.replacementQueue = result;
-        state.results.music.replacementQueueSource = source;
-        if (state.results.music.profile) state.results.music.profile.replacement_queue = result;
-        const skipped = result.skipped?.length || 0;
-        const sidecars = result.cleaned_sidecars?.length || 0;
-        const folders = result.removed_folders?.length || 0;
-        const cleanup = sidecars || folders ? `; cleaned ${sidecars} sidecar${sidecars === 1 ? '' : 's'}${folders ? ` and ${folders} folder${folders === 1 ? '' : 's'}` : ''}` : '';
-        setStatus(`Deleted ${result.deleted.length} item${result.deleted.length === 1 ? '' : 's'}${cleanup}${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
-        if (state.page === 'music_quality') renderMusicQuality(state.results.music.profile);
-        else renderMusicReplacementQueueDetail(state.results.music.profile);
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    }
-
-    function renderMusicLibrary(payload) {
-      mainTagline.textContent = 'Collection overview: format mix, fidelity profile, artwork readiness, and early library signals.';
-      renderMetrics(buildMusicDashboardMetrics(payload));
-      renderBars(buildMusicDashboardBars(payload));
-      filterBar.innerHTML = '';
-      mainContent.innerHTML = buildMusicDashboard(payload);
-      if (!payload) {
-        detailPanel.innerHTML = '<div class="empty">Run Music / Dashboard to profile the library.</div>';
-        return;
-      }
-      detailPanel.innerHTML = buildMusicProfileDetail(payload);
-    }
-
-    function buildMusicDashboard(payload) {
-      if (!payload) return '<div class="empty">Run Music / Dashboard to profile the library.</div>';
-      const histogram = payload.histogram || {};
-      const total = histogram.track_count ?? (payload.tracks || []).length;
-      const profileCounts = histogram.profile_counts || {};
-      const topProfile = Object.entries(profileCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
-      const statsHtml = `
-        <div class="dash-stats">
-          <div class="metric"><strong>${total.toLocaleString()}</strong><span>tracks</span></div>
-          <div class="metric"><strong>${String(histogram.album_count ?? 0)}</strong><span>albums</span></div>
-          <div class="metric"><strong>${String(histogram.artist_count ?? 0)}</strong><span>album artists</span></div>
-          <div class="metric"><strong>${formatDashboardSize(histogram.total_size_bytes)}</strong><span>total size</span></div>
-          <div class="metric"><strong>${escapeHtml(humanMusicProfileLabel(topProfile || '—'))}</strong><span>dominant profile</span></div>
-        </div>
-      `;
-      const PROFILE_ORDER = [
-        'mp3_trash', 'mp3_high_quality', 'flac_other',
-        'flac_44_1', 'flac_16_44_1', 'flac_24_44_1',
-        'flac_48', 'flac_16_48', 'flac_24_48',
-        'flac_88_2', 'flac_16_88_2', 'flac_24_88_2',
-        'flac_96', 'flac_16_96', 'flac_24_96',
-        'flac_176_4', 'flac_16_176_4', 'flac_24_176_4',
-        'flac_192', 'flac_16_192', 'flac_24_192',
-        'unknown_unreadable'
-      ];
-      const maxCount = Math.max(...Object.values(profileCounts), 1);
-      const profileCardsHtml = PROFILE_ORDER.filter(label => profileCounts[label]).map(label => {
-        const count = profileCounts[label];
-        const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
-        const barWidth = (count / maxCount) * 100;
-        return `
-          <div class="profile-card">
-            <div class="profile-card-group">${escapeHtml(musicProfileGroup(label))}</div>
-            <div class="profile-card-name">${escapeHtml(humanMusicProfileLabel(label))}</div>
-            <div class="profile-card-count">${count.toLocaleString()}</div>
-            <div class="profile-card-pct">${pct}% of library</div>
-            <div class="profile-card-bar"><span style="width:${barWidth}%"></span></div>
-          </div>
-        `;
-      }).join('');
-      const formatCounts = histogram.format_counts || {};
-      const formatMax = Math.max(...Object.values(formatCounts), 1);
-      const formatBarsHtml = Object.entries(formatCounts).sort((a, b) => b[1] - a[1]).map(([label, count]) => `
-        <div class="bar-row">
-          <span>${escapeHtml(label.toUpperCase())}</span>
-          <div class="bar"><span style="width:${(count / formatMax) * 100}%"></span></div>
-          <strong>${count}</strong>
-        </div>
-      `).join('');
-      const warningCount = histogram.warning_count || 0;
-      const signalHtml = `
-        <div class="dash-section-label">Signals Under Development</div>
-        <div class="dash-risk-row">
-          <span class="chip review">feature confidence: low</span>
-          <span class="chip ${warningCount ? 'review' : 'safe'}">unreadable / unknown: ${profileCounts.unknown_unreadable || 0}</span>
-          <span class="chip review">music risk flags: not reliable yet</span>
-        </div>
-      `;
-      return `
-        ${statsHtml}
-        <div class="dash-section-label">Quality Profiles</div>
-        <div class="profile-grid">${profileCardsHtml || '<div class="subtle">No profile data.</div>'}</div>
-        <div class="dash-section-label">Format / Fidelity Breakdown</div>
-        <div class="dash-res-bars bars">${formatBarsHtml || '<div class="subtle">No format data.</div>'}</div>
-        ${signalHtml}
-      `;
-    }
-
-    function buildMusicProfileDetail(payload) {
-      const histogram = payload.histogram || {};
-      const counts = histogram.sample_rate_counts || {};
-      const entries = Object.entries(counts).sort((a, b) => {
-        if (a[0] === 'unknown') return 1;
-        if (b[0] === 'unknown') return -1;
-        return parseFloat(a[0]) - parseFloat(b[0]);
-      });
-      const max = Math.max(...entries.map(([, value]) => value), 1);
-      const rows = entries.map(([label, value]) => `
-        <div class="bar-row">
-          <span>${escapeHtml(label)}</span>
-          <div class="bar"><span style="width:${(value / max) * 100}%"></span></div>
-          <strong>${value}</strong>
-        </div>
-      `).join('');
-      return `
-        <div class="finding" style="padding:14px 16px 14px">
-          <div class="dash-section-label">Sample Rate Distribution</div>
-          <div class="bars">${rows || '<div class="subtle">No sample-rate data.</div>'}</div>
-        </div>
-      `;
-    }
-
-    function renderMusicNormalize(payload) {
-      mainTagline.textContent = 'Review proposed changes, approve, and apply.';
-      renderMetrics(buildMusicNormalizeMetrics(payload));
-      renderBars(buildMusicNormalizeBars(payload));
-
-      const applyResult = state.results.music.apply;
-
-      if (!payload) {
-        filterBar.innerHTML = '';
-        const applyBanner = applyResult ? buildApplyResultBanner(applyResult) : '';
-        mainContent.innerHTML = applyBanner + '<div class="empty">Run Music / Normalize to generate a plan of tag, file, and folder fixes.</div>';
-        showNormalizeTreeDetail(null);
-        return;
-      }
-
-      renderFilters([
-        ['all', 'All'],
-        ['safe', 'Safe'],
-        ['review', 'Review'],
-        ['warnings', 'Warnings']
-      ]);
-
-      const changes = filteredMusicChanges(payload);
-      const total = (payload.proposed_changes || []).length;
-      const selectedCount = state.selectedChangeIds.size;
-
-      const rows = changes.map(change => `
-        <tr>
-          <td style="width:28px;text-align:center"><input type="checkbox" class="change-checkbox" data-item-id="${escapeHtml(change.item_id)}" ${state.selectedChangeIds.has(change.item_id) ? 'checked' : ''}></td>
-          <td><span class="chip ${change.confidence}">${escapeHtml(change.confidence)}</span></td>
-          <td>${escapeHtml(change.change_type)}</td>
-          <td><div class="mono" style="font-size:0.8em">${escapeHtml(change.path || '')}</div></td>
-          <td><div class="mono">${escapeHtml(change.current_value)}</div></td>
-          <td><div class="mono">${escapeHtml(change.proposed_value)}</div></td>
-        </tr>
-      `).join('');
-
-      const warningCounts = CounterFromArray((payload.warnings || []).map(w => w.code));
-      const warningList = Object.entries(warningCounts).map(([code, count]) => `<span class="chip review">${escapeHtml(code)}${count > 1 ? ` ×${count}` : ''}</span>`).join('');
-      const applyBanner = applyResult ? buildApplyResultBanner(applyResult) : '';
-
-      mainContent.innerHTML = `
-        ${applyBanner}
-        <div class="subtle" style="margin-bottom:10px;">Warnings: ${warningList || 'none'}</div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-          <button class="secondary" id="selAllSafe">All Safe</button>
-          <button class="secondary sel-toggle" id="selToggle">${selectedCount === total && total > 0 ? 'Deselect All' : 'Select All'}</button>
-          <span class="subtle" id="selCount" style="margin-left:4px">${selectedCount} of ${total} selected</span>
-          <div style="flex:1"></div>
-          <button class="primary" id="applyBtn" ${selectedCount === 0 ? 'disabled' : ''} style="min-width:160px">Apply ${selectedCount} Changes</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th></th><th>Confidence</th><th>Type</th><th>Path</th><th>Current</th><th>Proposed</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="6" class="subtle">No changes for this filter.</td></tr>'}</tbody>
-          </table>
-        </div>
-      `;
-
-      document.getElementById('selAllSafe').addEventListener('click', () => {
-        state.selectedChangeIds = new Set((payload.proposed_changes || []).filter(c => c.confidence === 'safe').map(c => c.item_id));
-        renderMusicNormalize(payload);
-      });
-      document.getElementById('selToggle').addEventListener('click', () => {
-        const allChangeIds = (payload.proposed_changes || []).map(c => c.item_id);
-        state.selectedChangeIds = state.selectedChangeIds.size === allChangeIds.length && allChangeIds.length > 0
-          ? new Set()
-          : new Set(allChangeIds);
-        renderMusicNormalize(payload);
-      });
-      document.getElementById('applyBtn').addEventListener('click', applySelectedChanges);
-
-      mainContent.querySelectorAll('.change-checkbox').forEach(cb => {
-        cb.addEventListener('change', () => {
-          if (cb.checked) state.selectedChangeIds.add(cb.dataset.itemId);
-          else state.selectedChangeIds.delete(cb.dataset.itemId);
-          const count = state.selectedChangeIds.size;
-          const countEl = document.getElementById('selCount');
-          if (countEl) countEl.textContent = `${count} of ${total} selected`;
-          const toggle = document.getElementById('selToggle');
-          if (toggle) toggle.textContent = count === total && total > 0 ? 'Deselect All' : 'Select All';
-          const btn = document.getElementById('applyBtn');
-          if (btn) { btn.disabled = count === 0; btn.textContent = `Apply ${count} Changes`; }
-          showNormalizeTreeDetail(payload);
-        });
-      });
-
-      showNormalizeTreeDetail(payload);
-    }
-
-    async function applySelectedChanges() {
-      const payload = state.results.music.normalize;
-      const source = sourceInput.value.trim();
-      if (!payload || !source) return;
-      const changes = (payload.proposed_changes || []).filter(c => state.selectedChangeIds.has(c.item_id));
-      if (changes.length === 0) return;
-      const btn = document.getElementById('applyBtn');
-      if (btn) btn.disabled = true;
-      setStatus(`Applying ${changes.length} changes…`, 'running');
-      try {
-        const response = await fetch('/api/music/apply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, changes })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Apply failed.');
-        state.results.music.apply = result;
-        state.results.music.normalize = null;
-        state.selectedChangeIds = new Set();
-        setStatus(`Applied: ${result.applied.length}, skipped: ${result.skipped.length}, failed: ${result.failed.length}.`, 'idle');
-        renderMusicNormalize(null);
-      } catch (error) {
-        setStatus(error.message, 'error');
-        if (btn) btn.disabled = false;
-      }
-    }
-
-    function buildApplyResultBanner(result) {
-      const applied = result.applied || [];
-      const skipped = result.skipped || [];
-      const failed = result.failed || [];
-      const remainingSafe = result.remaining_safe_count || 0;
-      const remainingReview = result.remaining_review_count || 0;
-      const complete = failed.length === 0 && remainingSafe === 0;
-      const failedDetail = failed.length > 0 ? `
-        <details style="margin-top:8px">
-          <summary style="cursor:pointer;color:var(--danger)">${failed.length} failed — expand</summary>
-          <div style="margin-top:6px">${failed.map(f => `<div class="mono" style="font-size:0.82em;color:var(--danger);margin-bottom:2px">${escapeHtml(f.path || f.item_id)}: ${escapeHtml(f.message)}</div>`).join('')}</div>
-        </details>` : '';
-      const remainingDetail = remainingSafe || remainingReview
-        ? `<div style="margin-top:8px;color:${remainingSafe ? 'var(--danger)' : 'var(--muted)'}">${remainingSafe} safe rename${remainingSafe === 1 ? '' : 's'} and ${remainingReview} review rename${remainingReview === 1 ? '' : 's'} still pending.</div>`
-        : '';
-      return `
-        <div style="background:var(--accent-glow);border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);border-radius:12px;padding:14px 18px;margin-bottom:16px">
-          <div style="font-weight:600;margin-bottom:6px">${complete ? 'Apply complete' : 'Apply needs review'}</div>
-          <div style="display:flex;gap:20px;flex-wrap:wrap">
-            <span style="color:var(--accent)">&#10003; ${applied.length} applied</span>
-            <span style="color:var(--muted)">${skipped.length} skipped</span>
-            ${failed.length > 0 ? `<span style="color:var(--danger)">&#10007; ${failed.length} failed</span>` : ''}
-          </div>
-          ${remainingDetail}
-          ${failedDetail}
-        </div>`;
-    }
-
-    function buildProposedFileTree(payload) {
-      const source = payload.source_root || '';
-      const sep = source.endsWith('/') ? source : source + '/';
-      const changes = selectedProposedChanges(payload);
-      const folderRenames = {};
-      const fileRenames = {};
-      for (const c of changes) {
-        if (c.change_type === 'folder_rename') folderRenames[c.current_value] = c.proposed_value;
-        if (c.change_type === 'file_rename') fileRenames[c.path] = c.proposed_value;
-      }
-      const tree = {};
-      for (const track of (payload.tracks || [])) {
-        const absPath = track.path;
-        const relPath = absPath.startsWith(sep) ? absPath.slice(sep.length) : absPath;
-        if (!isPathAffectedBySelectedChanges(absPath, relPath, changes)) continue;
-        const slashIdx = relPath.lastIndexOf('/');
-        const relDir = slashIdx >= 0 ? relPath.slice(0, slashIdx) : '';
-        const filename = slashIdx >= 0 ? relPath.slice(slashIdx + 1) : relPath;
-        let proposedDir = relDir;
-        const orderedFolderRenames = Object.entries(folderRenames).sort((a, b) => b[0].length - a[0].length);
-        for (const [cur, prop] of orderedFolderRenames) {
-          if (proposedDir === cur) { proposedDir = prop; continue; }
-          if (proposedDir.startsWith(cur + '/')) { proposedDir = prop + proposedDir.slice(cur.length); }
-        }
-        const proposedFilename = fileRenames[absPath] || filename;
-        const parts = proposedDir ? proposedDir.split('/') : [];
-        let node = tree;
-        for (const part of parts) {
-          if (!node[part]) node[part] = {};
-          node = node[part];
-        }
-        if (!node._files) node._files = [];
-        node._files.push(proposedFilename);
-      }
-      return tree;
-    }
-
-    function flattenTree(node, lines, depth) {
-      const keys = Object.keys(node).filter(k => k !== '_files').sort((a, b) => a.localeCompare(b));
-      for (const key of keys) {
-        lines.push({ label: key + '/', depth, type: 'dir' });
-        flattenTree(node[key], lines, depth + 1);
-      }
-      for (const file of (node._files || []).sort((a, b) => a.localeCompare(b))) {
-        lines.push({ label: file, depth, type: 'file' });
-      }
-    }
-
-    function showNormalizeTreeDetail(payload) {
-      if (!payload) {
-        detailPanel.innerHTML = '<div class="empty">Run Music / Normalize to preview the proposed structure.</div>';
-        return;
-      }
-      const selectedChanges = selectedProposedChanges(payload);
-      const tree = buildProposedFileTree(payload);
-      const lines = [];
-      flattenTree(tree, lines, 0);
-      const html = lines.map(line => {
-        const pad = line.depth * 14;
-        const isDir = line.type === 'dir';
-        return `<div style="padding-left:${pad}px;color:${isDir ? 'var(--accent)' : 'var(--ink)'};font-weight:${isDir ? 600 : 400};white-space:nowrap">${escapeHtml(line.label)}</div>`;
-      }).join('');
-      const folderMoves = selectedChanges.filter(c => c.change_type === 'folder_rename').length;
-      const fileRenames = selectedChanges.filter(c => c.change_type === 'file_rename').length;
-      detailPanel.innerHTML = `
-        <div style="margin-bottom:10px">
-          <div style="font-weight:600;margin-bottom:3px">Proposed Structure</div>
-          <div class="subtle" style="font-size:0.83em">${folderMoves} folder move${folderMoves !== 1 ? 's' : ''} &middot; ${fileRenames} file rename${fileRenames !== 1 ? 's' : ''}</div>
-        </div>
-        <div class="mono" style="font-size:0.8em;line-height:1.75;overflow:auto;max-height:62vh">
-          ${selectedChanges.length ? html : '<span class="subtle">Select changes to preview the proposed structure.</span>'}
-        </div>`;
-    }
-
-    function buildProposedMovieFileTree(payload) {
-      const selectedResults = selectedMovieNormalizeResults(payload);
-      if (selectedResults.length) {
-        const tree = {};
-        for (const result of selectedResults) {
-          addRelativeFileToTree(tree, result.proposed_value || result.current_value || '');
-        }
-        return tree;
-      }
-      const source = payload.source_root || '';
-      const sep = source.endsWith('/') ? source : source + '/';
-      const changes = selectedProposedChanges(payload);
-      const folderRenames = {};
-      const fileRenames = {};
-      const fileMoves = {};
-      for (const c of changes) {
-        if (c.change_type === 'folder_rename') folderRenames[c.current_value] = c.proposed_value;
-        if (c.change_type === 'file_rename') fileRenames[c.path] = c.proposed_value;
-        if (c.change_type === 'file_move') fileMoves[c.path] = c.proposed_value;
-      }
-      const tree = {};
-      for (const absPath of (payload.movie_files || [])) {
-        const relPath = absPath.startsWith(sep) ? absPath.slice(sep.length) : absPath;
-        if (!isPathAffectedBySelectedChanges(absPath, relPath, changes)) continue;
-        const moveRelPath = fileMoves[absPath];
-        if (moveRelPath) {
-          const slashIdx = moveRelPath.lastIndexOf('/');
-          const proposedDir = slashIdx >= 0 ? moveRelPath.slice(0, slashIdx) : '';
-          const proposedFilename = slashIdx >= 0 ? moveRelPath.slice(slashIdx + 1) : moveRelPath;
-          const parts = proposedDir ? proposedDir.split('/') : [];
-          let node = tree;
-          for (const part of parts) {
-            if (!node[part]) node[part] = {};
-            node = node[part];
-          }
-          if (!node._files) node._files = [];
-          node._files.push(proposedFilename);
-          continue;
-        }
-        const slashIdx = relPath.lastIndexOf('/');
-        const relDir = slashIdx >= 0 ? relPath.slice(0, slashIdx) : '';
-        const filename = slashIdx >= 0 ? relPath.slice(slashIdx + 1) : relPath;
-        let proposedDir = relDir;
-        const orderedFolderRenames = Object.entries(folderRenames).sort((a, b) => b[0].length - a[0].length);
-        for (const [cur, prop] of orderedFolderRenames) {
-          if (proposedDir === cur) { proposedDir = prop; continue; }
-          if (proposedDir.startsWith(cur + '/')) { proposedDir = prop + proposedDir.slice(cur.length); }
-        }
-        const proposedFilename = fileRenames[absPath] || filename;
-        const parts = proposedDir ? proposedDir.split('/') : [];
-        let node = tree;
-        for (const part of parts) {
-          if (!node[part]) node[part] = {};
-          node = node[part];
-        }
-        if (!node._files) node._files = [];
-        node._files.push(proposedFilename);
-      }
-      return tree;
-    }
-
-    function addRelativeFileToTree(tree, relPath) {
-      if (!relPath) return;
-      const slashIdx = relPath.lastIndexOf('/');
-      const relDir = slashIdx >= 0 ? relPath.slice(0, slashIdx) : '';
-      const filename = slashIdx >= 0 ? relPath.slice(slashIdx + 1) : relPath;
-      const parts = relDir ? relDir.split('/') : [];
-      let node = tree;
-      for (const part of parts) {
-        if (!node[part]) node[part] = {};
-        node = node[part];
-      }
-      if (!node._files) node._files = [];
-      node._files.push(filename);
-    }
-
-    function showMovieNormalizeTreeDetail(payload) {
-      if (!payload) {
-        detailPanel.innerHTML = '<div class="empty">Run Movies / Normalize to preview the proposed structure.</div>';
-        return;
-      }
-      const selectedChanges = selectedProposedChanges(payload);
-      const selectedResults = selectedMovieNormalizeResults(payload);
-      const tree = buildProposedMovieFileTree(payload);
-      const lines = [];
-      flattenTree(tree, lines, 0);
-      const html = lines.map(line => {
-        const pad = line.depth * 14;
-        const isDir = line.type === 'dir';
-        return `<div style="padding-left:${pad}px;color:${isDir ? 'var(--accent)' : 'var(--ink)'};font-weight:${isDir ? 600 : 400};white-space:nowrap">${escapeHtml(line.label)}</div>`;
-      }).join('');
-      const folderMoves = selectedChanges.filter(c => c.change_type === 'folder_rename').length;
-      const fileRenames = selectedChanges.filter(c => c.change_type === 'file_rename' || c.change_type === 'file_move').length;
-      const resultCount = selectedResults.length;
-      const summary = resultCount
-        ? `${resultCount} result${resultCount === 1 ? '' : 's'} selected &middot; ${folderMoves} folder move${folderMoves !== 1 ? 's' : ''} &middot; ${fileRenames} file rename${fileRenames !== 1 ? 's' : ''}`
-        : `${folderMoves} folder move${folderMoves !== 1 ? 's' : ''} &middot; ${fileRenames} file rename${fileRenames !== 1 ? 's' : ''}`;
-      detailPanel.innerHTML = `
-        <div style="margin-bottom:10px">
-          <div style="font-weight:600;margin-bottom:3px">Proposed Structure</div>
-          <div class="subtle" style="font-size:0.83em">${summary}</div>
-        </div>
-        <div class="mono" style="font-size:0.8em;line-height:1.75;overflow:auto;max-height:62vh">
-          ${selectedChanges.length || selectedResults.length ? html : '<span class="subtle">Select results to preview the proposed structure.</span>'}
-        </div>`;
-    }
-
-    function activeMovieNormalizePayload(payload) {
-      if (!payload) return payload;
-      const style = state.movieNamingStyle || payload.default_naming_style || payload.naming_style || 'concise';
-      const changesByStyle = payload.proposed_changes_by_naming_style || {};
-      const warningsByStyle = payload.warnings_by_naming_style || {};
-      const resultsByStyle = payload.movie_results_by_naming_style || {};
-      return {
-        ...payload,
-        naming_style: style,
-        proposed_changes: changesByStyle[style] || payload.proposed_changes || [],
-        warnings: warningsByStyle[style] || payload.warnings || [],
-        movie_results: resultsByStyle[style] || payload.movie_results || []
-      };
-    }
-
-    function selectedProposedChanges(payload) {
-      return (payload.proposed_changes || []).filter(c => state.selectedChangeIds.has(c.item_id));
-    }
-
-    function selectedMovieNormalizeResults(payload) {
-      return (payload.movie_results || []).filter(result => state.selectedNormalizeResultIds.has(result.result_id));
-    }
-
-    function isMovieNormalizeResultSelected(result) {
-      return state.selectedNormalizeResultIds.has(result.result_id)
-        || (!!result.actionable && (result.change_ids || []).every(id => state.selectedChangeIds.has(id)));
-    }
-
-    function movieNormalizeResultForChange(payload, change) {
-      return (payload.movie_results || []).find(result => (result.change_ids || []).includes(change.item_id));
-    }
-
-    function movieNormalizeResultsForConfidence(payload, confidence) {
-      return (payload.movie_results || []).filter(result => result.actionable && result.confidence === confidence);
-    }
-
-    function updateMovieNormalizeSelection(payload, rowType, resultId, changeId, checked) {
-      if (rowType === 'result') {
-        const result = (payload.movie_results || []).find(item => item.result_id === resultId);
-        if (!result) return;
-        if (checked) {
-          state.selectedNormalizeResultIds.add(result.result_id);
-          (result.change_ids || []).forEach(id => state.selectedChangeIds.add(id));
-        } else {
-          state.selectedNormalizeResultIds.delete(result.result_id);
-          removeMovieNormalizeResultChangeIds(payload, result);
-        }
-        return;
-      }
-      if (!changeId) return;
-      if (checked) state.selectedChangeIds.add(changeId);
-      else state.selectedChangeIds.delete(changeId);
-    }
-
-    function removeMovieNormalizeResultChangeIds(payload, result) {
-      for (const changeId of (result.change_ids || [])) {
-        const stillSelected = (payload.movie_results || []).some(item =>
-          item.result_id !== result.result_id
-          && state.selectedNormalizeResultIds.has(item.result_id)
-          && (item.change_ids || []).includes(changeId)
-        );
-        if (!stillSelected) state.selectedChangeIds.delete(changeId);
-      }
-    }
-
-    function toggleVisibleMovieNormalizeRows(payload, rows, deselect) {
-      for (const row of rows) {
-        if (row.type === 'result') {
-          updateMovieNormalizeSelection(payload, 'result', row.result.result_id, '', !deselect);
-        } else {
-          updateMovieNormalizeSelection(payload, 'change', '', row.change.item_id, !deselect);
-        }
-      }
-    }
-
-    function isPathAffectedBySelectedChanges(absPath, relPath, changes) {
-      return changes.some(change => {
-        if (change.change_type === 'file_rename' || change.change_type === 'file_move') {
-          return change.path === absPath;
-        }
-        if (change.change_type === 'folder_rename') {
-          const current = change.current_value || '';
-          return relPath === current || relPath.startsWith(current + '/');
-        }
-        return false;
-      });
-    }
-
-    function buildBitrateChart(dist, title) {
-      if (!dist || !dist.bins || dist.bins.length === 0) {
-        return '<div style="font-size:11px;color:var(--muted);padding:6px 0">' + title + ': no data</div>';
-      }
-      const bins = dist.bins;
-      const p10 = dist.p10, mean = dist.mean, p90 = dist.p90, p95 = dist.p95;
-
-      const maxBinKbps = Math.max.apply(null, bins.map(b => b.end_kbps));
-      const clipKbps = p95 ? Math.max(p95, mean || 0) : maxBinKbps;
-      const visibleBins = bins.filter(b => b.start_kbps <= clipKbps);
-      const overflowCount = bins.filter(b => b.start_kbps > clipKbps).reduce((s, b) => s + b.count, 0);
-
-      const W = 280, H = 78, ml = 12, mr = 12, mt = 18, mb = 9;
-      const pw = W - ml - mr, ph = H - mt - mb;
-      const baseY = mt + ph;
-      const maxKbps = clipKbps;
-      const maxCount = Math.max.apply(null, visibleBins.map(b => b.count));
-
-      const sx = k => ml + (k / maxKbps) * pw;
-      const sy = c => mt + ph * (1 - c / maxCount);
-      const binPts = visibleBins.map(b => [sx((b.start_kbps + Math.min(b.end_kbps, maxKbps)) / 2), sy(b.count)]);
-      const edgePts = [
-        [sx(visibleBins[0].start_kbps), baseY],
-        ...binPts,
-        [sx(Math.min(visibleBins[visibleBins.length - 1].end_kbps, maxKbps)), baseY]
-      ];
-
-      function smoothLine(ps) {
-        if (!ps.length) return '';
-        let d = 'M' + ps[0][0].toFixed(1) + ',' + ps[0][1].toFixed(1);
-        for (let i = 1; i < ps.length; i++) {
-          const cx = ((ps[i-1][0] + ps[i][0]) / 2).toFixed(1);
-          d += ' C' + cx + ',' + ps[i-1][1].toFixed(1) + ' ' + cx + ',' + ps[i][1].toFixed(1) + ' ' + ps[i][0].toFixed(1) + ',' + ps[i][1].toFixed(1);
-        }
-        return d;
-      }
-
-      const curveD = smoothLine(edgePts);
-      const areaD = curveD + ' Z';
-
-      function vline(kbps, label, clr) {
-        if (!kbps || kbps > maxKbps) return '';
-        const x = sx(kbps).toFixed(1);
-        return '<line x1="' + x + '" y1="' + mt + '" x2="' + x + '" y2="' + baseY + '" stroke="' + clr + '" stroke-width="1" stroke-dasharray="3,2" opacity="0.8"/>' +
-          '<text x="' + x + '" y="' + (mt - 9).toFixed(1) + '" text-anchor="middle" font-size="3.5" fill="' + clr + '">' + label + '</text>' +
-          '<text x="' + x + '" y="' + (mt - 3).toFixed(1) + '" text-anchor="middle" font-size="3.5" fill="' + clr + '">' + fmtM(kbps) + '</text>';
-      }
-
-      function fmtM(kbps) { return (kbps / 1000).toFixed(1) + ' Mbps'; }
-
-      const ticks = [0, 0.5, 1].map(f => {
-        const k = f * maxKbps;
-        return '<text x="' + sx(k).toFixed(1) + '" y="' + (baseY + 5).toFixed(1) + '" text-anchor="middle" font-size="3.5" fill="#6c675f">' + fmtM(k) + '</text>';
-      }).join('');
-
-      const overflowText = overflowCount
-        ? '<text x="' + (ml + pw) + '" y="' + (mt - 3).toFixed(1) + '" text-anchor="end" font-size="3.5" fill="#6c675f">+' + overflowCount + ' beyond ' + fmtM(clipKbps) + '</text>'
-        : '';
-
-      return '<div style="font-size:20px;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:6px">' + title + '</div>' +
-        '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;overflow:visible;font-family:Georgia,serif">' +
-          '<path d="' + areaD + '" fill="var(--accent)" opacity="0.13"/>' +
-          '<path d="' + curveD + '" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' +
-          '<line x1="' + ml + '" y1="' + baseY + '" x2="' + (ml + pw) + '" y2="' + baseY + '" stroke="var(--line)" stroke-width="1"/>' +
-          vline(p10, 'p10', 'var(--warn)') +
-          vline(mean, 'mean', 'var(--accent-2)') +
-          vline(p90, 'p90', 'var(--danger)') +
-          ticks +
-          overflowText +
-        '</svg>';
-    }
-
-    function buildBitrateBellCurve(payload) {
-      const histogram = payload && payload.histogram;
-      if (!histogram) return '<div class="empty">Run Movies / Dashboard to see bitrate distributions.</div>';
-      const snapshotNote = payload.dashboard_snapshot_only ? '<div class="subtle" style="margin-bottom:10px">Cached dashboard snapshot. Run Movies / Dashboard to rebuild after library changes.</div>' : '';
-      return '<div class="finding" style="padding:14px 16px 14px">' +
-        snapshotNote +
-        buildBitrateChart(histogram.video_bitrate_kbps, 'Video Bitrate') +
-        '<div style="margin-top:14px">' +
-        buildBitrateChart(histogram.audio_bitrate_kbps, 'Audio Bitrate') +
-        '</div></div>';
     }
 
     function renderMovieLibrary(payload) {
@@ -3892,597 +2695,6 @@ INDEX_HTML = """<!doctype html>
         setStatus(error.message, 'error');
         if (btn) btn.disabled = false;
       }
-    }
-
-    function renderMusicArtwork(payload) {
-      mainTagline.textContent = 'Browse album artists as local sidecar artwork. Missing artist images are shown in place.';
-
-      if (!payload) {
-        renderMetrics([]);
-        renderBars([]);
-        filterBar.innerHTML = '';
-        mainContent.innerHTML = '<div class="empty">Run Music / Artwork to browse album artist folders and sidecar artwork.</div>';
-        detailPanel.innerHTML = '<div class="empty">Run a scan first.</div>';
-        return;
-      }
-
-      const present = payload.present || [];
-      const missing = payload.missing || [];
-      const total = present.length + missing.length;
-
-      const LOW_SIZE = 30 * 1024;
-      const LOW_DIM = 300;
-      const lowQuality = present.filter(p => p.file_size_bytes > 0 && (p.file_size_bytes < LOW_SIZE || p.width < LOW_DIM || p.height < LOW_DIM));
-      const presentByArtist = new Map(present.map(item => [item.artist_name, item]));
-      const writable = present.filter(item => item.source === 'jellyfin');
-      const approved = Object.values(state.approvedArtworkCandidates);
-      const artists = [
-        ...present.map(item => ({ artist_name: item.artist_name, folder_path: item.folder_path, status: 'present', artwork: item })),
-        ...missing.map(item => ({ artist_name: item.artist_name, folder_path: item.folder_path, status: 'missing', artwork: null }))
-      ].sort((a, b) => a.artist_name.localeCompare(b.artist_name));
-
-      renderMetrics([
-        { value: String(total), label: 'album artists' },
-        { value: String(present.length), label: 'with image' },
-        { value: String(missing.length), label: 'missing image' },
-        { value: String(lowQuality.length), label: 'low quality' },
-      ]);
-      renderBars([
-        { label: 'with image', value: String(present.length), width: total ? (present.length / total) * 100 : 0 },
-        { label: 'missing image', value: String(missing.length), width: total ? (missing.length / total) * 100 : 0 },
-      ]);
-      renderFilters([
-        ['all', 'All'],
-        ['missing', 'Missing'],
-        ['present', 'With Image'],
-        ['low', 'Low Quality']
-      ]);
-
-      function qualityBadge(item) {
-        if (!item.width) return '';
-        const isLow = item.file_size_bytes < LOW_SIZE || item.width < LOW_DIM || item.height < LOW_DIM;
-        const label = item.width + '\xd7' + item.height;
-        const color = isLow ? 'var(--danger)' : 'var(--accent)';
-        return `<span style="font-size:10px;font-weight:600;color:${color};letter-spacing:0.03em">${label}</span>`;
-      }
-
-      const visibleArtists = artists.filter(artist => {
-        if (state.filter === 'missing') return artist.status === 'missing';
-        if (state.filter === 'present') return artist.status === 'present';
-        if (state.filter === 'low') {
-          const item = artist.artwork;
-          return item && item.file_size_bytes > 0 && (item.file_size_bytes < LOW_SIZE || item.width < LOW_DIM || item.height < LOW_DIM);
-        }
-        return true;
-      });
-
-      const artistTiles = visibleArtists.map(artist => {
-        const item = artist.artwork;
-        const isLow = item && item.file_size_bytes > 0 && (item.file_size_bytes < LOW_SIZE || item.width < LOW_DIM || item.height < LOW_DIM);
-        const imgPath = item ? (item.image_path || (item.folder_path + '/' + item.filename)) : '';
-        const imgSrc = item ? artworkImageUrl(imgPath, item) : '';
-        const sourceLabel = item ? artworkSourceLabel(item.source) || 'local' : '';
-        const sourceChip = item && isLowConfidenceArtworkSource(item.source) ? 'review' : 'safe';
-        return `
-          <button class="artist-tile" data-artist="${escapeHtml(artist.artist_name)}">
-            ${item ? `
-              <div class="artist-art" style="${isLow ? 'outline:3px solid rgba(138,51,65,0.65);outline-offset:-3px' : ''}">
-                <img src="${imgSrc}" alt="${escapeHtml(artist.artist_name)}" loading="lazy">
-              </div>
-            ` : '<div class="artist-art missing">Missing artist image</div>'}
-            <div class="artist-meta">
-              <div class="artist-name">${escapeHtml(artist.artist_name)}</div>
-              <div>${item ? `<span class="chip ${sourceChip}" style="font-size:0.72em">${escapeHtml(sourceLabel)}</span>` : state.approvedArtworkCandidates[artist.artist_name] ? '<span class="chip review" style="font-size:0.72em">approved</span>' : '<span class="chip high" style="font-size:0.72em">missing</span>'}${item ? qualityBadge(item) : ''}</div>
-              <div class="artist-path">${escapeHtml(artist.folder_path)}</div>
-            </div>
-          </button>
-        `;
-      }).join('');
-
-      mainContent.innerHTML = `
-        <div class="artist-toolbar">
-          <span class="subtle" id="artworkSelCount">${state.selectedArtistNames.size + approved.length} selected</span>
-          <button class="primary" id="artworkApplyBtn" ${state.selectedArtistNames.size + approved.length === 0 ? 'disabled' : ''}>Write Selected to Library</button>
-        </div>
-        ${writable.length > 0 ? `
-          <div class="artist-toolbar" style="margin-top:-4px">
-            <button class="secondary" id="artworkSelectWritable">Select Jellyfin</button>
-            <button class="secondary" id="artworkSelectNone">Select None</button>
-            <button class="secondary" id="artworkBackfillJellyfin">Backfill Jellyfin</button>
-            <span class="subtle">Writes cached Jellyfin images to album artist <span class="mono">artist.jpg</span> files.</span>
-          </div>
-        ` : `
-          <div class="artist-toolbar" style="margin-top:-4px">
-            <button class="secondary" id="artworkBackfillJellyfin">Backfill Jellyfin</button>
-          </div>
-        `}
-        <div class="artist-grid">
-          ${artistTiles || '<div class="empty">No album artists match this filter.</div>'}
-        </div>
-      `;
-
-      function updateArtworkSelection() {
-        const countEl = document.getElementById('artworkSelCount');
-        const approvedCount = Object.keys(state.approvedArtworkCandidates).length;
-        if (countEl) countEl.textContent = `${state.selectedArtistNames.size + approvedCount} selected`;
-        const btn = document.getElementById('artworkApplyBtn');
-        if (btn) btn.disabled = state.selectedArtistNames.size + approvedCount === 0;
-      }
-      document.getElementById('artworkSelectWritable')?.addEventListener('click', () => {
-        state.selectedArtistNames = new Set(writable.map(item => item.artist_name));
-        updateArtworkSelection();
-      });
-      document.getElementById('artworkSelectNone')?.addEventListener('click', () => {
-        state.selectedArtistNames = new Set();
-        updateArtworkSelection();
-      });
-      document.getElementById('artworkBackfillJellyfin')?.addEventListener('click', backfillJellyfinArtwork);
-      mainContent.querySelectorAll('.artist-tile').forEach(button => {
-        button.addEventListener('click', () => showArtworkArtistDetail(button.dataset.artist, artists, presentByArtist));
-        attachArtworkDropTarget(button, button.dataset.artist);
-      });
-      document.getElementById('artworkApplyBtn')?.addEventListener('click', applyArtwork);
-    }
-
-    function showArtworkArtistDetail(artistName, artists, presentByArtist) {
-      const artist = artists.find(item => item.artist_name === artistName);
-      if (!artist) return;
-      const item = presentByArtist.get(artistName);
-      const imgPath = item ? (item.image_path || (item.folder_path + '/' + item.filename)) : '';
-      const imgSrc = item ? artworkImageUrl(imgPath, item) : '';
-      const sourceLabel = item?.source === 'jellyfin' ? 'jellyfin metadata' : isLowConfidenceArtworkSource(item?.source) ? artworkSourceLabel(item.source) : 'local sidecar';
-      const sourceChip = item && isLowConfidenceArtworkSource(item.source) ? 'review' : 'safe';
-      const approved = state.approvedArtworkCandidates[artistName];
-      const previewSrc = approved ? candidatePreviewUrl(approved) : imgSrc;
-      const candidates = state.artworkCandidates[artistName] || [];
-      const imageSearchOffset = state.artworkImageSearchOffsets[artistName] || 0;
-      detailPanel.innerHTML = `
-        <div class="finding">
-          <h3>${escapeHtml(artistName)}</h3>
-          <p class="mono">${escapeHtml(artist.folder_path)}</p>
-          ${item ? `
-            <div style="width:100%;max-width:340px;aspect-ratio:1/1;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#eee6d8;margin:12px 0">
-              <img src="${escapeHtml(previewSrc)}" alt="${escapeHtml(artistName)}" style="width:100%;height:100%;object-fit:cover">
-            </div>
-            <div class="artwork-drop-zone" id="artworkDropZone">Drop image or image URL here</div>
-            ${approved ? `
-              <p><span class="chip review">approved candidate</span> ${escapeHtml(artworkSourceLabel(approved.source))}</p>
-              <p class="subtle">${escapeHtml(approved.title || '')}</p>
-              <p class="subtle">Current: ${escapeHtml(sourceLabel)} · ${escapeHtml(item.filename)}${item.width && item.height ? ` · ${item.width}\xd7${item.height}` : ''}</p>
-              <button class="primary" id="saveArtworkCandidate">Approve & Save</button>
-              <button class="secondary" id="clearArtworkCandidate">Clear Approval</button>
-            ` : `
-              <p><span class="chip ${sourceChip}">${escapeHtml(sourceLabel)}</span> ${escapeHtml(item.filename)}</p>
-              ${item.source === 'jellyfin' ? `<p class="mono subtle">${escapeHtml(imgPath)}</p>` : ''}
-              <p class="subtle">${item.width && item.height ? `${item.width}\xd7${item.height}` : 'dimensions unknown'} &middot; ${Math.round((item.file_size_bytes || 0) / 1024)} KB</p>
-            `}
-            <div class="artist-toolbar" style="margin-top:12px">
-              <button class="primary" id="findArtworkCandidates">Find Candidates</button>
-            </div>
-          ` : `
-            ${approved ? `
-              <div style="width:100%;max-width:340px;aspect-ratio:1/1;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:#eee6d8;margin:12px 0">
-                <img src="${escapeHtml(candidatePreviewUrl(approved))}" alt="${escapeHtml(artistName)} candidate" style="width:100%;height:100%;object-fit:cover">
-              </div>
-              <div class="artwork-drop-zone" id="artworkDropZone">Drop image or image URL here</div>
-              <p><span class="chip review">approved candidate</span> ${escapeHtml(approved.source)}</p>
-              <p class="subtle">${escapeHtml(approved.title || '')}</p>
-              <button class="primary" id="saveArtworkCandidate">Approve & Save</button>
-              <button class="secondary" id="clearArtworkCandidate">Clear Approval</button>
-            ` : `
-              <div class="artist-art missing" style="width:100%;max-width:340px;aspect-ratio:1/1;border:1px dashed var(--line);border-radius:8px;margin:12px 0">Missing artist image</div>
-              <div class="artwork-drop-zone" id="artworkDropZone">Drop image or image URL here</div>
-              <p><span class="chip high">missing</span> Add <span class="mono">artist.jpg</span> to this album artist folder.</p>
-            `}
-            <div class="artist-toolbar" style="margin-top:12px">
-              <button class="primary" id="findArtworkCandidates">Find Candidates</button>
-            </div>
-          `}
-          ${renderArtworkCandidateSections(artistName, candidates, imageSearchOffset)}
-        </div>
-      `;
-      document.getElementById('findArtworkCandidates')?.addEventListener('click', () => findArtworkCandidates(artistName, artists, presentByArtist));
-      document.getElementById('clearArtworkCandidate')?.addEventListener('click', () => {
-        delete state.approvedArtworkCandidates[artistName];
-        renderCurrentPage();
-        showArtworkArtistDetail(artistName, artists, presentByArtist);
-      });
-      document.getElementById('saveArtworkCandidate')?.addEventListener('click', () => applySingleArtworkCandidate(artistName));
-      document.getElementById('previousImageSearchCandidates')?.addEventListener('click', () => previousImageSearchCandidates(artistName, artists, presentByArtist));
-      document.getElementById('nextImageSearchCandidates')?.addEventListener('click', () => nextImageSearchCandidates(artistName, artists, presentByArtist));
-      const dropZone = document.getElementById('artworkDropZone');
-      if (dropZone) attachArtworkDropTarget(dropZone, artistName);
-      detailPanel.querySelectorAll('.artwork-candidate').forEach(button => {
-        button.addEventListener('click', () => {
-          const candidate = (state.artworkCandidates[artistName] || []).find(item => item.image_url === button.dataset.candidate);
-          if (!candidate) return;
-          state.approvedArtworkCandidates[artistName] = candidate;
-          renderCurrentPage();
-          showArtworkArtistDetail(artistName, artists, presentByArtist);
-        });
-      });
-    }
-
-    function renderArtworkCandidateSections(artistName, candidates, imageSearchOffset) {
-      const regularCandidates = candidates.filter(candidate => candidate.source !== 'image-search');
-      const bingCandidates = candidates.filter(candidate => candidate.source === 'image-search');
-      return [
-        renderArtworkCandidateSection('Artwork candidates', artistName, regularCandidates),
-        renderArtworkCandidateSection('Bing image search', artistName, bingCandidates, {
-          actions: [
-            imageSearchOffset ? { id: 'previousImageSearchCandidates', label: 'Back' } : null,
-            { id: 'nextImageSearchCandidates', label: 'Next' },
-          ].filter(Boolean),
-          meta: imageSearchOffset ? `showing ${imageSearchOffset + 1}-${imageSearchOffset + bingCandidates.length}` : '',
-        }),
-      ].join('');
-    }
-
-    function renderArtworkCandidateSection(title, artistName, candidates, options = {}) {
-      if (!candidates.length) return '';
-      return `
-        <section class="candidate-section">
-          <div class="candidate-section-heading">
-            <h4>${escapeHtml(title)}</h4>
-            <div>
-              ${options.meta ? `<span class="subtle" style="font-size:12px;margin-right:8px">${escapeHtml(options.meta)}</span>` : ''}
-              ${(options.actions || []).map(action => `<button class="secondary" id="${escapeHtml(action.id)}" style="padding:6px 10px;font-size:12px;margin-left:6px">${escapeHtml(action.label)}</button>`).join('')}
-            </div>
-          </div>
-          <div class="artist-grid" style="grid-template-columns:repeat(auto-fill,minmax(118px,1fr))">
-            ${candidates.map(candidate => renderArtworkCandidateCard(artistName, candidate)).join('')}
-          </div>
-        </section>
-      `;
-    }
-
-    function renderArtworkCandidateCard(artistName, candidate) {
-      return `
-        <button class="artist-tile artwork-candidate" data-artist="${escapeHtml(artistName)}" data-candidate="${escapeHtml(candidate.image_url)}">
-          <div class="artist-art"><img src="${escapeHtml(candidatePreviewUrl(candidate))}" alt="${escapeHtml(candidate.title)}" loading="lazy"></div>
-          <div class="artist-meta">
-            <div class="artist-name">${escapeHtml(candidate.title || candidate.source)}</div>
-            <div><span class="chip review" style="font-size:0.72em">${escapeHtml(artworkSourceLabel(candidate.source))}</span></div>
-          </div>
-        </button>
-      `;
-    }
-
-    function attachArtworkDropTarget(element, artistName) {
-      element.addEventListener('dragover', event => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
-        element.classList.add('dragover');
-      });
-      element.addEventListener('dragleave', () => {
-        element.classList.remove('dragover');
-      });
-      element.addEventListener('drop', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        element.classList.remove('dragover');
-        approveDroppedArtwork(event.dataTransfer, artistName);
-      });
-    }
-
-    function approveDroppedArtwork(dataTransfer, artistName) {
-      const file = Array.from(dataTransfer.files || []).find(item => item.type && item.type.startsWith('image/'));
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = () => {
-          approveArtworkCandidate(artistName, {
-            artist_name: artistName,
-            folder_path: artworkArtistFolderPath(artistName),
-            source: 'drop',
-            title: file.name || 'dropped image',
-            preview_url: String(reader.result || ''),
-            image_url: String(reader.result || ''),
-            page_url: ''
-          });
-        };
-        reader.onerror = () => setStatus('Could not read dropped image file.', 'error');
-        reader.readAsDataURL(file);
-        return;
-      }
-
-      const url = droppedArtworkUrl(dataTransfer);
-      if (!url) {
-        setStatus('Drop an image file or a direct image URL.', 'error');
-        return;
-      }
-      approveArtworkCandidate(artistName, {
-        artist_name: artistName,
-        folder_path: artworkArtistFolderPath(artistName),
-        source: 'drop',
-        title: urlHostLabel(url),
-        preview_url: url,
-        image_url: url,
-        page_url: url
-      });
-    }
-
-    function approveArtworkCandidate(artistName, candidate) {
-      state.approvedArtworkCandidates[artistName] = candidate;
-      setStatus(`${artistName} replacement approved from drop.`, 'idle');
-      renderCurrentPage();
-      showArtworkArtistDetailFromPayload(artistName);
-    }
-
-    function artworkArtistFolderPath(artistName) {
-      const payload = state.results.music.artwork;
-      const item = (payload?.present || []).find(item => item.artist_name === artistName)
-        || (payload?.missing || []).find(item => item.artist_name === artistName);
-      return item?.folder_path || '';
-    }
-
-    function droppedArtworkUrl(dataTransfer) {
-      const uriList = dataTransfer.getData('text/uri-list').split(/\\r?\\n/).find(line => line && !line.startsWith('#'));
-      if (isDroppableArtworkUrl(uriList)) return uriList;
-      const plain = dataTransfer.getData('text/plain').trim();
-      if (isDroppableArtworkUrl(plain)) return plain;
-      const htmlPayload = dataTransfer.getData('text/html');
-      const match = htmlPayload.match(/<img[^>]+src=["']([^"']+)["']/i);
-      if (match && isDroppableArtworkUrl(match[1])) return match[1];
-      return '';
-    }
-
-    function isDroppableArtworkUrl(value) {
-      try {
-        return new URL(value || '').protocol === 'https:';
-      } catch {
-        return false;
-      }
-    }
-
-    function urlHostLabel(url) {
-      try {
-        return new URL(url).hostname || 'dropped image URL';
-      } catch {
-        return 'dropped image URL';
-      }
-    }
-
-    function candidatePreviewUrl(candidate) {
-      if (!candidate) return '';
-      if (candidate.preview_url && candidate.preview_url.startsWith('data:image/')) return candidate.preview_url;
-      if (candidate.preview_url && candidate.preview_url.startsWith('https://')) return candidate.preview_url;
-      const path = candidate.preview_url || candidate.image_url || '';
-      return '/api/music/artwork/image?path=' + encodeURIComponent(path);
-    }
-
-    function artworkImageUrl(path, item) {
-      const version = item?.mtime_ns || item?.image_cache_key || [item?.file_size_bytes || 0, item?.width || 0, item?.height || 0].join('-');
-      return '/api/music/artwork/image?path=' + encodeURIComponent(path) + '&v=' + encodeURIComponent(version);
-    }
-
-    async function findArtworkCandidates(artistName, artists, presentByArtist) {
-      const source = sourceInput.value.trim();
-      if (!source) return;
-      setStatus(`Finding artwork candidates for ${artistName}…`, 'running');
-      try {
-        const response = await fetch('/api/music/artwork/candidates', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, artist_name: artistName })
-        });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'Candidate search failed.');
-        state.artworkCandidates[artistName] = (payload.candidates || []).map(candidate => (
-          candidate.source === 'image-search' ? { ...candidate, search_offset: 0 } : candidate
-        ));
-        state.artworkImageSearchOffsets[artistName] = 0;
-        setStatus(`Found ${state.artworkCandidates[artistName].length} candidate${state.artworkCandidates[artistName].length !== 1 ? 's' : ''} for ${artistName}.`, 'idle');
-        showArtworkArtistDetail(artistName, artists, presentByArtist);
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    }
-
-    async function nextImageSearchCandidates(artistName, artists, presentByArtist) {
-      const currentOffset = state.artworkImageSearchOffsets[artistName] || 0;
-      await loadImageSearchCandidates(artistName, artists, presentByArtist, currentOffset + 8, 'next');
-    }
-
-    async function previousImageSearchCandidates(artistName, artists, presentByArtist) {
-      const currentOffset = state.artworkImageSearchOffsets[artistName] || 0;
-      await loadImageSearchCandidates(artistName, artists, presentByArtist, Math.max(currentOffset - 8, 0), 'previous');
-    }
-
-    async function loadImageSearchCandidates(artistName, artists, presentByArtist, offset, direction) {
-      const source = sourceInput.value.trim();
-      if (!source) return;
-      setStatus(`Finding ${direction} Bing image results for ${artistName}…`, 'running');
-      try {
-        const response = await fetch('/api/music/artwork/image-search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, artist_name: artistName, offset })
-        });
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'Image search failed.');
-        const existing = state.artworkCandidates[artistName] || [];
-        const regularCandidates = existing.filter(candidate => candidate.source !== 'image-search');
-        const imageCandidates = (payload.candidates || []).map(candidate => ({ ...candidate, search_offset: offset }));
-        state.artworkCandidates[artistName] = regularCandidates.concat(imageCandidates);
-        state.artworkImageSearchOffsets[artistName] = offset;
-        setStatus(`Loaded ${imageCandidates.length} Bing image result${imageCandidates.length !== 1 ? 's' : ''} for ${artistName}.`, 'idle');
-        showArtworkArtistDetail(artistName, artists, presentByArtist);
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    }
-
-    async function applyArtwork() {
-      const source = sourceInput.value.trim();
-      const payload = state.results.music.artwork;
-      if (!source || !payload) return;
-
-      const items = (payload.present || [])
-        .filter(item => item.source === 'jellyfin' && state.selectedArtistNames.has(item.artist_name))
-        .map(item => item.artist_name);
-      const candidates = Object.values(state.approvedArtworkCandidates);
-      const candidateNames = new Set(candidates.map(candidate => candidate.artist_name));
-      const filteredItems = items.filter(name => !candidateNames.has(name));
-
-      if (filteredItems.length + candidates.length === 0) return;
-
-      const btn = document.getElementById('artworkApplyBtn');
-      if (btn) btn.disabled = true;
-      setStatus(`Writing artwork for ${filteredItems.length + candidates.length} artist${filteredItems.length + candidates.length !== 1 ? 's' : ''}…`, 'running');
-
-      try {
-        const response = await fetch('/api/music/artwork/apply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source,
-            items: filteredItems,
-            candidates
-          })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Apply failed.');
-
-        const resultItems = result.results || [];
-        const written = resultItems.filter(r => r.status === 'written').length;
-        const failed = resultItems.filter(r => r.status === 'failed').length;
-        setStatus(`Artwork write: ${written} written, ${failed} failed.`, 'idle');
-        applyArtworkResultsToPayload(resultItems, payload);
-
-        detailPanel.innerHTML = `
-          <div class="finding">
-            <h3>Apply Results</h3>
-            ${resultItems.map(r => `
-              <p>
-                <span class="chip ${r.status === 'written' ? (isLowConfidenceArtworkSource(r.source) ? 'review' : 'safe') : r.status === 'failed' ? 'high' : 'indexing'}" style="font-size:0.78em">${escapeHtml(r.status)}</span>
-                <span>${escapeHtml(r.artist_name)}</span>
-                ${r.source ? `<span class="subtle"> ${escapeHtml(artworkSourceLabel(r.source))}</span>` : ''}
-                ${r.message ? `<span class="subtle"> — ${escapeHtml(r.message)}</span>` : ''}
-              </p>
-            `).join('')}
-          </div>`;
-
-        renderCurrentPage();
-      } catch (error) {
-        setStatus(error.message, 'error');
-        if (btn) btn.disabled = false;
-      }
-    }
-
-    async function applySingleArtworkCandidate(artistName) {
-      const source = sourceInput.value.trim();
-      const payload = state.results.music.artwork;
-      const candidate = state.approvedArtworkCandidates[artistName];
-      if (!source || !payload || !candidate) return;
-
-      const btn = document.getElementById('saveArtworkCandidate');
-      if (btn) btn.disabled = true;
-      setStatus(`Writing artwork for ${artistName}…`, 'running');
-
-      try {
-        const response = await fetch('/api/music/artwork/apply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            source,
-            items: [],
-            candidates: [candidate]
-          })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Apply failed.');
-
-        const resultItems = result.results || [];
-        applyArtworkResultsToPayload(resultItems, payload);
-        const written = resultItems.some(r => r.status === 'written');
-        const failed = resultItems.find(r => r.status === 'failed');
-        if (failed) {
-          setStatus(`${artistName} artwork write failed: ${failed.message || 'unknown error'}`, 'error');
-        } else {
-          setStatus(`${artistName} artwork ${written ? 'saved' : 'not changed'}.`, 'idle');
-        }
-        renderCurrentPage();
-        showArtworkArtistDetailFromPayload(artistName);
-      } catch (error) {
-        setStatus(error.message, 'error');
-        if (btn) btn.disabled = false;
-      }
-    }
-
-    async function backfillJellyfinArtwork() {
-      const source = sourceInput.value.trim();
-      if (!source) return;
-      const btn = document.getElementById('artworkBackfillJellyfin');
-      if (btn) btn.disabled = true;
-      setStatus('Backfilling Jellyfin folder.jpg files…', 'running');
-      try {
-        const response = await fetch('/api/music/artwork/backfill-jellyfin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Backfill failed.');
-        setStatus(`Backfill complete: ${result.written.length} folder.jpg file${result.written.length !== 1 ? 's' : ''} written.`, 'idle');
-      } catch (error) {
-        setStatus(error.message, 'error');
-      } finally {
-        if (btn) btn.disabled = false;
-      }
-    }
-
-    function showArtworkArtistDetailFromPayload(artistName) {
-      const payload = state.results.music.artwork;
-      if (!payload) return;
-      const present = payload.present || [];
-      const missing = payload.missing || [];
-      const presentByArtist = new Map(present.map(item => [item.artist_name, item]));
-      const artists = [
-        ...present.map(item => ({ artist_name: item.artist_name, folder_path: item.folder_path, status: 'present', artwork: item })),
-        ...missing.map(item => ({ artist_name: item.artist_name, folder_path: item.folder_path, status: 'missing', artwork: null }))
-      ].sort((a, b) => a.artist_name.localeCompare(b.artist_name));
-      showArtworkArtistDetail(artistName, artists, presentByArtist);
-    }
-
-    function applyArtworkResultsToPayload(results, payload) {
-      if (!payload) return;
-      payload.present = payload.present || [];
-      payload.missing = payload.missing || [];
-      results.filter(result => result.status === 'written').forEach(result => {
-        const imagePath = result.folder_path + '/artist.jpg';
-        payload.missing = payload.missing.filter(item => item.artist_name !== result.artist_name);
-        payload.present = payload.present.filter(item => item.artist_name !== result.artist_name);
-        payload.present.push({
-          artist_name: result.artist_name,
-          folder_path: result.folder_path,
-          filename: 'artist.jpg',
-          image_path: imagePath,
-          source: result.source || 'local',
-          file_size_bytes: result.file_size_bytes || 0,
-          width: result.width || 0,
-          height: result.height || 0,
-          mtime_ns: result.mtime_ns || 0,
-          image_cache_key: result.mtime_ns || Date.now()
-        });
-        state.selectedArtistNames.delete(result.artist_name);
-        delete state.approvedArtworkCandidates[result.artist_name];
-        delete state.artworkCandidates[result.artist_name];
-        delete state.artworkImageSearchOffsets[result.artist_name];
-      });
-    }
-
-    function isLowConfidenceArtworkSource(source) {
-      return source === 'web' || source === 'album' || source === 'wikimedia' || source === 'image-search' || source === 'drop';
-    }
-
-    function artworkSourceLabel(source) {
-      if (source === 'web') return 'low confidence web';
-      if (source === 'album') return 'low confidence album';
-      if (source === 'wikimedia') return 'low confidence wikimedia';
-      if (source === 'image-search') return 'low confidence Bing';
-      if (source === 'drop') return 'low confidence dropped image';
-      if (source === 'jellyfin') return 'jellyfin';
-      return source || '';
     }
 
     function renderPlaceholder(title, bullets) {
@@ -6504,112 +4716,6 @@ INDEX_HTML = """<!doctype html>
       }
     }
 
-    function buildMusicNormalizeMetrics(payload) {
-      if (!payload) return [];
-      const safe = (payload.proposed_changes || []).filter(change => change.confidence === 'safe').length;
-      const review = (payload.proposed_changes || []).filter(change => change.confidence === 'review').length;
-      return [
-        { value: String((payload.proposed_changes || []).length), label: 'planned changes' },
-        { value: String(safe), label: 'safe changes' },
-        { value: String(review), label: 'review changes' },
-        { value: String((payload.warnings || []).length), label: 'warnings' }
-      ];
-    }
-
-    function buildMusicDashboardMetrics(payload) {
-      if (!payload) return [];
-      const histogram = payload.histogram || {};
-      const profileCounts = histogram.profile_counts || {};
-      const topProfile = Object.entries(profileCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '-';
-      return [
-        { value: String(histogram.track_count ?? (payload.tracks || []).length), label: 'tracks scanned' },
-        { value: String(histogram.album_count ?? 0), label: 'albums' },
-        { value: String(histogram.artist_count ?? 0), label: 'album artists' },
-        { value: humanMusicProfileLabel(topProfile), label: 'top profile' }
-      ];
-    }
-
-    function buildMusicDashboardBars(payload) {
-      if (!payload) return [];
-      const counts = payload.histogram?.profile_counts || {};
-      const entries = Object.entries(counts).sort((a, b) => musicProfileRank(a[0]) - musicProfileRank(b[0]));
-      const max = Math.max(...entries.map(([, value]) => value), 1);
-      return entries.map(([key, value]) => ({ label: humanMusicProfileLabel(key), value: String(value), width: (value / max) * 100 }));
-    }
-
-    function humanMusicProfileLabel(label) {
-      if (label === 'mp3_trash') return 'MP3 Trash';
-      if (label === 'mp3_high_quality') return 'MP3 High Quality';
-      if (label === 'flac_other') return 'FLAC Other';
-      if (label === 'flac_44_1') return 'FLAC 44.1 kHz';
-      if (label === 'flac_16_44_1') return 'FLAC 16-bit / 44.1 kHz';
-      if (label === 'flac_24_44_1') return 'FLAC 24-bit / 44.1 kHz';
-      if (label === 'flac_48') return 'FLAC 48 kHz';
-      if (label === 'flac_16_48') return 'FLAC 16-bit / 48 kHz';
-      if (label === 'flac_24_48') return 'FLAC 24-bit / 48 kHz';
-      if (label === 'flac_88_2') return 'FLAC 88.2 kHz';
-      if (label === 'flac_16_88_2') return 'FLAC 16-bit / 88.2 kHz';
-      if (label === 'flac_24_88_2') return 'FLAC 24-bit / 88.2 kHz';
-      if (label === 'flac_96') return 'FLAC 96 kHz';
-      if (label === 'flac_16_96') return 'FLAC 16-bit / 96 kHz';
-      if (label === 'flac_24_96') return 'FLAC 24-bit / 96 kHz';
-      if (label === 'flac_176_4') return 'FLAC 176.4 kHz';
-      if (label === 'flac_16_176_4') return 'FLAC 16-bit / 176.4 kHz';
-      if (label === 'flac_24_176_4') return 'FLAC 24-bit / 176.4 kHz';
-      if (label === 'flac_192') return 'FLAC 192 kHz';
-      if (label === 'flac_16_192') return 'FLAC 16-bit / 192 kHz';
-      if (label === 'flac_24_192') return 'FLAC 24-bit / 192 kHz';
-      if (label === 'unknown_unreadable') return 'Unknown / Unreadable';
-      return label || '—';
-    }
-
-    function musicProfileRank(label) {
-      const order = [
-        'mp3_trash', 'mp3_high_quality', 'flac_other',
-        'flac_44_1', 'flac_16_44_1', 'flac_24_44_1',
-        'flac_48', 'flac_16_48', 'flac_24_48',
-        'flac_88_2', 'flac_16_88_2', 'flac_24_88_2',
-        'flac_96', 'flac_16_96', 'flac_24_96',
-        'flac_176_4', 'flac_16_176_4', 'flac_24_176_4',
-        'flac_192', 'flac_16_192', 'flac_24_192',
-        'unknown_unreadable'
-      ];
-      const index = order.indexOf(label);
-      return index === -1 ? 98 : index;
-    }
-
-    function musicProfileGroup(label) {
-      if (label.startsWith('flac')) return 'FLAC';
-      if (label.startsWith('mp3')) return 'MP3';
-      return 'Unknown';
-    }
-
-    function formatDashboardSize(bytes) {
-      if (!bytes) return '—';
-      if (bytes >= 1e12) return (bytes / 1e12).toFixed(1) + ' TB';
-      if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
-      return (bytes / 1e6).toFixed(1) + ' MB';
-    }
-
-    function buildMusicNormalizeBars(payload) {
-      if (!payload) return [];
-      const total = Math.max((payload.proposed_changes || []).length, 1);
-      const safe = (payload.proposed_changes || []).filter(change => change.confidence === 'safe').length;
-      const review = (payload.proposed_changes || []).filter(change => change.confidence === 'review').length;
-      return [
-        { label: 'safe', value: String(safe), width: (safe / total) * 100 },
-        { label: 'review', value: String(review), width: (review / total) * 100 }
-      ];
-    }
-
-    function filteredMusicChanges(payload) {
-      if (!payload) return [];
-      if (state.filter === 'warnings') return [];
-      const changes = payload.proposed_changes || [];
-      if (state.filter === 'all') return changes;
-      return changes.filter(change => change.confidence === state.filter);
-    }
-
     function buildMovieMetrics(payload) {
       if (!payload) return [];
       const histogram = payload.histogram || {};
@@ -6782,40 +4888,38 @@ def library_roots_path() -> Path:
 def load_library_roots() -> dict[str, Any]:
     path = library_roots_path()
     if not path.exists():
-        return {"music": "", "movies": "", "recent": []}
+        return {"movies": "", "recent": []}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            return {"music": "", "movies": "", "recent": []}
-        music = data.get("music") if isinstance(data.get("music"), str) else ""
+            return {"movies": "", "recent": []}
         movies = data.get("movies") if isinstance(data.get("movies"), str) else ""
         recent = data.get("recent") if isinstance(data.get("recent"), list) else []
         recent = [
             r for r in recent
             if isinstance(r, dict)
-            and r.get("lane") in {"music", "movies"}
+            and r.get("lane") == "movies"
             and isinstance(r.get("source"), str)
             and r["source"]
         ][:2]
-        return {"music": music, "movies": movies, "recent": recent}
+        return {"movies": movies, "recent": recent}
     except (OSError, json.JSONDecodeError):
-        return {"music": "", "movies": "", "recent": []}
+        return {"movies": "", "recent": []}
 
 
 def save_library_roots(data: dict[str, Any]) -> None:
     path = library_roots_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    music = data.get("music") if isinstance(data.get("music"), str) else ""
     movies = data.get("movies") if isinstance(data.get("movies"), str) else ""
     recent = data.get("recent") if isinstance(data.get("recent"), list) else []
     recent = [
         r for r in recent
         if isinstance(r, dict)
-        and r.get("lane") in {"music", "movies"}
+        and r.get("lane") == "movies"
         and isinstance(r.get("source"), str)
         and r["source"]
     ][:2]
-    payload = json.dumps({"music": music, "movies": movies, "recent": recent}, indent=2) + "\n"
+    payload = json.dumps({"movies": movies, "recent": recent}, indent=2) + "\n"
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as handle:
         handle.write(payload)
         temp_path = Path(handle.name)
@@ -6867,9 +4971,6 @@ def build_handler(
                     self.respond_json(load_library_roots())
                 except Exception as exc:
                     self.respond_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-                return
-            if self.path.startswith("/api/music/artwork/image"):
-                self.handle_artwork_image()
                 return
             if self.path not in {"/", "/index.html"}:
                 self.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
@@ -6961,42 +5062,6 @@ def build_handler(
                 if route == "/api/movies/subtitle-readiness/history/dismiss":
                     self.handle_movies_subtitle_readiness_history_dismiss(payload)
                     return
-                if route == "/api/music/replacement-queue/list":
-                    self.handle_music_replacement_queue_list(payload)
-                    return
-                if route == "/api/music/replacement-queue/add":
-                    self.handle_music_replacement_queue_add(payload)
-                    return
-                if route == "/api/music/replacement-queue/delete":
-                    self.handle_music_replacement_queue_delete(payload)
-                    return
-                if route == "/api/music/profile":
-                    self.handle_music_profile(payload)
-                    return
-                if route == "/api/music/normalize":
-                    self.handle_music_normalize(payload)
-                    return
-                if route == "/api/music/apply":
-                    self.handle_music_apply(payload)
-                    return
-                if route == "/api/music/artwork/scan":
-                    self.handle_music_artwork_scan(payload)
-                    return
-                if route == "/api/music/artwork/candidates":
-                    self.handle_music_artwork_candidates(payload)
-                    return
-                if route == "/api/music/artwork/image-search":
-                    self.handle_music_artwork_image_search(payload)
-                    return
-                if route == "/api/music/artwork/apply":
-                    self.handle_music_artwork_apply(payload)
-                    return
-                if route == "/api/music/artwork/backfill-jellyfin":
-                    self.handle_music_artwork_backfill_jellyfin(payload)
-                    return
-                if route == "/api/music/artwork/promote":
-                    self.handle_music_artwork_promote(payload)
-                    return
                 self.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             except RequestConflictError as exc:
                 self.respond_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
@@ -7083,34 +5148,6 @@ def build_handler(
             if not isinstance(items, list):
                 raise ValueError("items must be a list")
             self.respond_json(lookup_omdb_ratings([item for item in items if isinstance(item, dict)], omdb_key))
-
-        def handle_music_profile(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with guarded_heavy_scan(source, "Music profile scan"):
-                with ACTIVITY_TRACKER.track(source, "Music profile scan"):
-                    report = scan_music_profiles(source)
-                    response = report.to_dict()
-                    response["histogram"] = build_music_histogram_payload(report)
-                    response["replacement_queue"] = music_reconcile_replacement_queue(source, response["tracks"])
-            self.respond_json(response)
-
-        def handle_music_replacement_queue_list(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            self.respond_json(music_queue_for_source(source))
-
-        def handle_music_replacement_queue_add(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            items = payload.get("items")
-            if not isinstance(items, list):
-                raise ValueError("items must be a list")
-            self.respond_json(music_add_profile_items_to_queue(source, items))
-
-        def handle_music_replacement_queue_delete(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            item_ids = payload.get("item_ids")
-            if not isinstance(item_ids, list):
-                raise ValueError("item_ids must be a list")
-            self.respond_json(music_delete_replacement_queue_media(source, item_ids))
 
         def handle_source_scan_warning(self, payload: dict[str, Any]) -> None:
             source = resolve_source_path(payload.get("source"), default_source=default_source)
@@ -7351,255 +5388,6 @@ def build_handler(
                 raise ValueError("item_ids must be a list")
             self.respond_json(dismiss_subtitle_history_items(source, item_ids))
 
-        def handle_music_normalize(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with ACTIVITY_TRACKER.track(source, "Music normalize plan"):
-                plan = build_plan(source)
-                response = plan.to_dict()
-                response["summary"] = summarize_music_plan(response)
-            self.respond_json(response)
-
-        def handle_music_apply(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            raw_changes = payload.get("changes", [])
-            if not isinstance(raw_changes, list):
-                raise ValueError("changes must be a list")
-            changes = [ProposedChange(**c) for c in raw_changes]
-            with ACTIVITY_TRACKER.track(source, "Music apply"):
-                report = apply_changes_in_place(source, changes)
-            self.respond_json(report.to_dict())
-
-        def handle_music_artwork_scan(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with ACTIVITY_TRACKER.track(source, "Music artwork scan"):
-                report = scan_artist_artwork(source)
-            self.respond_json(report.to_dict())
-
-        def handle_music_artwork_backfill_jellyfin(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            with ACTIVITY_TRACKER.track(source, "Music artwork backfill"):
-                result = backfill_jellyfin_artist_artwork(source)
-            self.respond_json(result)
-
-        def handle_music_artwork_candidates(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            artist_name = payload.get("artist_name")
-            if not isinstance(artist_name, str) or not artist_name.strip():
-                raise ValueError("artist_name is required")
-            with ACTIVITY_TRACKER.track(source, "Music artwork candidates"):
-                gap = self.find_artwork_gap(source, artist_name)
-                candidates = (
-                    find_album_artwork_candidates(gap)
-                    + search_wikimedia_artist_candidates(gap)
-                    + find_web_artist_candidates(gap)
-                    + find_image_search_artist_candidates(gap)
-                )
-            self.respond_json({
-                "source_root": str(source),
-                "artist_name": artist_name,
-                "candidates": [candidate.to_dict() for candidate in candidates],
-            })
-
-        def handle_music_artwork_image_search(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            artist_name = payload.get("artist_name")
-            if not isinstance(artist_name, str) or not artist_name.strip():
-                raise ValueError("artist_name is required")
-            raw_offset = payload.get("offset", 0)
-            if not isinstance(raw_offset, int):
-                raise ValueError("offset must be an integer")
-            offset = max(raw_offset, 0)
-            with ACTIVITY_TRACKER.track(source, "Music artwork image search"):
-                gap = self.find_artwork_gap(source, artist_name)
-                candidates = find_image_search_artist_candidates(gap, offset=offset)
-            self.respond_json({
-                "source_root": str(source),
-                "artist_name": artist_name,
-                "offset": offset,
-                "candidates": [candidate.to_dict() for candidate in candidates],
-            })
-
-        def find_artwork_gap(self, source: Path, artist_name: str) -> ArtworkGapItem:
-            report = scan_artist_artwork(source)
-            gap = next((item for item in report.missing if item.artist_name == artist_name), None)
-            if gap is None:
-                present = next((item for item in report.present if item.artist_name == artist_name), None)
-                if present is not None:
-                    gap = ArtworkGapItem(artist_name=present.artist_name, folder_path=present.folder_path)
-            if gap is None:
-                raise ValueError("artist was not found in the current artwork scan")
-            return gap
-
-        def handle_music_artwork_apply(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            requested_names = payload.get("items")
-            if not isinstance(requested_names, list):
-                raise ValueError("items must be a list of artist names")
-            requested_set = set(requested_names)
-            report = scan_artist_artwork(source)
-            candidates = [
-                item
-                for item in report.present
-                if item.source == "jellyfin" and item.artist_name in requested_set
-            ]
-            approved_candidates = payload.get("candidates", [])
-            if not isinstance(approved_candidates, list):
-                raise ValueError("candidates must be a list")
-            missing_by_name = {item.artist_name: item for item in report.missing}
-            present_by_name = {item.artist_name: item for item in report.present}
-            resolutions = [resolve_cached_artwork(item) for item in candidates]
-            replacement_resolutions = []
-            for candidate in approved_candidates:
-                if not isinstance(candidate, dict):
-                    continue
-                artist_name = candidate.get("artist_name")
-                image_url = candidate.get("image_url")
-                source_name = candidate.get("source", "remote")
-                if not isinstance(artist_name, str) or not isinstance(image_url, str):
-                    continue
-                gap = missing_by_name.get(artist_name)
-                if gap is None and artist_name in present_by_name:
-                    present_item = present_by_name[artist_name]
-                    gap = ArtworkGapItem(artist_name=present_item.artist_name, folder_path=present_item.folder_path)
-                if gap is None:
-                    continue
-                approved_gap = ArtworkGapItem(artist_name=gap.artist_name, folder_path=gap.folder_path)
-                if source_name == "album":
-                    candidate_path = Path(image_url).resolve()
-                    artist_folder = Path(gap.folder_path).resolve()
-                    try:
-                        candidate_path.relative_to(artist_folder)
-                    except ValueError:
-                        continue
-                    replacement_resolutions.append(resolve_file_artwork(
-                        approved_gap,
-                        str(candidate_path),
-                        "album",
-                        title=str(candidate.get("title") or candidate_path.name),
-                    ))
-                elif source_name == "web":
-                    rediscovered = {
-                        candidate.image_url
-                        for candidate in find_web_artist_candidates(gap)
-                    }
-                    if image_url not in rediscovered:
-                        continue
-                    replacement_resolutions.append(resolve_remote_artwork(
-                        approved_gap,
-                        image_url,
-                        "web",
-                        allowed_hosts=set(),
-                        title=str(candidate.get("title") or ""),
-                        page_url=str(candidate.get("page_url") or ""),
-                    ))
-                elif source_name == "image-search":
-                    search_offset = candidate.get("search_offset", 0)
-                    if not isinstance(search_offset, int):
-                        search_offset = 0
-                    rediscovered = {
-                        candidate.image_url
-                        for candidate in find_image_search_artist_candidates(gap, offset=search_offset)
-                    }
-                    if image_url not in rediscovered:
-                        continue
-                    replacement_resolutions.append(resolve_remote_artwork(
-                        approved_gap,
-                        image_url,
-                        "image-search",
-                        allowed_hosts=set(),
-                        title=str(candidate.get("title") or ""),
-                        page_url=str(candidate.get("page_url") or ""),
-                    ))
-                elif source_name == "drop":
-                    title = str(candidate.get("title") or "dropped image")
-                    if image_url.startswith("data:image/"):
-                        replacement_resolutions.append(resolve_data_url_artwork(
-                            approved_gap,
-                            image_url,
-                            "drop",
-                            title=title,
-                        ))
-                    else:
-                        replacement_resolutions.append(resolve_remote_artwork(
-                            approved_gap,
-                            image_url,
-                            "drop",
-                            allowed_hosts=set(),
-                            title=title,
-                            page_url=str(candidate.get("page_url") or ""),
-                        ))
-                else:
-                    replacement_resolutions.append(resolve_remote_artwork(
-                        approved_gap,
-                        image_url,
-                        str(source_name),
-                        title=str(candidate.get("title") or ""),
-                        page_url=str(candidate.get("page_url") or ""),
-                    ))
-            results = apply_artwork(resolutions, dry_run=False)
-            if replacement_resolutions:
-                results.extend(apply_artwork(replacement_resolutions, dry_run=False, overwrite=True))
-            result_payload = []
-            for result in results:
-                item = {
-                    "artist_name": result.artist_name,
-                    "folder_path": result.folder_path,
-                    "status": result.status,
-                    "source": result.source,
-                    "message": result.message,
-                }
-                if result.status == "written":
-                    image_path = Path(result.folder_path) / "artist.jpg"
-                    try:
-                        stat = image_path.stat()
-                        item["file_size_bytes"] = stat.st_size
-                        item["mtime_ns"] = stat.st_mtime_ns
-                        with Image.open(image_path) as img:
-                            item["width"], item["height"] = img.size
-                    except Exception:
-                        pass
-                result_payload.append(item)
-            self.respond_json({
-                "source_root": str(source),
-                "results": result_payload,
-            })
-
-        def handle_music_artwork_promote(self, payload: dict[str, Any]) -> None:
-            source = resolve_source_path(payload.get("source"), default_source=default_source)
-            folder_path = payload.get("folder_path")
-            if not isinstance(folder_path, str) or not folder_path.strip():
-                raise ValueError("folder_path is required")
-            folder = Path(folder_path).resolve()
-            try:
-                folder.relative_to(source.resolve())
-            except ValueError:
-                raise ValueError("folder_path is not within the source root")
-            provenance_file = folder / PROVENANCE_FILENAME
-            with ACTIVITY_TRACKER.track(source, "Music artwork promote"):
-                if provenance_file.exists():
-                    provenance_file.unlink()
-            self.respond_json({"ok": True, "folder_path": str(folder)})
-
-        def handle_artwork_image(self) -> None:
-            from urllib.parse import parse_qs, urlparse
-            qs = parse_qs(urlparse(self.path).query)
-            paths = qs.get("path", [])
-            if not paths:
-                self.respond_json({"error": "missing path"}, status=HTTPStatus.BAD_REQUEST)
-                return
-            img_path = Path(paths[0])
-            if not img_path.is_file():
-                self.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
-                return
-            suffix = img_path.suffix.lower()
-            mime = "image/jpeg" if suffix in (".jpg", ".jpeg") else "image/png" if suffix == ".png" else "image/jpeg"
-            data = img_path.read_bytes()
-            self.send_response(HTTPStatus.OK)
-            self.send_header("Content-Type", mime)
-            self.send_header("Content-Length", str(len(data)))
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            self.wfile.write(data)
 
         def read_json_body(self) -> dict[str, Any]:
             length = int(self.headers.get("Content-Length", "0"))
@@ -7617,18 +5405,6 @@ def build_handler(
             self.wfile.write(body)
 
     return Handler
-
-
-def summarize_music_plan(payload: dict[str, Any]) -> dict[str, Any]:
-    changes = payload.get("proposed_changes", [])
-    confidence_counts = Counter(change.get("confidence", "") for change in changes)
-    change_type_counts = Counter(change.get("change_type", "") for change in changes)
-    return {
-      "change_count": len(changes),
-      "confidence_counts": dict(confidence_counts),
-      "change_type_counts": dict(change_type_counts),
-      "warning_count": len(payload.get("warnings", [])),
-    }
 
 
 def resolve_source_path(raw_source: Any, default_source: Path | None = None) -> Path:

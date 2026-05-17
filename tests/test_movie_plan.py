@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from normal.apply import apply_changes_in_place
+from normal.movie_apply import apply_changes_in_place
 from normal.movie_plan import build_movie_plan, canonical_movie_base, parse_movie_name
 
 
