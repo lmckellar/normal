@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from normal.movie_profile import (
+    DEFAULT_MOVIE_STANDARDS,
     build_movie_profile_definitions,
     build_replacement_candidate_definition,
     build_histogram_payload,
@@ -80,6 +81,7 @@ class MovieProfileTests(unittest.TestCase):
             Path("/movies"),
             Path("/movies/The Matrix (1999) [1080p BluRay x264 GRP]/The Matrix (1999) [1080p BluRay x264 GRP].mkv"),
             facts,
+            standards=DEFAULT_MOVIE_STANDARDS,
         )
 
         self.assertNotEqual(item.profile.quality_label, "reference")

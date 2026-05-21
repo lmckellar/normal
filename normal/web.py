@@ -2239,6 +2239,90 @@ INDEX_HTML = """<!doctype html>
       }
     }
 
+    function buildBitrateChart(dist, title) {
+      if (!dist || !dist.bins || dist.bins.length === 0) {
+        return '<div style="font-size:11px;color:var(--muted);padding:6px 0">' + title + ': no data</div>';
+      }
+      const bins = dist.bins;
+      const p10 = dist.p10, mean = dist.mean, p90 = dist.p90, p95 = dist.p95;
+
+      const maxBinKbps = Math.max.apply(null, bins.map(b => b.end_kbps));
+      const clipKbps = p95 ? Math.max(p95, mean || 0) : maxBinKbps;
+      const visibleBins = bins.filter(b => b.start_kbps <= clipKbps);
+      const overflowCount = bins.filter(b => b.start_kbps > clipKbps).reduce((s, b) => s + b.count, 0);
+
+      const W = 280, H = 78, ml = 12, mr = 12, mt = 18, mb = 9;
+      const pw = W - ml - mr, ph = H - mt - mb;
+      const baseY = mt + ph;
+      const maxKbps = clipKbps;
+      const maxCount = Math.max.apply(null, visibleBins.map(b => b.count));
+
+      const sx = k => ml + (k / maxKbps) * pw;
+      const sy = c => mt + ph * (1 - c / maxCount);
+      const binPts = visibleBins.map(b => [sx((b.start_kbps + Math.min(b.end_kbps, maxKbps)) / 2), sy(b.count)]);
+      const edgePts = [
+        [sx(visibleBins[0].start_kbps), baseY],
+        ...binPts,
+        [sx(Math.min(visibleBins[visibleBins.length - 1].end_kbps, maxKbps)), baseY]
+      ];
+
+      function smoothLine(ps) {
+        if (!ps.length) return '';
+        let d = 'M' + ps[0][0].toFixed(1) + ',' + ps[0][1].toFixed(1);
+        for (let i = 1; i < ps.length; i++) {
+          const cx = ((ps[i-1][0] + ps[i][0]) / 2).toFixed(1);
+          d += ' C' + cx + ',' + ps[i-1][1].toFixed(1) + ' ' + cx + ',' + ps[i][1].toFixed(1) + ' ' + ps[i][0].toFixed(1) + ',' + ps[i][1].toFixed(1);
+        }
+        return d;
+      }
+
+      const curveD = smoothLine(edgePts);
+      const areaD = curveD + ' Z';
+
+      function vline(kbps, label, clr) {
+        if (!kbps || kbps > maxKbps) return '';
+        const x = sx(kbps).toFixed(1);
+        return '<line x1="' + x + '" y1="' + mt + '" x2="' + x + '" y2="' + baseY + '" stroke="' + clr + '" stroke-width="1" stroke-dasharray="3,2" opacity="0.8"/>' +
+          '<text x="' + x + '" y="' + (mt - 9).toFixed(1) + '" text-anchor="middle" font-size="3.5" fill="' + clr + '">' + label + '</text>' +
+          '<text x="' + x + '" y="' + (mt - 3).toFixed(1) + '" text-anchor="middle" font-size="3.5" fill="' + clr + '">' + fmtM(kbps) + '</text>';
+      }
+
+      function fmtM(kbps) { return (kbps / 1000).toFixed(1) + ' Mbps'; }
+
+      const ticks = [0, 0.5, 1].map(f => {
+        const k = f * maxKbps;
+        return '<text x="' + sx(k).toFixed(1) + '" y="' + (baseY + 5).toFixed(1) + '" text-anchor="middle" font-size="3.5" fill="#6c675f">' + fmtM(k) + '</text>';
+      }).join('');
+
+      const overflowText = overflowCount
+        ? '<text x="' + (ml + pw) + '" y="' + (mt - 3).toFixed(1) + '" text-anchor="end" font-size="3.5" fill="#6c675f">+' + overflowCount + ' beyond ' + fmtM(clipKbps) + '</text>'
+        : '';
+
+      return '<div style="font-size:20px;font-weight:800;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);margin-bottom:6px">' + title + '</div>' +
+        '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" style="display:block;overflow:visible;font-family:Georgia,serif">' +
+          '<path d="' + areaD + '" fill="var(--accent)" opacity="0.13"/>' +
+          '<path d="' + curveD + '" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+          '<line x1="' + ml + '" y1="' + baseY + '" x2="' + (ml + pw) + '" y2="' + baseY + '" stroke="var(--line)" stroke-width="1"/>' +
+          vline(p10, 'p10', 'var(--warn)') +
+          vline(mean, 'mean', 'var(--accent-2)') +
+          vline(p90, 'p90', 'var(--danger)') +
+          ticks +
+          overflowText +
+        '</svg>';
+    }
+
+    function buildBitrateBellCurve(payload) {
+      const histogram = payload && payload.histogram;
+      if (!histogram) return '<div class="empty">Run Movies / Dashboard to see bitrate distributions.</div>';
+      const snapshotNote = payload.dashboard_snapshot_only ? '<div class="subtle" style="margin-bottom:10px">Cached dashboard snapshot. Run Movies / Dashboard to rebuild after library changes.</div>' : '';
+      return '<div class="finding" style="padding:14px 16px 14px">' +
+        snapshotNote +
+        buildBitrateChart(histogram.video_bitrate_kbps, 'Video Bitrate') +
+        '<div style="margin-top:14px">' +
+        buildBitrateChart(histogram.audio_bitrate_kbps, 'Audio Bitrate') +
+        '</div></div>';
+    }
+
     function renderMovieLibrary(payload) {
       mainTagline.textContent = 'Collection overview: quality tier distribution, resolution breakdown, and at-a-glance diagnostics.';
       renderMetrics(buildMovieMetrics(payload));
@@ -2549,6 +2633,240 @@ INDEX_HTML = """<!doctype html>
       mainContent.innerHTML = buildMovieTable(filteredMovies(payload, state.filter));
       renderReplacementQueueDetail(payload);
       attachMovieReplacementHandlers(payload, []);
+    }
+
+    function activeMovieNormalizePayload(payload) {
+      if (!payload) return payload;
+      const style = state.movieNamingStyle || payload.default_naming_style || payload.naming_style || 'concise';
+      const changesByStyle = payload.proposed_changes_by_naming_style || {};
+      const warningsByStyle = payload.warnings_by_naming_style || {};
+      const resultsByStyle = payload.movie_results_by_naming_style || {};
+      return {
+        ...payload,
+        naming_style: style,
+        proposed_changes: changesByStyle[style] || payload.proposed_changes || [],
+        warnings: warningsByStyle[style] || payload.warnings || [],
+        movie_results: resultsByStyle[style] || payload.movie_results || []
+      };
+    }
+
+    function selectedProposedChanges(payload) {
+      return (payload.proposed_changes || []).filter(c => state.selectedChangeIds.has(c.item_id));
+    }
+
+    function selectedMovieNormalizeResults(payload) {
+      return (payload.movie_results || []).filter(result => state.selectedNormalizeResultIds.has(result.result_id));
+    }
+
+    function isMovieNormalizeResultSelected(result) {
+      return state.selectedNormalizeResultIds.has(result.result_id)
+        || (!!result.actionable && (result.change_ids || []).every(id => state.selectedChangeIds.has(id)));
+    }
+
+    function movieNormalizeResultForChange(payload, change) {
+      return (payload.movie_results || []).find(result => (result.change_ids || []).includes(change.item_id));
+    }
+
+    function movieNormalizeResultsForConfidence(payload, confidence) {
+      return (payload.movie_results || []).filter(result => result.actionable && result.confidence === confidence);
+    }
+
+    function updateMovieNormalizeSelection(payload, rowType, resultId, changeId, checked) {
+      if (rowType === 'result') {
+        const result = (payload.movie_results || []).find(item => item.result_id === resultId);
+        if (!result) return;
+        if (checked) {
+          state.selectedNormalizeResultIds.add(result.result_id);
+          (result.change_ids || []).forEach(id => state.selectedChangeIds.add(id));
+        } else {
+          state.selectedNormalizeResultIds.delete(result.result_id);
+          removeMovieNormalizeResultChangeIds(payload, result);
+        }
+        return;
+      }
+      if (!changeId) return;
+      if (checked) state.selectedChangeIds.add(changeId);
+      else state.selectedChangeIds.delete(changeId);
+    }
+
+    function removeMovieNormalizeResultChangeIds(payload, result) {
+      for (const changeId of (result.change_ids || [])) {
+        const stillSelected = (payload.movie_results || []).some(item =>
+          item.result_id !== result.result_id
+          && state.selectedNormalizeResultIds.has(item.result_id)
+          && (item.change_ids || []).includes(changeId)
+        );
+        if (!stillSelected) state.selectedChangeIds.delete(changeId);
+      }
+    }
+
+    function toggleVisibleMovieNormalizeRows(payload, rows, deselect) {
+      for (const row of rows) {
+        if (row.type === 'result') {
+          updateMovieNormalizeSelection(payload, 'result', row.result.result_id, '', !deselect);
+        } else {
+          updateMovieNormalizeSelection(payload, 'change', '', row.change.item_id, !deselect);
+        }
+      }
+    }
+
+    function isPathAffectedBySelectedChanges(absPath, relPath, changes) {
+      return changes.some(change => {
+        if (change.change_type === 'file_rename' || change.change_type === 'file_move') {
+          return change.path === absPath;
+        }
+        if (change.change_type === 'folder_rename') {
+          const current = change.current_value || '';
+          return relPath === current || relPath.startsWith(current + '/');
+        }
+        return false;
+      });
+    }
+
+    function flattenTree(node, lines, depth) {
+      const keys = Object.keys(node).filter(k => k !== '_files').sort((a, b) => a.localeCompare(b));
+      for (const key of keys) {
+        lines.push({ label: key + '/', depth, type: 'dir' });
+        flattenTree(node[key], lines, depth + 1);
+      }
+      for (const file of (node._files || []).sort((a, b) => a.localeCompare(b))) {
+        lines.push({ label: file, depth, type: 'file' });
+      }
+    }
+
+    function addRelativeFileToTree(tree, relPath) {
+      if (!relPath) return;
+      const slashIdx = relPath.lastIndexOf('/');
+      const relDir = slashIdx >= 0 ? relPath.slice(0, slashIdx) : '';
+      const filename = slashIdx >= 0 ? relPath.slice(slashIdx + 1) : relPath;
+      const parts = relDir ? relDir.split('/') : [];
+      let node = tree;
+      for (const part of parts) {
+        if (!node[part]) node[part] = {};
+        node = node[part];
+      }
+      if (!node._files) node._files = [];
+      node._files.push(filename);
+    }
+
+    function buildProposedMovieFileTree(payload) {
+      const selectedResults = selectedMovieNormalizeResults(payload);
+      if (selectedResults.length) {
+        const tree = {};
+        for (const result of selectedResults) {
+          addRelativeFileToTree(tree, result.proposed_value || result.current_value || '');
+        }
+        return tree;
+      }
+      const source = payload.source_root || '';
+      const sep = source.endsWith('/') ? source : source + '/';
+      const changes = selectedProposedChanges(payload);
+      const folderRenames = {};
+      const fileRenames = {};
+      const fileMoves = {};
+      for (const c of changes) {
+        if (c.change_type === 'folder_rename') folderRenames[c.current_value] = c.proposed_value;
+        if (c.change_type === 'file_rename') fileRenames[c.path] = c.proposed_value;
+        if (c.change_type === 'file_move') fileMoves[c.path] = c.proposed_value;
+      }
+      const tree = {};
+      for (const absPath of (payload.movie_files || [])) {
+        const relPath = absPath.startsWith(sep) ? absPath.slice(sep.length) : absPath;
+        if (!isPathAffectedBySelectedChanges(absPath, relPath, changes)) continue;
+        const moveRelPath = fileMoves[absPath];
+        if (moveRelPath) {
+          const slashIdx = moveRelPath.lastIndexOf('/');
+          const proposedDir = slashIdx >= 0 ? moveRelPath.slice(0, slashIdx) : '';
+          const proposedFilename = slashIdx >= 0 ? moveRelPath.slice(slashIdx + 1) : moveRelPath;
+          const parts = proposedDir ? proposedDir.split('/') : [];
+          let node = tree;
+          for (const part of parts) {
+            if (!node[part]) node[part] = {};
+            node = node[part];
+          }
+          if (!node._files) node._files = [];
+          node._files.push(proposedFilename);
+          continue;
+        }
+        const slashIdx = relPath.lastIndexOf('/');
+        const relDir = slashIdx >= 0 ? relPath.slice(0, slashIdx) : '';
+        const filename = slashIdx >= 0 ? relPath.slice(slashIdx + 1) : relPath;
+        let proposedDir = relDir;
+        const orderedFolderRenames = Object.entries(folderRenames).sort((a, b) => b[0].length - a[0].length);
+        for (const [cur, prop] of orderedFolderRenames) {
+          if (proposedDir === cur) { proposedDir = prop; continue; }
+          if (proposedDir.startsWith(cur + '/')) { proposedDir = prop + proposedDir.slice(cur.length); }
+        }
+        const proposedFilename = fileRenames[absPath] || filename;
+        const parts = proposedDir ? proposedDir.split('/') : [];
+        let node = tree;
+        for (const part of parts) {
+          if (!node[part]) node[part] = {};
+          node = node[part];
+        }
+        if (!node._files) node._files = [];
+        node._files.push(proposedFilename);
+      }
+      return tree;
+    }
+
+    function showMovieNormalizeTreeDetail(payload) {
+      if (!payload) {
+        detailPanel.innerHTML = '<div class="empty">Run Movies / Normalize to preview the proposed structure.</div>';
+        return;
+      }
+      const selectedChanges = selectedProposedChanges(payload);
+      const selectedResults = selectedMovieNormalizeResults(payload);
+      const tree = buildProposedMovieFileTree(payload);
+      const lines = [];
+      flattenTree(tree, lines, 0);
+      const html = lines.map(line => {
+        const pad = line.depth * 14;
+        const isDir = line.type === 'dir';
+        return `<div style="padding-left:${pad}px;color:${isDir ? 'var(--accent)' : 'var(--ink)'};font-weight:${isDir ? 600 : 400};white-space:nowrap">${escapeHtml(line.label)}</div>`;
+      }).join('');
+      const folderMoves = selectedChanges.filter(c => c.change_type === 'folder_rename').length;
+      const fileRenames = selectedChanges.filter(c => c.change_type === 'file_rename' || c.change_type === 'file_move').length;
+      const resultCount = selectedResults.length;
+      const summary = resultCount
+        ? `${resultCount} result${resultCount === 1 ? '' : 's'} selected &middot; ${folderMoves} folder move${folderMoves !== 1 ? 's' : ''} &middot; ${fileRenames} file rename${fileRenames !== 1 ? 's' : ''}`
+        : `${folderMoves} folder move${folderMoves !== 1 ? 's' : ''} &middot; ${fileRenames} file rename${fileRenames !== 1 ? 's' : ''}`;
+      detailPanel.innerHTML = `
+        <div style="margin-bottom:10px">
+          <div style="font-weight:600;margin-bottom:3px">Proposed Structure</div>
+          <div class="subtle" style="font-size:0.83em">${summary}</div>
+        </div>
+        <div class="mono" style="font-size:0.8em;line-height:1.75;overflow:auto;max-height:62vh">
+          ${selectedChanges.length || selectedResults.length ? html : '<span class="subtle">Select results to preview the proposed structure.</span>'}
+        </div>`;
+    }
+
+    function buildApplyResultBanner(result) {
+      const applied = result.applied || [];
+      const skipped = result.skipped || [];
+      const failed = result.failed || [];
+      const remainingSafe = result.remaining_safe_count || 0;
+      const remainingReview = result.remaining_review_count || 0;
+      const complete = failed.length === 0 && remainingSafe === 0;
+      const failedDetail = failed.length > 0 ? `
+        <details style="margin-top:8px">
+          <summary style="cursor:pointer;color:var(--danger)">${failed.length} failed — expand</summary>
+          <div style="margin-top:6px">${failed.map(f => `<div class="mono" style="font-size:0.82em;color:var(--danger);margin-bottom:2px">${escapeHtml(f.path || f.item_id)}: ${escapeHtml(f.message)}</div>`).join('')}</div>
+        </details>` : '';
+      const remainingDetail = remainingSafe || remainingReview
+        ? `<div style="margin-top:8px;color:${remainingSafe ? 'var(--danger)' : 'var(--muted)'}">${remainingSafe} safe rename${remainingSafe === 1 ? '' : 's'} and ${remainingReview} review rename${remainingReview === 1 ? '' : 's'} still pending.</div>`
+        : '';
+      return `
+        <div style="background:var(--accent-glow);border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);border-radius:12px;padding:14px 18px;margin-bottom:16px">
+          <div style="font-weight:600;margin-bottom:6px">${complete ? 'Apply complete' : 'Apply needs review'}</div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap">
+            <span style="color:var(--accent)">&#10003; ${applied.length} applied</span>
+            <span style="color:var(--muted)">${skipped.length} skipped</span>
+            ${failed.length > 0 ? `<span style="color:var(--danger)">&#10007; ${failed.length} failed</span>` : ''}
+          </div>
+          ${remainingDetail}
+          ${failedDetail}
+        </div>`;
     }
 
     function renderMovieNormalize(payload) {

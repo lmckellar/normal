@@ -48,7 +48,7 @@ Once the fork is made, all music code and traces are stripped from `normal`.
 ## 0.7.0 — Scan architecture and workflow consolidation *(done, not yet tagged)*
 
 - **Persistent probe cache** (`ProbeCache` in `probe_cache.py`) — cold → warm
-  scan across the full library; shared by profile, junk, export, and inspect.
+  scan across the full library; shared by profile, export, and inspect.
 - **Server-side movie profile cache** — single cached report serves Dashboard,
   Delete Weak Encodes, and Repair Defaults; explicit invalidation after
   file-mutating operations.
@@ -124,6 +124,7 @@ analogue.
 
 ## Later candidates
 
+- **Extract inline JS from web.py** — move the ~5000-line inline `<script>` block into a proper `.js` file (or a few). No architectural overhaul; the goal is editor tooling: symbol search, go-to-definition, linting. The current blob is workable but makes wiring bugs slow to diagnose.
 - **Catalogue merge / swap report** — import another user's exported catalogue,
   compare shared movies, and suggest swaps where one library has a stronger
   encode.

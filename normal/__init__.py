@@ -1,4 +1,4 @@
-"""Standalone local music-library normalizer."""
+"""Local workbench for movie library normalization and quality management."""
 
 __all__ = ["__version__"]
 

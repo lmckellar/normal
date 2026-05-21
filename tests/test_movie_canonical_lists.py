@@ -71,9 +71,9 @@ class MovieCanonicalListsTests(unittest.TestCase):
             self.assertEqual(top_100.total_count, 100)
             self.assertEqual(top_100.missing_count, 98)
 
-            top_1000 = next(item for item in report.list_summaries if item.id == "top_1000")
-            self.assertEqual(top_1000.covered_count, 2)
-            self.assertEqual(top_1000.total_count, 1000)
+            animation = next(item for item in report.list_summaries if item.id == "animation")
+            self.assertEqual(animation.covered_count, 1)
+            self.assertEqual(animation.total_count, 50)
 
             sci_fi_badge = next(item for item in report.badges if item.id == "sci_fi")
             self.assertFalse(sci_fi_badge.unlocked)

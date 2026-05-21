@@ -1,11 +1,13 @@
 # normal
 
-Local workbench for taming pirated music and movie libraries.
+Local workbench for taming pirated movie libraries.
 
-Two lanes:
-
-- **Music** — normalize FLAC tags, filenames, and folder structure; repair artist artwork for Jellyfin
-- **Movies** — normalize file and folder names; profile encode quality; compare owned titles against canonical movie lists; triage weak encodes; repair multi-audio packaging and subtitle defaults
+- **Normalize** file and folder names
+- **Profile** encode quality across the library
+- **Compare** owned titles against canonical movie lists
+- **Triage** weak encodes and queue replacements
+- **Repair** multi-audio packaging and subtitle defaults
+- **Clean** junk videos and sidecar spam
 
 No cloud. No transcoding. No destructive defaults.
 
@@ -27,12 +29,7 @@ The agent will handle dependencies and get you to a running web UI.
 ## CLI quick reference
 
 ```bash
-# Music: scan → plan → apply
-normal scan --source /path/to/music --report scan.json
-normal plan --source /path/to/music --plan plan.json
-normal apply --source /path/to/music --plan plan.json --target /path/to/output
-
-# Movies: scan for quality issues, normalize names
+# Scan for quality issues, normalize names
 normal movie-scan --source /path/to/movies --report scan.json --progress
 normal movie-plan --source /path/to/movies --plan plan.json
 normal movie-apply --source /path/to/movies --plan plan.json --target /path/to/output
@@ -44,7 +41,6 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 ## Docs
 
 - [Movies](docs/movies.md)
-- [Music](docs/music.md)
 - [Install](docs/install.md)
 - [Quick start](docs/quickstart.md)
 - [CLI reference](docs/commands.md)
