@@ -212,7 +212,7 @@ normal movie-inspect --path /path/to/file.mkv --report out/inspect.json
 
 ### movie-junk
 
-Find likely sample, featurette, and short junk videos.
+Find likely sample, featurette, extra, and sidecar spam junk in a movie library pre-clean pass.
 
 ```bash
 normal movie-junk --source /path/to/movies --report out/junk.json
@@ -227,9 +227,9 @@ CLI is report-only. Deletion is done through the web UI.
 
 Detection criteria:
 - junk markers in filenames or ancestor folders such as `sample`, `samples`, `extra`, `extras`, `featurette`, `featurettes`, and known typo variants
-- duration under 5 minutes → high-confidence junk
 - marker-backed junk under 2 GB → high-confidence junk
-- marker-backed junk between 2 GB and 3 GB needs another junk signal such as stacked markers or short runtime
+- marker-backed junk between 2 GB and 4 GB needs stacked signals such as a file marker plus an ancestor marker, multiple ancestor markers, or a very small file
+- marker-only video files at or above 4 GB are ignored
 - size alone does not create junk candidates
 
 ---

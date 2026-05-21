@@ -485,14 +485,18 @@ class WebTests(unittest.TestCase):
             second_sample = source / "Movie.2000" / "Movie.sample.mp4"
             promo_document = source / "Movie.2000" / "RARBG.txt"
             movie = source / "Movie.2000" / "Movie.2000.mkv"
+            large_false_positive = source / "Movie.2000" / "Featurettes" / "Feature.mkv"
             sample.parent.mkdir(parents=True)
+            large_false_positive.parent.mkdir(parents=True, exist_ok=True)
             sample.write_text("sample", encoding="utf-8")
             second_sample.write_text("sample", encoding="utf-8")
             promo_document.write_text("Downloaded from RARBG", encoding="utf-8")
             with movie.open("wb") as handle:
                 handle.truncate(101 * 1024 * 1024)
+            with large_false_positive.open("wb") as handle:
+                handle.truncate(4 * 1024 * 1024 * 1024)
 
-            result = delete_movie_junk_files(source, [sample, second_sample, promo_document, movie])
+            result = delete_movie_junk_files(source, [sample, second_sample, promo_document, movie, large_false_positive])
 
             self.assertEqual(
                 result["deleted"],
@@ -502,7 +506,14 @@ class WebTests(unittest.TestCase):
             self.assertFalse(second_sample.exists())
             self.assertFalse(promo_document.exists())
             self.assertTrue(movie.exists())
-            self.assertEqual(result["skipped"], [{"path": str(movie.resolve()), "reason": "not_current_junk_candidate"}])
+            self.assertTrue(large_false_positive.exists())
+            self.assertEqual(
+                result["skipped"],
+                [
+                    {"path": str(movie.resolve()), "reason": "not_current_junk_candidate"},
+                    {"path": str(large_false_positive.resolve()), "reason": "not_current_junk_candidate"},
+                ],
+            )
 
 
 if __name__ == "__main__":

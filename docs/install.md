@@ -3,7 +3,7 @@
 ## Requirements
 
 - **Python 3.12 or later**
-- **ffprobe** — required for all movie lane commands that probe media files (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-junk`, `movie-register`, `web`)
+- **ffprobe** — required for movie lane commands that probe media files (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`)
 
 ### Installing ffprobe
 

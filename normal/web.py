@@ -5266,7 +5266,7 @@ def build_handler(
             source = resolve_source_path(payload.get("source"), default_source=default_source)
             with guarded_heavy_scan(source, "Movie junk scan"):
                 with ACTIVITY_TRACKER.track(source, "Movie junk scan"):
-                    report = scan_movie_cleanup(source, probe_media=tracked_probe(source, "ffprobe junk scan", cache=PROBE_CACHE))
+                    report = scan_movie_cleanup(source)
             self.respond_json(report.to_dict())
 
         def handle_movies_junk_delete(self, payload: dict[str, Any]) -> None:
@@ -5275,7 +5275,7 @@ def build_handler(
             if not isinstance(paths, list):
                 raise ValueError("paths must be a list")
             with ACTIVITY_TRACKER.track(source, "Movie junk delete"):
-                result = delete_movie_junk_files(source, paths, probe_media=tracked_probe(source, "ffprobe junk delete check", cache=PROBE_CACHE))
+                result = delete_movie_junk_files(source, paths)
             self.respond_json(result)
 
         def handle_movies_replacement_queue_list(self, payload: dict[str, Any]) -> None:
@@ -5629,7 +5629,6 @@ def format_storage_size(size_bytes: int) -> str:
 def delete_movie_junk_files(
     source: Path,
     raw_paths: list[Any],
-    probe_media: Callable[[Path], Any] = probe_media_facts,
 ) -> dict[str, Any]:
     source_root = source.resolve()
     deleted = []
@@ -5645,10 +5644,7 @@ def delete_movie_junk_files(
         if not resolved.exists() or not resolved.is_file():
             skipped.append({"path": str(resolved), "reason": "not_file"})
             continue
-        try:
-            reasons = detect_movie_junk_reasons(resolved, probe_media(resolved))
-        except Exception:
-            reasons = detect_movie_junk_reasons(resolved)
+        reasons = detect_movie_junk_reasons(resolved)
         if not reasons:
             reasons = detect_movie_junk_document_reasons(resolved)
         if not reasons:

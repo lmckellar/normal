@@ -3,17 +3,15 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 import re
-from typing import Any, Callable
+from typing import Any
 
 from normal.models import WarningItem, utc_now_iso
-from normal.movie_scan import discover_video_files, movie_id_for, probe_media_facts
+from normal.movie_scan import discover_video_files, movie_id_for
 from normal.quality_review import MediaFacts
 
 
-SHORT_VIDEO_SECONDS = 5 * 60
 SMALL_VIDEO_BYTES = 100 * 1024 * 1024
-GENERAL_PROBE_SIZE_CEILING = 500 * 1024 * 1024
-JUNK_MARKER_PROBE_SIZE_CEILING = 3 * 1024 * 1024 * 1024
+MARKER_ONLY_JUNK_MAX_BYTES = 4 * 1024 * 1024 * 1024
 SAFE_JUNK_MARKER_SIZE_BYTES = 2 * 1024 * 1024 * 1024
 JUNK_DOCUMENT_EXTENSIONS = {".txt", ".html", ".htm"}
 STRONG_JUNK_TOKEN_PATTERN = re.compile(
@@ -80,7 +78,6 @@ class MovieJunkReport:
 
 def scan_movie_junk(
     source_root: Path,
-    probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
 ) -> MovieJunkReport:
     report = MovieJunkReport(source_root=str(source_root.resolve()), generated_at=utc_now_iso())
     movie_files = discover_video_files(source_root)
@@ -97,41 +94,9 @@ def scan_movie_junk(
 
     for movie_path in movie_files:
         file_size_bytes = safe_file_size(movie_path)
-
-        # Marker-based junk can now stay actionable up to 3 GB, but ambiguous
-        # 2-3 GB cases may need probe confirmation for a second signal.
-        cheap_reasons = detect_movie_junk_reasons(movie_path, facts=None)
-        if cheap_reasons:
-            if highest_confidence(cheap_reasons) == "review" and should_probe_marker_junk(movie_path, file_size_bytes):
-                cheap_reasons = probe_junk_reasons(report, movie_path, cheap_reasons, probe_media)
-            report.junk.append(
-                MovieJunkItem(
-                    movie_id=movie_id_for(movie_path, source_root),
-                    path=str(movie_path),
-                    relative_path=movie_id_for(movie_path, source_root),
-                    file_name=movie_path.name,
-                    file_size_bytes=file_size_bytes,
-                    file_size_label=format_file_size(file_size_bytes),
-                    runtime_seconds=runtime_for_probe_reasons(cheap_reasons),
-                    runtime_label=format_runtime(runtime_for_probe_reasons(cheap_reasons)),
-                    confidence=highest_confidence(cheap_reasons),
-                    reasons=cheap_reasons,
-                )
-            )
-            continue
-
-        # No marker hit — only probe small files for short-video junk.
-        if file_size_bytes is None or file_size_bytes >= GENERAL_PROBE_SIZE_CEILING:
-            continue
-
-        facts = probe_media_with_warning(report, movie_path, probe_media)
-        if facts is None:
-            continue
-        reasons = detect_movie_junk_reasons(movie_path, facts)
+        reasons = detect_movie_junk_reasons(movie_path)
         if not reasons:
             continue
-
-        runtime_seconds = runtime_for(facts)
         report.junk.append(
             MovieJunkItem(
                 movie_id=movie_id_for(movie_path, source_root),
@@ -140,8 +105,8 @@ def scan_movie_junk(
                 file_name=movie_path.name,
                 file_size_bytes=file_size_bytes,
                 file_size_label=format_file_size(file_size_bytes),
-                runtime_seconds=runtime_seconds,
-                runtime_label=format_runtime(runtime_seconds),
+                runtime_seconds=None,
+                runtime_label=None,
                 confidence=highest_confidence(reasons),
                 reasons=reasons,
             )
@@ -191,9 +156,8 @@ def scan_movie_promo_documents(source_root: Path) -> MovieJunkReport:
 
 def scan_movie_cleanup(
     source_root: Path,
-    probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
 ) -> MovieJunkReport:
-    video_report = scan_movie_junk(source_root, probe_media)
+    video_report = scan_movie_junk(source_root)
     doc_report = scan_movie_promo_documents(source_root)
     merged = MovieJunkReport(
         source_root=str(source_root.resolve()),
@@ -223,10 +187,14 @@ def is_supported_junk_document_file(path: Path, source_root: Path | None = None)
 
 
 def detect_movie_junk_reasons(path: Path, facts: MediaFacts | None = None) -> list[MovieJunkReason]:
-    reasons: list[MovieJunkReason] = []
     marker_signals = detect_junk_marker_signals(path)
     file_size = file_size_for(path, facts)
-    is_short_video = facts is not None and facts.runtime_seconds is not None and facts.runtime_seconds < SHORT_VIDEO_SECONDS
+    if not (marker_signals.file_tokens or marker_signals.ancestor_tokens):
+        return []
+    if file_size is not None and file_size >= MARKER_ONLY_JUNK_MAX_BYTES:
+        return []
+
+    reasons: list[MovieJunkReason] = []
     is_very_small = file_size is not None and file_size < SMALL_VIDEO_BYTES
 
     if marker_signals.file_tokens:
@@ -236,7 +204,6 @@ def detect_movie_junk_reasons(path: Path, facts: MediaFacts | None = None) -> li
             has_ancestor_marker=bool(marker_signals.ancestor_tokens),
             ancestor_marker_count=len(marker_signals.ancestor_tokens),
             has_strong_marker=marker_signals.has_strong_marker,
-            is_short_video=is_short_video,
             is_very_small=is_very_small,
         )
         reasons.append(
@@ -255,7 +222,6 @@ def detect_movie_junk_reasons(path: Path, facts: MediaFacts | None = None) -> li
             has_ancestor_marker=True,
             ancestor_marker_count=len(marker_signals.ancestor_tokens),
             has_strong_marker=marker_signals.has_strong_marker,
-            is_short_video=is_short_video,
             is_very_small=is_very_small,
         )
         reasons.append(
@@ -264,16 +230,6 @@ def detect_movie_junk_reasons(path: Path, facts: MediaFacts | None = None) -> li
                 message=f"Ancestor path contains junk marker: {', '.join(marker_signals.ancestor_tokens)}",
                 confidence=confidence,
                 matched_value=",".join(marker_signals.ancestor_tokens),
-            )
-        )
-
-    if is_short_video:
-        reasons.append(
-            MovieJunkReason(
-                code="short_video",
-                message=f"Runtime is under {SHORT_VIDEO_SECONDS // 60} minutes.",
-                confidence="high",
-                matched_value=str(facts.runtime_seconds),
             )
         )
 
@@ -329,12 +285,8 @@ def junk_marker_confidence(
     has_ancestor_marker: bool,
     ancestor_marker_count: int,
     has_strong_marker: bool,
-    is_short_video: bool,
     is_very_small: bool,
 ) -> str:
-    if is_short_video:
-        return "high"
-
     if file_size is None:
         return "review"
 
@@ -343,58 +295,11 @@ def junk_marker_confidence(
         if has_strong_marker or has_ancestor_marker:
             return "high"
         return "review"
-    if file_size < JUNK_MARKER_PROBE_SIZE_CEILING:
+    if file_size < MARKER_ONLY_JUNK_MAX_BYTES:
         if stacked_signal:
             return "high"
         return "review"
     return "review"
-
-
-def should_probe_marker_junk(path: Path, file_size: int | None) -> bool:
-    marker_signals = detect_junk_marker_signals(path)
-    if not (marker_signals.file_tokens or marker_signals.ancestor_tokens):
-        return False
-    return file_size is not None and file_size < JUNK_MARKER_PROBE_SIZE_CEILING
-
-
-def probe_junk_reasons(
-    report: MovieJunkReport,
-    movie_path: Path,
-    cheap_reasons: list[MovieJunkReason],
-    probe_media: Callable[[Path], MediaFacts],
-) -> list[MovieJunkReason]:
-    facts = probe_media_with_warning(report, movie_path, probe_media)
-    if facts is None:
-        return cheap_reasons
-    return detect_movie_junk_reasons(movie_path, facts)
-
-
-def probe_media_with_warning(
-    report: MovieJunkReport,
-    movie_path: Path,
-    probe_media: Callable[[Path], MediaFacts],
-) -> MediaFacts | None:
-    try:
-        return probe_media(movie_path)
-    except Exception as exc:
-        report.warnings.append(
-            WarningItem(
-                code="movie_junk_probe_error",
-                message=f"Unable to probe media metadata for duration checks: {exc}",
-                path=str(movie_path),
-            )
-        )
-        return None
-
-
-def runtime_for_probe_reasons(reasons: list[MovieJunkReason]) -> int | None:
-    short_reason = next((reason for reason in reasons if reason.code == "short_video"), None)
-    if short_reason is None or short_reason.matched_value is None:
-        return None
-    try:
-        return int(short_reason.matched_value)
-    except ValueError:
-        return None
 
 
 def detect_movie_junk_document_reasons(path: Path) -> list[MovieJunkReason]:
@@ -445,10 +350,6 @@ def safe_file_size(path: Path) -> int | None:
 
 def file_size_for(path: Path, facts: MediaFacts | None) -> int | None:
     return facts.file_size_bytes if facts is not None else safe_file_size(path)
-
-
-def runtime_for(facts: MediaFacts | None) -> int | None:
-    return facts.runtime_seconds if facts is not None else None
 
 
 def format_file_size(size_bytes: int | None) -> str | None:

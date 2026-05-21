@@ -92,6 +92,7 @@ normal movie-junk --source /path/to/movies --report junk.json
 ```
 
 CLI is report-only. To delete, use the web UI: `Movies > Delete Junk Videos`.
+Video junk detection is size-first and path-heuristic-only: marker-backed files under 4 GB are surfaced for review or direct deletion; marker-only files at or above 4 GB are ignored.
 
 ### Export a catalogue
 

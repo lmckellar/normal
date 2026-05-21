@@ -128,7 +128,7 @@ Current scope is embedded subtitle streams already inside the container. Externa
 
 Two pages handle library noise:
 
-- **Delete Junk Videos** — junk-marker videos such as samples, extras, featurettes, and short bonus clips, detected from filenames, ancestor folders, duration, and conservative size thresholds
+- **Delete Junk Videos** — junk-marker videos such as samples, extras, and featurettes, detected from filenames, ancestor folders, and conservative size thresholds with a hard 4 GB suppression ceiling
 - **Delete Junk Sidecar & Spam Files** — promo PDFs, NFO files, and other non-video sidecars
 
 Both show a preview list before anything is deleted.

@@ -16,7 +16,7 @@ normal/
 ├── movie_profile.py             # Movie profile: quality ladder classification, heuristic findings
 ├── movie_audio_fix.py           # Movie audio packaging repair: lossless MKV remux helpers
 ├── movie_inspect.py             # Movie inspect: single-file diagnostic
-├── movie_junk.py                # Movie junk: sample/featurette/short + sidecar spam detection
+├── movie_junk.py                # Movie junk: size-first video markers + sidecar spam detection
 ├── movie_omdb.py                # Server-side OMDb rating lookups and cache
 ├── movie_replacement_queue.py   # Replacement queue: persistent state for movie triage families
 ├── movie_subtitle_fix.py        # Subtitle repair: lossless MKV remux for subtitle default flags
@@ -193,7 +193,7 @@ All routes in `web.py`. Key families:
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
 | `/api/movies/inspect` | POST | One-file movie diagnostic payload |
 | `/api/movies/normalize` | POST | Build movie normalize plan |
-| `/api/movies/junk` | POST | Combined junk scan: short/sample videos + sidecar spam docs |
+| `/api/movies/junk` | POST | Combined junk scan: marker-based videos + sidecar spam docs |
 | `/api/movies/junk/delete` | POST | Delete selected junk files |
 | `/api/movies/replacement-queue/list` | POST | Queue state for current source, optionally filtered by issue family |
 | `/api/movies/replacement-queue/add` | POST | Add movie triage items to the queue |
@@ -215,7 +215,7 @@ Hard rules — do not relax without explicit user instruction:
 4. `movie-apply --in-place` is explicitly opt-in — never infer it from context.
 5. Web UI delete routes validate each path against the current source root before unlinking; outside-root paths are rejected.
 6. Junk deletion revalidates each candidate as junk immediately before deletion.
-7. Movie junk uses a larger marker-based window: junk markers in filenames or ancestor folders can be high-confidence below 2 GB, and 2-3 GB cases require stacked signals before promotion.
+7. Movie junk is size-first: marker-backed videos can be high-confidence below 2 GB, 2-4 GB cases require stacked signals before promotion, and marker-only videos at or above 4 GB are ignored.
 8. No remote metadata fetching — all data comes from local files only.
 9. Heavy recursive web scans are single-flight per source; same-source overlaps are rejected.
 10. Heavy movie-side recursive discovery is intentionally streamed rather than fully enumerated up front, because that change was central to reducing the earlier CPU spike and improving cancellation behavior.

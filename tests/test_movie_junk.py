@@ -20,24 +20,15 @@ class MovieJunkTests(unittest.TestCase):
     def test_detects_sample_and_featurette_path_tokens(self) -> None:
         sample_reasons = detect_movie_junk_reasons(
             Path("/movies/Movie.1999/Movie.1999.sample.mkv"),
-            MediaFacts(runtime_seconds=7200, file_size_bytes=5_000 * 1024 * 1024),
+            MediaFacts(runtime_seconds=7200, file_size_bytes=500 * 1024 * 1024),
         )
         featurette_reasons = detect_movie_junk_reasons(
             Path("/movies/Movie.1999/Featurettes/Behind The Scenes.mkv"),
-            MediaFacts(runtime_seconds=7200, file_size_bytes=5_000 * 1024 * 1024),
+            MediaFacts(runtime_seconds=7200, file_size_bytes=500 * 1024 * 1024),
         )
 
         self.assertIn("junk_file_token", {reason.code for reason in sample_reasons})
         self.assertIn("junk_ancestor_token", {reason.code for reason in featurette_reasons})
-
-    def test_detects_short_video_as_high_confidence_junk(self) -> None:
-        reasons = detect_movie_junk_reasons(
-            Path("/movies/Movie.1999/clip.mkv"),
-            MediaFacts(runtime_seconds=299, file_size_bytes=800 * 1024 * 1024),
-        )
-
-        self.assertEqual([reason.code for reason in reasons], ["short_video"])
-        self.assertEqual(reasons[0].confidence, "high")
 
     def test_does_not_use_size_only_as_junk_signal(self) -> None:
         reasons = detect_movie_junk_reasons(
@@ -83,6 +74,27 @@ class MovieJunkTests(unittest.TestCase):
         self.assertEqual([reason.code for reason in reasons], ["junk_ancestor_token"])
         self.assertEqual(reasons[0].confidence, "review")
 
+    def test_suppresses_marker_only_junk_at_or_above_4gb(self) -> None:
+        reasons = detect_movie_junk_reasons(
+            Path("/movies/Movie.1999/Featurettes/Behind.The.Scenes.mkv"),
+            MediaFacts(runtime_seconds=7200, file_size_bytes=4 * 1024 * 1024 * 1024),
+        )
+
+        self.assertEqual(reasons, [])
+
+    def test_suppresses_reported_large_extra_false_positives(self) -> None:
+        filename_only = detect_movie_junk_reasons(
+            Path("/movies/E.T.The.Extra-Terrestrial.1982.Bluray.1080p.DTS-HD-7.1.x264-Grym.(@BTNET).mkv"),
+            MediaFacts(runtime_seconds=6900, file_size_bytes=15_450_000_000),
+        )
+        ancestor_only = detect_movie_junk_reasons(
+            Path("/movies/The Game 1997 Criterion BDRip 1080p DTS extra-HighCode/The Game 1997 Criterion BDRip 1080p DTS-HighCode.mkv"),
+            MediaFacts(runtime_seconds=7800, file_size_bytes=13_360_000_000),
+        )
+
+        self.assertEqual(filename_only, [])
+        self.assertEqual(ancestor_only, [])
+
     def test_detects_promo_document_junk(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
@@ -106,10 +118,7 @@ class MovieJunkTests(unittest.TestCase):
             movie.touch()
             os.truncate(movie, 101 * 1024 * 1024)
 
-            report = scan_movie_junk(
-                source,
-                probe_media=lambda _: MediaFacts(runtime_seconds=7200, file_size_bytes=4_000 * 1024 * 1024),
-            )
+            report = scan_movie_junk(source)
 
             self.assertEqual(report.junk, [])
             self.assertEqual(report.warnings, [])
@@ -141,17 +150,13 @@ class MovieJunkTests(unittest.TestCase):
             self.assertEqual([item.relative_path for item in report.junk], ["Movie/www.example.com.html"])
             self.assertEqual(report.junk[0].runtime_label, None)
 
-    def test_scan_movie_junk_reports_probe_failures_but_still_uses_path_tokens(self) -> None:
+    def test_scan_movie_junk_still_uses_path_tokens_without_probe(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
             sample = source / "Movie.sample.mkv"
             sample.write_text("video", encoding="utf-8")
 
-            # Under 2 GB, marker-backed junk remains actionable without probe success.
-            report = scan_movie_junk(
-                source,
-                probe_media=lambda _: (_ for _ in ()).throw(RuntimeError("boom")),
-            )
+            report = scan_movie_junk(source)
 
             self.assertEqual(len(report.junk), 1)
             self.assertEqual(report.junk[0].confidence, "high")
@@ -171,22 +176,17 @@ class MovieJunkTests(unittest.TestCase):
             self.assertIsNotNone(item.file_size_label)
             self.assertIsNone(item.runtime_label)
 
-    def test_scan_movie_junk_probes_ambiguous_2gb_to_3gb_marker_case(self) -> None:
+    def test_scan_movie_junk_suppresses_large_marker_only_case(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
-            sample = source / "Movie" / "Movie.sample.mkv"
-            sample.parent.mkdir()
+            sample = source / "Movie" / "Featurettes" / "Behind.The.Scenes.mkv"
+            sample.parent.mkdir(parents=True)
             sample.touch()
-            os.truncate(sample, int(2.5 * 1024 * 1024 * 1024))
+            os.truncate(sample, 4 * 1024 * 1024 * 1024)
 
-            report = scan_movie_junk(
-                source,
-                probe_media=lambda _: MediaFacts(runtime_seconds=299, file_size_bytes=int(2.5 * 1024 * 1024 * 1024)),
-            )
+            report = scan_movie_junk(source)
 
-            self.assertEqual(len(report.junk), 1)
-            self.assertEqual(report.junk[0].confidence, "high")
-            self.assertEqual(report.junk[0].runtime_label, "4:59")
+            self.assertEqual(report.junk, [])
 
     def test_formats_file_size_and_runtime_for_review(self) -> None:
         self.assertEqual(format_file_size(75 * 1024 * 1024), "75.0 MB")
