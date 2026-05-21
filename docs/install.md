@@ -1,9 +1,11 @@
 # Install
 
+*Authorship: Agent-written.*
+
 ## Requirements
 
 - **Python 3.12 or later**
-- **ffprobe** — required for movie lane commands that probe media files (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`)
+- **ffprobe** — required for commands that probe media files (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`)
 
 ### Installing ffprobe
 
@@ -62,9 +64,9 @@ Expected output: top-level command list including `scan`, `plan`, `apply`, `movi
 ffprobe -version
 ```
 
-Both must succeed before running any movie lane command.
+Both must succeed before running `normal`.
 
-If you plan to use Movies / Canonical Lists, also verify:
+If you plan to use `Movies / Canonical Lists`, also verify:
 
 ```bash
 printf '%s\n' "${TMDB_KEY:+TMDB_KEY loaded}"
@@ -72,7 +74,7 @@ printf '%s\n' "${TMDB_KEY:+TMDB_KEY loaded}"
 
 ## Platform notes
 
-`normal` is developed and tested on Linux. macOS and Windows are not explicitly supported before 1.0 — rough edges are expected, particularly around:
+`normal` is developed and tested on Linux. macOS and Windows are not explicitly supported before 1.0. Rough edges are expected, particularly around:
 
 - file path handling on Windows
 - `ffprobe` PATH resolution

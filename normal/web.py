@@ -1209,8 +1209,8 @@ INDEX_HTML = """<!doctype html>
     const CONFIG = {
       movies: {
         title: 'Movies',
-        lede: 'Assess, fix, and standardize your movie and TV library. Diagnostics here focus on quality, compatibility, and repairable playback or visibility issues.',
-        sourceLabel: '/path/to/movie or TV library',
+        lede: 'Assess, repair, and standardize your movie library. Diagnostics here focus on quality, defaults, junk, and repairable playback or visibility issues.',
+        sourceLabel: '/path/to/movie library',
         pages: [
           { id: 'library', label: 'Dashboard View', action: 'scan', endpoint: '/api/movies/profile' },
           { id: 'normalize', label: 'Normalize Movie Files & Folders', action: 'plan', endpoint: '/api/movies/normalize' },

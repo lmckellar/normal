@@ -1,13 +1,12 @@
 # Roadmap
 
-`normal` is pre-1.0. The current version story was retroactively rebuilt from
-commit history and diff/change logs; package metadata stays at `0.1.0` until a
-real release is cut.
+*Authorship: Agent-written.*
+
+`normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. Package metadata stays at `0.1.0` until a real release is cut.
 
 ## Where we are now
 
-The movie-lane build-out is complete and the architectural consolidation
-originally planned for 1.0.x–1.x happened early. Live today:
+The movie workflow build-out is the product now. Live today:
 
 - **Persistent probe cache** — cold full-library scan (~330 s) drops to ~5 s on
   every subsequent run; per-file invalidation on mtime change keeps it honest
@@ -15,33 +14,17 @@ originally planned for 1.0.x–1.x happened early. Live today:
 - **Server-side profile cache** — Dashboard, Delete Weak Encodes, and Repair
   Defaults all share one cached `MovieProfileReport` per source; page switches
   return in under a second.
-- **Unified scan workflows** — Repair Defaults (Multi-Audio + Subtitle) runs one
+- **Unified scan workflows** — Repair Defaults (Audio Packaging + Subtitle Readiness) runs one
   shared scan feeding two sub-tabs; Junk (video + docs) runs one combined scan
   (~12 s vs ~2 min) feeding two detail panels.
 - **Instant quality-profile saves** — no rescan triggered; browser patches
   in-memory state and rerenders immediately.
 
-The remaining pre-TV work is trimming and hardening: fork and remove the Music
-lane, remove verbose naming, tighten UI consistency, and finish outstanding
-parser edge cases.
+The remaining pre-TV work is trimming and hardening: remove remaining music-era public traces, remove verbose naming, tighten UI consistency, and finish parser edge cases.
 
 ### Product identity going forward
 
-`normal` will be a dedicated tool for tagging, folder-quality management, and
-library health for **movie and TV show collections** — a gap not well served by
-free tools. Music library management will continue as a separate, focused
-product (see below).
-
-## Music lane — fork, not delete
-
-The music features (FLAC tagging, normalization, artist deduplication, dashboard
-profile, artwork repair, Jellyfin sync, CSV export, replacement queue) will be
-extracted cleanly into a new git project with its own identity rather than
-discarded. The intended scope of that product: a tagging, visualisation, and
-intelligence dashboard for music collections that names, tags, and organises
-files; recommends new listening; and surfaces upcoming live music activity.
-
-Once the fork is made, all music code and traces are stripped from `normal`.
+`normal` is now a dedicated tool for naming, quality management, repair, and library health for movie collections first, with TV as the next major expansion. The public docs should reflect that current state directly rather than preserving parallel-story clutter from earlier phases.
 
 ---
 
@@ -52,8 +35,8 @@ Once the fork is made, all music code and traces are stripped from `normal`.
 - **Server-side movie profile cache** — single cached report serves Dashboard,
   Delete Weak Encodes, and Repair Defaults; explicit invalidation after
   file-mutating operations.
-- **Unified Repair Defaults** — Fix Multi-Audio Packaging and Repair Subtitle
-  Readiness share one scan and surface as two sub-tabs on one page.
+- **Unified Repair Defaults** — Audio Packaging and Subtitle Readiness share one
+  scan and surface as two sub-tabs on one page.
 - **Unified junk scan** — video junk and document/sidecar junk merged into one
   combined scan; ~12 s vs ~2 min previously.
 - **Single-walk normalization** — `build_movie_plan` accepts a pre-discovered
@@ -70,8 +53,7 @@ Once the fork is made, all music code and traces are stripped from `normal`.
 
 ## 0.7.x — Library trim and polish
 
-- Fork Music lane to its own project; strip all music code and references from
-  `normal`.
+- Remove remaining public music-lane references from the repo and docs.
 - Remove verbose naming option — drop `--naming-style verbose`, the web naming
   selector, and verbose-only preview payloads; retain the parser hardening the
   verbose-mode tests produced.
@@ -95,7 +77,7 @@ Once the fork is made, all music code and traces are stripped from `normal`.
 - **Package cleanup** — adapt movie artifact cleanup for TV extras, samples,
   empty season folders, duplicate wrappers, and season-pack folders.
 - **Apply safety** — reuse movie normalizer's preview/apply discipline: no
-  destructive defaults, review for ambiguity, source-root validation on every
+  silent destructive execution, review for ambiguity, source-root validation on every
   moved or deleted path.
 
 ## 0.9.x — Hardening and feature refinement

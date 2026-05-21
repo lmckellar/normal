@@ -1,144 +1,79 @@
 # Quick start
 
-## Music lane
+*Authorship: Agent-written.*
 
-The music pipeline is: scan → plan → review → apply.
+This quick start is intentionally biased toward a safe first run on a test movie library rather than a live one.
 
-### 1. Scan your library
+## 1. Build a representative test library
 
-```bash
-normal scan --source /path/to/music --report scan.json
-```
+Make a small `Example Movies` directory on a local drive.
 
-Reads your FLAC library, groups tracks into albums, and reports tag inconsistencies, naming issues, and likely fixes. Nothing is changed.
+- include a cross-section of your real naming conventions
+- include a few strong encodes, a few weak ones, and a few junky package leftovers
+- if you use an external mechanical drive for the real library, copy the same test set there later and repeat the checks
 
-### 2. Generate a change plan
+The point is not volume. The point is to confirm that `normal` ingests your actual mess correctly before you let it near the real library.
 
-```bash
-normal plan --source /path/to/music --plan plan.json --summary plan.md
-```
+## 2. Start with read-only workflows
 
-Produces a JSON plan with proposed tag edits, file renames, and folder renames. Each change is labelled `safe` or `review`. The optional `--summary` writes a human-readable version alongside it.
-
-### 3. Review
-
-Open `plan.md` (or `plan.json`) and check the `review`-confidence changes. Safe changes are deterministic and low-risk. Review changes need a human decision.
-
-### 4. Apply
-
-Copy to a new directory (recommended for a first run):
-
-```bash
-normal apply --source /path/to/music --plan plan.json --target /path/to/cleaned-music
-```
-
-Or apply in-place:
-
-```bash
-normal apply --source /path/to/music --plan plan.json --in-place
-```
-
-An apply report is written to `normal-apply-report.json` in the destination root.
-
-### 5. Export a collection list
-
-```bash
-normal output --source /path/to/cleaned-music --csv collection.csv
-```
-
-Writes an album-level CSV: artist, album, year, genre, track count, path.
-
----
-
-## Movie lane
-
-### Normalize file and folder names
+### Normalize naming preview
 
 ```bash
 normal movie-plan --source /path/to/movies --plan movie-plan.json --summary movie-plan.md
 normal movie-apply --source /path/to/movies --plan movie-plan.json --target /path/to/normalized-movies
 ```
 
-Parses title, year, and technical tokens from local paths only. Concise `Title (Year)` naming is the default; verbose technical-token naming remains available with `--naming-style verbose`. Ambiguous parses and unresolved concise collisions are flagged as `review`. See [docs/commands.md](commands.md) for naming rules.
+`movie-plan` is read-only. Review the summary before applying anything. For a first run, keep `movie-apply` pointed at a separate target directory rather than mutating in place.
 
-### Profile encode quality
+### Profile library quality
 
 ```bash
 normal movie-scan --source /path/to/movies --report movie-scan.json --progress
 ```
 
-Profiles each file against the quality ladder using ffprobe metadata. No changes made. Use `--progress` to print live count, elapsed time, and ETA to stderr.
-
-Scan outputs and web tables now include a main-audio summary in addition to bitrate. Typical labels include `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, and `DTS-HD MA 5.1`.
+Profiles each file against the current quality posture using `ffprobe`. No changes are made.
 
 ```bash
 normal movie-profile --source /path/to/movies --report movie-profile.json
 ```
 
-Classifies files into quality tiers and attaches heuristic findings for playback risk and indexing risk.
+Classifies the same library against the repo-local standards and surfaces review findings.
 
-### Inspect a single file
+### Inspect one problematic file
 
 ```bash
 normal movie-inspect --path /path/to/file.mkv --report inspect.json
 ```
 
-Detailed one-file diagnostic view.
+Useful when one title behaves badly in Plex or looks misclassified.
 
-### Find junk
+### Find junk candidates
 
 ```bash
 normal movie-junk --source /path/to/movies --report junk.json
 ```
 
-CLI is report-only. To delete, use the web UI: `Movies > Delete Junk Videos`.
-Video junk detection is size-first and path-heuristic-only: marker-backed files under 4 GB are surfaced for review or direct deletion; marker-only files at or above 4 GB are ignored.
+CLI is report-only. Deletion is done through the web UI after selection and confirmation.
 
-### Export a catalogue
-
-```bash
-normal movie-register --report movie-scan.json --xlsx catalogue.xlsx
-```
-
-Formatted XLSX: title, year, resolution, video codec, audio, container, file size.
-
----
-
-## Web UI
-
-If you use API-backed web features, load your local env first. Keep durable API keys outside `.venv/bin/activate`; venv recreation can wipe them.
+## 3. Use the web UI on the test library
 
 ```bash
 source .venv/bin/activate
-normal web --host 127.0.0.1 --port 8765 --source /path/to/library
+normal web --host 127.0.0.1 --port 8765 --source /path/to/Example\ Movies
 ```
 
 Open `http://127.0.0.1:8765` in a browser.
 
-The Library Switcher in the top right selects the active lane. The source path input auto-detects Music vs Movies from the path (last segment containing `music` or `movies` wins).
+Use the test library to exercise the full workflow in order:
 
-**Music pages**
-- Dashboard View — format mix, fidelity profile, artwork readiness
-- Normalize Music Files & Folders — interactive plan review and apply
-- Delete Weak Encodes — weak track triage with replacement queue tracking
-- Repair Artwork for Jellyfin — album artist browser with candidate preview and approve/write
-- Music Recommendation Engine — placeholder for future discovery tools
+1. `Dashboard View` to understand current library shape
+2. `Normalize Movie Files & Folders` to confirm the downstream naming shape matches your taste
+3. `Delete Weak Encodes` to see whether the replacement-candidate policy feels sane
+4. `Repair Defaults` to review audio-packaging and subtitle-default logic
+5. `Delete Junk & Spam Files` to confirm junk detection is neither too timid nor too reckless
 
-**Movie pages**
-- Dashboard View — quality tier distribution, bitrate histograms, resolution breakdown
-- Normalize Movie Files & Folders — interactive rename plan review and apply; All Results includes already-normalized videos as no-change rows for full selected-output preview
-- Delete Weak Encodes — quality triage with replacement queue tracking; deleted queue items can be dismissed later if they are not worth replacing; tables now show a separate main-audio column alongside audio bitrate
-- Fix Multi-Audio Packaging — triage MKVs where default audio language/track choice is likely wrong, then either flip English to default in place, drop tagged foreign-language audio, or queue the file for replacement. The delete-foreign-audio variant is currently untested on real libraries.
-- Delete Junk Videos — checkbox select and confirm to delete
-- Delete Junk Sidecar & Spam Files — sidecar and spam file cleanup
-- Canonical Lists — strict title/year overlap against live all-time movie lists with simple badge unlocks
+## 4. Only then consider live use
 
-Canonical Lists uses TMDb plus a local cache. Start the web UI with `--tmdb-key` or load `TMDB_KEY` before launch. If an agent starts the server for you, the expected behavior is a clean launch with configured API integrations available, not a degraded launch that only serves the page shell.
+When the test library behaves the way you want, repeat the same process on a copy of that test set stored on the real external drive if one is involved. Once both local-drive and real-drive behavior look sane, move to the live library.
 
-Scans can be stopped mid-run with the Stop button. Per-page ETA estimates are stored in localStorage and shown on subsequent runs.
-
-Heavy recursive web scans now show a confirmation warning for risky sources such as drive-root style paths and NTFS/FUSE mounts. The web server also allows only one heavy scan per source at a time.
-
-Separately, the heavy movie scan path now discovers files as it walks instead of prebuilding the entire recursive result first. That change matters because it lowers the up-front traversal burst and lets cancellation bite during the directory walk rather than only after enumeration finishes.
-
-Known issue: under some not-yet-isolated UI interaction pattern, cancelling a movie scan and quickly starting another workflow can leave an `ffprobe` probe running in the background. The Drive Activity indicator may not show that leftover probe in every case.
+Watching `normal` purify the test library is useful. Rushing straight to the live library is not.

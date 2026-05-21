@@ -1,61 +1,69 @@
 # normal
 
-Local workbench for taming pirated movie libraries.
+*Authorship: Agent-written.*
 
-- **Normalize** file and folder names
-- **Profile** encode quality across the library
-- **Compare** owned titles against canonical movie lists
-- **Triage** weak encodes and queue replacements
-- **Repair** multi-audio packaging and subtitle defaults
-- **Clean** junk videos and sidecar spam
+`normal` is a local movie-library workbench for people who want a smaller, cleaner, more deliberate pirate library. It is no longer a broad media-organizing sandbox. It now assumes a strong downstream shape, pushes toward it aggressively, and keeps destructive actions visible and gated.
 
-No cloud. No transcoding. No destructive defaults.
+- Normalize movies into clear `Title (Year)` naming
+- Profile library quality against a hardcoded standards posture
+- Delete weak encodes into a replacement queue
+- Repair default audio and subtitle behavior
+- Delete junk videos and sidecar spam
+- Compare the library against canonical movie lists
 
-<img width="1440" height="900" alt="movies_dashboard_default" src="https://github.com/user-attachments/assets/fb2abd09-7704-4748-acb7-f3dd4c1b7ade" />
+![normal movie dashboard](docs/assets/readme_dashboard.png)
 
+## What It Is Now
 
-## Get started
+`normal` is opinionated on purpose.
 
-Paste this into Claude Code CLI, Codex CLI, Gemini CLI, or any agent that can run shell commands:
+- A good movie library should default to the clearest possible naming: `Title (Year)`
+- Quality should live inside a defined library policy, not drift title by title
+- Large files carry a burden of proof under physical storage economics
+- Scans should minimize unnecessary drive reads and writes
+- Junk media ephemera should not quietly accumulate forever
 
-```
-Clone https://github.com/lmckellar/normal, install it with pip install -e . (Python 3.12+), install ffprobe via your system package manager if not present, verify with `normal --help`, then start the web UI pointed at my library.
-```
+The fuller product stance lives in [docs/statement.md](docs/statement.md).
 
-The agent will handle dependencies and get you to a running web UI.
+## Safety
 
-**No agent?** See [docs/install.md](docs/install.md) for manual steps, then [docs/quickstart.md](docs/quickstart.md) for a full walkthrough.
+`normal` is aggressive in workflow shape, not reckless in execution.
 
-## CLI quick reference
+- Scans and plans are read-only
+- CLI commands do not delete media
+- Web deletions require checkbox selection and a confirmation action
+- The server revalidates selected paths against the active source root before deleting
+- `normal` will not silently rename or destroy files behind your back
+
+Before touching a live library, use a representative local test library first. The recommended sanity checks are in [docs/quickstart.md](docs/quickstart.md) and [docs/safety.md](docs/safety.md).
+
+## Get Started
 
 ```bash
-# Scan for quality issues, normalize names
-normal movie-scan --source /path/to/movies --report scan.json --progress
-normal movie-plan --source /path/to/movies --plan plan.json
-normal movie-apply --source /path/to/movies --plan plan.json --target /path/to/output
-
-# Web UI
-normal web --host 127.0.0.1 --port 8765 --source /path/to/library
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+ffprobe -version
+normal --help
+normal web --host 127.0.0.1 --port 8765 --source /path/to/Test\ Movies
 ```
+
+Then open `http://127.0.0.1:8765`.
 
 ## Docs
 
-- [Movies](docs/movies.md)
+- [Statement](docs/statement.md)
 - [Install](docs/install.md)
 - [Quick start](docs/quickstart.md)
+- [Movies](docs/movies.md)
+- [Safety](docs/safety.md)
 - [CLI reference](docs/commands.md)
-- [Safety model](docs/safety.md)
+- [Documentation authorship](docs/writing.md)
 - [Roadmap](docs/roadmap.md)
 
-For contributors and AI agents working in the codebase: [docs/agent.md](docs/agent.md).
+Historical note: `normal` did not start as a movie-only tool. Current public docs describe what it is now. Project-history docs still note the path it took to get here, including the now-legacy music lane.
 
-## Design posture
-
-`normal` is a single-user local utility. Some preferences are intentionally hardcoded rather than surfaced as UI controls — the expected adjustment path is direct repo or agent edits. This is a deliberate pre-1.0 stance; see the roadmap for how this evolves toward the 1.0 UI.
-
-## Known issue
-
-There is an open movie-scan / web UI issue around probe cancellation and observability. Under some currently unknown interaction pattern — likely involving scan cancellation, quick page changes, and rapidly starting another scan — an `ffprobe` process can keep running in the background after the UI thinks the scan is gone. In that state the leftover probe may also fail to appear in the Drive Activity indicator because the current `ps`-based visibility check does not catch every case.
+For contributors and AI agents working in the codebase: [docs/agent.md](docs/agent.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

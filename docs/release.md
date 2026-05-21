@@ -1,5 +1,7 @@
 # Release notes
 
+*Authorship: Agent-written.*
+
 This is an internal guide for keeping versioning, the changelog, and the roadmap
 aligned. Keep it local and lightweight until the first GitHub push is ready.
 

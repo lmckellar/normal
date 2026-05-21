@@ -1,42 +1,36 @@
 # Movies
 
-The movie lane handles four practical problems in a pirated library: inconsistent naming, uneven encode quality, bad multi-audio packaging, and messy subtitle defaults.
+*Authorship: Agent-written.*
 
-![Movies dashboard](assets/movies_dashboard_default.png)
+The movie workflow is the product now. It is not a generic media organizer. It is a deliberate local system for forcing a pirate movie library toward a cleaner downstream shape with as little ambiguity, scan waste, and junk tolerance as possible.
+
+![Movies dashboard](assets/readme_dashboard.png)
 
 ## Dashboard
 
-A library-wide view of encode quality — resolution breakdown, quality tier distribution, and bitrate histograms. A good first stop to understand the shape of your collection before deciding what to clean up.
+A library-wide view of encode quality, resolution mix, standards posture, and replacement pressure. This is the first stop if you want to understand what kind of library you actually have rather than what you imagine you have.
 
-To export a formatted XLSX catalogue of the current library, use the **Export** button on the Movies library card in the Library Switcher (top-left). The button is visible whenever a Movies library path is configured.
-
-Theme examples:
-
-![Movies dashboard, Win95 theme](assets/movies_dashboard_win95.png)
-
-![Movies dashboard, dark theme](assets/movies_dashboard_dark.png)
-
-![Movies dashboard, matrix theme](assets/movies_dashboard_matrix.png)
-
-![Movies dashboard, sand theme](assets/movies_dashboard_sand.png)
+To export a formatted XLSX catalogue of the current library, use the **Export** button on the Movies library card in the Library Switcher.
 
 ## Canonical Lists
 
-The **Canonical Lists** page compares owned titles against live all-time movie lists using TMDb and a local cache. It is title-coverage focused: bitrate, quality tiers, and warning telemetry do not affect the result.
+The **Canonical Lists** page compares owned titles against live all-time movie lists using TMDb and a local cache. It is title-coverage focused. Bitrate, quality tiers, and warning telemetry do not affect the result.
 
 Pass `--tmdb-key` to `normal web` or set `TMDB_KEY` before launch. Current badges are intentionally simple and good enough for first-pass coverage tracking; badge-system refinement is deferred.
 
+![Canonical Lists](assets/canonical_lists.png)
+
 ## Normalize names
 
-Files named by whoever uploaded them tend to have inconsistent formatting — varying year placement, leftover technical tokens, mismatched folder names. `normal` parses each path locally (no network lookups) and proposes a clean, consistent target shape:
+Uploader naming is usually sloppy. `normal` parses each path locally with no remote metadata and proposes a clean target shape:
 
 ```
 Title (Year)/Title (Year).mkv
 ```
 
-The production normalizer is concise-first and now considered product-complete for movie libraries. Its default **All Results** review shows every scanned video file, including already-normalized items as no-change rows, so the proposed structure preview can show the full selected downstream library shape. Use the **Safe** and **Flagged for review** list filters with **Select All / Deselect All** to narrow or bulk-select the actionable rows.
+The production normalizer is concise-first and treated as the intended movie shape. **All Results** includes already-normalized items as no-change rows so the preview shows the full downstream structure, not just the diffs.
 
-Verbose naming still exists temporarily in the web UI and CLI as a parser-hardening leftover, but it is scheduled for removal before the broader refactor. The CLI currently supports `--naming-style verbose` for this older technical-token shape:
+Verbose naming still exists temporarily in the CLI as parser-hardening scaffolding, but it is not the public end state:
 
 ```
 Title (Year) [technical tokens]/Title (Year) [technical tokens].mkv
@@ -56,9 +50,11 @@ Normalize also handles common library-chaos cleanup when the evidence is local a
 
 The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it can split technical-token runs that appear before a trailing parenthesized year. In verbose mode, it keeps selected edition/video details such as `Director's Cut`, `BluRay Remux`, codec, resolution, and HDR tokens while dropping uploader, language, and audio-packaging noise.
 
+![Normalize Movie Files & Folders](assets/normalize_movies.png)
+
 ## Quality triage
 
-A full movie profile scan now separates **Action Based** cards from **Quality Profile** cards.
+A full movie profile scan separates **Action Based** cards from **Quality Profile** cards.
 
 Action cards:
 
@@ -72,12 +68,12 @@ Quality profile cards:
 
 | Profile | What it means |
 |---|---|
-| `Standard Definition` | Edge cases and legacy files that are still worth keeping |
-| `Library Grade` | Good enough for casual viewing, including compact encodes like Tigole |
+| `Standard Definition` | Weak HD encodes and standard-definition material still worth keeping |
+| `Library Grade` | Good enough for casual viewing and broad library selection |
 | `Collector Grade` | Solid compact encodes that hold up better on difficult material |
-| `Reference` | Mild to no visual compression with lossless audio |
+| `Reference` | Mild to no visual compression with lossless-audio posture |
 
-The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Replacement Candidate uses a simpler inline **Edit** control: choose the quality-profile cutoff, then save to refresh the dashboard. Quality-profile editing no longer exposes per-profile allowed audio codec lists; audio posture is controlled through channel floor, bitrate floor, vintage channel exemption, and **Require lossless audio**.
+The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Replacement Candidate uses a simpler inline **Edit** control: choose the quality-profile cutoff, then save.
 
 Dashboard movie profile scans stream progress without pre-counting the whole tree. During a scan, the drive activity bar shows processed file count, elapsed time, current `ffprobe` target when visible, and ETA only when a bounded total is known. This avoids false precision on large rebuilds while still showing forward movement.
 
@@ -92,29 +88,35 @@ The audio channel minimum has a companion **Exempt pre-surround era films** sett
 
 Quality scan results include a normalized main-audio summary for the playback-relevant stream alongside audio bitrate — `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`, and similar labels.
 
-The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue — when a better encode for the same title shows up in a future scan, it is automatically marked complete.
+The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue. When a better encode for the same title shows up in a future scan, it is automatically marked complete.
 
 Queue history has four hard filters: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Deleted rows can be dismissed from queue history inline when the release is no longer worth replacing. That action only changes queue state; it does not touch media files.
 
 The queue-history table is sortable by title, year, and IMDb rating. IMDb ratings are fetched server-side from [OMDb](https://www.omdbapi.com/) and require a free API key passed via `--omdb-key` or the `OMDB_KEY` environment variable. Lookups use local title cleanup plus a small cache, so repeated page loads do not keep spending the OMDb quota. Without a key the column is hidden; when OMDb is rate-limited, new cells show `limit` and cached ratings still display.
 
-## Multi-audio packaging triage
+![Delete Weak Encodes](assets/delete_weak_encodes.png)
 
-Some MKVs are muxed with the wrong main audio track: for example, Italian marked as default and a weaker English track left as the fallback. The **Fix Multi-Audio Packaging** page uses the same replacement-queue workflow as weak encode triage, but with different scan rules:
+## Repair defaults
+
+`Repair Defaults` is one page with two sub-tabs: `Audio Packaging` and `Subtitle Readiness`.
+
+### Audio Packaging
+
+Some MKVs are muxed with the wrong main audio track: for example, Italian marked as default and a weaker English track left as the fallback. The `Audio Packaging` tab uses the same shared movie profile scan and replacement-queue substrate as weak-encode triage, but with different issue rules:
 
 - detect non-English default audio when English is present
 - flag the stronger case where the English fallback is materially weaker than the default track
 - show the main audio summary plus default-vs-English stream summaries so the queue is explainable before deletion
 
-For MKVs, the page can do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops audio streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers are left as review-only items. Replacement queue delete/replace is still available for genuinely bad releases.
+For MKVs, the page can do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers stay review-only.
 
 While a remux is running, the page locks checkbox selection and disables conflicting bulk actions. The destructive **Delete Selected Files** button is separated to the far right of the action row so it is visually distinct from the two repair actions.
 
-Current safety note: **Make English Default** has been exercised against real files. **Make English Default + Delete Foreign Audio** is implemented but currently untested on real libraries and should be treated as a cautious review-only workflow before first public push.
+Current safety note: **Make English Default** has been exercised against real files. **Make English Default + Delete Foreign Audio** is implemented but currently untested on real libraries and should still be treated cautiously.
 
-## Subtitle readiness repair
+### Subtitle Readiness
 
-The **Repair Subtitle Readiness** page is a sibling repair lane built on the same movie-profile scan. It follows the current subtitle hygiene stance from the standards engine:
+The `Subtitle Readiness` tab is the sibling repair lane built on the same profile scan. It follows the current subtitle hygiene stance from the standards engine:
 
 - default to no subtitle when main audio is already English
 - default to forced English when a forced English subtitle exists
@@ -124,14 +126,22 @@ This workflow is non-destructive: it does not delete media files or subtitle fil
 
 Current scope is embedded subtitle streams already inside the container. External `.srt` / `.ass` sidecars are not modified.
 
+Subtitle review-only and fixed items are also tracked in subtitle history. That is useful today, but it is not yet a finished broad audit system for every destructive or repair action in the product.
+
+![Repair Defaults](assets/repair_defaults.png)
+
 ## Junk cleanup
 
-Two pages handle library noise:
+`Delete Junk & Spam Files` is one combined scan with two result panels:
 
-- **Delete Junk Videos** — junk-marker videos such as samples, extras, and featurettes, detected from filenames, ancestor folders, and conservative size thresholds with a hard 4 GB suppression ceiling
-- **Delete Junk Sidecar & Spam Files** — promo PDFs, NFO files, and other non-video sidecars
+- junk-marker videos such as samples, extras, and featurettes, detected from filenames, ancestor folders, and conservative size thresholds with a hard 4 GB suppression ceiling
+- promo PDFs, NFOs, HTML files, and other non-video sidecar spam
 
-Both show a preview list before anything is deleted.
+Both are preview-first. Nothing is deleted until you select rows and confirm.
+
+Current honesty note: junk deletion history in the UI is useful for the session, but long-term permanence and coherence of junk-deletion audit logging still has a real gap.
+
+![Delete Junk & Spam Files](assets/delete_junk_spam.png)
 
 ## Catalogue export
 
@@ -147,14 +157,12 @@ The `Audio` column uses the same normalized main-audio summary as the scan and w
 
 | Page | What it does |
 |---|---|
-| Dashboard | Quality overview — tiers, histograms, resolution breakdown. Export XLSX catalogue via Library Switcher. |
-| Normalize | Review and apply rename plans |
-| Delete Weak Encodes | Triage and queue replacements |
-| Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |
-| Repair Subtitle Readiness | Repair embedded subtitle defaults for supported MKVs without deleting files |
-| Delete Junk Videos | Remove samples, extras, featurettes, and similar bonus-content junk |
-| Delete Junk Sidecar & Spam Files | Remove sidecar and spam files |
-| Canonical Lists | Compare owned titles against live all-time movie lists and unlock simple coverage badges |
+| Dashboard View | Quality overview, replacement pressure, histograms, standards editing |
+| Normalize Movie Files & Folders | Review and apply rename plans |
+| Delete Weak Encodes | Triage low-floor encodes and queue replacements |
+| Repair Defaults | Fix default audio/subtitle behavior where supported, or keep review cases visible |
+| Delete Junk & Spam Files | Remove junk videos and sidecar spam after preview and confirmation |
+| Canonical Lists | Compare owned titles against curated movie lists and unlock simple coverage badges |
 
 ## Known issue
 

@@ -1,83 +1,8 @@
 # CLI reference
 
-All commands share `--source` for the library root unless otherwise noted.
+*Authorship: Agent-written.*
 
-## Music lane
-
-### scan
-
-Analyze a FLAC library for tag, filename, and folder issues.
-
-```bash
-normal scan --source /path/to/music --report out/scan.json
-```
-
-| Flag | Required | Description |
-|---|---|---|
-| `--source` | Yes | Path to music library root |
-| `--report` | Yes | Output path for the JSON scan report |
-
-No changes made.
-
----
-
-### plan
-
-Generate a reviewable change plan.
-
-```bash
-normal plan --source /path/to/music --plan out/plan.json --summary out/plan.md
-```
-
-| Flag | Required | Description |
-|---|---|---|
-| `--source` | Yes | Path to music library root |
-| `--plan` | Yes | Output path for the JSON plan file |
-| `--summary` | No | Output path for a human-readable plan summary |
-
-No changes made.
-
----
-
-### apply
-
-Execute an existing plan.
-
-```bash
-# Write to a new directory (recommended)
-normal apply --source /path/to/music --plan out/plan.json --target /path/to/output
-
-# Mutate in place (explicit opt-in)
-normal apply --source /path/to/music --plan out/plan.json --in-place
-```
-
-| Flag | Required | Description |
-|---|---|---|
-| `--source` | Yes | Path to the source music library |
-| `--plan` | Yes | Path to an existing JSON plan file |
-| `--target` | One of | Output directory for the cleaned copy |
-| `--in-place` | One of | Mutate the source library directly |
-
-Writes `normal-apply-report.json` to the destination root.
-
----
-
-### output
-
-Export a cleaned library as an album-level CSV.
-
-```bash
-normal output --source /path/to/cleaned-music --csv out/collection.csv
-```
-
-| Flag | Required | Description |
-|---|---|---|
-| `--source` | Yes | Path to the cleaned music library |
-| `--csv` | Yes | Output path for the CSV |
-
----
-
-## Movie lane
+All current top-level commands are movie commands.
 
 ### movie-plan
 
@@ -93,7 +18,7 @@ normal movie-plan --source /path/to/movies --plan out/plan.json --naming-style v
 | `--source` | Yes | Path to movie library root |
 | `--plan` | Yes | Output path for the JSON plan file |
 | `--summary` | No | Output path for a human-readable summary |
-| `--naming-style` | No | `concise` for production `Title (Year)` output, or temporary `verbose` output with selected edition/video tokens. Defaults to `concise`; verbose is scheduled for removal. |
+| `--naming-style` | No | `concise` for intended `Title (Year)` output, or temporary `verbose` output with selected edition and video tokens. Defaults to `concise`. |
 
 Default target naming shape: `Title (Year)/Title (Year).ext`
 
@@ -123,7 +48,14 @@ normal movie-apply --source /path/to/movies --plan out/plan.json --target /path/
 normal movie-apply --source /path/to/movies --plan out/plan.json --in-place
 ```
 
-Same flag semantics as `apply`. Writes `normal-movie-apply-report.json`.
+Writes `normal-movie-apply-report.json`.
+
+| Flag | Required | Description |
+|---|---|---|
+| `--source` | Yes | Path to the source movie library |
+| `--plan` | Yes | Path to an existing JSON plan file |
+| `--target` | One of | Output directory for the cleaned copy |
+| `--in-place` | One of | Mutate the source library directly |
 
 ---
 
@@ -174,24 +106,24 @@ Quality-profile labels:
 
 | Profile | Meaning |
 |---|---|
-| `Standard Definition` | Edge cases and legacy files that are still worth keeping |
-| `Library Grade` | Good enough for casual viewing, including compact encodes like Tigole |
+| `Standard Definition` | Weak HD encodes and standard-definition material still worth keeping |
+| `Library Grade` | Good enough for casual viewing and broad library selection |
 | `Collector Grade` | Solid compact encodes that hold up better on difficult material |
 | `Reference` | Mild to no visual compression with lossless-audio posture |
 
 Config source:
 - repo-local `movie_standards.json`
 
-Dashboard note:
-- `Movies / Dashboard View` now separates action cards from quality-profile cards. Inline definition controls live on the quality-profile cards and the Replacement Candidate card, write `movie_standards.json`, then rerun the dashboard so counts refresh against the new stance rules.
-- Standards persistence is repo-local rather than port-local. Browser cache is only a convenience snapshot, and stale dashboard saves are rejected if `movie_standards.json` changed since that view loaded.
-- Quality-profile edit controls intentionally omit per-profile allowed audio codec lists. Profile matching uses video floor, main-audio channel/bitrate floors, optional vintage channel exemption, hygiene toggles, and the lossless-audio toggle.
-- Dashboard movie profile scans report streamed progress in the activity bar as processed file count and current probe target. Percent/ETA appear only for workflows with a known total.
+Dashboard notes:
+- `Movies / Dashboard View` separates action cards from quality-profile cards.
+- Inline definition controls write `movie_standards.json`.
+- Browser cache is convenience state only; repo-local standards are authoritative.
+- Dashboard scans report streamed progress in the activity bar.
 
-The same `movie-profile` report also powers two separate web triage lanes:
+The same `movie-profile` report also powers the main web triage lanes:
 
 - `Delete Weak Encodes`
-- `Fix Multi-Audio Packaging`
+- `Repair Defaults`
 
 ---
 
@@ -223,7 +155,7 @@ normal movie-junk --source /path/to/movies --report out/junk.json
 | `--source` | Yes | Path to movie library root |
 | `--report` | Yes | Output path for the JSON junk report |
 
-CLI is report-only. Deletion is done through the web UI.
+CLI is report-only. Deletion is done through the web UI after selection and confirmation.
 
 Detection criteria:
 - junk markers in filenames or ancestor folders such as `sample`, `samples`, `extra`, `extras`, `featurette`, `featurettes`, and known typo variants
@@ -289,9 +221,8 @@ Movie pages currently exposed in the web UI:
 - `Dashboard View`
 - `Normalize Movie Files & Folders`
 - `Delete Weak Encodes`
-- `Fix Multi-Audio Packaging`
-- `Delete Junk Videos`
-- `Delete Junk Sidecar & Spam Files`
+- `Repair Defaults`
+- `Delete Junk & Spam Files`
 - `Canonical Lists`
 
 Heavy recursive web scans now show a confirmation warning for risky sources such as drive-root style paths and NTFS/FUSE mounts. The server also rejects overlapping heavy scans for the same source instead of running them concurrently.

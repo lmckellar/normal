@@ -1,21 +1,22 @@
 # Safety model
 
-`normal` is conservative by design. Scans and plans are read-only. Mutations require an explicit user action, and destructive web actions re-check the selected paths immediately before touching disk.
+*Authorship: Agent-written.*
+
+`normal` is no longer conservative in product opinion, but it is still explicit in execution. Scans and plans are read-only. Mutations require an intentional user action. Destructive web actions re-check the selected paths immediately before touching disk.
 
 ## Read-only operations
 
 These commands do not mutate the library:
 
-| Lane | Commands |
+| Scope | Commands |
 |---|---|
-| Music | `scan`, `plan`, `output` |
 | Movies | `movie-plan`, `movie-scan`, `movie-profile`, `movie-inspect`, `movie-junk`, `movie-output`, `movie-register` |
 
 Read-only commands may write reports, plans, CSV files, or XLSX catalogues to the explicit output paths you provide. They do not rename, delete, overwrite, or rewrite media files.
 
 ## Apply operations
 
-Music `apply` and movie `movie-apply` use the same safety posture:
+`movie-apply` uses the following safety posture:
 
 - Requires an explicit plan file. There is no auto-apply from scan output.
 - `--target` and `--in-place` are mutually exclusive; exactly one must be specified.
@@ -30,28 +31,31 @@ Music `apply` and movie `movie-apply` use the same safety posture:
 All destructive web UI actions follow the same pattern:
 
 1. User selects files via checkboxes. Selection alone does nothing.
-2. User clicks a delete button.
+2. User clicks a destructive action button.
 3. The browser confirmation step must pass.
 4. The server revalidates every selected path against the current source root.
 5. Paths outside the active source root are rejected.
 6. Each file is reclassified immediately before deletion where a detector exists.
 
-**Delete Junk Videos / Delete Junk Sidecar & Spam Files**: selected files are revalidated as current junk candidates before unlink. A file that no longer meets the junk criteria is skipped.
+Those first two steps are the minimum two approval gates the product promises before deletion: explicit selection and explicit confirmation.
 
-**Delete Weak Encodes / Fix Multi-Audio Packaging**: selected files are added to the movie Replacement Queue and then deleted after confirmation. Deleted items remain visible as `deleted, awaiting replacement` and can be auto-completed by a future scan when a replacement copy appears that no longer matches the queued issue family. Deleted queue items can also be manually marked `deleted from queue` when they are no longer worth replacing; that action is queue-only and does not delete media.
+**Delete Junk & Spam Files**: selected files are revalidated as current junk candidates before unlink. A file that no longer meets the junk criteria is skipped.
+
+**Delete Weak Encodes / Repair Defaults (Audio Packaging)**: selected files are added to the movie Replacement Queue and then deleted after confirmation. Deleted items remain visible as `deleted, awaiting replacement` and can be auto-completed by a future scan when a replacement copy appears that no longer matches the queued issue family. Deleted queue items can also be manually marked `deleted from queue` when they are no longer worth replacing. That action is queue-only and does not delete media.
 
 The CLI does not delete media. Deletion workflows are web-only and require checkbox selection plus confirmation.
 
-## Replacement queues
+## Replacement queue
 
-Replacement queues are source-scoped and stored under `~/.local/share/normal/`:
+The movie replacement queue is source-scoped and stored under `~/.local/share/normal/`:
 
 | Queue | File |
 |---|---|
 | Movies | `movie-replacement-queue.json` |
-| Music | `music-replacement-queue.json` |
 
 Queue items move forward through states such as `pending`, `deleted`, `dismissed`, and `completed`. The tool does not silently remove queue history.
+
+Subtitle repair also keeps a separate source-scoped subtitle history. Junk deletion has useful UI history today, but not yet the same durable coherent audit posture.
 
 ## Scan control
 
@@ -71,7 +75,7 @@ There is also an execution-model guard behind the movie-side heavy scans: recurs
 
 This is also worth treating as a candidate pattern for broader platform hardening, not just a Linux-local fix. Different filesystems, launch paths, indexers, sync agents, antivirus, thumbnailers, and shell or service managers can amplify up-front directory walks and incidental writes differently. Current read/write hygiene looks directionally safer, but cross-platform effects are not yet characterized and should be validated rather than assumed.
 
-Movie metadata probes run through `ffprobe` with a 30 second timeout per file. A timed-out probe becomes a reported warning/error for that file rather than hanging the whole scan indefinitely.
+Movie metadata probes run through `ffprobe` with a 30 second timeout per file. A timed-out probe becomes a reported warning or error for that file rather than hanging the whole scan indefinitely.
 
 Known open issue:
 
@@ -102,8 +106,6 @@ If the OS process check is unavailable or times out, the UI reports that process
 ## Remote access and metadata
 
 Core scan, profile, normalize, and delete workflows are local-first. They do not require cloud services and do not fetch remote metadata.
-
-Artwork repair is the exception: candidate discovery can query configured web sources for artist images, and approved artwork writes are explicit. Low-confidence writes are tagged with provenance so future scans can distinguish tool-written artwork from existing local sidecars.
 
 ## What normal will never do without explicit instruction
 
