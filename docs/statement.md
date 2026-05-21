@@ -2,6 +2,8 @@
 
 *Authorship: Gently user-edited.*
 
+Human authored update: This document was transcribed from my insane, hurried scrawlings by the ever patient GPT5.4 that has accompanied me so well throughout this journey. He has, sadly, collpased far too much information for my liking or for this to coherently fit with what i consider to be my states positions regarding authorship for this project, nascent thoough they may be. Time is short right now, so consider this to be a purely AI summarized document for now - that is marked as intended for complete re-writing into human output. The original transcript of the conversation and notes that produced this artefact have been preserved in internal/docs.
+
 `normal` has evolved from a safety-first, probe-heavy file renaming tool with less clearly separated functions into a highly opinionated movie-library workflow that now asserts the following.
 
 ## A Good Pirate Movie Library Should
