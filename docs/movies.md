@@ -128,7 +128,7 @@ Current scope is embedded subtitle streams already inside the container. Externa
 
 Two pages handle library noise:
 
-- **Delete Junk Videos** — samples, featurettes, and shorts, detected by path tokens and duration
+- **Delete Junk Videos** — junk-marker videos such as samples, extras, featurettes, and short bonus clips, detected from filenames, ancestor folders, duration, and conservative size thresholds
 - **Delete Junk Sidecar & Spam Files** — promo PDFs, NFO files, and other non-video sidecars
 
 Both show a preview list before anything is deleted.
@@ -152,7 +152,7 @@ The `Audio` column uses the same normalized main-audio summary as the scan and w
 | Delete Weak Encodes | Triage and queue replacements |
 | Fix Multi-Audio Packaging | Detect wrong-language defaults, remux MKVs to prefer English, optionally drop tagged foreign-language audio, or queue replacements |
 | Repair Subtitle Readiness | Repair embedded subtitle defaults for supported MKVs without deleting files |
-| Delete Junk Videos | Remove samples and featurettes |
+| Delete Junk Videos | Remove samples, extras, featurettes, and similar bonus-content junk |
 | Delete Junk Sidecar & Spam Files | Remove sidecar and spam files |
 | Canonical Lists | Compare owned titles against live all-time movie lists and unlock simple coverage badges |
 

@@ -7,41 +7,39 @@ For AI agents and developers working in this codebase. Covers repo structure, mo
 ```
 normal/
 ├── cli.py                       # CLI entry point and command dispatch
-├── commands.py                  # Music command implementations (scan, plan, apply, output)
+├── commands.py                  # CLI command implementations (movie scan, plan, apply, output, web)
 ├── models.py                    # Shared data models — ProposedChange and core types
-├── scan.py                      # Music scan: reads FLAC tags, groups into albums, emits issues
-├── plan.py                      # Music plan: proposes tag edits, renames, folder moves
-├── apply.py                     # Music apply: executes an existing plan file
-├── output.py                    # Music CSV export + movie XLSX register (movie-register)
+├── output.py                    # Movie XLSX register (movie-register) and quality CSV export
+├── movie_apply.py               # Movie apply: executes an existing plan file
 ├── movie_scan.py                # Movie scan: ffprobe probing, quality scoring, triage
 ├── movie_plan.py                # Movie plan: title/year parsing, rename proposals
 ├── movie_profile.py             # Movie profile: quality ladder classification, heuristic findings
 ├── movie_audio_fix.py           # Movie audio packaging repair: lossless MKV remux helpers
 ├── movie_inspect.py             # Movie inspect: single-file diagnostic
-├── movie_junk.py                # Movie junk: sample/featurette/short detection
+├── movie_junk.py                # Movie junk: sample/featurette/short + sidecar spam detection
 ├── movie_omdb.py                # Server-side OMDb rating lookups and cache
 ├── movie_replacement_queue.py   # Replacement queue: persistent state for movie triage families
+├── movie_subtitle_fix.py        # Subtitle repair: lossless MKV remux for subtitle default flags
 ├── movie_subtitle_history.py    # Subtitle fix audit log: persistent history for fixed and review-only items
-├── music_profile.py             # Music profile: format/fidelity classification for dashboard
-├── music_replacement_queue.py   # Music replacement queue (parallel structure to movie queue)
+├── movie_canonical_lists.py     # Canonical list coverage: TMDb list fetching and library matching
+├── movie_identity.py            # Movie title/year parsing shared across scan and plan
+├── probe_cache.py               # Persistent ffprobe result cache (keyed by path + mtime)
 ├── quality_review.py            # Quality review helpers
-├── artwork.py                   # Artist artwork: Jellyfin sidecar fetch, candidate approval, write
 ├── web.py                       # Built-in HTTP server + all web API route handlers
 ├── __init__.py
 └── __main__.py                  # python -m normal entry point
 
-tests/                           # Unit and fixture-based tests
-fixtures/                        # Sample FLAC albums for scan/plan/apply/output tests
+tests/                           # Unit tests
 docs/                            # User and agent documentation
 ```
 
 ## Module ownership
 
-- **Music normalization pipeline**: `scan.py` → `plan.py` → `apply.py` → `output.py`
-- **Movie normalization pipeline**: `movie_plan.py` → `movie_apply` (in `commands.py`)
+- **Movie normalization pipeline**: `movie_plan.py` → `movie_apply.py`
 - **Movie quality pipeline**: `movie_scan.py` → `movie_profile.py` → `movie_inspect.py` → `movie_junk.py`
 - **Movie audio packaging repair**: `movie_profile.py` → `movie_audio_fix.py`
 - **Movie subtitle repair**: `movie_profile.py` → `movie_subtitle_fix.py` → `movie_subtitle_history.py`
+- **Probe caching**: `probe_cache.py` — persistent per-file ffprobe cache; shared by profile, junk, export, and inspect
 - **Web layer**: `web.py` — all HTTP routes in one file; stdlib `http.server`, no external framework
 - **Shared data contract**: `models.py` — `ProposedChange` is the core type crossing module boundaries
 - **Persistent state**: `movie_replacement_queue.py` writes to `~/.local/share/normal/movie-replacement-queue.json`; `movie_subtitle_history.py` writes to `~/.local/share/normal/subtitle-fix-history.json`
@@ -100,10 +98,6 @@ Core type used throughout the plan/apply pipeline:
 | `proposed_value` | str | Proposed replacement value |
 | `confidence` | str | `safe` or `review` |
 | `reason` | str | Human-readable reason for the change |
-
-### Music scan / plan report (JSON)
-
-Top-level keys: `source_root`, `generated_at`, `ruleset_version`, `tracks`, `albums`, `proposed_changes`, `warnings`
 
 ### Movie scan report (JSON)
 
@@ -181,12 +175,6 @@ Keyed by source directory. Each item carries `item_id` (SHA256[:16] of `source_r
 - `fixed` items are written when the subtitle repair action completes successfully.
 - Dismissal sets `dismissed_at`; items are never deleted.
 
-### Artwork provenance (JSON)
-
-Path: `Album Artist/artist.normal-artwork.json`
-
-Written alongside low-confidence artwork writes. Stores source label (`low confidence album`, `low confidence web`, `low confidence wikimedia`, `low confidence Bing`, `low confidence dropped image`). Rescans use it to restore labels. Deleting the file manually re-labels the image as a verified local sidecar on the next scan.
-
 ## Web API routes
 
 All routes in `web.py`. Key families:
@@ -196,19 +184,6 @@ All routes in `web.py`. Key families:
 | `/api/activity?source=...` | GET | Current normal / ffprobe / ffmpeg activity for a source |
 | `/api/library-roots` | GET / POST | Load or save main and recent library roots |
 | `/api/source/scan-warning` | POST | Detect risky scan sources such as drive-root style paths and NTFS/FUSE mounts and return a confirmation warning payload |
-| `/api/music/apply` | POST | Apply selected music changes in-place |
-| `/api/music/profile` | POST | Music dashboard profile / weak encode triage payload |
-| `/api/music/normalize` | POST | Build music normalize plan |
-| `/api/music/replacement-queue/list` | POST | Music replacement queue for current source |
-| `/api/music/replacement-queue/add` | POST | Add music profile items to queue |
-| `/api/music/replacement-queue/delete` | POST | Delete queued music items and mark them deleted |
-| `/api/music/artwork/scan` | POST | Artist artwork scan |
-| `/api/music/artwork/candidates` | POST | Candidate discovery for one artist |
-| `/api/music/artwork/image-search` | POST | Paginated image-search candidates for one artist |
-| `/api/music/artwork/apply` | POST | Apply approved artwork candidates |
-| `/api/music/artwork/backfill-jellyfin` | POST | Copy local artist sidecars into Jellyfin metadata cache |
-| `/api/music/artwork/promote` | POST | Promote a cached/approved artwork candidate |
-| `/api/music/artwork/image?...` | GET | Serve artwork preview image bytes |
 | `/api/movies/apply` | POST | Apply selected movie renames in-place |
 | `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, audio packaging triage, and subtitle-readiness triage |
 | `/api/movies/dashboard/histogram` | POST | Rebuild movie dashboard histogram aggregates from the current in-memory `movies` payload after partial web mutations |
@@ -234,16 +209,16 @@ All routes in `web.py`. Key families:
 
 Hard rules — do not relax without explicit user instruction:
 
-1. `scan`, `plan`, `movie-scan`, `movie-profile`, `movie-inspect`, `movie-junk`, `output`, `movie-output`, `movie-register` make **no file mutations**.
-2. `apply` and `movie-apply` require an explicit plan file and never auto-apply from a scan.
-3. `apply --target` writes to a new directory; the source is untouched.
-4. `apply --in-place` is explicitly opt-in — never infer it from context.
+1. `movie-scan`, `movie-profile`, `movie-inspect`, `movie-junk`, `movie-output`, `movie-register` make **no file mutations**.
+2. `movie-apply` requires an explicit plan file and never auto-applies from a scan.
+3. `movie-apply --target` writes to a new directory; the source is untouched.
+4. `movie-apply --in-place` is explicitly opt-in — never infer it from context.
 5. Web UI delete routes validate each path against the current source root before unlinking; outside-root paths are rejected.
 6. Junk deletion revalidates each candidate as junk immediately before deletion.
-7. Junk token matches (path contains `sample`, `featurette`, etc.) are suppressed for files ≥ 500 MB — no legitimate sample is that large, and parent folder names like `Movie and Sample` would otherwise cause false positives on full-length features.
-7. No remote metadata fetching — all data comes from local files only.
-8. Heavy recursive web scans are single-flight per source; same-source overlaps are rejected.
-9. Heavy movie-side recursive discovery is intentionally streamed rather than fully enumerated up front, because that change was central to reducing the earlier CPU spike and improving cancellation behavior.
+7. Movie junk uses a larger marker-based window: junk markers in filenames or ancestor folders can be high-confidence below 2 GB, and 2-3 GB cases require stacked signals before promotion.
+8. No remote metadata fetching — all data comes from local files only.
+9. Heavy recursive web scans are single-flight per source; same-source overlaps are rejected.
+10. Heavy movie-side recursive discovery is intentionally streamed rather than fully enumerated up front, because that change was central to reducing the earlier CPU spike and improving cancellation behavior.
 
 ## Intentional design decisions
 
@@ -256,7 +231,6 @@ These are deliberate choices, not gaps:
 - **Movie normalize scan walks the directory once.** `build_movie_plan` accepts an optional `movie_files: list[Path] | None` keyword argument. `handle_movies_normalize` and `handle_movies_apply` call `discover_video_files` once and pass the result to all per-style plan builds, eliminating the previous 3× redundant walk.
 - **Movie audio labels are centralized.** Main-audio display strings should come from the shared normalization path, not from per-surface ad hoc codec formatting. Keep scan JSON, CSV/XLSX export, and web tables aligned.
 - **`Movies > Plex Compatibility` is hidden in the current UI.** The heuristics live in `movie_profile.py`. The page is suppressed because the workflow isn't concrete enough. Do not re-expose it without a workflow design.
-- **Music normalization is FLAC-only.** MP3 appears in dashboard profile views but is not a normalization target before 1.0.
 - **No external web framework.** `web.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.
 - **Replacement candidates are standards-driven.** Delete/replace eligibility is based on `profile.weak_candidate`, which is derived from the configured quality-profile cutoff in repo-local `movie_standards.json`.
 - **Movie standards persistence is file-backed.** `movie_standards.json` is the authoritative store across server restarts and localhost port changes. Browser dashboard cache is origin-scoped convenience state only.

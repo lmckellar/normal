@@ -236,16 +236,12 @@ class WebTests(unittest.TestCase):
     def test_movie_junk_page_is_wired(self) -> None:
         self.assertIn("id: 'junk'", INDEX_HTML)
         self.assertIn("endpoint: '/api/movies/junk'", INDEX_HTML)
-        self.assertIn("id: 'promo'", INDEX_HTML)
-        self.assertIn("endpoint: '/api/movies/promo-docs'", INDEX_HTML)
         self.assertIn("'/api/movies/junk/delete'", INDEX_HTML)
-        self.assertIn("junk: null, promo: null", INDEX_HTML)
+        self.assertIn("junk: null,", INDEX_HTML)
         self.assertIn("if (page === 'junk') {\n          state.results.movies.junk = payload;", INDEX_HTML)
-        self.assertIn("if (page === 'promo') {\n          state.results.movies.promo = payload;", INDEX_HTML)
         self.assertIn("renderMovieJunk(state.results.movies.junk);", INDEX_HTML)
-        self.assertIn("renderMovieJunk(state.results.movies.promo);", INDEX_HTML)
-        self.assertIn("const resultKey = state.page === 'promo' ? 'promo' : 'junk';", INDEX_HTML)
-        self.assertNotIn("if (page === 'junk' || page === 'promo') {\n          state.results.movies.junk = payload;", INDEX_HTML)
+        self.assertNotIn("id: 'promo'", INDEX_HTML)
+        self.assertNotIn("endpoint: '/api/movies/promo-docs'", INDEX_HTML)
 
     def test_movie_replacement_queue_is_wired_inside_weak_encodes(self) -> None:
         self.assertIn("Replacement Queue", INDEX_HTML)
@@ -312,7 +308,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("queued</span>", INDEX_HTML)
         self.assertIn("Deleted, Waiting Replacement", INDEX_HTML)
         self.assertIn("!replacementQueueItemForPath(payload, item.path)", INDEX_HTML)
-        self.assertIn("button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }", INDEX_HTML)
+        self.assertIn("button:disabled { opacity: 0.45; cursor: not-allowed; }", INDEX_HTML)
         self.assertIn("color: var(--ink);", INDEX_HTML.split("button {", 1)[1].split("}", 1)[0])
         self.assertIn("color: var(--ink);", INDEX_HTML.split(".page-button, .filter-button {", 1)[1].split("}", 1)[0])
         self.assertNotIn("cursor: progress", INDEX_HTML)
@@ -328,18 +324,18 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("inspect-movie", INDEX_HTML)
 
     def test_movie_audio_packaging_page_is_wired(self) -> None:
-        self.assertIn("id: 'audio_packaging'", INDEX_HTML)
-        self.assertIn("label: 'Fix Multi-Audio Packaging'", INDEX_HTML)
-        self.assertIn("renderMovieAudioPackaging", INDEX_HTML)
+        self.assertIn("id: 'fix_defaults'", INDEX_HTML)
+        self.assertIn("label: 'Repair Defaults'", INDEX_HTML)
+        self.assertIn("renderMovieFixDefaults", INDEX_HTML)
         self.assertIn("movieAudioFixBusy: false", INDEX_HTML)
         self.assertIn("function movieAudioFixSelectionLocked()", INDEX_HTML)
-        self.assertIn("wrong default + weak English", INDEX_HTML)
+        self.assertIn("wrong language · weak English", INDEX_HTML)
         self.assertIn("Wrong Default Language", INDEX_HTML)
         self.assertIn("Weak English Fallback", INDEX_HTML)
         self.assertIn("issue_family: issueFamily", INDEX_HTML)
         self.assertIn("'/api/movies/audio-packaging/fix'", INDEX_HTML)
-        self.assertIn("Make English Default", INDEX_HTML)
-        self.assertIn("Make English Default + Delete Foreign Audio", INDEX_HTML)
+        self.assertIn("Set English Default", INDEX_HTML)
+        self.assertIn("Set English Default + Drop Foreign", INDEX_HTML)
         self.assertIn("junk-actions audio-packaging-actions", INDEX_HTML)
         self.assertIn("triage-action-spacer", INDEX_HTML)
         self.assertIn("Selection locked while ffmpeg remux is running.", INDEX_HTML)
@@ -350,13 +346,13 @@ class WebTests(unittest.TestCase):
         self.assertIn("drop_foreign_audio: dropForeignAudio", INDEX_HTML)
         self.assertIn("function summarizeAudioFixResult(result, dropForeignAudio)", INDEX_HTML)
         self.assertIn("English already default", INDEX_HTML)
-        self.assertIn("<th>Main Audio</th>", INDEX_HTML)
+        self.assertIn("<th>Audio</th>", INDEX_HTML)
         self.assertIn("function describeAudioFormat(stream)", INDEX_HTML)
 
     def test_movie_subtitle_readiness_page_is_wired(self) -> None:
-        self.assertIn("id: 'subtitle_readiness'", INDEX_HTML)
-        self.assertIn("label: 'Repair Subtitle Readiness'", INDEX_HTML)
-        self.assertIn("renderMovieSubtitleReadiness", INDEX_HTML)
+        self.assertIn("id: 'fix_defaults'", INDEX_HTML)
+        self.assertIn("label: 'Repair Defaults'", INDEX_HTML)
+        self.assertIn("renderMovieFixDefaults", INDEX_HTML)
         self.assertIn("movieSubtitleFixBusy: false", INDEX_HTML)
         self.assertIn("function movieSubtitleFixSelectionLocked()", INDEX_HTML)
         self.assertIn("function movieSubtitleReadinessIssueCode(item)", INDEX_HTML)
@@ -378,8 +374,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("Standard Definition", INDEX_HTML)
         self.assertIn("Library Grade", INDEX_HTML)
         self.assertIn("Collector Grade", INDEX_HTML)
-        self.assertIn("id=\"exportCatalogueButton\"", INDEX_HTML)
-        self.assertIn("Export Catalogue", INDEX_HTML)
+        self.assertIn("data-catalogue-source", INDEX_HTML)
+        self.assertIn("generateCatalogue", INDEX_HTML)
         self.assertIn("attachMovieDashboardHandlers(payload);", INDEX_HTML)
         self.assertNotIn("Generate Catalogue", INDEX_HTML)
         self.assertNotIn("catalogue-btn", INDEX_HTML)
@@ -474,7 +470,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("id=\"selFlaggedReview\"", movie_normalize_section)
         self.assertIn("Concise Naming", INDEX_HTML)
         self.assertIn("Verbose Naming - Include Extra Information", INDEX_HTML)
-        self.assertIn("function activeMovieNormalizePayload(payload)", INDEX_HTML)
+        self.assertIn("function activeMovieNormalizePayload(payload) {", INDEX_HTML)
         self.assertIn("proposed_changes_by_naming_style", INDEX_HTML)
         self.assertIn("requestBody.naming_style = state.movieNamingStyle", INDEX_HTML)
         self.assertIn("naming_style: payload.naming_style || state.movieNamingStyle || 'concise'", INDEX_HTML)
@@ -485,11 +481,11 @@ class WebTests(unittest.TestCase):
     def test_delete_movie_junk_files_only_deletes_current_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
-            sample = source / "Movie.2000" / "RARBG.com.mp4"
+            sample = source / "Movie.2000" / "Extras" / "Behind.The.Scenes.mp4"
             second_sample = source / "Movie.2000" / "Movie.sample.mp4"
             promo_document = source / "Movie.2000" / "RARBG.txt"
             movie = source / "Movie.2000" / "Movie.2000.mkv"
-            sample.parent.mkdir()
+            sample.parent.mkdir(parents=True)
             sample.write_text("sample", encoding="utf-8")
             second_sample.write_text("sample", encoding="utf-8")
             promo_document.write_text("Downloaded from RARBG", encoding="utf-8")

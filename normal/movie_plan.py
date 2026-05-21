@@ -7,7 +7,7 @@ import re
 import xml.etree.ElementTree as ET
 
 from normal.models import ChangePlan, ProposedChange, WarningItem, build_empty_plan
-from normal.movie_identity import ParsedMovieIdentity, parse_movie_identity
+from normal.movie_identity import ParsedMovieIdentity, parse_movie_identity, split_title_prefix_tail
 from normal.movie_scan import VIDEO_EXTENSIONS, discover_video_files
 
 
@@ -222,9 +222,9 @@ def build_movie_plan(
 
         if len(folder_files) != 1:
             multi_changes = plan_multi_part_movie_folder(source_root, folder_path, sorted(folder_files), naming_style)
-            if not multi_changes:
+            if multi_changes is None:
                 multi_changes = plan_multi_movie_package_folder(source_root, folder_path, sorted(folder_files), naming_style)
-            if multi_changes:
+            if multi_changes is not None:
                 plan.proposed_changes.extend(multi_changes)
             else:
                 plan.warnings.append(
@@ -327,6 +327,9 @@ def append_movie_file_changes(
     if file_change is not None:
         plan.proposed_changes.append(file_change)
 
+    if should_skip_single_movie_folder_change(folder_path, parsed):
+        return
+
     folder_change = build_folder_change(source_root, folder_path, canonical_base, parsed.confidence)
     if folder_change is not None:
         plan.proposed_changes.append(folder_change)
@@ -348,19 +351,19 @@ def plan_multi_part_movie_folder(
     folder_path: Path,
     folder_files: list[Path],
     naming_style: str,
-) -> list[ProposedChange]:
+) -> list[ProposedChange] | None:
     parsed_files = [(movie_path, parse_movie_name_with_sidecar_fallback(movie_path)) for movie_path in folder_files]
     if any(parsed.title is None or parsed.year is None for _, parsed in parsed_files):
-        return []
+        return None
     identities = {(parsed.title, parsed.year) for _, parsed in parsed_files}
     if len(identities) != 1:
-        return []
+        return None
     part_labels = [movie_part_label(parsed) for _, parsed in parsed_files]
     if any(label is None for label in part_labels):
-        return []
+        return None
     labels = [label or "" for label in part_labels]
     if len(set(label.casefold() for label in labels)) != len(labels):
-        return []
+        return None
 
     first = parsed_files[0][1]
     base = movie_base_for_naming_style(first, naming_style)
@@ -400,19 +403,19 @@ def plan_multi_movie_package_folder(
     folder_path: Path,
     folder_files: list[Path],
     naming_style: str,
-) -> list[ProposedChange]:
+) -> list[ProposedChange] | None:
     if not is_multi_movie_package_folder_name(folder_path.name.casefold()):
-        return []
+        return None
 
     parsed_files = [(movie_path, parse_movie_name_with_sidecar_fallback(movie_path)) for movie_path in folder_files]
     if any(parsed.title is None or parsed.year is None for _, parsed in parsed_files):
-        return []
+        return None
     if any(movie_title_contains_package_marker(parsed.title or "") for _, parsed in parsed_files):
-        return []
+        return None
 
     identities = {(parsed.title.casefold(), parsed.year) for _, parsed in parsed_files if parsed.title is not None}
     if len(identities) != len(parsed_files):
-        return []
+        return None
 
     changes: list[ProposedChange] = []
     for movie_path, parsed in parsed_files:
@@ -445,6 +448,34 @@ def plan_multi_movie_package_folder(
             )
         )
     return changes
+
+
+def should_skip_single_movie_folder_change(folder_path: Path, parsed: ParsedMovieName) -> bool:
+    if not parsed.title or not is_multi_movie_package_folder_name(folder_path.name.casefold()):
+        return False
+    return folder_name_contains_distinct_package_segments(folder_path.name, parsed.title)
+
+
+def folder_name_contains_distinct_package_segments(folder_name: str, parsed_title: str) -> bool:
+    if re.search(r"\s(?:&|and)\s", folder_name, re.IGNORECASE) is None:
+        return False
+
+    parsed_key = comparable_movie_title(parsed_title)
+    segment_titles = [segment_title_from_package_name(part) for part in re.split(r"(?i)\s(?:&|and)\s", folder_name)]
+    matching_segments = [title for title in segment_titles if title and comparable_movie_title(title) == parsed_key]
+    other_segments = [title for title in segment_titles if title and comparable_movie_title(title) != parsed_key]
+    return bool(matching_segments and other_segments)
+
+
+def segment_title_from_package_name(value: str) -> str:
+    cleaned = cleanup_collection_folder_name(strip_leading_site_credit(value))
+    cleaned = YEAR_PATTERN.sub(" ", cleaned)
+    title_source, _tail = split_title_prefix_tail(cleaned)
+    return cleanup_title_text(title_source)
+
+
+def comparable_movie_title(value: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.casefold()).split())
 
 
 def movie_part_label(parsed: ParsedMovieName) -> str | None:

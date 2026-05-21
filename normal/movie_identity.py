@@ -129,6 +129,13 @@ COMPACT_TITLE_WORDS = {
     "SPACE": "Space",
     "ODYSSEY": "Odyssey",
 }
+KNOWN_SAFE_NOISE_TOKENS = {
+    "elektri4ka",
+    "uniongang",
+    "grav1ty",
+    "maxoverpower",
+    "theatrical",
+}
 
 
 @dataclass(slots=True)
@@ -162,6 +169,9 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
     title_source, prefix_tail_text = split_title_prefix_tail(source_text[: match.start()])
     title_text = cleanup_title_text(prefer_ascii_title_segment(title_source))
     tail_text = f"{prefix_tail_text} {source_text[match.end() :]}".strip()
+    year_leading_payload = parse_year_leading_title_payload(source_text, match)
+    if year_leading_payload is not None and not title_text:
+        title_text, tail_text = year_leading_payload
     compact_review = False
     compact_payload = parse_leading_number_compact_payload(source_text, match)
     if compact_payload is not None:
@@ -193,7 +203,13 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
             if not token or token.lower() in SKIP_TOKENS:
                 continue
             tech_tokens.append(token)
-            if token == split_token and token.isalnum() and len(token) > 9 and split_token.lower() not in CANONICAL_TOKEN_MAP:
+            if (
+                token == split_token
+                and token.isalnum()
+                and len(token) > 9
+                and split_token.lower() not in CANONICAL_TOKEN_MAP
+                and split_token.lower() not in KNOWN_SAFE_NOISE_TOKENS
+            ):
                 unknown_tokens.append(token)
 
     confidence = "safe"
@@ -227,11 +243,14 @@ def find_movie_year_match(value: str) -> re.Match[str] | None:
     matches = list(YEAR_PATTERN.finditer(value))
     if not matches:
         return None
+    parenthesized = next((match for match in matches if is_parenthesized_year(value, match)), None)
+    if parenthesized is not None:
+        return parenthesized
+    boundary_match = next((match for match in matches if is_probable_release_year_position(value, match)), None)
+    if boundary_match is not None:
+        return boundary_match
     first = matches[0]
     if first.start() == 0 and len(matches) > 1:
-        parenthesized = next((match for match in matches[1:] if is_parenthesized_year(value, match)), None)
-        if parenthesized is not None:
-            return parenthesized
         if is_leading_numeric_title(value, first):
             return matches[1]
     return first
@@ -245,6 +264,29 @@ def is_leading_numeric_title(value: str, match: re.Match[str]) -> bool:
     if match.start() != 0 or match.end() >= len(value):
         return False
     return value[match.end()] in {".", "-", "_", " "}
+
+
+def is_probable_release_year_position(value: str, match: re.Match[str]) -> bool:
+    suffix = value[match.end() :].lstrip(" ._-)[](")
+    if not suffix:
+        return True
+    token_match = TOKEN_PATTERN.match(suffix)
+    if token_match is None:
+        return False
+    return is_title_boundary_token(token_match.group(0))
+
+
+def parse_year_leading_title_payload(source_text: str, match: re.Match[str]) -> tuple[str, str] | None:
+    if match.start() != 0:
+        return None
+    suffix = source_text[match.end() :].lstrip(" ._-)[](")
+    if not suffix:
+        return None
+    title_source, suffix_tail = split_title_prefix_tail(suffix)
+    title_text = cleanup_title_text(prefer_ascii_title_segment(title_source))
+    if not title_text:
+        return None
+    return title_text, suffix_tail.strip()
 
 
 def parse_leading_number_compact_payload(source_text: str, match: re.Match[str]) -> tuple[str, int, str] | None:
@@ -299,7 +341,11 @@ def split_title_prefix_tail(prefix: str) -> tuple[str, str]:
 
 def is_title_boundary_token(token: str) -> bool:
     key = token.lower()
-    return key in TITLE_BOUNDARY_TOKENS or re.fullmatch(r"\d{3,4}p", key) is not None
+    return (
+        key in TITLE_BOUNDARY_TOKENS
+        or re.fullmatch(r"\d{3,4}p", key) is not None
+        or re.fullmatch(r"\d{3,4}x\d{3,4}", key) is not None
+    )
 
 
 def cleanup_compact_title_text(value: str) -> str:
@@ -405,6 +451,8 @@ def normalize_token(token: str) -> str:
     key = token.lower()
     if key in CANONICAL_TOKEN_MAP:
         return CANONICAL_TOKEN_MAP[key]
+    if key == "theatrical":
+        return "Theatrical"
     if re.fullmatch(r"\d{3,4}p", key):
         return key
     if re.fullmatch(r"\d+bit", key):

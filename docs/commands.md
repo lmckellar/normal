@@ -226,9 +226,11 @@ normal movie-junk --source /path/to/movies --report out/junk.json
 CLI is report-only. Deletion is done through the web UI.
 
 Detection criteria:
-- path tokens: `sample`, `featurette`, `featurettes`, and known typo variants
+- junk markers in filenames or ancestor folders such as `sample`, `samples`, `extra`, `extras`, `featurette`, `featurettes`, and known typo variants
 - duration under 5 minutes → high-confidence junk
-- size under 100 MB → flagged for review
+- marker-backed junk under 2 GB → high-confidence junk
+- marker-backed junk between 2 GB and 3 GB needs another junk signal such as stacked markers or short runtime
+- size alone does not create junk candidates
 
 ---
 
