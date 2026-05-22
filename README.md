@@ -72,7 +72,7 @@ Watching the tool purify a test library for the first time is a good experience.
 
   Keys are free with basic usage plans and can be passed either by environment variable or via `normal web --tmdb-key ... --omdb-key ...`.
 
-  `normal` thoughtfully provides an internal local caching feature that minimises progressive API calls after initial scan. This allows users to stay comofrtable within free usage plan rate limits for the API service providers even if managing a very large replacement queue. In the even they are rate limited they can simply wait 24 hours and perform another scan in normal - it will rebuild whatever was not initially scanned, update anything that has gone stale, yet not re-query the API endpoint for known values. 
+  `normal` thoughtfully provides an internal local caching feature that minimises progressive API calls after initial scan. This allows users to stay comofrtable within free usage plan rate limits for the API service providers even if managing a very large replacement queue. In the even they are rate limited they can simply wait 24 hours and perform another scan in normal - it will rebuild whatever was not initially scanned, update anything that has gone stale, while deliberately avoiding any wasteful re-queries against the API endpoint for known values from prior scans. 
 
   See [docs/safety.md](docs/safety.md#networking-behaviour) for the networking posture and [docs/movies.md](docs/movies.md) for where these features appear in the UI.
 
