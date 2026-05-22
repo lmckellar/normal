@@ -114,4 +114,23 @@ Core scan, profile, normalize, and delete workflows are local-first. They do not
 - Delete anything from the CLI
 - Mutate files outside the specified source root
 - Delete web-selected files without confirmation and server-side revalidation
-- Terminate unrelated system processes
+
+## If You Deleted Something You Wanted
+  
+If you accidentally approve a deletion, the first rule is simple: stop writing to the affected drive and seek help immediately. Do not keep scanning, moving files, downloading replacements, or running cleanup passes against that same storage until you understand your recovery options. Recovery is time-sensitive and depends heavily on the filesystem, whether snapshots or backups exist, whether the file was hard-deleted or only moved to Trash, and whether the storage has already reused the space.
+  
+If you have a suitably capable command line coding agent available (GPT, Sonnet, Opus, Gemini or equivalent frontier-class open weight model derived system such as Deepseek, Gwen, Kimi, etc), use it immediately. The agent is not “recovering files from cache by magic”; it is a fast way to triage the system and guide you to the best available recovery path while time still matters. In practice that usually means quickly checking whether the file is still in Trash, whether the disk or NAS has snapshots, whether a backup exists, whether another process still has the deleted file open, and what filesystem-aware recovery options are safest before further writes occur.
+  
+If you are "Agentless in Seattle", Plan B is to open ChatGPT (www.chatgpt.com) immediately and paste a short factual description of what happened. Keep it plain and specific. A useful seed is:
+  
+`I accidentally deleted a video file I wanted to keep while using a local media cleanup tool. I need urgent triage advice to maximise recovery chances. Please do not assume you have access to my machine. First, ask me only the minimum questions you need to determine the safest next steps, such as: what operating system I am using, whether the file was deleted to Trash or permanently deleted, whether the drive is SSD/HDD/external/NAS, whether I know the filesystem, and whether I have backups or snapshots. Then give me the safest immediate actions in priority order, with emphasis on avoiding further writes to the affected storage.`
+
+`human authored`
+Stay calm! While I can't promise you get those files back, you are not alone and casually working through the steps is your best move right now. 
+
+Here is a meme to lift your spirits. We've all been there. Image credit to NanoBanana as served via Gemini 3.5 Flash.
+
+<img width="1408" height="768" alt="agentless-in-seattle-1993" src="https://github.com/user-attachments/assets/339e6836-f07b-4bcc-b906-a94b089bc4ae" />
+
+
+
