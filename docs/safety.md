@@ -126,6 +126,7 @@ If you are "Agentless in Seattle", Plan B is to open ChatGPT (www.chatgpt.com) i
 `I accidentally deleted a video file I wanted to keep while using a local media cleanup tool. I need urgent triage advice to maximise recovery chances. Please do not assume you have access to my machine. First, ask me only the minimum questions you need to determine the safest next steps, such as: what operating system I am using, whether the file was deleted to Trash or permanently deleted, whether the drive is SSD/HDD/external/NAS, whether I know the filesystem, and whether I have backups or snapshots. Then give me the safest immediate actions in priority order, with emphasis on avoiding further writes to the affected storage.`
 
 `human authored`
+
 Stay calm! While I can't promise you get those files back, you are not alone and casually working through the steps is your best move right now. 
 
 Here is a meme to lift your spirits. We've all been there. Image credit to NanoBanana as served via Gemini 3.5 Flash.
