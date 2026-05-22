@@ -94,7 +94,7 @@ Please note: watching the tool absolutely purify your test library will be a thr
 
 ## Safety and Visibility
 
-- `normal` will never, ever delete a file on your system without you explicitly performing two approval-gating actions. Ever.
+- `normal` will never, ever delete a file on your system without you explicitly performing two approval-gating actions. It is completely 'deterministic' in nature and does not utilise AI inference for naming, logic or any feature in any way (beyond it's development of course).
 - `normal` seeks to maximise visibility of what is being changed, why it is being changed, and what it is being changed to, while minimizing friction. The user is intended to review downstream output shape and confirm it is to their liking.
 - `normal` will not silently destroy or rename something. All downstream actions are intended to be visible and explicit.
 
