@@ -72,7 +72,7 @@ Namely; every lever the user is given to pull is an opportunity to bloat the app
 
 The biggest vistims of this development, unfortunately, were the Extras Appreciators and the Fans of Featurettes. These nested files, if allowed to parse into the Normalize lane, will generally cause minor flagging issues and likely push the normalizing logic out of it's comfort zone and lead to missed actions or potentially some oddly garbled naming outputs for the movies that have Extras present. 
 
-Efforts are being made to include a "blanket policy exemption" that can be applied to the Normalizer but this is not yet in development.
+The default workflow currently expects these files to be eradicated prior to running the Normalization pass in order to hit a clean one shot against the Media Library. Efforts are being made to include a "blanket policy exemption" that can be applied to the Normalizer but this is not yet in development.
 
 ## What Must Be Crystal Clear
 
