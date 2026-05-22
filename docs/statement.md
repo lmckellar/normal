@@ -41,17 +41,21 @@ It therefore provides a solution in line with both scan economics and physical s
 
 This instantly frees up hard drive space, reduces further scanning overhead, and centralizes the process of replacing weak encodes into a clean and simple list that automatically scans and updates itself, correctly recognizing when a deleted candidate has been replaced and neatly shuffling it off to an audit log of the event.
 
-## Known Operational Biases
+## Known Operational Biases, Behaviours and Facts
 
 There are known operational and behavioural biases within the system that must be flagged explicity instead of floating as an implication within the documentation:
 
 `normal` expects the user speaks English as their primary language and does not at this stage accomodate other languages gracefully (although it is noted this would be a trivial implementation detail if desired)
 
-`normal` expects the user to delete any movie file other than the core .mkv or other video files. it will parse towards this end with great confidence and accuracy, yet loses coherence in dealing with a broader array of nested directories or other ephemera such as "Extras" folders within the movie directory or scattered around the base dir. 
+`normal` expects the user to delete any movie file other than the core .mkv or other video files in order to support primary naming functions. It will parse towards the goal of a "junk free library" with great confidence and accuracy, yet loses coherence in dealing with a broader array of nested directories or other ephemera such as "Extras" folders within the movie directory or scattered around the base dir. 
 
 `normal` likewise does not play nicely with remux disc image folders or other pure lossless folder structures and is not intended for the storage and maintenance of these types of libraries.
 
 `normal` at this stage completely eschews any form of AI inference or API passthrough for core functions. This is not a rigid stance and may soften over time in line with states princples; however, the focus was and is to keep the local deterministic fundamentals as tight as possible before even contemplating using inference as a viable pathway for normalization, no matter how 'tempting' the ease of it may be.
+
+`normal` has been tested and developed exlusively in a Linux environment (Ubuntu 24.x). Given it is fundamentally a python back-end calling a small set of basic open source libraries with a local Web UI interface it should be perfectly and easily portable across any major OS, but this is at this stage an untested claim. 
+
+`normal` makes extensive use of agentic coding tools and is a 100% pair programmed code base using primarily ChatGPT 5.4 harnessed in Codex CLI and Sonnet 4.6 harnessed in Claude Code CLI. Documentation is 'majoritively' agent written with response to user prompting. User facing policy regarding authorship notation has been created. It is regarded that the primary surface touch points of the document set (README, Statement, etc) should contain the highest ratio of human to agent input, even if that involves manually line editing typos like our forefathers once did before us.
 
 ## Source First, Then Client Quirks
 `User-written`
