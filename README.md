@@ -4,7 +4,7 @@
 
 Restoring order to your chaotic movie library
 
-`normal` is an opinionated open source local workbench that fixes a cross section of common issues with pirated movie libraries. It seeks to restore order where there was chaos and can be useful for organizing, maintaining, improving or expanding your movie library.
+`normal` is an opinionated open source local workbench that fixes a cross section of common issues with messy movie libraries. It seeks to restore order where there was chaos and can be useful for organizing, maintaining, improving or expanding your collection.
 
 Documentation authorship policy: [docs/writing.md](docs/writing.md).
 
