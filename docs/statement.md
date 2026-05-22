@@ -10,15 +10,17 @@ As the parser logic expanded and hardened in confidence, the application has gon
 
 Within the app, these are treated as fixed assumptions.
 
-For `normal`, the quality stance is a firm, anchored preference for material that is of "web streaming service" / "solidly enjoyable, respectful modern compression" at a minimum, and up to 4K UHD remux at a maximum, with logical gradations scoped in between.
+For `normal`, the quality stance is a firm, anchored preference for material that is of equivlanet quality to modern web streaming services through to 4K remux content with logical gradations scoped in between. 
+
+Lesser quality may be tolerated for less technically demanding or less frequently watched movies, but beneath a certain floor the file is not worth retaining. 
 
 ## Physical Storage Economics
 
-`normal` adheres to a principle of **physical storage economics**, whereby the larger in size a media object becomes, the greater the burden of proof becomes on it to justify its existence.
+`normal` adheres to a principle of **physical storage economics**, whereby the larger in size a media object becomes, the greater the burden of proof becomes on it to justify its existence. 
+
+'normal' considers objectively weak encodes to be worth discarding immediately and regards the safe, orderly and auditable deletion of said objects to be highly relevant and convenient through the process of their replacement
 
 `normal` does not consider maximum bitrate to be the holy grail, nor does it automatically give permission to large packaged metadata files to exist without reason, such as audio tracks with multiple language options.
-
-'normal' considers objectively weak encodes to be worth discarding immediately and regards the safe, orderly and auditable deletion of it to be highly relevant and convenient through the process of replacing it
 
 ## Scan Economics
 
