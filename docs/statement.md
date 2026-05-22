@@ -51,7 +51,7 @@ There are known operational and behavioural biases within the system that must b
 
 `normal` likewise does not play nicely with remux disc image folders or other pure lossless folder structures and is not intended for the storage and maintenance of these types of libraries.
 
-`normal` at this stage completely eschews any form of AI inference of API passthrough for core functions. This is not a rigid stance and may soften over time in line with states princples; however, the focus was and is to keep the local deterministics fundamentals as tight as possible before even contemplating using inference as a viable pathway for normalization, no matter how 'tempting' the ease of it may be.
+`normal` at this stage completely eschews any form of AI inference of API passthrough for core functions. This is not a rigid stance and may soften over time in line with states princples; however, the focus was and is to keep the local deterministic fundamentals as tight as possible before even contemplating using inference as a viable pathway for normalization, no matter how 'tempting' the ease of it may be.
 
 ## Source First, Then Client Quirks
 `User-written`
