@@ -66,7 +66,7 @@ In its journey and evolution, `normal` did not disregard its internal review, pr
 
 ## An Engineering Trade Off
 
-From it's origins as a cheerfully bloated swiss army knife intended for personal use to an increasing cohesive and brutally effective media management system some very real and present trade off's needed to be confronted.
+From its origins as a cheerfully bloated swiss army knife intended for personal use to an increasing cohesive and brutally effective media management system some very real and present trade off's needed to be confronted.
 
 Namely; every lever the user is given to pull is an opportunity to bloat the app in both form and function. Additionally; each lever, if wielded in such a way that it 'differentiated' a single step from a back end perspective, would inevitably flow into library maintability woes as successive re-scans would be required to re-normalize the library accross the different lanes of function (names/folders, deleting weak encodes, remuxxing audio tracks, remuxxing subtitle tracks, deleting sidecar spam, deleting samples/features/etc). I felt this pain and friction myself as the function lanes all came online, became useful and needed to be maintained accross a rolling wave of incoming files into my library. 
 
