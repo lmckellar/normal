@@ -10,7 +10,7 @@ As the parser name handling logic expanded and grew in confidence alongside of t
 - have the most obvious, clear and consistent naming convention of `Title (Year)`, unless needed to differentiate duplicates or alternate versions, whereby a logical differentiating token will be appended to the end of the name
 - define an intended quality stance and library policy in line with this stance, then apply it unanimously while giving the user visibility into its shape and contents
 - be clear of Samples, Features, Extras, or other "high load, low pay off" media ephemera
-- allow maintainability and maximum useful user visibility into any relevant quality metric of the film (at a glance, sortable technical and canonical inspection)
+- allow maintainability and maximum useful user visibility into any relevant quality metric of the film ('at a glance' sortable technical and canonical inspection)
 
 Within the app, these are treated as fixed assumptions.
 
