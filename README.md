@@ -20,7 +20,7 @@ Documentation authorship policy: [docs/writing.md](docs/writing.md).
 - Lets you compare your collection directly against canonical movie lists (TMDB Top 100, 250, etc.) and identify what's missing
 - One Click Export your entire library as a cleanly organized spreadsheet
 
-The fuller stance on why these choices are the right ones is in [docs/statement.md](docs/statement.md).
+The fuller stance on why these choices are adopted is in [docs/statement.md](docs/statement.md).
 
 ## The Opinionated Part
 
