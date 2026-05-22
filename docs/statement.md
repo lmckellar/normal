@@ -18,7 +18,7 @@ Lesser quality may be tolerated for less technically demanding or less frequentl
 
 `normal` adheres to a principle of **physical storage economics**, whereby the larger in size a media object becomes, the greater the burden of proof becomes on it to justify its existence. 
 
-'normal' considers objectively weak encodes to be worth discarding immediately and regards the safe, orderly and auditable deletion of said objects to be highly relevant and convenient through the process of their replacement
+`normal` considers objectively weak encodes to be worth discarding immediately and regards the safe, orderly and auditable deletion of said objects to be highly relevant and convenient through the process of their replacement
 
 `normal` does not consider maximum bitrate to be the holy grail, nor does it automatically give permission to large packaged metadata files to exist without reason, such as audio tracks with multiple language options.
 
