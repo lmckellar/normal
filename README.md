@@ -34,7 +34,7 @@ The claim: A library of 1,000 orderly, relevant, well-encoded films beats a libr
 
 ## Before You Point It at Your Real Library
 
-`normal` is aggressive by default. It renames, moves, deletes files and folders, uses recursive probe walks to gather metadata where needed, calls remuxing workloads via `ffmpeg`, and will seek to move "from A to B" as fast as you will let it.
+`normal` is aggressive by default. It renames, moves, deletes files and folders, uses recursive probe walks to gather metadata where needed, calls remuxing workloads via `ffmpeg`, and will seek to move "from A to B" as fast as you let it. It does this by combining workflows while still providing visibility into what is being modified and what its output shape will be, but the net effect is that the tool can feel a little like it's "in a hurry to clean your room" compared to more traditional and stage based implementations of this concept. This accumulates to big savings in terms of drive read/write and time spent tending to the process of maintenance yet does require the user to excercise adequate dilligence. 
 
 While safety has not been an afterthought, any downstream user must exercise their own judgement on this matter.
 
