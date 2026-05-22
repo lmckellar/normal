@@ -45,7 +45,7 @@ The claims:
 
 While safety has been given primary consideration throughout development, any downstream user must exercise their own judgement on this matter.
 
-Before it touches anything you care about, build a small test directory with a representative cross-section of your actual naming and folder conventions, a Noah's Ark of your current mess, and run everything there first.
+Before it touches anything you care about, copy + paste a small test directory with a representative cross-section of your actual naming and folder conventions, a Noah's Ark of your current mess, and run everything there first.
 
 Nothing is deleted without two explicit approval actions from you. All planned changes are shown before they run. 
 
