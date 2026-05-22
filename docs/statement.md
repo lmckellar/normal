@@ -5,7 +5,7 @@ Certain sections may differ and are labelled locally with the relevant tags
 
 As the parser name handling logic expanded and grew in confidence alongside of the additions of caching in conjuction with scan / apply streamlining measures, the application has gone from a "safety first", probe-heavy file renaming tool with unclear boundaries between functions to a hardened, opinionated and deliberate 'purification' workflow that asserts the following.
 
-## A Good Pirate Movie Library Should:
+## A Modern Collectors Movie Library Should:
 
 - have the most obvious, clear and consistent naming convention of `Title (Year)`, unless needed to differentiate duplicates or alternate versions, whereby a logical differentiating token will be appended to the end of the name
 - define an intended quality stance and library policy in line with this stance, then apply it unanimously while giving the user visibility into its shape and contents
