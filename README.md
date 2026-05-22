@@ -26,15 +26,17 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 `normal` is built around two principles:
 
-Physical storage economics. The bigger a file gets, the stronger the case it has to make for existing.
+**Physical storage economics**
+The bigger a file gets, the stronger the case it has to make for existing.
 
-Scan economics. Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
+**Scan economics** 
+Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
 
 The claims: 
 
-A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 weak, mediocre and chaotic ones. 
+1. A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 weak, mediocre and chaotic ones. 
 
-A maintenance process of 1,000 concise, respectful drive read/write events is preferable to one of 5,000 less consise ones.
+2. A maintenance process of 1,000 concise, respectful drive read/write events is preferable to one of 5,000 less consise ones if it acheives the same downstream shape.
 
 ## Before You Point It at Your Real Library
 `User-written`
