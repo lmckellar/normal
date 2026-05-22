@@ -30,7 +30,7 @@ This traverses script shape into workflow, boundaries between functions, conside
 
 ## Opinionated, Yet Merciful
 
-`normal` is opinionated, yet merciful. It understands that mistakes happen and that tastes change. `normal` understands that migrating the centre-mass of quality of a library upward can be painful if the original library shape was anchored on the wrong encode profile. Ask me how I know.
+`normal` is opinionated, yet merciful. It understands that mistakes happen and that tastes and technology change. `normal` understands that migrating the centre-mass of quality of a library upward can be painful if the original library shape was anchored on the wrong encode profile. Ask me how I know.
 
 It therefore provides a solution in line with both scan economics and physical storage economics: a "minimum floor of garbage" is defined via profiles, a scan identifies the movies that are garbage, and they are shift-deleted in a single pass that also records them in a register as "deleted, awaiting replacement".
 
