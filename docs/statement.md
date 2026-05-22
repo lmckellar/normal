@@ -14,7 +14,7 @@ As the parser name handling logic expanded and grew in confidence alongside of t
 
 Within the app, these are treated as fixed assumptions.
 
-For `normal`, the quality stance is a firm, anchored preference for material that is of equivlanet quality to modern web streaming services through to 4K remux quality content with logical gradations scoped in between. 
+For `normal`, the quality stance is a firmly anchored preference for material that is of equivlanet quality to modern web streaming services through to 4K remux quality content with logical gradations scoped in between. 
 
 Lesser quality may be tolerated for less technically demanding or less frequently watched movies, but beneath a certain floor the file is not worth retaining. 
 
