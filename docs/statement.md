@@ -2,13 +2,13 @@
 
 As the parser logic expanded and hardened in confidence, the application has gone from a "safety first", probe-heavy file renaming tool with unclear boundaries between functions to a highly opinionated and deliberate workflow that asserts the following.
 
-## A Good Pirate Movie Library Should
+## A Good Pirate Movie Library Should:
 
-- have the most obvious, clear and consistent naming convention of `Title (Year)`, unless needed to differentiate duplicates or alternate version(s)
+- have the most obvious, clear and consistent naming convention of `Title (Year)`, unless needed to differentiate duplicates and/or alternate version(s)
 - define an intended quality stance and library policy in line with this stance, then apply it unanimously while giving the user visibility into its shape and contents
 - be clear of Samples, Features, Extras, or other "high load, low pay off" media ephemera
-- seek to improve itself before pondering downstream client metadata quirks
-- be opinionated, yet merciful
+
+Within the app, these are treated as fixed assumptions.
 
 For `normal`, the quality stance is a firm, anchored preference for material that is of "web streaming service" / "solidly enjoyable, respectful modern compression" at a minimum, and up to 4K UHD remux at a maximum, with logical gradations scoped in between.
 
@@ -18,9 +18,11 @@ For `normal`, the quality stance is a firm, anchored preference for material tha
 
 `normal` does not consider maximum bitrate to be the holy grail, nor does it automatically give permission to large packaged metadata files to exist without reason, such as audio tracks with multiple language options.
 
+'normal' considers objectively weak encodes to be worth discarding immediately and regards the safe, orderly and auditable deletion of it to be highly relevant and convenient through the process of replacing it
+
 ## Scan Economics
 
-`normal` also adheres to a policy of **scan economics**. It should respect the fact it is reading and writing to a physical drive in many cases; as such it should consider performing the breadth of its functions with the absolute minimum of read and write.
+`normal` also adheres to a policy of **scan economics**. It should respect the fact it is reading and writing to a physical drive; as such it should consider performing the breadth of its functions with the absolute minimum of read and write.
 
 This traverses script shape into workflow, boundaries between functions, considerations of maintenance scanning, caching, local storage, and most importantly the assertion of an opinionated downstream object shape and the required steps in order to reach said state, then pursuing that as confidently as the hardening evidence allows the tool to become.
 
@@ -38,7 +40,7 @@ First and foremost, the tool seeks to repair and improve the library files at th
 
 ## Subtitle and Playback Defaults
 
-`normal` asserts that hands should be best devoted to popcorn at the start of a movie, not fiddling with subtitles.
+`normal` asserts that hands should be devoted to popcorn or the rolling of fine papers at the start of a movie, not fiddling with subtitles.
 
 As such it defines and enforces a logical preference of:
 
@@ -54,15 +56,25 @@ As such, it allows the user to directly compare their collection to a curated bu
 
 For example, this may highlight that Australian Netflix users are treated to approximately 7-8 of the IMDb Top 100 as of May 2026 research. A user library with a large mass of high quality encodes in this gravitational centre will naturally destroy the major streaming slop fests in this regard, and `normal` intends to point the way to this.
 
-This will be a lightweight research table pulled from an external server which is periodically updated, but not a hard and fast guarantee of actual provider library shape, as these platforms change often and are technically expensive to parse.
+This is intended to be a lightweight research table pulled from an external server which is periodically updated, but not a hard and fast guarantee of actual provider library shape, as these platforms change often and are technically expensive to parse.
 
 ## Confidence, Compression, and Edge Cases
 
-In its journey and evolution, `normal` did not disregard its internal review, proposal, and triaging architecture. It simply grew so confident in it that it began to compress it together with higher confidence, becoming more sensitive to genuine edge cases and less wasteful elsewhere.
+In its journey and evolution, `normal` did not disregard its internal review, proposal, and triaging architecture. It simply grew so confident in it that it began to compress it together, act more and flag less, while becoming more sensitive to genuine edge cases. It become less wasteful elsewhere by folding separate editing stages into single scan and approval passes. 
+
+## An Engineering Trade Off
+
+From it's origins as a cheerfully bloated swiss army knife intended for personal use to an increasing cohesive and brutally effective media management system some very real and present trade off's needed to be confronted.
+
+Namely; every lever the user is given to pull is an opportunity to bloat the app in both form and function. Additionally; each lever, if wielded in such a way that it 'differentiated' a single step from a back end perspective, would inevitably flow into library maintability woes as successive re-scans would be required to re-normalize the library accross the different lanes of function (names/folders, deleting weak encodes, remuxxing audio tracks, remuxxing subtitle tracks, deleting sidecar spam, deleting samples/features/etc). I felt this pain and friction myself as the function lanes all came online, became useful and needed to be maintained accross a rolling wave of incoming files into my library. 
+
+The biggest vistims of this development, unfortunately, were the Extras Appreciators and the Fans of Featurettes. These nested files, if allowed to parse into the Normalize lane, will generally cause minor flagging issues and likely push the normalizing logic out of it's comfort zone and lead to missed actions or potentially some oddly garbled naming outputs for the movies that have Extras present. 
+
+Efforts are being made to include a "blanket policy exemption" that can be applied to the Normalizer but this is not yet in development.
 
 ## What Must Be Crystal Clear
 
-`normal` is now aggressive by default and, out of respect, implores the user to perform, at the bare minimum, several simple and logical sanity and safety checks against test files on bare metal before so much as allowing a scan to hit their precious library with the tool.
+`normal` is now aggressive by default and, out of respect, implores the user to perform, at the bare minimum, several simple and logical safety checks against test files on bare metal before so much as allowing a scan to hit their precious library with the tool.
 
 These checks were done as par for the course during development. Do not assume I was willing to trust the actions of this system without verifying an initial set of safe mechanical actions myself. Yet this does not absolve any downstream user of the same responsibility.
 
