@@ -1,90 +1,93 @@
 # Product Statement
 
-*Authorship: Gently user-edited.*
-
-Human authored update: This document was transcribed from my insane, hurried scrawlings by the ever patient GPT5.4 that has accompanied me so well throughout this journey. He has, sadly, collpased far too much information for my liking or for this to coherently fit with what i consider to be my states positions regarding authorship for this project, nascent thoough they may be. Time is short right now, so consider this to be a purely AI summarized document for now - that is marked as intended for complete re-writing into human output. The original transcript of the conversation and notes that produced this artefact have been preserved in internal/docs.
-
-`normal` has evolved from a safety-first, probe-heavy file renaming tool with less clearly separated functions into a highly opinionated movie-library workflow that now asserts the following.
+As the parser logic expanded and hardened in confidence, the application has gone from a "safety first", probe-heavy file renaming tool with unclear boundaries between functions to a highly opinionated and deliberate workflow that asserts the following.
 
 ## A Good Pirate Movie Library Should
 
-- have the most obvious, clear, and consistent naming convention of `Title (Year)` unless a duplicate or alternate version needs differentiation
-- define an intended quality stance and library policy, then apply it unanimously while still giving the user visibility into the shape and contents of the library
-- be clear of Samples, Features, Extras, and other high-load, low-payoff media ephemera
-- improve the files at their source before worrying about downstream client quirks like Plex versus Jellyfin behavior
+- have the most obvious, clear and consistent naming convention of `Title (Year)`, unless needed to differentiate duplicates or alternate version(s)
+- define an intended quality stance and library policy in line with this stance, then apply it unanimously while giving the user visibility into its shape and contents
+- be clear of Samples, Features, Extras, or other "high load, low pay off" media ephemera
+- seek to improve itself before pondering downstream client metadata quirks
+- be opinionated, yet merciful
 
-For `normal`, the quality stance is anchored between a minimum of respectable web-streaming-service level material and a maximum of 4K UHD remux, with logical gradations in between.
+For `normal`, the quality stance is a firm, anchored preference for material that is of "web streaming service" / "solidly enjoyable, respectful modern compression" at a minimum, and up to 4K UHD remux at a maximum, with logical gradations scoped in between.
 
 ## Physical Storage Economics
 
-`normal` adheres to a principle of physical storage economics. The larger a media object becomes, the greater the burden of proof becomes on it to justify its existence.
+`normal` adheres to a principle of **physical storage economics**, whereby the larger in size a media object becomes, the greater the burden of proof becomes on it to justify its existence.
 
-`normal` does not consider maximum bitrate the holy grail. It does not automatically permit large packaged metadata payloads to exist without reason, including audio layouts bloated with unnecessary language options.
+`normal` does not consider maximum bitrate to be the holy grail, nor does it automatically give permission to large packaged metadata files to exist without reason, such as audio tracks with multiple language options.
 
 ## Scan Economics
 
-`normal` also adheres to scan economics. It respects the fact that it is often reading and writing to a physical drive. As such, it should aim to perform the breadth of its functions with the absolute minimum of read and write.
+`normal` also adheres to a policy of **scan economics**. It should respect the fact it is reading and writing to a physical drive in many cases; as such it should consider performing the breadth of its functions with the absolute minimum of read and write.
 
-This is not just a scanning detail. It crosses into script shape, workflow structure, function boundaries, maintenance scanning, caching, local storage, and most importantly the assertion of an opinionated downstream object shape. `normal` should decide what the target state is, what the required steps are to get there, and then pursue that state as confidently as the hardening evidence allows.
+This traverses script shape into workflow, boundaries between functions, considerations of maintenance scanning, caching, local storage, and most importantly the assertion of an opinionated downstream object shape and the required steps in order to reach said state, then pursuing that as confidently as the hardening evidence allows the tool to become.
 
 ## Opinionated, Yet Merciful
 
-`normal` is opinionated, yet merciful. It understands that mistakes happen and tastes change. It also understands that migrating the centre-mass of quality of a library upward can be painful when the original library shape was anchored on the wrong encode profile.
+`normal` is opinionated, yet merciful. It understands that mistakes happen and that tastes change. `normal` understands that migrating the centre-mass of quality of a library upward can be painful if the original library shape was anchored on the wrong encode profile. Ask me how I know.
 
-Its answer is aligned with both scan economics and physical storage economics:
+It therefore provides a solution in line with both scan economics and physical storage economics: a "minimum floor of garbage" is defined via profiles, a scan identifies the movies that are garbage, and they are shift-deleted in a single pass that also records them in a register as "deleted, awaiting replacement".
 
-- define a minimum floor of garbage via quality profiles
-- scan to identify which movies are garbage by that policy
-- shift-delete those weak encodes in a single pass
-- record them as deleted and awaiting replacement
+This instantly frees up hard drive space, reduces further scanning overhead, and centralizes the process of replacing weak encodes into a clean and simple list that automatically scans and updates itself, correctly recognizing when a deleted candidate has been replaced and neatly shuffling it off to an audit log of the event.
 
-This instantly frees drive space, reduces future scan overhead, and centralizes replacing weak encodes into a clean list that updates itself. When a deleted candidate is replaced by a better copy, `normal` should recognize that and move it off into replacement history automatically.
+## Source First, Then Client Quirks
 
-## Naming, Defaults, and Downstream Shape
+First and foremost, the tool seeks to repair and improve the library files at their source in the most immediately logical way, and will only then consider questions like "how does Plex deal with this specifically compared to Jellyfin?"
 
-`normal` asserts that hands should be devoted to popcorn at the start of a movie, not fiddling with subtitle controls. Its default posture is:
+## Subtitle and Playback Defaults
 
-- forced subtitles by default if they exist
-- English-audio primary should default to no subtitle
-- foreign-audio primary should default to English subtitle
+`normal` asserts that hands should be best devoted to popcorn at the start of a movie, not fiddling with subtitles.
 
-It also asserts that a library of 5,000 poor films is weaker than a library of 1,000 excellent and canonically significant ones. Canonical list comparison exists to orient the user against curated movie buckets, not just to inflate counts.
+As such it defines and enforces a logical preference of:
 
-The planned regional estimate matrix belongs in that same orientation layer: a lightweight externally updated research table that compares a user library against the rough canonical depth of a known platform in a region. It is intended as a directional reference, not a guarantee of actual streaming-catalog shape.
+- Forced Subtitles by default if they exist
+- English Audio has no subtitle by default
+- Foreign Audio primary should have English subtitle by default
 
-## Internal Confidence and Compression
+## Canon, Quality, and Orientation
 
-In its journey, `normal` did not discard its internal review, proposal, and triaging architecture. It simply became confident enough in that architecture to compress it together with higher confidence, becoming more sensitive to genuine edge cases and less wasteful everywhere else.
+`normal` asserts that a library of 5,000 shit films is much weaker than a library of 1,000 excellent, canonically significant films.
+
+As such, it allows the user to directly compare their collection to a curated bucket of TMDB canonical list material for an orientation. It also plans to include a quick-and-dirty regional estimate matrix based off research data that presents a UI element comparing a user library to a known platform.
+
+For example, this may highlight that Australian Netflix users are treated to approximately 7-8 of the IMDb Top 100 as of May 2026 research. A user library with a large mass of high quality encodes in this gravitational centre will naturally destroy the major streaming slop fests in this regard, and `normal` intends to point the way to this.
+
+This will be a lightweight research table pulled from an external server which is periodically updated, but not a hard and fast guarantee of actual provider library shape, as these platforms change often and are technically expensive to parse.
+
+## Confidence, Compression, and Edge Cases
+
+In its journey and evolution, `normal` did not disregard its internal review, proposal, and triaging architecture. It simply grew so confident in it that it began to compress it together with higher confidence, becoming more sensitive to genuine edge cases and less wasteful elsewhere.
 
 ## What Must Be Crystal Clear
 
-`normal` is now aggressive by default and, out of respect, strongly implores the user to perform several simple sanity and safety checks against test files on bare metal before allowing any real scan to touch a precious live library.
+`normal` is now aggressive by default and, out of respect, implores the user to perform, at the bare minimum, several simple and logical sanity and safety checks against test files on bare metal before so much as allowing a scan to hit their precious library with the tool.
 
-The minimum recommended checks are:
+These checks were done as par for the course during development. Do not assume I was willing to trust the actions of this system without verifying an initial set of safe mechanical actions myself. Yet this does not absolve any downstream user of the same responsibility.
 
-1. Goal: ascertain whether `normal` is set up correctly, whether it ingests your media desirably in its current structure, and whether it scans without issue.
-   Suggested test: make an `Example Movies` directory on your local drive with a representative cross-section of your library. Think of this like a Noah's Ark of naming and foldering conventions. You do not need to hit anything yet. This is a ground-level sanity check that the Python scripts, UI, dependencies, and probes are all actually working together.
-2. Goal: ascertain whether drive pathing, scanning, and probing are fine on the external hard drive if you store media on a mechanical drive.
-   Suggested test: copy the same `Example Movies` folder to the external drive and repeat the experiment there.
+1. Goal: ascertain, is `normal` set up correctly, and does it desirably ingest my media, in its current structure, and scan it without issue?  
+   Suggested test: make an `Example Movies` directory on your local drive with a representative cross section of your library. Think of this like a Noah's Ark of naming and foldering conventions. You do not need to hit anything yet; the flood is yet to come. You simply want a ground-level sanity check: Python scripts, UI and dependencies are talking, probes are running, and the hood is in fact as "all good" as it is reputed to be.
 
-From there, validate as far as you need before trusting live execution. It obviously makes sense to run the example library through the full range of motion and test each feature in turn.
+2. Goal: ascertain drive pathing, scanning, and probing are fine on external hard drive, if using a mechanical drive to store media.  
+   Suggested test: copy and paste the `Example Movies` folder across to the hard drive and repeat the same experiment.
 
-`normal` accommodates that well: the test library simply becomes another selectable library with its own storage and audit trail, alongside the main library and any other roots you use. Stay in the test environment until you are comfortable running live.
+How much further you wish to validate system behaviour to gain confidence from there is up to you. It would of course make sense to run your example library through the full range of motion to test all features in turn.
 
-## Safety and Visibility Promises
+`normal` is set up to easily accommodate this: the test library will simply become a selectable library, as your main library will when you scan it. They each have their own storage and auditing trails and can exist happily side by side, alongside other directories and libraries of course.
 
-- `normal` will never delete a file on your system without you explicitly performing two approval-gating actions: selection and confirmation
-- `normal` seeks to maximize visibility of what is being changed, why it is being changed, and what it is being changed to while minimizing friction
-- `normal` will not silently destroy or rename something; the intended downstream actions are visible before they run
+Please note: watching the tool absolutely purify your test library will be a thrilling experience the first time you witness it. Be patient. Do not rush to the live library. Stay in your test environment until you are comfortable running live.
 
-## Audit Logging: Useful, Not Yet Coherent
+## Safety and Visibility
 
-`normal` seeks to keep an audit log of actions, but this arrived late and remains half-baked.
+- `normal` will never, ever delete a file on your system without you explicitly performing two approval-gating actions. Ever.
+- `normal` seeks to maximise visibility of what is being changed, why it is being changed, and what it is being changed to, while minimizing friction. The user is intended to review downstream output shape and confirm it is to their liking.
+- `normal` will not silently destroy or rename something. All downstream actions are intended to be visible and explicit.
 
-The honest current description is:
+## Audit Logging
 
-- already useful
-- not yet a clean and coherent management of state and storage
-- with a notable gap around long-term permanence and accountability for junk-deleted items
+`normal` seeks to keep an audit log of actions, although this functionality came late in development and is subsequently half-baked.
 
-The newer aggression in junk deletion has not yet been paired with equally mature destructive-action logging. That gap should be treated as real, visible, and scheduled to be addressed rather than hand-waved away.
+It may best be described as currently quite useful, but not a clean and coherent management of state and storage, with a known and notable gap around audit log permanence of "Junk Deleted Items".
+
+The newfound aggression in junk deletion has not yet been paired with a deeper accountability to destructive action logging. This will be addressed soon.
