@@ -1,6 +1,6 @@
 # Product Statement
 
-As the parser logic expanded and hardened in confidence, the application has gone from a "safety first", probe-heavy file renaming tool with unclear boundaries between functions to a highly opinionated and deliberate workflow that asserts the following.
+As the parser logic expanded and hardened in confidence, the application has gone from a "safety first", probe-heavy file renaming tool with unclear boundaries between functions to a hardened, opinionated and deliberate 'purification' workflow that asserts the following.
 
 ## A Good Pirate Movie Library Should:
 
