@@ -1,41 +1,46 @@
 # normal
 
-*Authorship: Agent-written.*
+*Authorship: Human/AI-authored.*
 
-`normal` is a local movie-library workbench for people who want a smaller, cleaner, more deliberate pirate library. It is no longer a broad media-organizing sandbox. It now assumes a strong downstream shape, pushes toward it aggressively, and keeps destructive actions visible and gated.
+restoring order to your chaotic movie library
 
-- Normalize movies into clear `Title (Year)` naming
-- Profile library quality against a hardcoded standards posture
-- Delete weak encodes into a replacement queue
-- Repair default audio and subtitle behavior
-- Delete junk videos and sidecar spam
-- Compare the library against canonical movie lists
+`normal` is an opinionated open source local workbench that fixes a cross section of common issues with pirated movie libraries. It seeks to restore order where there was chaos and can be useful for organizing, maintaining, improving or expanding your movie library.
+
+Documentation authorship policy: [docs/writing.md](docs/writing.md).
 
 ![normal movie dashboard](docs/assets/readme_dashboard.png)
 
-## What It Is Now
+## What It Does
 
-`normal` is opinionated on purpose.
+- Normalises movie files and parent folders into `Title (Year)/Title (Year)` naming convention
+- Inspects the library and arranges it into a cross section of user editable quality profiles and surfaces what doesn't make the cut
+- Deletes these weak movie encodes (looking at you, YIFY) from disk and then saves them in a text based replacement queue, freeing space immediately while recording what needs replacing
+- Deletes Samples, Featurettes, Extras, Foreign Audio, promotional `.txt` spam and other junk ephemera
+- Enforces logical subtitle and audio defaults across the board with `ffmpeg` remuxing
+- Lets you compare your collection directly against canonical movie lists (TMDB Top 100, 250, etc.) and identify what's missing
+- One Click Export your entire library as a cleanly organized spreadsheet
 
-- A good movie library should default to the clearest possible naming: `Title (Year)`
-- Quality should live inside a defined library policy, not drift title by title
-- Large files carry a burden of proof under physical storage economics
-- Scans should minimize unnecessary drive reads and writes
-- Junk media ephemera should not quietly accumulate forever
+The fuller stance on why these choices are the right ones is in [docs/statement.md](docs/statement.md).
 
-The fuller product stance lives in [docs/statement.md](docs/statement.md).
+## The Opinionated Part
 
-## Safety
+`normal` is built around two principles:
 
-`normal` is aggressive in workflow shape, not reckless in execution.
+Physical storage economics. The bigger a file gets, the stronger the case it has to make for existing.
 
-- Scans and plans are read-only
-- CLI commands do not delete media
-- Web deletions require checkbox selection and a confirmation action
-- The server revalidates selected paths against the active source root before deleting
-- `normal` will not silently rename or destroy files behind your back
+Scan economics. Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
 
-Before touching a live library, use a representative local test library first. The recommended sanity checks are in [docs/quickstart.md](docs/quickstart.md) and [docs/safety.md](docs/safety.md).
+The claim: A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 weak, mediocre and chaotic ones.
+
+## Before You Point It at Your Real Library
+
+`normal` is aggressive by default. It renames, moves, deletes files and folders, uses recursive probe walks to gather metadata where needed, calls remuxing workloads via `ffmpeg`, and will seek to move "from A to B" as fast as you will let it.
+
+While safety has not been an afterthought, any downstream user must exercise their own judgement on this matter.
+
+Before it touches anything you care about, build a small test directory with a representative cross-section of your actual naming and folder conventions, a Noah's Ark of your current mess, and run everything there first.
+
+Nothing is deleted without two explicit approval actions from you. All planned changes are shown before they run. But the recommended sanity-check process is in [docs/quickstart.md](docs/quickstart.md) and [docs/safety.md](docs/safety.md). Do it. Watching the tool purify a test library for the first time is a good experience. Watching it touch your real library before you're ready is not.
 
 ## Get Started
 
@@ -43,12 +48,10 @@ Before touching a live library, use a representative local test library first. T
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-ffprobe -version
-normal --help
 normal web --host 127.0.0.1 --port 8765 --source /path/to/Test\ Movies
 ```
 
-Then open `http://127.0.0.1:8765`.
+Open <http://127.0.0.1:8765>.
 
 ## Docs
 
@@ -61,9 +64,7 @@ Then open `http://127.0.0.1:8765`.
 - [Documentation authorship](docs/writing.md)
 - [Roadmap](docs/roadmap.md)
 
-Historical note: `normal` did not start as a movie-only tool. Current public docs describe what it is now. Project-history docs still note the path it took to get here, including the now-legacy music lane.
-
-For contributors and AI agents working in the codebase: [docs/agent.md](docs/agent.md), [CONTRIBUTING.md](CONTRIBUTING.md), and [CHANGELOG.md](CHANGELOG.md).
+For contributors and agents working in the codebase: [docs/agent.md](docs/agent.md), [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
