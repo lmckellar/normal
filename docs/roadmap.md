@@ -2,8 +2,6 @@
 
 *Authorship: Agent-written.*
 
-`normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, with a matching git tag and GitHub prerelease; earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.
-
 ## Where we are now
 
 ### Headline
@@ -128,3 +126,6 @@ analogue.
   encode.
 - **Plex Compatibility workflow** — heuristic findings exist in
   `movie_profile.py`; the UI remains hidden until the workflow shape is clear.
+
+## Disclaimer
+  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, with a matching git tag and GitHub prerelease; earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.
