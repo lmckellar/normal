@@ -85,7 +85,7 @@ As such it defines and enforces a logical preference of:
 
 As such, it allows the user to directly compare their collection to a curated bucket of TMDB canonical list material for an orientation. It also plans to include a quick-and-dirty regional estimate matrix based off research data that presents a UI element comparing a user library to a known platform.
 
-For example, this may highlight that Australian Netflix users are generously treated to approximately 7-8 of the IMDb Top 100 (as of May 2026 research performed via GPT5.4-thinking Web). Without meaning to boast, normal says I'm crusing at 59/100 of the All Time on my end. Do better Netflix. 
+For example, this may highlight that Australian Netflix users are generously treated to approximately 7-8 of the IMDb Top 100 (as of May 2026 research performed via GPT5.4-thinking Web). Without meaning to boast, normal says I'm cruising at 59/100 of the All Time list on my end. 
 
 A user library with a large mass of high quality encodes in this gravitational centre will naturally destroy the major streaming slop fests in this regard, and `normal` intends to point the way to this.
 
