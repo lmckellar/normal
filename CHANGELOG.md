@@ -1,9 +1,13 @@
 # Changelog
 
 This changelog was retroactively rebuilt from commit history and diff/change
-logs. Package metadata is still `0.1.0` until a real release is cut.
+logs. Real release tags start at `v0.7.0-alpha.1`.
 
 ## [Unreleased]
+
+---
+
+## [0.7.0-alpha.1] — 2026-05-23
 
 ### Added
 
@@ -42,8 +46,6 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 - Movie name normalization now deletes empty package artifact folders, handles nonstandard resolution differentiators such as `1072p`, trims verbose uploader/language/audio noise, and preserves useful edition/video tokens such as `Open Matte`.
 - Repair Subtitle Readiness table now shows movie title and year (e.g. `Alien (1979)`) instead of the raw file path.
 - Downstream Plex client subtitle-default changes are verified working without cache invalidation issues.
-
----
 
 ## [0.6.3] — 2026-05-12
 

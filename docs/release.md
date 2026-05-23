@@ -7,11 +7,14 @@ aligned. Keep it local and lightweight until the first GitHub push is ready.
 
 ## Versioning
 
-The current published package version is still `0.1.0`. The retroactively
-rebuilt history in `CHANGELOG.md` is a planning aid, not a set of real tags.
+The current package version is `0.7.0a1`, tagged as `v0.7.0-alpha.1`. Earlier
+history in `CHANGELOG.md` is still a planning aid rather than a set of real
+tags.
 
 Use the smallest version bump that explains the work:
 
+- `0.x.0-alpha.N` for the first real prerelease cut of a completed lane or
+  architecture milestone when more polish is expected before the stable tag.
 - `0.x.0` for a new lane, major workflow, or major architecture milestone.
 - `0.x.y` for fixes, docs, hardening, UI polish, or small additions inside an
   existing lane.
@@ -20,8 +23,8 @@ Use the smallest version bump that explains the work:
 - `1.0.0` is reserved for the final refactor slice.
 - `1.x` starts with refactor stabilization before the dashboard-led UI overhaul.
 
-Do not bump `pyproject.toml` or `normal.__version__` until cutting a real
-release.
+Only bump `pyproject.toml` and `normal.__version__` when cutting a real release
+or prerelease.
 
 ## Changelog
 

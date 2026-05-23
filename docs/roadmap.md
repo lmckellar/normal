@@ -2,7 +2,7 @@
 
 *Authorship: Agent-written.*
 
-`normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. Package metadata stays at `0.1.0` until a real release is cut.
+`normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release tag is `v0.7.0-alpha.1`; earlier sections in `CHANGELOG.md` remain reconstructed history rather than tags.
 
 ## Where we are now
 
@@ -31,7 +31,7 @@ The remaining pre-TV work is trimming and hardening: remove remaining legacy pub
 
 ---
 
-## 0.7.0 — Scan architecture and workflow consolidation *(done, not yet tagged)*
+## 0.7.0-alpha.1 — Scan architecture and workflow consolidation *(first real prerelease)*
 
 - **Persistent probe cache** (`ProbeCache` in `probe_cache.py`) — cold → warm
   scan across the full library; shared by profile, export, and inspect.
