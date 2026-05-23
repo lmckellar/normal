@@ -36,7 +36,7 @@ Conversely, beneath a certain perceptual threshold even small files are objectiv
 
 Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
 
-The claims: 
+**The Dual Claims**
 
 1. A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 weak, mediocre and chaotic ones. 
 
