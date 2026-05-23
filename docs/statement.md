@@ -148,7 +148,7 @@ One such principle that was forged through the creation of this documentation se
 
 **The human voice has value as a trust signal among other things**. 
 
-Despite what the agent may say: **Emotion is not a "distrust signal.** Humour is not "worth sanding out" such that the end user may feel assured in the quality or professionalism of output. To the contrary: 
+Despite what the agent may say: **Emotion is not a "distrust signal".** Humour is not "worth sanding out" such that the end user may feel assured in the quality or professionalism of output. To the contrary: 
 
 In a world of flat, generic AI content, any user will rightly interrogate any object in front of them on a screen; "is this AI generated?". With specific regard to software, they will naturally ask the most relevant question; "if this code is AI generated, how do I know this person understands it?". The solution arises naturally, of course. 
 
