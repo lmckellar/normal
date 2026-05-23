@@ -65,13 +65,14 @@ The web UI uses a Stop/Run toggle for in-flight scans:
 - Clicking Stop aborts the browser request.
 - Movie profile scans also check for client disconnects between files and report `movie_profile_cancelled` when cancellation is observed.
 - Cancellation is cooperative. A currently running media probe may finish or time out before the request fully unwinds.
+- The earlier cancelled-scan / stray-`ffprobe` rough edge is no longer treated as an active known issue, but cancellation still does not mean force-killing an in-flight probe.
 
 The web UI also applies two guards around heavy recursive scans:
 
 - risky sources such as drive-root style paths and NTFS/FUSE mounts trigger an explicit confirmation warning
 - only one heavy scan per source is allowed at a time; overlapping requests are rejected instead of running concurrently
 
-There is also an execution-model guard behind the movie-side heavy scans: recursive discovery is no longer fully enumerated before probes begin. The scan walks the tree incrementally and checks for cancellation as it goes. That was the main change that reduced the earlier CPU spike on large or risky sources.Different filesystems, launch paths, indexers, sync agents, antivirus, thumbnailers, and shell or service managers can amplify up-front directory walks and incidental writes differently. Current read/write hygiene looks directionally safer, but cross-platform effects are not yet characterized and should be validated rather than assumed.
+There is also an execution-model guard behind the movie-side heavy scans: recursive discovery is no longer fully enumerated before probes begin. The scan walks the tree incrementally and checks for cancellation as it goes. That was the main change that reduced the earlier CPU spike on large or risky sources. Different filesystems, launch paths, indexers, sync agents, antivirus, thumbnailers, and shell or service managers can amplify up-front directory walks and incidental writes differently. Current read/write hygiene looks directionally safer, but cross-platform effects are not yet characterized and should be validated rather than assumed.
 
 Movie metadata probes run through `ffprobe` with a 30 second timeout per file. A timed-out probe becomes a reported warning or error for that file rather than hanging the whole scan indefinitely.
 
@@ -124,5 +125,4 @@ Here is a meme to lift your spirits. We've all been there. Image credit to NanoB
 
 normal -------------------------------------------------------------------------------you------------------------------------------------------------------------------ ChatGPT.com
 <img width="1408" height="768" alt="agentless-in-seattle-1993" src="https://github.com/user-attachments/assets/339e6836-f07b-4bcc-b906-a94b089bc4ae" />
-
 

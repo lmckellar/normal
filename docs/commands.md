@@ -227,4 +227,4 @@ Movie pages currently exposed in the web UI:
 
 Heavy recursive web scans now show a confirmation warning for risky sources such as drive-root style paths and NTFS/FUSE mounts. The server also rejects overlapping heavy scans for the same source instead of running them concurrently.
 
-Known issue: some cancelled movie scans can leave a background `ffprobe` running if another UI action starts immediately after cancellation. The exact trigger is still unknown, and the Drive Activity `ps` check may miss the leftover probe.
+Scan cancellation is cooperative rather than instantaneous. Movie profile scans check for cancellation between files; a currently running `ffprobe` may still finish or hit its timeout before the request fully unwinds. The earlier cancelled-scan / stray-`ffprobe` rough edge is no longer treated as an active known issue after the current scan-control hardening.

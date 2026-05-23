@@ -166,6 +166,6 @@ The `Audio` column uses the same normalized main-audio summary as the scan and w
 | Delete Junk & Spam Files | Remove junk videos and sidecar spam after preview and confirmation |
 | Canonical Lists | Compare owned titles against curated movie lists and unlock simple coverage badges |
 
-Formerly open note: movie probe cancellation had a rough edge where a cancelled scan could occasionally leave a background `ffprobe` running if another UI action started immediately after. That path has since been addressed through the current scan-control hardening and has been stable in real use, so it is no longer treated as an active concern.
+Movie scan cancellation is cooperative rather than instantaneous. Scans check for cancellation between files, while a currently running `ffprobe` may still finish or hit its timeout before unwind completes. The earlier cancelled-scan / stray-`ffprobe` rough edge is no longer treated as an active concern after the current scan-control hardening.
 
 Low priority parsing edge case: some low-quality multi-movie pack names can leak genre-style tokens such as `Sci Fi` into the parsed title when those tokens appear before the year. Current guidance is to treat those as local repair cases rather than broaden the parser heuristics.

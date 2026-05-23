@@ -2,7 +2,7 @@
 
 *Authorship: Agent-written.*
 
-`normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release tag is `v0.7.0-alpha.1`; earlier sections in `CHANGELOG.md` remain reconstructed history rather than tags.
+`normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, with a matching git tag and GitHub prerelease; earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.
 
 ## Where we are now
 
@@ -19,9 +19,8 @@ The movie workflow build-out is the product now. Live today:
   (~12 s vs ~2 min) feeding two detail panels.
 - **Instant quality-profile saves** — no rescan triggered; browser patches
   in-memory state and rerenders immediately.
-- **Cancellation rough-edge closure** — the earlier cancelled-scan / leftover-`ffprobe`
-  issue is no longer treated as active after the current scan-control hardening
-  and has been stable in real use.
+- **Cancellation rough-edge closure** — the earlier cancelled-scan / stray-`ffprobe`
+  issue is no longer treated as active after the current scan-control hardening.
 
 The remaining pre-TV work is trimming and hardening: remove remaining legacy public traces, remove verbose naming, tighten UI consistency, and finish parser edge cases.
 

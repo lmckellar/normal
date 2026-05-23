@@ -7,9 +7,10 @@ aligned. Keep it local and lightweight until the first GitHub push is ready.
 
 ## Versioning
 
-The current package version is `0.7.0a1`, tagged as `v0.7.0-alpha.1`. Earlier
-history in `CHANGELOG.md` is still a planning aid rather than a set of real
-tags.
+The current package version is `0.7.0a1`. Its matching git tag is
+`v0.7.0-alpha.1`, and its matching GitHub release should be published as a
+prerelease. Earlier history in `CHANGELOG.md` is still a planning aid rather
+than a set of real tags or GitHub releases.
 
 Use the smallest version bump that explains the work:
 
@@ -24,7 +25,12 @@ Use the smallest version bump that explains the work:
 - `1.x` starts with refactor stabilization before the dashboard-led UI overhaul.
 
 Only bump `pyproject.toml` and `normal.__version__` when cutting a real release
-or prerelease.
+or prerelease. In this repo, "real release" means all of:
+
+- version bump
+- changelog section
+- matching git tag
+- matching GitHub release object
 
 ## Changelog
 
@@ -55,4 +61,6 @@ The roadmap should tell the release story, not list every idea.
   change.
 - Bump `pyproject.toml` and `normal/__init__.py` to the release version.
 - Run `python3 -m unittest discover -s tests`.
-- Create a matching git tag.
+- Create and push the matching git tag.
+- Publish the matching GitHub release from that tag.
+- Mark `alpha` and similar prerelease cuts as GitHub prereleases.
