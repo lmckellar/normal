@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from normal.movie_identity import parse_movie_identity
 from normal.movie_plan import build_movie_plan
-from normal.movie_preclean import MOVIE_PRECLEAN_LEDGER_PATH, filter_movie_files_with_preclean, load_movie_preclean_entries
-from normal.movie_scan import discover_video_files
+from normal.movie_preclean import MOVIE_PRECLEAN_BUCKETS, load_movie_preclean_entries
 
 
 class MovieOneShotNormalizeTests(unittest.TestCase):
@@ -166,23 +166,51 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
                     self.assertIn("movie_name_review", {warning.code for warning in plan.warnings})
                     self.assertTrue(any(change.confidence == "review" for change in plan.proposed_changes))
 
-    def test_live_library_acceptance_after_logged_preclean(self) -> None:
-        source = Path("/mnt/media_storage/Movies")
-        if not source.exists():
-            self.skipTest("/mnt/media_storage/Movies is not available in this environment")
+    def test_load_movie_preclean_entries_without_path_returns_empty(self) -> None:
+        self.assertEqual(load_movie_preclean_entries(), [])
 
-        entries = load_movie_preclean_entries(MOVIE_PRECLEAN_LEDGER_PATH)
-        movie_files = filter_movie_files_with_preclean(discover_video_files(source), entries)
-        plan = build_movie_plan(source, movie_files=movie_files)
+    def test_load_movie_preclean_entries_with_missing_path_returns_empty(self) -> None:
+        missing = Path("/tmp/normal-missing-preclean.jsonl")
+        if missing.exists():
+            missing.unlink()
+        self.assertEqual(load_movie_preclean_entries(missing), [])
 
-        warning_codes = {warning.code for warning in plan.warnings}
-        self.assertTrue(
-            warning_codes.issubset({"movie_name_existing_target_collision"}),
-            msg=f"unexpected warnings: {sorted(warning_codes)}",
-        )
-        self.assertTrue(
-            all(change.confidence == "safe" for change in plan.proposed_changes if "Target path already exists in the library." not in change.reason)
-        )
+    def test_load_movie_preclean_entries_loads_valid_jsonl(self) -> None:
+        payload = {
+            "path": "/tmp/example",
+            "action": "remove",
+            "reason": "test",
+            "bucket": sorted(MOVIE_PRECLEAN_BUCKETS)[0],
+            "notes": "note",
+            "timestamp": "2026-05-23T00:00:00+10:00",
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ledger = Path(tmpdir) / "movie-preclean.jsonl"
+            ledger.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            entries = load_movie_preclean_entries(ledger)
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].path, payload["path"])
+        self.assertEqual(entries[0].bucket, payload["bucket"])
+
+    def test_load_movie_preclean_entries_rejects_unknown_bucket(self) -> None:
+        payload = {
+            "path": "/tmp/example",
+            "action": "remove",
+            "reason": "test",
+            "bucket": "unknown_bucket",
+            "notes": "note",
+            "timestamp": "2026-05-23T00:00:00+10:00",
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ledger = Path(tmpdir) / "movie-preclean.jsonl"
+            ledger.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            with self.assertRaises(ValueError):
+                load_movie_preclean_entries(ledger)
 
 
 if __name__ == "__main__":

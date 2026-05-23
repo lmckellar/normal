@@ -81,13 +81,15 @@ Watching the tool purify a test library for the first time is a good experience.
 `Agent-written`
 
 ```bash
+git clone https://github.com/lmckellar/normal.git
+cd normal
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
 normal web --host 127.0.0.1 --port 8765 --source /path/to/Test\ Movies
 ```
 
-Open <http://127.0.0.1:8765>.
+Then open `http://127.0.0.1:8765` in your browser.
 
 ## Support
 `Agent-written`

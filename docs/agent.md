@@ -54,6 +54,7 @@ normal <command> [flags]         # after pip install
 
 # Tests
 python3 -m unittest discover -s tests
+python3 -m unittest tests.internal.movie_one_shot_live_acceptance
 
 # Web server
 source .venv/bin/activate
@@ -215,6 +216,14 @@ Keep the web test split aligned with current ownership:
 - patch internal module symbols at their owning path when needed; avoid patching through the `normal.web` facade unless the facade itself is under test.
 
 If route testing needs to grow, prefer a tiny request/response harness around `RequestContext` or route callables before adding broader server bootstrap for each case.
+
+Internal-only live-library hardening stays out of the default suite. Run it explicitly with:
+
+```bash
+NORMAL_TEST_MOVIE_SOURCE=/path/to/Movies \
+NORMAL_TEST_MOVIE_PRECLEAN_LEDGER=/path/to/movie-preclean.jsonl \
+python3 -m unittest tests.internal.movie_one_shot_live_acceptance
+```
 
 ## Safety constraints
 

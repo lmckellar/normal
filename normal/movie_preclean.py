@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 
-
-MOVIE_PRECLEAN_LEDGER_PATH = Path("out/manual-cleanup/movie-preclean.jsonl")
 MOVIE_PRECLEAN_BUCKETS = {
     "junk_extras",
     "misplaced_non_movie",
@@ -24,8 +22,8 @@ class MoviePrecleanEntry:
     timestamp: str
 
 
-def load_movie_preclean_entries(ledger_path: Path = MOVIE_PRECLEAN_LEDGER_PATH) -> list[MoviePrecleanEntry]:
-    if not ledger_path.exists():
+def load_movie_preclean_entries(ledger_path: Path | None = None) -> list[MoviePrecleanEntry]:
+    if ledger_path is None or not ledger_path.exists():
         return []
 
     entries: list[MoviePrecleanEntry] = []

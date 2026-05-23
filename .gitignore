@@ -19,3 +19,7 @@ venv/
 # Tool directories
 .claude/
 .playwright-mcp/
+
+# Local-only agent and runtime output artifacts
+/CLAUDE.md
+/out/

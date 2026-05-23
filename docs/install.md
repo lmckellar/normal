@@ -24,12 +24,14 @@ Verify: `ffprobe -version`
 Clone and install:
 
 ```bash
-git clone <repo>
+git clone https://github.com/lmckellar/normal.git
 cd normal
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
 
-Or non-editable:
+Or non-editable from inside the cloned repo:
 
 ```bash
 pip install .
