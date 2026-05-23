@@ -24,7 +24,7 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 ## The Opinionated Part
 
-`normal` is built around two principles:
+`normal` is built around two principles that lead to two primary claims:
 
 **Physical Storage Economics**
 
