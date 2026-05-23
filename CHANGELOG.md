@@ -35,6 +35,7 @@ logs. Package metadata is still `0.1.0` until a real release is cut.
 
 ### Fixed
 
+- Formerly open movie-scan cancellation rough edge is no longer tracked as an active concern. The scan-control hardening around cancellation, incremental traversal, and probe lifecycle has been stable in real use, including the earlier path where a cancelled scan could occasionally leave a background `ffprobe` behind.
 - `reconcile_replacement_queue` was calling `replacement_identities` (an O(library-size) walk with `path.resolve()` per file) once per replacement-queue item rather than once per issue family, due to Python's eager evaluation of `dict.setdefault` defaults. On a 973-movie library with a large queue this added ~194s to every profile response. Fixed by guarding with an explicit `if family not in` check.
 - IMDb rating availability on fresh web UI load.
 - Movie name normalization now handles mixed-script title prefixes, `Director's Cut`, compact `BluRayRemux` tokens, language tags like `3Rus Eng`, hyphenated release groups like `CME-v0`, technical tokens before trailing parenthesized years, and the `Blauray` typo.

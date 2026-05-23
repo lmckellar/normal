@@ -17,6 +17,7 @@ To export a formatted XLSX catalogue of the current library, use the **Export** 
 The **Canonical Lists** page compares owned titles against live all-time movie lists using TMDb and a local cache. It is title-coverage focused. Bitrate, quality tiers, and warning telemetry do not affect the result.
 
 Pass `--tmdb-key` to `normal web` or set `TMDB_KEY` before launch. Current badges are intentionally simple and good enough for first-pass coverage tracking; badge-system refinement is deferred.
+For the broader local-first versus outbound API posture, see [Safety](safety.md#networking-behaviour).
 
 ![Canonical Lists](assets/canonical_lists.png)
 
@@ -93,6 +94,7 @@ The **Delete Weak Encodes** page lets you select weak files for deletion. Each d
 Queue history has four hard filters: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Deleted rows can be dismissed from queue history inline when the release is no longer worth replacing. That action only changes queue state; it does not touch media files.
 
 The queue-history table is sortable by title, year, and IMDb rating. IMDb ratings are fetched server-side from [OMDb](https://www.omdbapi.com/) and require a free API key passed via `--omdb-key` or the `OMDB_KEY` environment variable. Lookups use local title cleanup plus a small cache, so repeated page loads do not keep spending the OMDb quota. Without a key the column is hidden; when OMDb is rate-limited, new cells show `limit` and cached ratings still display.
+This is one of the few optional outbound API paths; see [Safety](safety.md#networking-behaviour).
 
 ![Delete Weak Encodes](assets/delete_weak_encodes.png)
 
@@ -164,8 +166,6 @@ The `Audio` column uses the same normalized main-audio summary as the scan and w
 | Delete Junk & Spam Files | Remove junk videos and sidecar spam after preview and confirmation |
 | Canonical Lists | Compare owned titles against curated movie lists and unlock simple coverage badges |
 
-## Known issue
-
-There is an open issue around movie probes not always unwinding cleanly when a scan is cancelled and another UI action starts immediately after. Exact reproduction conditions are still unknown. In some cases a background `ffprobe` keeps running and is not visible through the current Drive Activity `ps` check.
+Formerly open note: movie probe cancellation had a rough edge where a cancelled scan could occasionally leave a background `ffprobe` running if another UI action started immediately after. That path has since been addressed through the current scan-control hardening and has been stable in real use, so it is no longer treated as an active concern.
 
 Low priority parsing edge case: some low-quality multi-movie pack names can leak genre-style tokens such as `Sci Fi` into the parsed title when those tokens appear before the year. Current guidance is to treat those as local repair cases rather than broaden the parser heuristics.
