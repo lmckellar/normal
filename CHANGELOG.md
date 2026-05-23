@@ -5,6 +5,11 @@ logs. Real release tags start at `v0.7.0-alpha.1`.
 
 ## [Unreleased]
 
+### Changed
+
+- Web frontend extracted out of `normal/web.py` into package-managed assets under `normal/web_assets/`. The stdlib `http.server` backend remains in place, now serves `/assets/app.css` and `/assets/app.js`, and injects only a small runtime bootstrap into the HTML shell instead of carrying the full UI inline.
+- Web packaging and tests updated to match the split frontend layout. `pyproject.toml` now includes the packaged web assets, and web-layer tests now assert against asset content and static-asset serving instead of a single embedded HTML constant.
+
 ---
 
 ## [0.7.0-alpha.1] — 2026-05-23

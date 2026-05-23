@@ -25,7 +25,8 @@ normal/
 ├── movie_identity.py            # Movie title/year parsing shared across scan and plan
 ├── probe_cache.py               # Persistent ffprobe result cache (keyed by path + mtime)
 ├── quality_review.py            # Quality review helpers
-├── web.py                       # Built-in HTTP server + all web API route handlers
+├── web.py                       # Built-in HTTP server + web API route handlers + asset serving
+├── web_assets/                  # Package-managed HTML, CSS, and JS for the local web UI
 ├── __init__.py
 └── __main__.py                  # python -m normal entry point
 
@@ -40,7 +41,7 @@ docs/                            # User and agent documentation
 - **Movie audio packaging repair**: `movie_profile.py` → `movie_audio_fix.py`
 - **Movie subtitle repair**: `movie_profile.py` → `movie_subtitle_fix.py` → `movie_subtitle_history.py`
 - **Probe caching**: `probe_cache.py` — persistent per-file ffprobe cache; shared by profile, junk, export, and inspect
-- **Web layer**: `web.py` — all HTTP routes in one file; stdlib `http.server`, no external framework
+- **Web layer**: `web.py` + `web_assets/` — stdlib `http.server`, package-managed frontend assets, no external framework
 - **Shared data contract**: `models.py` — `ProposedChange` is the core type crossing module boundaries
 - **Persistent state**: `movie_replacement_queue.py` writes to `~/.local/share/normal/movie-replacement-queue.json`; `movie_subtitle_history.py` writes to `~/.local/share/normal/subtitle-fix-history.json`
 

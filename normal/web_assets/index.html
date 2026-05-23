@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>normal workbench</title>
+    <link rel="stylesheet" href="/assets/app.css">
+
+</head>
+<body>
+  <div class="shell">
+    <section class="masthead">
+      <div class="card mast-main">
+        <div class="eyebrow">normal workbench</div>
+        <h1 id="heroTitle">Movies</h1>
+        <p class="lede" id="heroLede">Local workbench for diagnosing and cleaning movie libraries.</p>
+        <div class="controls">
+          <input id="sourcePath" type="text" placeholder="/path/to/library">
+          <button id="runButton" class="primary">Run</button>
+        </div>
+        <div class="page-nav" id="pageNav"></div>
+        <div class="status-bar">
+          <div class="status-row">
+            <span class="status-dot" id="statusDot"></span>
+            <span class="status" id="statusText">Idle.</span>
+            <span class="status-timer" id="statusTimer"></span>
+          </div>
+          <div class="status-track"><div class="status-fill" id="statusFill"></div></div>
+        </div>
+        <div class="activity-bar" id="activityBar">
+          <span class="activity-dot"></span>
+          <div>
+            <div class="activity-title" id="activityTitle">Drive activity: idle</div>
+            <div class="activity-detail" id="activityDetail">No normal job or media probe detected for the selected source.</div>
+          </div>
+        </div>
+      </div>
+      <div class="card mast-side">
+        <div class="theme-picker">
+          <div class="theme-picker-label">Theme</div>
+          <div id="themeBtns"></div>
+        </div>
+        <div class="eyebrow">Library Switcher</div>
+        <div class="library-switcher" id="libraryRoots"></div>
+      </div>
+    </section>
+
+    <section class="layout">
+      <div class="card panel">
+        <h2 id="mainTitle">Library</h2>
+        <div class="tagline" id="mainTagline">Choose a lane and run a scan.</div>
+        <div id="filterBar" class="page-nav"></div>
+        <div id="mainContent"></div>
+      </div>
+      <div class="card panel">
+        <h2>Detail</h2>
+        <div class="details" id="detailPanel">
+          <div class="empty">For movies, this pane stays attached to the current directory's Replacement Queue.</div>
+        </div>
+      </div>
+    </section>
+  </div>
+    <script>__NORMAL_BOOTSTRAP__</script>
+  <script src="/assets/app.js"></script>
+
+</body>
+</html>
+"""
+
+
+def library_roots_path() -> Path:
+    return Path.home() / ".local" / "share" / "normal" / "library-roots.json"
+
+
+def load_library_roots() -> dict[str, Any]:
+    path = library_roots_path()
+    if not path.exists():
+        return {"movies": "", "recent": []}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {"movies": "", "recent": []}
+        movies = data.get("movies") if isinstance(data.get("movies"), str) else ""
+        recent = data.get("recent") if isinstance(data.get("recent"), list) else []
+        recent = [
+            r for r in recent
+            if isinstance(r, dict)
+            and r.get("lane") == "movies"
+            and isinstance(r.get("source"), str)
+            and r["source"]
+        ][:2]
+        return {"movies": movies, "recent": recent}
+    except (OSError, json.JSONDecodeError):
+        return {"movies": "", "recent": []}
+
+
+def save_library_roots(data: dict[str, Any]) -> None:
+    path = library_roots_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    movies = data.get("movies") if isinstance(data.get("movies"), str) else ""
+    recent = data.get("recent") if isinstance(data.get("recent"), list) else []
+    recent = [
+        r for r in recent
+        if isinstance(r, dict)
+        and r.get("lane") == "movies"
+        and isinstance(r.get("source"), str)
+        and r["source"]
+    ][:2]
+    payload = json.dumps({"movies": movies, "recent": recent}, indent=2) + "\n"
+    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as handle:
+        handle.write(payload)
+        temp_path = Path(handle.name)
+    temp_path.replace(path)
