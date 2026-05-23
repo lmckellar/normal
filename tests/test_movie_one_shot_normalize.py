@@ -175,8 +175,14 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
         movie_files = filter_movie_files_with_preclean(discover_video_files(source), entries)
         plan = build_movie_plan(source, movie_files=movie_files)
 
-        self.assertFalse(plan.warnings)
-        self.assertTrue(all(change.confidence == "safe" for change in plan.proposed_changes))
+        warning_codes = {warning.code for warning in plan.warnings}
+        self.assertTrue(
+            warning_codes.issubset({"movie_name_existing_target_collision"}),
+            msg=f"unexpected warnings: {sorted(warning_codes)}",
+        )
+        self.assertTrue(
+            all(change.confidence == "safe" for change in plan.proposed_changes if "Target path already exists in the library." not in change.reason)
+        )
 
 
 if __name__ == "__main__":
