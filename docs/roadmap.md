@@ -8,12 +8,11 @@
 
 ### Headline
 
-`normal` is now a movie-first local workbench with its main lanes built and
+`normal` is now in a semi-stable alpha state with main lanes built and
 materially useful: normalize, quality triage, junk cleanup, repair defaults,
 canonical list coverage, and export. The recent scan/cache work means the
 product shape feels coherent rather than exploratory, but it is still pre-1.0
-and the remaining work is mostly trim, consistency, and hardening before the TV
-lane starts.
+and the remaining work will need to focus heavily on UI and UX improvements.
 
 ### Concerns
 
