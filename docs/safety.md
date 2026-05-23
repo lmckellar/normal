@@ -122,7 +122,7 @@ Stay calm! While I can't promise you get those files back, you are not alone and
 
 Here is a meme to lift your spirits. We've all been there. Image credit to NanoBanana as served via Gemini 3.5 Flash.
 
-normal ---------------------------------------------------------------------------you--------------------------------------------------------------------------------- ChatGPT.com
+normal -------------------------------------------------------------------------------you------------------------------------------------------------------------------ ChatGPT.com
 <img width="1408" height="768" alt="agentless-in-seattle-1993" src="https://github.com/user-attachments/assets/339e6836-f07b-4bcc-b906-a94b089bc4ae" />
 
 
