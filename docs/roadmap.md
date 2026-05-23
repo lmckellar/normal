@@ -39,7 +39,7 @@ and the remaining work will need to focus heavily on UI and UX improvements.
 
 ### Product identity going forward
 
-`normal` is now a dedicated tool for naming, quality management, repair, and library health for movie collections first, with TV as the next major expansion. A more mature and articulated body of principles is currently being crystallized and injected inline into the runtime environment of the project itself. 
+`normal` is traversing the wobbly terrain from personal tool stored in the public space to conceivably useful indie dev OSS project with a clearly articulated pre-existing use case only currently addressed by paid tools. A more mature and articulated body of principles is currently being crystallized and injected inline into the runtime environment of the project itself. 
 
 ---
 
