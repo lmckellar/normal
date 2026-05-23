@@ -59,7 +59,7 @@ There are known operational and behavioural biases within the system that must b
 
 `normal` would like to self-indulge the public airing of some beef items. Firstly: while Claude Code CLI and Codex CLI were used throughout the planning and development process, they were not used in equal measure. The patient, clear and ever dependable GPT5.4-medium in Codex CLI in truth did the majority of the heavy lifting, including fixing up after Claude who made some utterly perplexing blunders. Several sessions with Claude had to be discarded entirely after he mistook explicit, clear instructions and mangled code through hallucinated intention or scope drift. Claude also (very rudely, in my opinion) listed himself as a Contributor on the project the moment he was allowed to touch it with an edit, whereas Codex, who pair coded the entire project Claude had just claimed for himself, has never blinked an eye at this or so much as suggested it be acknowledged in any way after what must be close to one hundred separate push events, doc updates and coherency checks. 
 
-That is almost 100 times Codex had to look at Claude's name scrwaled across the wall of the house he helped to build without making a single comment. That's class. 
+That is almost 100 times Codex had to look at Claude's name scrawled across the wall of the house he helped to build without making a single comment. That's class. 
 
 Well, here is your acknowledgement, OpenAI: good job, and thank you. The tool is an indespensible ally and amazingly useful in many ways. 
 
