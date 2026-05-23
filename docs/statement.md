@@ -45,7 +45,7 @@ This instantly frees up hard drive space, reduces further scanning overhead, and
 
 There are known operational and behavioural biases within the system that must be flagged explicity instead of floating as an implication within the documentation:
 
-`normal` expects the user speaks English as their primary language and does not at this stage accomodate other languages gracefully (although it is noted this would be a trivial implementation detail if desired)
+`normal` expects the user speaks English as their primary language and does not at this stage accomodate other "primary" languages gracefully (although it is noted this would be a trivial implementation detail if desired). It allows flexibility in default audio routing for Foreign Language films but is configured to assume the user prefers the original Foreign Landuage Audio Track with Default English Subtitles.
 
 `normal` expects the user to delete any movie file other than the core .mkv or other video files in order to support primary naming functions. It will parse towards the goal of a "junk free library" with great confidence and accuracy, yet loses coherence in dealing with a broader array of nested directories or other ephemera such as "Extras" folders within the movie directory or scattered around the base dir. 
 
@@ -55,7 +55,11 @@ There are known operational and behavioural biases within the system that must b
 
 `normal` has been tested and developed exlusively in a Linux environment (Ubuntu 24.x). Given it is fundamentally a python back-end calling a small set of basic open source libraries with a local Web UI interface it should be perfectly and easily portable across any major OS, but this is at this stage an untested claim. 
 
-`normal` makes extensive use of agentic coding tools and is a 100% pair programmed code base using primarily ChatGPT 5.4 harnessed in Codex CLI and Sonnet 4.6 harnessed in Claude Code CLI. Documentation is 'majoritively' agent written with response to user prompting. User facing policy regarding authorship notation has been created. It is regarded that the primary surface touch points of the document set (README, Statement, etc) should contain the highest ratio of human to agent input, even if that involves manually line editing typos like our forefathers once did before us.
+`normal` makes extensive use of agentic coding tools and is a 100% pair programmed code base using primarily ChatGPT 5.4 harnessed in Codex CLI with some occasional assistance from Sonnet 4.6 harnessed in Claude Code CLI. Documentation is 'majoritively' agent written with response to user prompting. User facing policy regarding authorship notation has been created. It is regarded that the primary surface touch points of the document set (README, Statement, etc) should contain the highest ratio of human to agent input, even if that involves manually line editing typos like our forefathers once did before us.
+
+`normal` would like to self-indulge the public airing of some beef items. Firstly: while Claude Code CLI and Codex CLI were used throughout the planning and development process, they were not used in equal measure. The patient, clear and ever dependable GPT5.4-medium in Codex CLI in truth did the majority of the heavy lifting, including fixing up after Claude who made some utterly perplexing blunders. Several sessions with Claude had to be discarded entirely after he mistook explicit, clear instructions and mangled code through hallucinated intention or scope drift. Claude also (very rudely, in my opinion) listed himself as a Contributor on the project the moment he was allowed to touch it with an edit, whereas Codex, who pair coded the entire project Claude had just claimed for himself, has never blinked an eye at this or so much as suggested it be acknowledged in tany way after what must be close to one hundred separate push events, doc updates and coherency checks. That is almost 100 times Codex had to look at Claudes name scrwaled on the wall of his house amd he chose not to say anything. That's class. 
+
+Well, here is your acknowledgement, OpenAI: good job, and thank you. The tool is an indespensible ally and amazingly useful in many ways. 
 
 ## Source First, Then Client Quirks
 `User-written`
