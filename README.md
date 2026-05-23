@@ -30,6 +30,8 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 The bigger a file gets, the stronger the case it has to make for existing.
 
+Conversely, beneath a certain perceptual threshold even small files are objectively not worth existing. 
+
 **Physical Scan Economics** 
 
 Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
@@ -61,20 +63,20 @@ Watching the tool purify a test library for the first time is a good experience.
 
   `normal` works without external API keys for its core local workflows: movie normalize, profile scans, junk detection, repair defaults, inspect, and exports all run against local files.
 
-  Two web features use optional third-party APIs:
+  Two web features related to pulling Ratings use optional third-party APIs:
 
   - `TMDB_KEY` enables `Movies / Canonical Lists`, which compares your library against TMDb-backed movie lists.
   - `OMDB_KEY` enables IMDb ratings in replacement-queue history for quick sorting of 'most acclaimed movies I have deleted and need to replace'
 
   If you do not provide these keys:
 
-  - the app still launches and the main movie workflows still work
-  - `Canonical Lists` cannot fetch TMDb coverage data without `TMDB_KEY`
-  - replacement-history IMDb ratings stay unavailable without `OMDB_KEY` and renders a '-' in the otherwise fully functioning output table
+  - the app still launches and the main movie workflows still work as you would expect
+  - `Canonical Lists` cannot fetch TMDb coverage data without `TMDB_KEY` and will not render useable lists in the UI
+  - replacement-history-list IMDb ratings do not pull and instead render as a '-' in the otherwise fully functioning output table
 
   Keys are free with basic usage plans and can be passed either by environment variable or via `normal web --tmdb-key ... --omdb-key ...`.
 
-  `normal` thoughtfully provides an internal local caching feature that minimises progressive API calls after initial scan. This allows users to stay comfortably within free usage plan rate limits for the API service providers even if managing a very large replacement queue and avoids needlessly hammering the provider endpoints with wasteful API requests. In the event the user gets rate limited (liekly on initial scan of huge library if many weak encodes get nuked, unlikely otherwise) they can simply wait 24 hours for the TMBD rate limit to refresh and perform another scan in normal - it will rebuild whatever was not initially scanned, update anything that has gone stale, while deliberately avoiding any wasteful re-queries against the API endpoint for known values from prior scans. 
+  `normal` thoughtfully provides an internal local caching feature that minimises progressive API calls after initial scan. This allows users to stay comfortably within free usage plan rate limits for the API service providers even if managing a very large replacement queue and avoids needlessly hammering the provider endpoints with wasteful API requests. In the event the user gets rate limited (likely on initial scan of huge library if many weak encodes get nuked, unlikely otherwise) they can simply wait 24 hours for the TMBD rate limit to refresh and perform another scan in normal - it will rebuild whatever was not initially scanned, update anything that has gone stale, while deliberately avoiding any wasteful re-queries against the API endpoint for known values from prior scans. 
 
   See [docs/safety.md](docs/safety.md#networking-behaviour) for the networking posture and [docs/movies.md](docs/movies.md) for where these features appear in the UI.
 
