@@ -17,24 +17,22 @@ and the remaining work will need to focus heavily on UI and UX improvements.
 ### Concerns
 
 - **UI/UX maturity** — functionally strong, but still uneven in consistency,
-  colour logic, and overall polish between pages.
+  colour logic, and overall polish between pages. does not respect screen realestate
+  nor yet have a concise, Universal Principle of interaction perceivable across workflows
 - **Main workflow maturity** — movie lanes are credible for real use; TV does
-  not exist yet, so the product is still intentionally single-lane in practice.
-- **Documentation coherence** — mostly aligned with the movie-first reality, but should
-  keep losing stale parallel-story and legacy identity traces as the repo
-  settles.
+  not exist yet, so the product is still intentionally movie only in practice.
+- **Documentation coherence** — mostly aligned with the movie-first reality. Current key
+  user docs Readme and Statement are suitabily human written.
 - **Safety / mutation confidence** — rename, delete, and remux lanes are
   meaningfully bounded and preview-driven, but they still deserve active
-  caution because the product mutates real libraries.
-- **Auditability / receipts** — replacement and subtitle history are useful and
-  real, but they are still lane-specific rather than a broad, finished audit
-  posture.
+  caution to retain clear boundaries in the face of TV parsing logic.
+- **Auditability / receipts** — replacement and subtitle history are useful with
+  a noted gap around junk deletion. Authorial policy is clear yet not evenly applied to doc base. 
 - **Performance / scan economics** — recent cache and shared-scan work improved
-  the runtime story materially, but scan cost and UI responsiveness still need
-  protecting as the product grows.
-- **Architecture health** — recent cache and shared-scan consolidation improved
-  the shape materially; frontend/editor ergonomics remain less mature than the
-  backend workflows.
+  the runtime reality materially. retain strength and defend against boundary regressions.
+- **Architecture health** — structural refactor of web.py has deconstructed monolithic 
+  web backend into assets packages. frontend/editor ergonomics remain less mature than the
+  backend workflows which feel suitably scoped to the tool. 
 - **Release/versioning coherence** — now coherent from `v0.7.0-alpha.1`
   forward; earlier reconstructed history remains useful context, not true
   release history.
