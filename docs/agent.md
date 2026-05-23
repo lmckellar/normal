@@ -25,7 +25,7 @@ normal/
 ├── movie_identity.py            # Movie title/year parsing shared across scan and plan
 ├── probe_cache.py               # Persistent ffprobe result cache (keyed by path + mtime)
 ├── quality_review.py            # Quality review helpers
-├── web.py                       # Built-in HTTP server + web API route handlers + asset serving
+├── web/                         # Built-in HTTP server package: routes, state, activity, serializers, asset serving
 ├── web_assets/                  # Package-managed HTML, CSS, and JS for the local web UI
 ├── __init__.py
 └── __main__.py                  # python -m normal entry point
@@ -41,7 +41,7 @@ docs/                            # User and agent documentation
 - **Movie audio packaging repair**: `movie_profile.py` → `movie_audio_fix.py`
 - **Movie subtitle repair**: `movie_profile.py` → `movie_subtitle_fix.py` → `movie_subtitle_history.py`
 - **Probe caching**: `probe_cache.py` — persistent per-file ffprobe cache; shared by profile, junk, export, and inspect
-- **Web layer**: `web.py` + `web_assets/` — stdlib `http.server`, package-managed frontend assets, no external framework
+- **Web layer**: `web/` + `web_assets/` — stdlib `http.server`, package-managed frontend assets, no external framework
 - **Shared data contract**: `models.py` — `ProposedChange` is the core type crossing module boundaries
 - **Persistent state**: `movie_replacement_queue.py` writes to `~/.local/share/normal/movie-replacement-queue.json`; `movie_subtitle_history.py` writes to `~/.local/share/normal/subtitle-fix-history.json`
 
@@ -64,7 +64,7 @@ python3 -m normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 
 When the user asks to start the web UI, open the app, or provide the localhost link, treat that as a request for a clean launch, not a minimal process spawn.
 
-If a change touches `web.py` or otherwise requires a server restart to go live, restart the local web UI as part of finishing the task and include the localhost link in the completion report so the user can test immediately.
+If a change touches `normal/web/` or otherwise requires a server restart to go live, restart the local web UI as part of finishing the task and include the localhost link in the completion report so the user can test immediately.
 
 A clean launch must:
 
@@ -151,7 +151,7 @@ Both cutoffs are persisted in `movie_standards.json` per stance and exposed as s
 
 Each profile card (both Action Based and Quality Profile) has a **View** button that swaps `mainContent` inline to a Quality Profile Inspector: a sortable table of titles in that tier with columns: Title, Year, Resolution, Codec, Ch, Raw Audio, Norm. Audio, Video Bitrate, File Size. Resolution is derived from `facts.resolution_bucket` and sorted by rank (SD < 720p < 1080p < 2160p). Title and year are parsed from the filename stem via `^(.+?)\s*\((\d{4})\)` — `MovieProfileItem` carries no separate title/year fields. The inspector is state-driven (`state.movieProfileInspectorLabel`, `state.movieProfileInspectorType`, `state.movieProfileInspectorSort`) and cleared on any `setPage` call. A "← Back to Dashboard" button restores the card view. The View button is suppressed when count is 0. If the payload has no `movies` (cached/snapshot-only), the inspector shows an empty-state prompt instead of a table.
 
-**Norm. Audio** is a front-end-only perceptually normalized bitrate expressed as an AC3-equivalent figure. Multipliers by `audio_format_family`: AAC 1.30×, EAC3 1.12×, DTS (lossy) 0.95×, AC3 1.00× (baseline). Lossless families (TrueHD, DTS-HD, FLAC, PCM) display "Lossless" with no numeric value. The multiplier tapers linearly toward 1.0 between 75 kbps/channel and 110 kbps/channel (AC3-eq space), scaling with channel count — 450–660 kbps for 5.1, 600–880 kbps for 7.1. Above the upper threshold the cell shows `≥N kbps eq.` rather than a precise figure, since codec differences become perceptually negligible. The column sorts on the normalized value; Raw Audio sorts on the original `audio_bitrate_kbps`. All math lives in `normalizeAudioBitrate()` and `fmtNormAudioBitrate()` in `web.py` — no scan-side changes. Do not bake these multipliers into the scan infrastructure.
+**Norm. Audio** is a front-end-only perceptually normalized bitrate expressed as an AC3-equivalent figure. Multipliers by `audio_format_family`: AAC 1.30×, EAC3 1.12×, DTS (lossy) 0.95×, AC3 1.00× (baseline). Lossless families (TrueHD, DTS-HD, FLAC, PCM) display "Lossless" with no numeric value. The multiplier tapers linearly toward 1.0 between 75 kbps/channel and 110 kbps/channel (AC3-eq space), scaling with channel count — 450–660 kbps for 5.1, 600–880 kbps for 7.1. Above the upper threshold the cell shows `≥N kbps eq.` rather than a precise figure, since codec differences become perceptually negligible. The column sorts on the normalized value; Raw Audio sorts on the original `audio_bitrate_kbps`. All math lives in `normalizeAudioBitrate()` and `fmtNormAudioBitrate()` in `normal/web_assets/app.js` — no scan-side changes. Do not bake these multipliers into the scan infrastructure.
 
 Dashboard movie profile scans stream file discovery and do not pre-count the whole tree. If you touch scan observability, preserve forward guidance that is true for streamed scans: processed file count, elapsed time, current probe target when available, and ETA/percent only when the backend has a real bounded total.
 
@@ -178,7 +178,7 @@ Keyed by source directory. Each item carries `item_id` (SHA256[:16] of `source_r
 
 ## Web API routes
 
-All routes in `web.py`. Key families:
+Routes are registered from the `normal/web/` package. Key families:
 
 | Route | Method | Description |
 |---|---|---|
@@ -206,6 +206,16 @@ All routes in `web.py`. Key families:
 | `/api/movies/subtitle-readiness/history/sync` | POST | Upsert review-only items into subtitle history (called after profile scan) |
 | `/api/movies/subtitle-readiness/history/dismiss` | POST | Mark subtitle history items as dismissed |
 
+## Test boundaries
+
+Keep the web test split aligned with current ownership:
+
+- `tests/test_web.py` covers facade behavior, HTTP routing, asset serving, and end-to-end handler responses.
+- direct unit tests for `normal/web/activity.py`, `normal/web/scan_guard.py`, and `normal/web/serializers.py` cover internal behavior in place instead of through `normal.web` re-exports.
+- patch internal module symbols at their owning path when needed; avoid patching through the `normal.web` facade unless the facade itself is under test.
+
+If route testing needs to grow, prefer a tiny request/response harness around `RequestContext` or route callables before adding broader server bootstrap for each case.
+
 ## Safety constraints
 
 Hard rules — do not relax without explicit user instruction:
@@ -227,12 +237,12 @@ These are deliberate choices, not gaps:
 
 - **Hardcoded preferences remain the pre-1.0 default.** Quality thresholds and replacement priority weights are mostly in code or repo-local config. Movie normalization is the main exception: concise vs verbose naming is now exposed in the CLI and web UI.
 - **Movie triage uses a shared scan across all repair workflows.** `Delete Weak Encodes` and `Repair Defaults` (Audio Packaging + Subtitle Readiness sub-tabs) are all backed by the same `movie-profile` report and replacement queue substrate. Keep workflow and UI code shared where possible, but keep issue-family rules separate.
-- **Movie profile results are server-side cached.** `MOVIE_PROFILE_CACHE` in `web.py` stores the `MovieProfileReport` object keyed by resolved source path. Dashboard, Delete Weak Encodes, and Repair Defaults (both Audio Packaging and Subtitle Readiness tabs) all hit this cache on repeated navigation. The cache is explicitly invalidated after `handle_movies_apply`, `handle_movies_audio_packaging_fix` (when files were fixed), and `handle_movies_subtitle_readiness_fix` (when files were fixed). Response serialisation (`asdict`, histogram, queue reconciliation) happens outside the `ACTIVITY_TRACKER` context so the activity indicator correctly terminates when the last file is probed.
+- **Movie profile results are server-side cached.** `MOVIE_PROFILE_CACHE` in `normal/web/state.py` stores the `MovieProfileReport` object keyed by resolved source path. Dashboard, Delete Weak Encodes, and Repair Defaults (both Audio Packaging and Subtitle Readiness tabs) all hit this cache on repeated navigation. The cache is explicitly invalidated after `handle_movies_apply`, `handle_movies_audio_packaging_fix` (when files were fixed), and `handle_movies_subtitle_readiness_fix` (when files were fixed). Response serialisation (`asdict`, histogram, queue reconciliation) happens outside the `ACTIVITY_TRACKER` context so the activity indicator correctly terminates when the last file is probed.
 - **Quality profile definition saves do not trigger a rescan.** `POST /api/movies/standards/update` writes `movie_standards.json` and returns the updated definitions. The UI patches `state.results.movies.profile` in-memory and re-renders immediately; profile counts and classifications remain as of the last scan and update on the next user-initiated scan. Do not reintroduce a post-save rescan or reclassification call — even cache-based reclassification is expensive at library scale (~5,500 `build_movie_profile_item` calls).
 - **Movie normalize scan walks the directory once.** `build_movie_plan` accepts an optional `movie_files: list[Path] | None` keyword argument. `handle_movies_normalize` and `handle_movies_apply` call `discover_video_files` once and pass the result to all per-style plan builds, eliminating the previous 3× redundant walk.
 - **Movie audio labels are centralized.** Main-audio display strings should come from the shared normalization path, not from per-surface ad hoc codec formatting. Keep scan JSON, CSV/XLSX export, and web tables aligned.
 - **`Movies > Plex Compatibility` is hidden in the current UI.** The heuristics live in `movie_profile.py`. The page is suppressed because the workflow isn't concrete enough. Do not re-expose it without a workflow design.
-- **No external web framework.** `web.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.
+- **No external web framework.** `normal/web/server.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.
 - **Replacement candidates are standards-driven.** Delete/replace eligibility is based on `profile.weak_candidate`, which is derived from the configured quality-profile cutoff in repo-local `movie_standards.json`.
 - **Movie standards persistence is file-backed.** `movie_standards.json` is the authoritative store across server restarts and localhost port changes. Browser dashboard cache is origin-scoped convenience state only.
 - **Movie histogram persistence is intentionally absent.** Bitrate histograms are rebuilt from the current movie profile payload. Cached dashboard snapshots may be shown for convenience, but cannot be incrementally trusted when they do not carry `movies`.

@@ -172,7 +172,8 @@ These are still explicit mutations, but they are repair operations rather than f
 ## Design boundaries
 
 - The web server is stdlib `http.server`, not an external framework.
-- The frontend shell, styles, and client logic are package-managed assets under `normal/web_assets/`, loaded and served by the stdlib web layer.
+- The frontend shell, styles, and client logic are package-managed assets under `normal/web_assets/`, loaded and served by the stdlib web package under `normal/web/`.
+- Web tests are intentionally split: facade and handler behavior stays in `tests/test_web.py`, while `normal/web/activity.py`, `scan_guard.py`, and `serializers.py` carry direct unit coverage.
 - Heavy recursive scans are single-flight per source in the web UI.
 - Recursive discovery is streamed rather than fully enumerated up front in the heavy movie workflows.
 - Most product decisions are local-file-first. Remote metadata is limited to the optional TMDb and OMDb surfaces.

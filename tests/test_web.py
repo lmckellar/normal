@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import tempfile
 import threading
 import unittest
@@ -9,25 +8,12 @@ import urllib.request
 from contextlib import contextmanager
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from subprocess import CompletedProcess
-from unittest.mock import patch
 
 from normal.web import (
     build_handler,
-    ActivityTracker,
-    HEAVY_SCAN_REGISTRY,
-    build_activity_payload,
-    build_source_scan_warning,
-    read_web_asset_text,
     delete_movie_junk_files,
-    find_external_activity,
-    format_storage_size,
-    guarded_heavy_scan,
-    looks_like_drive_directory,
-    RequestConflictError,
+    read_web_asset_text,
     render_index_html,
-    resolve_source_path,
-    SourceMountDetails,
 )
 
 
@@ -49,16 +35,6 @@ class WebTests(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
-
-    def test_resolve_source_path_uses_explicit_source(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = resolve_source_path(tmpdir)
-            self.assertEqual(path, Path(tmpdir).resolve())
-
-    def test_resolve_source_path_falls_back_to_default(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = resolve_source_path(None, default_source=Path(tmpdir))
-            self.assertEqual(path, Path(tmpdir).resolve())
 
     def test_scan_warning_is_wired(self) -> None:
         self.assertIn("'/api/source/scan-warning'", FRONTEND)
@@ -155,123 +131,6 @@ class WebTests(unittest.TestCase):
         self.assertIn("function activityProgressPieces(job)", FRONTEND)
         self.assertIn("files processed", FRONTEND)
         self.assertIn("app.find(item => item.kind !== 'probe')", FRONTEND)
-
-    def test_activity_tracker_snapshots_active_probe_for_source(self) -> None:
-        tracker = ActivityTracker()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir)
-            movie = source / "Movie.mkv"
-            movie.write_text("movie", encoding="utf-8")
-            with tracker.track(source, "ffprobe movie metadata", kind="probe", current_path=movie):
-                items = tracker.snapshot(source)
-            self.assertEqual(len(items), 1)
-            self.assertEqual(items[0]["kind"], "probe")
-            self.assertEqual(items[0]["current_path"], str(movie.resolve()))
-            self.assertEqual(tracker.snapshot(source), [])
-
-    def test_activity_tracker_snapshot_includes_progress_metadata(self) -> None:
-        tracker = ActivityTracker()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir)
-            movie = source / "Movie.mkv"
-            temp_output = source / "Movie.tmp.mkv"
-            movie.write_text("movie", encoding="utf-8")
-            with tracker.track(source, "Movie audio fix", kind="remux", current_path=movie) as item_id:
-                tracker.update(
-                    item_id,
-                    status_text="ffmpeg remux active",
-                    processed=10,
-                    total=20,
-                    progress_fraction=0.5,
-                    completed_seconds=60.0,
-                    total_seconds=120.0,
-                    eta_seconds=60.0,
-                    output_size_bytes=1000,
-                    output_path=temp_output,
-                    speed="2.0x",
-                )
-                items = tracker.snapshot(source)
-            self.assertEqual(items[0]["kind"], "remux")
-            self.assertEqual(items[0]["status_text"], "ffmpeg remux active")
-            self.assertEqual(items[0]["processed"], 10)
-            self.assertEqual(items[0]["total"], 20)
-            self.assertEqual(items[0]["progress_fraction"], 0.5)
-            self.assertEqual(items[0]["eta_seconds"], 60.0)
-            self.assertEqual(items[0]["output_path"], str(temp_output.resolve()))
-
-    def test_find_external_activity_matches_ffprobe_for_source(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir).resolve()
-            ps_output = f"123 1 ffprobe ffprobe -v error {source}/Movie.mkv\n"
-            completed = CompletedProcess(args=[], returncode=0, stdout=ps_output, stderr="")
-            with patch("normal.web.subprocess.run", return_value=completed):
-                matches, note = find_external_activity(source)
-            self.assertIsNone(note)
-            self.assertEqual(matches[0]["pid"], 123)
-            self.assertEqual(matches[0]["command"], "ffprobe")
-
-    def test_build_activity_payload_reports_idle_shape(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            completed = CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-            with patch("normal.web.subprocess.run", return_value=completed):
-                payload = build_activity_payload(Path(tmpdir))
-            self.assertFalse(payload["active"])
-            self.assertEqual(payload["app"], [])
-            self.assertEqual(payload["external"], [])
-
-    def test_build_activity_payload_skips_external_scan_when_app_activity_exists(self) -> None:
-        tracker = ActivityTracker()
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir)
-            movie = source / "Movie.mkv"
-            movie.write_text("movie", encoding="utf-8")
-            with tracker.track(source, "Movie audio fix", kind="remux", current_path=movie):
-                with patch("normal.web.ACTIVITY_TRACKER", tracker):
-                    with patch("normal.web.find_external_activity") as find_external:
-                        payload = build_activity_payload(source)
-            find_external.assert_not_called()
-            self.assertTrue(payload["active"])
-            self.assertEqual(payload["external"], [])
-
-    def test_build_activity_payload_uses_external_scan_when_no_app_activity_exists(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir)
-            external_items = [{"pid": 123, "ppid": 1, "command": "ffprobe", "summary": "ffprobe Movie.mkv"}]
-            with patch("normal.web.find_external_activity", return_value=(external_items, None)) as find_external:
-                payload = build_activity_payload(source)
-            find_external.assert_called_once_with(source)
-            self.assertTrue(payload["active"])
-            self.assertEqual(payload["external"], external_items)
-
-    def test_drive_directory_detection_covers_common_mount_roots(self) -> None:
-        self.assertTrue(looks_like_drive_directory(Path("/mnt/media_storage")))
-        self.assertTrue(looks_like_drive_directory(Path("/media/lachlan/Drive")))
-        self.assertTrue(looks_like_drive_directory(Path("/Volumes/Media")))
-        self.assertFalse(looks_like_drive_directory(Path("/mnt/media_storage/Movies")))
-
-    def test_build_source_scan_warning_marks_risky_ntfs_mount(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir)
-            usage = shutil.disk_usage(source)
-            with patch("normal.web.source_mount_details", return_value=SourceMountDetails(fstype="fuseblk", target="/mnt/media_storage")):
-                payload = build_source_scan_warning(source)
-        self.assertTrue(payload["warn"])
-        self.assertIn("mount:fuseblk", payload["reasons"])
-        self.assertIn("higher risk", payload["message"])
-        self.assertEqual(payload["mount_fstype"], "fuseblk")
-        self.assertEqual(payload["total_size_bytes"], usage.total)
-
-    def test_guarded_heavy_scan_rejects_same_source_overlap(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            source = Path(tmpdir)
-            with patch("normal.web.HEAVY_SCAN_REGISTRY", HEAVY_SCAN_REGISTRY.__class__()):
-                with guarded_heavy_scan(source, "Movie profile scan"):
-                    with self.assertRaises(RequestConflictError):
-                        with guarded_heavy_scan(source, "Movie canonical lists"):
-                            self.fail("overlapping heavy scan should not be allowed")
-
-    def test_format_storage_size_uses_tb_for_large_drives(self) -> None:
-        self.assertEqual(format_storage_size(4_500_000_000_000), "4.5 TB")
 
     def test_movie_junk_page_is_wired(self) -> None:
         self.assertIn("id: 'junk'", FRONTEND)
