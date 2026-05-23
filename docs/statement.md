@@ -116,7 +116,7 @@ The default workflow currently expects these files to be eradicated prior to run
 These checks were done as par for the course during development. Do not assume I was willing to trust the actions of this system without verifying an initial set of safe mechanical actions myself. Yet this does not absolve any downstream user of the same responsibility.
 
 1. Goal: ascertain, is `normal` set up correctly, and does it desirably ingest my media, in its current structure, and scan it without issue?  
-   Suggested test: make an `Example Movies` directory on your local drive with a representative cross section of your library. Think of this like a Noah's Ark of naming and foldering conventions. You do not need to hit anything yet; the flood is yet to come. You simply want a ground-level sanity check: Python scripts, UI and dependencies are talking, probes are running, and the hood is in fact as "all good" as it is reputed to be.
+   Suggested test: make an `Example Movies` directory on your local drive with a representative cross section of your library. Think of this like a Noah's Ark of naming and foldering conventions. You do not have them all represented yet, just enough to form a reasonable cross section of naming conventions. You simply want a ground-level sanity check: Python scripts, UI and dependencies are talking, probes are running, and the hood is in fact as "all good" as it is reputed to be.
 
 2. Goal: ascertain drive pathing, scanning, and probing are fine on external hard drive, if using a mechanical drive to store media.  
    Suggested test: copy and paste the `Example Movies` folder across to the hard drive and repeat the same experiment.
