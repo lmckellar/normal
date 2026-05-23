@@ -40,14 +40,6 @@ lane starts.
   forward; earlier reconstructed history remains useful context, not true
   release history.
 
-### Pruning
-
-- Remove concern bullets once they are no longer live; do not preserve resolved
-  status noise here.
-- If a point turns into change history or implementation detail, move it to
-  `CHANGELOG.md` or the milestone sections below instead of expanding this note.
-- Keep this section short enough to read in under a minute.
-
 ### Product identity going forward
 
 `normal` is now a dedicated tool for naming, quality management, repair, and library health for movie collections first, with TV as the next major expansion. The public docs should reflect that current state directly rather than preserving parallel-story clutter from earlier phases.
