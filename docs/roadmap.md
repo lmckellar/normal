@@ -20,7 +20,7 @@ and the remaining work will need to focus heavily on UI and UX improvements.
   colour logic, and overall polish between pages.
 - **Main workflow maturity** — movie lanes are credible for real use; TV does
   not exist yet, so the product is still intentionally single-lane in practice.
-- **Docs freshness** — mostly aligned with the movie-first reality, but should
+- **Doc coherence** — mostly aligned with the movie-first reality, but should
   keep losing stale parallel-story and legacy identity traces as the repo
   settles.
 - **Safety / mutation confidence** — rename, delete, and remux lanes are
