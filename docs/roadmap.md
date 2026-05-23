@@ -13,6 +13,7 @@ materially useful: normalize, quality triage, junk cleanup, repair defaults,
 canonical list coverage, and export. The recent scan/cache work means the
 product shape feels coherent rather than exploratory, but it is still pre-1.0
 and the remaining work will need to focus heavily on UI and UX improvements.
+Presently only recommended for Linux users who are comfortable working with alpha software.
 
 ### Concerns
 
