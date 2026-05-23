@@ -23,7 +23,7 @@ The movie workflow build-out is the product now. Live today:
   issue is no longer treated as active after the current scan-control hardening
   and has been stable in real use.
 
-The remaining pre-TV work is trimming and hardening: remove remaining music-era public traces, remove verbose naming, tighten UI consistency, and finish parser edge cases.
+The remaining pre-TV work is trimming and hardening: remove remaining legacy public traces, remove verbose naming, tighten UI consistency, and finish parser edge cases.
 
 ### Product identity going forward
 
@@ -56,7 +56,7 @@ The remaining pre-TV work is trimming and hardening: remove remaining music-era 
 
 ## 0.7.x — Library trim and polish
 
-- Remove remaining public music-lane references from the repo and docs.
+- Remove remaining legacy public identity references from the repo and docs.
 - Remove verbose naming option — drop `--naming-style verbose`, the web naming
   selector, and verbose-only preview payloads; retain the parser hardening the
   verbose-mode tests produced.

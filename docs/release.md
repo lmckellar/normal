@@ -15,8 +15,8 @@ Use the smallest version bump that explains the work:
 - `0.x.0` for a new lane, major workflow, or major architecture milestone.
 - `0.x.y` for fixes, docs, hardening, UI polish, or small additions inside an
   existing lane.
-- `0.9.0` marks Canonical Lists and Music Recommendation lane passes complete.
-- `0.9.x` starts minor recommendation tuning and refactor slices.
+- `0.9.0` marks Canonical Lists and the next product-shape milestone complete.
+- `0.9.x` starts minor follow-up tuning and refactor slices.
 - `1.0.0` is reserved for the final refactor slice.
 - `1.x` starts with refactor stabilization before the dashboard-led UI overhaul.
 

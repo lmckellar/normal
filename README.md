@@ -100,6 +100,8 @@ Open <http://127.0.0.1:8765>.
 - [Documentation authorship](docs/writing.md)
 - [Roadmap](docs/roadmap.md)
 
+Architecture overview (`Agent-written` support doc): [docs/architecture.md](docs/architecture.md).
+
 For contributors and agents working in the codebase: [docs/agent.md](docs/agent.md), [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md).
 
 ## License
