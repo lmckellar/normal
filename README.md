@@ -27,9 +27,11 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 `normal` is built around two principles:
 
 **Physical storage economics**
+
 The bigger a file gets, the stronger the case it has to make for existing.
 
 **Scan economics** 
+
 Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
 
 The claims: 
