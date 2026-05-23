@@ -51,8 +51,10 @@ The roadmap should tell the release story, not list every idea.
 - Keep lane-sized future work below the architecture milestones unless it must
   happen first.
 - Label defaults and assumptions when the implementation is still open.
-- Review and update `Where we are now` whenever changelog current-state entries
-  change, including `[Unreleased]` work.
+- Review `Where we are now` whenever changelog current-state entries change,
+  including `[Unreleased]` work. Prune resolved concerns, reshuffle bullets if
+  priority changed, and keep it as a short status note rather than a second
+  changelog.
 
 ## Release cut checklist
 

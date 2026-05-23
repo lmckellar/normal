@@ -6,23 +6,47 @@
 
 ## Where we are now
 
-The movie workflow build-out is the product now. Live today:
+### Headline
 
-- **Persistent probe cache** — cold full-library scan (~330 s) drops to ~5 s on
-  every subsequent run; per-file invalidation on mtime change keeps it honest
-  after repairs and renames.
-- **Server-side profile cache** — Dashboard, Delete Weak Encodes, and Repair
-  Defaults all share one cached `MovieProfileReport` per source; page switches
-  return in under a second.
-- **Unified scan workflows** — Repair Defaults (Audio Packaging + Subtitle Readiness) runs one
-  shared scan feeding two sub-tabs; Junk (video + docs) runs one combined scan
-  (~12 s vs ~2 min) feeding two detail panels.
-- **Instant quality-profile saves** — no rescan triggered; browser patches
-  in-memory state and rerenders immediately.
-- **Cancellation rough-edge closure** — the earlier cancelled-scan / stray-`ffprobe`
-  issue is no longer treated as active after the current scan-control hardening.
+`normal` is now a movie-first local workbench with its main lanes built and
+materially useful: normalize, quality triage, junk cleanup, repair defaults,
+canonical list coverage, and export. The recent scan/cache work means the
+product shape feels coherent rather than exploratory, but it is still pre-1.0
+and the remaining work is mostly trim, consistency, and hardening before the TV
+lane starts.
 
-The remaining pre-TV work is trimming and hardening: remove remaining legacy public traces, remove verbose naming, tighten UI consistency, and finish parser edge cases.
+### Concerns
+
+- **UI/UX maturity** — functionally strong, but still uneven in consistency,
+  colour logic, and overall polish between pages.
+- **Main workflow maturity** — movie lanes are credible for real use; TV does
+  not exist yet, so the product is still intentionally single-lane in practice.
+- **Docs freshness** — mostly aligned with the movie-first reality, but should
+  keep losing stale parallel-story and legacy identity traces as the repo
+  settles.
+- **Safety / mutation confidence** — rename, delete, and remux lanes are
+  meaningfully bounded and preview-driven, but they still deserve active
+  caution because the product mutates real libraries.
+- **Auditability / receipts** — replacement and subtitle history are useful and
+  real, but they are still lane-specific rather than a broad, finished audit
+  posture.
+- **Performance / scan economics** — recent cache and shared-scan work improved
+  the runtime story materially, but scan cost and UI responsiveness still need
+  protecting as the product grows.
+- **Architecture health** — recent cache and shared-scan consolidation improved
+  the shape materially; frontend/editor ergonomics remain less mature than the
+  backend workflows.
+- **Release/versioning coherence** — now coherent from `v0.7.0-alpha.1`
+  forward; earlier reconstructed history remains useful context, not true
+  release history.
+
+### Pruning
+
+- Remove concern bullets once they are no longer live; do not preserve resolved
+  status noise here.
+- If a point turns into change history or implementation detail, move it to
+  `CHANGELOG.md` or the milestone sections below instead of expanding this note.
+- Keep this section short enough to read in under a minute.
 
 ### Product identity going forward
 
