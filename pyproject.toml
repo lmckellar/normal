@@ -7,7 +7,27 @@ name = "normal"
 version = "0.1.0"
 description = "Local workbench for diagnosing and cleaning movie libraries"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
+keywords = [
+  "movie-library",
+  "media-library",
+  "media-management",
+  "ffprobe",
+  "ffmpeg",
+  "cli",
+  "web-ui",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Web Environment",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Multimedia :: Video",
+  "Topic :: Utilities",
+]
 dependencies = [
   "openpyxl>=3.1",
   "Pillow>=10.0",
@@ -15,6 +35,12 @@ dependencies = [
 authors = [
   { name = "Lachlan" }
 ]
+
+[project.urls]
+Homepage = "https://github.com/lmckellar/normal"
+Repository = "https://github.com/lmckellar/normal.git"
+Issues = "https://github.com/lmckellar/normal/issues"
+Documentation = "https://github.com/lmckellar/normal#readme"
 
 [project.scripts]
 normal = "normal.cli:main"

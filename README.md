@@ -89,6 +89,15 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/Test\ Movies
 
 Open <http://127.0.0.1:8765>.
 
+## Support
+`Agent-written`
+
+`normal` currently supports Python 3.12 and newer.
+
+Platform support is Linux-first. The project is developed and tested on Linux. macOS and Windows may work, but they are not explicitly supported before `1.0`.
+
+`ffprobe` is required for media-probing workflows such as `movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, and `web`.
+
 ## Docs
 
 - [Statement](docs/statement.md)
