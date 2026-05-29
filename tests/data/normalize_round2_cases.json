@@ -1,44 +1,37 @@
 [
   {
     "path": "Land.of.the.Dead.2005.BluRayRemux.1080p.x264.3Rus.Eng.-CME-v0.mkv",
-    "naming_style": "verbose",
     "expected_confidence": "safe",
-    "expected_target": "Land Of The Dead (2005) [BluRay Remux 1080p x264]/Land Of The Dead (2005) [BluRay Remux 1080p x264].mkv"
+    "expected_target": "Land Of The Dead (2005)/Land Of The Dead (2005).mkv"
   },
   {
     "path": "Basic Instinct (1992) [Unrated 1080PENGITAMULTISUBX264BLURAYSHIV]/Basic Instinct (1992) [Unrated 1080PENGITAMULTISUBX264BLURAYSHIV].mkv",
-    "naming_style": "verbose",
     "expected_confidence": "safe",
-    "expected_target": "Basic Instinct (1992) [Unrated 1080p x264 BluRay].mkv"
+    "expected_target": "Basic Instinct (1992).mkv"
   },
   {
     "path": "(2001) [ASPACEODYSSEY1968V22160PBLURAYX26510BITHDRTIGOLE]/(2001) [ASPACEODYSSEY1968V22160PBLURAYX26510BITHDRTIGOLE].mkv",
-    "naming_style": "verbose",
     "expected_confidence": "review",
-    "expected_target": "2001 A Space Odyssey (1968) [V2 2160p BluRay x265 10bit HDR].mkv"
+    "expected_target": "2001 A Space Odyssey (1968).mkv"
   },
   {
     "path": "www.YTS.mx.The.Big.Lebowski.1998.1080p.BluRay.x264.AAC.mkv",
-    "naming_style": "verbose",
     "expected_confidence": "safe",
-    "expected_target": "The Big Lebowski (1998) [1080p BluRay x264]/The Big Lebowski (1998) [1080p BluRay x264].mkv"
+    "expected_target": "The Big Lebowski (1998)/The Big Lebowski (1998).mkv"
   },
   {
     "path": "Downloaded.from.TorrentGalaxy.to.The.Thing.1982.1080p.BluRay.x264-GRP.mkv",
-    "naming_style": "verbose",
     "expected_confidence": "safe",
-    "expected_target": "The Thing (1982) [1080p BluRay x264]/The Thing (1982) [1080p BluRay x264].mkv"
+    "expected_target": "The Thing (1982)/The Thing (1982).mkv"
   },
   {
     "path": "Leon.The.Professional.1994.International.Cut.1080p.BluRay.x264-GRP.mkv",
-    "naming_style": "verbose",
     "expected_confidence": "safe",
-    "expected_target": "Leon The Professional (1994) [International Cut 1080p BluRay x264]/Leon The Professional (1994) [International Cut 1080p BluRay x264].mkv"
+    "expected_target": "Leon The Professional (1994)/Leon The Professional (1994).mkv"
   },
   {
     "path": "City.of.God.2002.PORTUGUESE.1080p.BluRay.x264.DTS-GRP.mkv",
-    "naming_style": "verbose",
     "expected_confidence": "safe",
-    "expected_target": "City Of God (2002) [1080p BluRay x264]/City Of God (2002) [1080p BluRay x264].mkv"
+    "expected_target": "City Of God (2002)/City Of God (2002).mkv"
   }
 ]

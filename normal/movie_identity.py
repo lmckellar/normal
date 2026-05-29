@@ -177,6 +177,9 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
     source_text = stem
     year_source = "filename"
     parse_source_path = str(movie_path)
+    title_text_override: str | None = None
+    tail_text_override: str | None = None
+    title_source_override: str | None = None
     if match is None:
         parent_match = find_movie_year_match(movie_path.parent.name)
         if parent_match is None:
@@ -194,6 +197,10 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
                 year_source="unparsed",
                 parse_source_path=str(movie_path),
             )
+        child_parent_payload = parse_child_title_payload_with_parent_year(stem, movie_path.parent.name, parent_match)
+        if child_parent_payload is not None:
+            title_text_override, tail_text_override = child_parent_payload
+            title_source_override = "filename_title_parent_year"
         source_text = movie_path.parent.name
         match = parent_match
         year_source = "parent_folder"
@@ -204,6 +211,10 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
     title_source, prefix_tail_text = split_title_prefix_tail(source_text[: match.start()])
     title_text = cleanup_title_text(prefer_ascii_title_segment(title_source))
     tail_text = f"{prefix_tail_text} {source_text[match.end() :]}".strip()
+    if title_text_override is not None and tail_text_override is not None:
+        title_text = title_text_override
+        tail_text = tail_text_override
+        title_source_name = title_source_override or title_source_name
     year_leading_payload = parse_year_leading_title_payload(source_text, match)
     if year_leading_payload is not None and not title_text:
         title_text, tail_text = year_leading_payload
@@ -393,6 +404,30 @@ def parse_year_leading_bracket_payload(source_text: str, match: re.Match[str]) -
         return None
     tail_tokens = tokens[boundary:]
     return cleanup_title_text(" ".join(title_tokens)), " ".join(tail_tokens)
+
+
+def parse_child_title_payload_with_parent_year(
+    child_text: str,
+    parent_text: str,
+    parent_match: re.Match[str],
+) -> tuple[str, str] | None:
+    year = int(parent_match.group(1))
+    parent_title = fallback_parent_title(parent_text, year)
+    if not parent_title:
+        return None
+    title_match = find_title_span_in_source(child_text, parent_title)
+    if title_match is None:
+        return None
+    tail_text = child_text[title_match.end() :].strip()
+    return parent_title, tail_text
+
+
+def find_title_span_in_source(source_text: str, title: str) -> re.Match[str] | None:
+    title_tokens = TOKEN_PATTERN.findall(title)
+    if not title_tokens:
+        return None
+    pattern = r"(?i)" + r"[\W_]*".join(re.escape(token) for token in title_tokens)
+    return re.search(pattern, strip_leading_site_credit(source_text))
 
 
 def split_title_prefix_tail(prefix: str) -> tuple[str, str]:

@@ -95,7 +95,7 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
             ]:
                 (source / filename).write_text("video", encoding="utf-8")
 
-            plan = build_movie_plan(source, naming_style="verbose")
+            plan = build_movie_plan(source)
 
             self.assertFalse(plan.warnings)
             self.assertTrue(plan.proposed_changes)
@@ -103,14 +103,14 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
 
     def test_leading_release_credit_noise_is_removed_from_title_inference(self) -> None:
         cases = {
-            "www.YTS.mx.The.Big.Lebowski.1998.1080p.BluRay.x264.AAC.mkv": "The Big Lebowski (1998) [1080p BluRay x264]",
-            "Downloaded.from.TorrentGalaxy.to.The.Thing.1982.1080p.BluRay.x264-GRP.mkv": "The Thing (1982) [1080p BluRay x264]",
-            "MoviesByRizzo - The Sting 1973 1080p BluRay x264 AAC.mkv": "The Sting (1973) [1080p BluRay x264]",
-            "anoXmous - The Godfather 1972 1080p BluRay x264.mp4": "The Godfather (1972) [1080p BluRay x264]",
-            "ETRG - The Social Network 2010 720p BluRay x264.mp4": "The Social Network (2010) [720p BluRay x264]",
-            "[YTS.AM] Casablanca (1942) [1080p] [BluRay] [YTS.AM].mp4": "Casablanca (1942) [1080p BluRay]",
-            "[TGx] The Apartment 1960 1080p BluRay x264-GRP.mkv": "The Apartment (1960) [1080p BluRay x264]",
-            "[Erai-raws] Perfect Blue (1997) [1080p][Multiple Subtitle].mkv": "Perfect Blue (1997) [1080p]",
+            "www.YTS.mx.The.Big.Lebowski.1998.1080p.BluRay.x264.AAC.mkv": "The Big Lebowski (1998)",
+            "Downloaded.from.TorrentGalaxy.to.The.Thing.1982.1080p.BluRay.x264-GRP.mkv": "The Thing (1982)",
+            "MoviesByRizzo - The Sting 1973 1080p BluRay x264 AAC.mkv": "The Sting (1973)",
+            "anoXmous - The Godfather 1972 1080p BluRay x264.mp4": "The Godfather (1972)",
+            "ETRG - The Social Network 2010 720p BluRay x264.mp4": "The Social Network (2010)",
+            "[YTS.AM] Casablanca (1942) [1080p] [BluRay] [YTS.AM].mp4": "Casablanca (1942)",
+            "[TGx] The Apartment 1960 1080p BluRay x264-GRP.mkv": "The Apartment (1960)",
+            "[Erai-raws] Perfect Blue (1997) [1080p][Multiple Subtitle].mkv": "Perfect Blue (1997)",
         }
 
         for filename, expected_base in cases.items():
@@ -121,7 +121,7 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
                     movie.parent.mkdir(parents=True, exist_ok=True)
                     movie.write_text("video", encoding="utf-8")
 
-                    plan = build_movie_plan(source, naming_style="verbose", movie_files=[movie])
+                    plan = build_movie_plan(source, movie_files=[movie])
 
                     self.assertFalse(plan.warnings)
                     self.assertIn(
@@ -138,16 +138,16 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
             ]:
                 (source / filename).write_text("video", encoding="utf-8")
 
-            plan = build_movie_plan(source, naming_style="verbose")
+            plan = build_movie_plan(source)
 
             self.assertFalse(plan.warnings)
             proposed = {change.proposed_value for change in plan.proposed_changes}
             self.assertIn(
-                "City Of God (2002) [1080p BluRay x264]/City Of God (2002) [1080p BluRay x264].mkv",
+                "City Of God (2002)/City Of God (2002).mkv",
                 proposed,
             )
             self.assertIn(
-                "Leon The Professional (1994) [International Cut 1080p BluRay x264]/Leon The Professional (1994) [International Cut 1080p BluRay x264].mkv",
+                "Leon The Professional (1994)/Leon The Professional (1994).mkv",
                 proposed,
             )
 
@@ -185,8 +185,8 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
 
     def test_selected_raw_corpus_cases_hold_safe_and_review_boundaries(self) -> None:
         safe_cases = {
-            "Land.of.the.Dead.2005.BluRayRemux.1080p.x264.3Rus.Eng.-CME-v0.mkv": "Land Of The Dead (2005) [BluRay Remux 1080p x264]",
-            "Resolution.Trap.2017.1920x820.1080p.BluRay.x264-GRP.mkv": "Resolution Trap (2017) [1080p BluRay x264]",
+            "Land.of.the.Dead.2005.BluRayRemux.1080p.x264.3Rus.Eng.-CME-v0.mkv": "Land Of The Dead (2005)",
+            "Resolution.Trap.2017.1920x820.1080p.BluRay.x264-GRP.mkv": "Resolution Trap (2017)",
         }
         review_cases = [
             (
@@ -207,7 +207,7 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
                     source = Path(tmpdir)
                     movie = source / filename
                     movie.write_text("video", encoding="utf-8")
-                    plan = build_movie_plan(source, naming_style="verbose", movie_files=[movie])
+                    plan = build_movie_plan(source, movie_files=[movie])
                     self.assertFalse(plan.warnings)
                     self.assertTrue(all(change.confidence == "safe" for change in plan.proposed_changes))
                     self.assertIn(f"{base}/{base}.mkv", {change.proposed_value for change in plan.proposed_changes})
@@ -220,7 +220,7 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
                     folder.mkdir()
                     movie = folder / filename
                     movie.write_text("video", encoding="utf-8")
-                    plan = build_movie_plan(source, naming_style="verbose", movie_files=[movie])
+                    plan = build_movie_plan(source, movie_files=[movie])
                     self.assertIn("compact_token_heuristic", {warning.code for warning in plan.warnings})
                     self.assertTrue(any(change.confidence == "review" for change in plan.proposed_changes))
 
@@ -232,7 +232,7 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
                     folder.mkdir()
                     movie = folder / filename
                     movie.write_text("video", encoding="utf-8")
-                    plan = build_movie_plan(source, naming_style="verbose", movie_files=[movie])
+                    plan = build_movie_plan(source, movie_files=[movie])
                     self.assertFalse(plan.warnings)
                     self.assertTrue(all(change.confidence == "safe" for change in plan.proposed_changes))
 
@@ -248,7 +248,7 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
                     movie = source / case["path"]
                     movie.parent.mkdir(parents=True, exist_ok=True)
                     movie.write_text("video", encoding="utf-8")
-                    plan = build_movie_plan(source, naming_style=case["naming_style"], movie_files=[movie])
+                    plan = build_movie_plan(source, movie_files=[movie])
                     proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
                     self.assertIn((case["expected_target"], case["expected_confidence"]), proposed)
 

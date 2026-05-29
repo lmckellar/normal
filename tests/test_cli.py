@@ -94,7 +94,7 @@ class NormalCliTests(unittest.TestCase):
             self.assertIn("proposed_changes", payload)
             self.assertIn("The Matrix (1999).mkv", {change["proposed_value"] for change in payload["proposed_changes"]})
 
-    def test_movie_plan_can_write_verbose_plan(self) -> None:
+    def test_movie_plan_rejects_removed_naming_style_flag(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "movies"
             folder = source / "Loose Folder"
@@ -109,12 +109,11 @@ class NormalCliTests(unittest.TestCase):
                 "--plan",
                 str(plan_path),
                 "--naming-style",
-                "verbose",
+                "concise",
             )
 
-            self.assertEqual(result.returncode, 0, msg=result.stderr)
-            payload = json.loads(plan_path.read_text(encoding="utf-8"))
-            self.assertIn("The Matrix (1999) [1080p BluRay].mkv", {change["proposed_value"] for change in payload["proposed_changes"]})
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unrecognized arguments: --naming-style concise", result.stderr)
 
     def test_movie_profile_writes_report_and_histogram(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -69,9 +69,8 @@ comfortable working with alpha software.
 ## 0.7.x — Library trim and polish
 
 - Remove remaining legacy public identity references from the repo and docs.
-- Remove verbose naming option — drop `--naming-style verbose`, the web naming
-  selector, and verbose-only preview payloads; retain the parser hardening the
-  verbose-mode tests produced.
+- Keep verbose naming removed from the product path; retain only the parser
+  hardening and concise collision logic that the old regression corpus forced.
 - Themes — remove at least two; full removal decision pending.
 - Canonical list: surface "deleted, awaiting replacement" as a distinct token
   separate from "missing".

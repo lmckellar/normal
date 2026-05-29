@@ -7,7 +7,7 @@ from typing import Any
 
 from normal.models import ProposedChange
 from normal.movie_apply import apply_changes_in_place
-from normal.movie_plan import DEFAULT_MOVIE_NAMING_STYLE, MOVIE_NAMING_STYLES, build_movie_plan, parse_movie_name_with_sidecar_fallback
+from normal.movie_plan import build_movie_plan, parse_movie_name_with_sidecar_fallback
 from normal.movie_scan import discover_video_files
 
 from .http import RequestContext
@@ -16,10 +16,8 @@ from .serializers import build_movie_normalize_results
 from .state import MOVIE_PROFILE_CACHE
 
 
-def _build_normalize_payload(source, requested_style, movie_files, plan, parsed_movies):
+def _build_normalize_payload(source, movie_files, plan, parsed_movies):
     response = plan.to_dict()
-    response["naming_style"] = requested_style
-    response["default_naming_style"] = DEFAULT_MOVIE_NAMING_STYLE
     response["movie_results"] = build_movie_normalize_results(
         source,
         movie_files,
@@ -33,23 +31,17 @@ def _build_normalize_payload(source, requested_style, movie_files, plan, parsed_
 
 def handle_movies_normalize(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
-    requested_style = str(payload.get("naming_style") or DEFAULT_MOVIE_NAMING_STYLE)
-    if requested_style not in MOVIE_NAMING_STYLES:
-        raise ValueError(f"unknown movie naming style: {requested_style}")
     with guarded_heavy_scan(source, "Movie normalize plan"):
         with ctx.handler.activity_tracker.track(source, "Movie normalize plan"):
             movie_files = discover_video_files(source)
             parsed_movies = {movie_path: parse_movie_name_with_sidecar_fallback(movie_path) for movie_path in movie_files}
-            plan = build_movie_plan(source, naming_style=requested_style, movie_files=movie_files, parsed_movies=parsed_movies)
-            response = _build_normalize_payload(source, requested_style, movie_files, plan, parsed_movies)
+            plan = build_movie_plan(source, movie_files=movie_files, parsed_movies=parsed_movies)
+            response = _build_normalize_payload(source, movie_files, plan, parsed_movies)
     ctx.respond_json(response)
 
 
 def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
-    requested_style = str(payload.get("naming_style") or DEFAULT_MOVIE_NAMING_STYLE)
-    if requested_style not in MOVIE_NAMING_STYLES:
-        raise ValueError(f"unknown movie naming style: {requested_style}")
     raw_changes = payload.get("changes", [])
     if not isinstance(raw_changes, list):
         raise ValueError("changes must be a list")
@@ -59,9 +51,9 @@ def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
         MOVIE_PROFILE_CACHE.invalidate(source)
         movie_files = discover_video_files(source)
         parsed_movies = {movie_path: parse_movie_name_with_sidecar_fallback(movie_path) for movie_path in movie_files}
-        plan = build_movie_plan(source, naming_style=requested_style, movie_files=movie_files, parsed_movies=parsed_movies)
+        plan = build_movie_plan(source, movie_files=movie_files, parsed_movies=parsed_movies)
     response = report.to_dict()
-    remaining_payload = _build_normalize_payload(source, requested_style, movie_files, plan, parsed_movies)
+    remaining_payload = _build_normalize_payload(source, movie_files, plan, parsed_movies)
     remaining_changes = remaining_payload["proposed_changes"]
     response["remaining_changes"] = remaining_changes
     response["remaining_safe_count"] = len([change for change in remaining_changes if change["confidence"] == "safe"])

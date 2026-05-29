@@ -891,9 +891,6 @@
       refreshActivityState();
       try {
         const requestBody = { source };
-        if (state.lane === 'movies' && pageConfig.id === 'normalize') {
-          requestBody.naming_style = 'concise';
-        }
         async function fetchPagePayload(body) {
           const response = await fetch(pageConfig.endpoint, {
             method: 'POST',
@@ -1800,7 +1797,7 @@
         const response = await fetch('/api/movies/apply', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, changes, naming_style: 'concise' })
+          body: JSON.stringify({ source, changes })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Apply failed.');

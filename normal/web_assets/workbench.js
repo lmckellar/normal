@@ -1489,7 +1489,6 @@
       const warning = await fetchScanWarning(source);
       state.scanWarning = warning?.message || '';
       const body = { source };
-      if (state.page === 'normalize') body.naming_style = 'concise';
       const payload = await fetchJson(page.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1543,7 +1542,7 @@
       const result = await fetchJson('/api/movies/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, changes, naming_style: 'concise' }),
+        body: JSON.stringify({ source, changes }),
       });
       state.results.normalizeApply = result;
       state.results.normalize = result.remaining_plan || null;

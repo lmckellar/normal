@@ -49,7 +49,7 @@ Normalize also handles common library-chaos cleanup when the evidence is local a
 - multi-part movie folders such as CD1/CD2 normalize to one movie folder with part labels preserved in filenames
 - multi-movie package folders can be split into individual movie folders when each video file, or a same-stem NFO, locally parses to its own title/year; package marker words such as `trilogy` are not treated as movie titles
 
-The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it can split technical-token runs that appear before a trailing parenthesized year. In verbose mode, it keeps selected edition/video details such as `Director's Cut`, `BluRay Remux`, codec, resolution, and HDR tokens while dropping uploader, language, and audio-packaging noise.
+The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it can split technical-token runs that appear before a trailing parenthesized year. Those parsed tokens still feed collision differentiation and review reasoning, but normalize output stays concise-only.
 
 ![Normalize Movie Files & Folders](assets/normalize_movies.png)
 

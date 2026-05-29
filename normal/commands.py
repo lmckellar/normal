@@ -48,9 +48,9 @@ def run_movie_output(report_path: Path, csv_path: Path, minimum_status: str) -> 
     return 0
 
 
-def run_movie_plan(source: Path, plan_path: Path, summary_path: Path | None, naming_style: str = "concise") -> int:
+def run_movie_plan(source: Path, plan_path: Path, summary_path: Path | None) -> int:
     source_root = ensure_source_directory(source)
-    plan = build_movie_plan(source_root, naming_style=naming_style)
+    plan = build_movie_plan(source_root)
     write_json(plan_path, plan.to_dict())
 
     if summary_path is not None:

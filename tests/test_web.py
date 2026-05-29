@@ -473,7 +473,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("id=\"selFlaggedReview\"", movie_normalize_section)
         self.assertIn("function activeMovieNormalizePayload(payload) {", FRONTEND)
         self.assertNotIn("proposed_changes_by_naming_style", FRONTEND)
-        self.assertIn("requestBody.naming_style = 'concise';", FRONTEND)
+        self.assertNotIn("requestBody.naming_style", FRONTEND)
         self.assertIn("remaining_safe_count", FRONTEND)
         self.assertIn("Apply needs review", FRONTEND)
         self.assertIn("safe rename${remainingSafe === 1 ? '' : 's'} and ${remainingReview} review rename", FRONTEND)

@@ -15,7 +15,6 @@ from normal.commands import (
     run_movie_scan,
     run_web,
 )
-from normal.movie_plan import MOVIE_NAMING_STYLES
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,7 +49,6 @@ def build_parser() -> argparse.ArgumentParser:
     movie_plan_parser.add_argument("--source", type=Path, required=True)
     movie_plan_parser.add_argument("--plan", type=Path, required=True)
     movie_plan_parser.add_argument("--summary", type=Path)
-    movie_plan_parser.add_argument("--naming-style", choices=MOVIE_NAMING_STYLES, default="concise")
     movie_plan_parser.set_defaults(func=handle_movie_plan)
 
     movie_apply_parser = subparsers.add_parser(
@@ -122,7 +120,7 @@ def handle_movie_output(args: argparse.Namespace) -> int:
 
 
 def handle_movie_plan(args: argparse.Namespace) -> int:
-    return run_movie_plan(source=args.source, plan_path=args.plan, summary_path=args.summary, naming_style=args.naming_style)
+    return run_movie_plan(source=args.source, plan_path=args.plan, summary_path=args.summary)
 
 
 def handle_movie_apply(args: argparse.Namespace) -> int:
