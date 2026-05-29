@@ -45,6 +45,15 @@ docs/                            # User and agent documentation
 - **Shared data contract**: `models.py` — `ProposedChange` is the core type crossing module boundaries
 - **Persistent state**: `movie_replacement_queue.py` writes to `~/.local/share/normal/movie-replacement-queue.json`; `movie_subtitle_history.py` writes to `~/.local/share/normal/subtitle-fix-history.json`
 
+## Current backend posture
+
+Two backend themes matter to current agent work:
+
+- normalize is now more evidence-driven end to end
+- scan economics are now a first-class architectural constraint
+
+That means agents should treat planner evidence, serializer shape, and scan execution cost as linked concerns rather than separate cleanup tasks.
+
 ## Entry points
 
 ```bash
@@ -207,6 +216,12 @@ Routes are registered from the `normal/web/` package. Key families:
 | `/api/movies/subtitle-readiness/history/sync` | POST | Upsert review-only items into subtitle history (called after profile scan) |
 | `/api/movies/subtitle-readiness/history/dismiss` | POST | Mark subtitle history items as dismissed |
 
+For normalize specifically, the route contract now matters beyond a flat change list:
+
+- movie rows can carry linked serialized changes
+- movie rows can carry warning messages, not just warning codes
+- this richer row payload is what powers `/normalize-lab` review inspection
+
 ## Test boundaries
 
 Keep the web test split aligned with current ownership:
@@ -240,6 +255,8 @@ Hard rules — do not relax without explicit user instruction:
 9. Heavy recursive web scans are single-flight per source; same-source overlaps are rejected.
 10. Heavy movie-side recursive discovery is intentionally streamed rather than fully enumerated up front, because that change was central to reducing the earlier CPU spike and improving cancellation behavior.
 
+Performance improvements do not weaken the source-choice rule. Accidentally scanning a drive root is less punitive than before, but it is still a risky source choice that should trigger warning and explicit confirmation paths in the web flow.
+
 ## Intentional design decisions
 
 These are deliberate choices, not gaps:
@@ -249,6 +266,8 @@ These are deliberate choices, not gaps:
 - **Movie profile results are server-side cached.** `MOVIE_PROFILE_CACHE` in `normal/web/state.py` stores the `MovieProfileReport` object keyed by resolved source path. Dashboard, Delete Weak Encodes, and Repair Defaults (both Audio Packaging and Subtitle Readiness tabs) all hit this cache on repeated navigation. The cache is explicitly invalidated after `handle_movies_apply`, `handle_movies_audio_packaging_fix` (when files were fixed), and `handle_movies_subtitle_readiness_fix` (when files were fixed). Response serialisation (`asdict`, histogram, queue reconciliation) happens outside the `ACTIVITY_TRACKER` context so the activity indicator correctly terminates when the last file is probed.
 - **Quality profile definition saves do not trigger a rescan.** `POST /api/movies/standards/update` writes `movie_standards.json` and returns the updated definitions. The UI patches `state.results.movies.profile` in-memory and re-renders immediately; profile counts and classifications remain as of the last scan and update on the next user-initiated scan. Do not reintroduce a post-save rescan or reclassification call — even cache-based reclassification is expensive at library scale (~5,500 `build_movie_profile_item` calls).
 - **Movie normalize scan walks the directory once.** `build_movie_plan` accepts an optional `movie_files: list[Path] | None` keyword argument. `handle_movies_normalize` and `handle_movies_apply` call `discover_video_files` once and pass the result to all per-style plan builds, eliminating the previous 3× redundant walk.
+- **Normalize collision resolution is evidence-first.** Existing-target collisions should first attempt safe alternate concise targets derived from parsed differentiators or local folder context before being left in review. Preserve review for the cases that are still genuinely unresolved.
+- **Normalize row serialization is part of the hot path.** Avoid reparsing names, rescanning warning lists, or rebuilding equivalent row detail per movie when indexed or precomputed data can be reused once per request.
 - **Movie audio labels are centralized.** Main-audio display strings should come from the shared normalization path, not from per-surface ad hoc codec formatting. Keep scan JSON, CSV/XLSX export, and web tables aligned.
 - **`Movies > Plex Compatibility` is hidden in the current UI.** The heuristics live in `movie_profile.py`. The page is suppressed because the workflow isn't concrete enough. Do not re-expose it without a workflow design.
 - **No external web framework.** `normal/web/server.py` uses stdlib `http.server`. Keep it that way unless there is a compelling reason to add a dependency.

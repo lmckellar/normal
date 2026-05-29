@@ -14,7 +14,14 @@ The normalize flow is a proposal pipeline first:
 
 - `movie-plan` and the web normalize page parse local paths and build a rename or cleanup plan.
 - The plan can include file renames, file moves, folder renames, safe folder merges, and a narrow set of safe cleanup deletes.
+- Existing-target collisions are not all treated the same. The planner first tries to resolve them into safe alternate concise targets when local evidence is strong enough, then leaves only the unresolved cases in review.
 - Nothing is changed during planning. Mutation only happens when the user applies selected changes.
+
+Current normalize contract is intentionally evidence-driven:
+
+- parser evidence and local folder context can promote a collision from `review` to `safe`
+- normalize web payloads now carry linked change detail plus warning detail for each movie row
+- `/normalize-lab` is an internal inspection surface for that richer backend reasoning, not a second mutation UI
 
 ### Quality and triage pipeline
 
@@ -26,6 +33,14 @@ The quality workflow starts with local media facts, then classifies them into ac
 - `movie_profile.py` classifies those facts against repo-local movie standards.
 - The same profile result feeds the Dashboard, Delete Weak Encodes, Audio Packaging, and Subtitle Readiness flows.
 - This shared-scan model is deliberate. It avoids separate full-library rescans for each page.
+
+The scan economics matter here:
+
+- recursive discovery is streamed rather than fully enumerated up front
+- probe results are persisted by path, mtime, and size
+- web profile consumers reuse one cached report per source root
+
+In practice this means cold scans against very large or accidentally broad roots are now much less punitive than earlier revisions. That is an execution-model property, not a product promise that every source choice is equally safe or equally cheap.
 
 ### Repair pipelines
 
@@ -100,6 +115,7 @@ There are four main freshness models in the current architecture.
 - Probe cache entries are keyed by resolved path, file mtime, and file size.
 - If any of those change, the old entry no longer matches and the file is reprobed.
 - This is the main reason warm scans are much faster than cold scans.
+- The current execution model also reduces the cold-scan penalty because discovery and probe work are interleaved instead of paying a large up-front enumeration cost first.
 
 ### Server-side movie profile cache
 
@@ -176,6 +192,7 @@ These are still explicit mutations, but they are repair operations rather than f
 - Web tests are intentionally split: facade and handler behavior stays in `tests/test_web.py`, while `normal/web/activity.py`, `scan_guard.py`, and `serializers.py` carry direct unit coverage.
 - Heavy recursive scans are single-flight per source in the web UI.
 - Recursive discovery is streamed rather than fully enumerated up front in the heavy movie workflows.
+- Backend row serializers are expected to work from indexed or precomputed scan/plan state rather than re-walking or reparsing per row on hot paths.
 - Most product decisions are local-file-first. Remote metadata is limited to the optional TMDb and OMDb surfaces.
 
 For user-facing operation and safety guidance, see [Movies](movies.md) and [Safety](safety.md). For agent/developer operational detail, see [Agent reference](agent.md).
