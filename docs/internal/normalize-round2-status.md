@@ -200,6 +200,45 @@ Observed effect on the reference mounted library: normalize returned to
 single-digit-second behaviour instead of the earlier minute-scale post-hardening
 regression.
 
+## 2026-05-30 Follow-On Slice
+
+This follow-on slice tightened three connected gaps that still showed up in
+real normalize review output:
+
+- parser/planner collision handling
+- normalize row visibility in `/normalize-lab`
+- review boundary coverage for existing-target cases
+
+### What Changed
+
+- existing-target collisions now attempt a safe alternate concise target before
+  staying in review
+- differentiators can come from parsed technical tokens such as `BDRip` or
+  `1080p`
+- when technical tokens are not enough, the planner can now reuse local package
+  labels from parent folders below the source root
+- normalize row payloads now include serialized linked changes plus warning
+  messages, not just flattened code lists
+- `/normalize-lab` now shows those linked reasons and warning messages directly
+  in the row detail pane, and row checkbox selection updates the active detail
+  view immediately
+
+### Validation Run
+
+Focused validation for this slice:
+
+- `python -m unittest tests.test_movie_plan tests.test_web tests.test_web_serializers tests.test_movie_normalize_web tests.test_movie_one_shot_normalize`
+
+### Remaining Legit Review Limits
+
+These still correctly stay in review after this slice:
+
+- root-level duplicate titles that collide with an existing canonical target
+  but have no extra local context to safely differentiate
+- cases where title/year parsing still fails or stays weak
+- subtitle merge collisions or mixed-residue folders where auto-cleanup would
+  risk dropping substantive payload
+
 ## Important Constraint
 
 Do not expand normalize with invented business rules.

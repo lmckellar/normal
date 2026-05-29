@@ -87,6 +87,28 @@ class WebSerializersTests(unittest.TestCase):
         self.assertEqual(results[1]["proposed_value"], "B Renamed/Alpha.mkv")
         self.assertEqual(results[1]["confidence"], "safe")
 
+    def test_build_movie_normalize_results_exposes_warning_messages_and_linked_change_reasons(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Movie.2000.mkv"
+            movie.write_text("movie", encoding="utf-8")
+            existing_target_folder = source / "Movie (2000)"
+            existing_target_folder.mkdir()
+            (existing_target_folder / "Movie (2000).mkv").write_text("existing", encoding="utf-8")
+
+            from normal.movie_plan import build_movie_plan
+            from normal.movie_scan import discover_video_files
+
+            movie_files = discover_video_files(source)
+            plan = build_movie_plan(source, movie_files=movie_files)
+            results = build_movie_normalize_results(source, movie_files, plan.proposed_changes, plan.warnings)
+
+        result = next(item for item in results if item["current_value"] == "Movie.2000.mkv")
+        self.assertEqual(result["confidence"], "review")
+        existing_target_result = next(item for item in results if item["current_value"] == "Movie (2000)/Movie (2000).mkv")
+        self.assertIn("Movie normalization target already exists in the library.", existing_target_result["warning_messages"])
+        self.assertTrue(any("Target path already exists in the library." in change["reason"] for change in result["linked_changes"]))
+
     def test_build_profile_response_merges_helper_payloads(self) -> None:
         report = MovieProfileReport(source_root="/library", generated_at="2026-05-23T00:00:00+00:00")
         standards = {"video": {"1080p": {"minimum_kbps": 2500}}}

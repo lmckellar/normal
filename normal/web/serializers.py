@@ -33,11 +33,13 @@ def build_movie_normalize_results(
     for movie_path in sorted(movie_files, key=lambda path: str(path.relative_to(source_root)).casefold()):
         relative_path = movie_path.relative_to(source_root)
         linked_changes = movie_normalize_changes_for_file(relative_path, movie_path, change_index)
+        serialized_linked_changes = [serialize_proposed_change(change) for change in linked_changes]
         projected_path = projected_movie_normalize_path(relative_path, movie_path, linked_changes)
         parsed = parsed_movies.get(movie_path) if parsed_movies is not None else None
         if parsed is None:
             parsed = parse_movie_name_with_sidecar_fallback(movie_path)
-        linked_warning_codes = warning_codes_for_movie(relative_path, movie_path, warning_index)
+        linked_warnings = warning_details_for_movie(relative_path, movie_path, warning_index)
+        linked_warning_codes = [warning["code"] for warning in linked_warnings]
         confidence = "unchanged"
         if linked_changes:
             confidence = "review" if any(change.confidence == "review" for change in linked_changes) else "safe"
@@ -70,9 +72,12 @@ def build_movie_normalize_results(
                 "actionable": bool(linked_changes),
                 "change_ids": [change.item_id for change in linked_changes],
                 "linked_change_types": dedupe_strings([change.change_type for change in linked_changes]),
+                "linked_changes": serialized_linked_changes,
                 "reason_codes": reason_codes,
                 "reason_messages": reason_messages,
                 "warning_codes": dedupe_strings(warning_codes),
+                "warning_messages": dedupe_strings([warning["message"] for warning in linked_warnings]),
+                "warnings": linked_warnings,
                 "title_source": parsed.title_source,
                 "year_source": parsed.year_source,
                 "parse_source_path": parsed.parse_source_path,
@@ -152,7 +157,7 @@ def index_movie_normalize_changes(plan_changes: list[ProposedChange]) -> dict[st
 
 
 def index_movie_normalize_warnings(source_root: Path, warnings: list[WarningItem]) -> dict[str, list[str]]:
-    index: dict[str, list[str]] = {}
+    index: dict[str, list[dict[str, Any]]] = {}
     for warning in warnings:
         if not warning.path:
             continue
@@ -164,8 +169,44 @@ def index_movie_normalize_warnings(source_root: Path, warnings: list[WarningItem
         except ValueError:
             pass
         for key in keys:
-            index.setdefault(key, []).append(warning.code)
+            index.setdefault(key, []).append(
+                {
+                    "code": warning.code,
+                    "message": warning.message,
+                    "path": warning.path,
+                    "reason_codes": list(warning.reason_codes),
+                }
+            )
     return index
+
+
+def warning_details_for_movie(relative_path: Path, movie_path: Path, warning_index: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    relative_text = str(relative_path)
+    parent_text = str(relative_path.parent)
+    movie_text = str(movie_path)
+    parent_abs = str(movie_path.parent)
+    return dedupe_warning_details(
+        [
+            *warning_index.get(relative_text, []),
+            *warning_index.get(movie_text, []),
+            *warning_index.get(parent_text, []),
+            *warning_index.get(parent_abs, []),
+        ]
+    )
+
+
+def serialize_proposed_change(change: ProposedChange) -> dict[str, Any]:
+    return {
+        "item_id": change.item_id,
+        "change_type": change.change_type,
+        "current_value": change.current_value,
+        "proposed_value": change.proposed_value,
+        "confidence": change.confidence,
+        "reason": change.reason,
+        "path": change.path,
+        "reason_codes": list(change.reason_codes),
+        "warning_codes": list(change.warning_codes),
+    }
 
 
 def dedupe_strings(values: list[str]) -> list[str]:
@@ -176,6 +217,28 @@ def dedupe_strings(values: list[str]) -> list[str]:
             continue
         seen.add(value)
         ordered.append(value)
+    return ordered
+
+
+def dedupe_warning_details(values: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[tuple[str, str, str]] = set()
+    ordered: list[dict[str, Any]] = []
+    for value in values:
+        code = str(value.get("code") or "")
+        message = str(value.get("message") or "")
+        path = str(value.get("path") or "")
+        key = (code, message, path)
+        if not code or key in seen:
+            continue
+        seen.add(key)
+        ordered.append(
+            {
+                "code": code,
+                "message": message,
+                "path": path,
+                "reason_codes": [str(item) for item in value.get("reason_codes", []) if str(item)],
+            }
+        )
     return ordered
 
 

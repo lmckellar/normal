@@ -39,7 +39,7 @@
     return (state.payload?.movie_results || []).map(row => ({
       ...row,
       reason_bucket: buildReasonBucket(row),
-      linked_changes: linkedChangesForRow(row),
+      linked_changes: (row.linked_changes || []).length ? row.linked_changes : linkedChangesForRow(row),
     }));
   }
 
@@ -124,12 +124,34 @@
         const id = input.dataset.rowCheck || '';
         if (input.checked) state.selected.add(id);
         else state.selected.delete(id);
+        state.activeRowId = id;
+        renderDetail();
       });
     });
   }
 
+  function rowById(rowId) {
+    return state.rows.find(item => item.result_id === rowId) || state.filteredRows.find(item => item.result_id === rowId) || null;
+  }
+
+  function buildReviewCauses(row, changes) {
+    const seen = new Set();
+    const causes = [];
+    [
+      ...(row.warning_messages || []),
+      ...(row.reason_messages || []),
+      ...changes.map(change => change.reason).filter(Boolean),
+    ].forEach(message => {
+      const key = String(message || '').trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      causes.push(key);
+    });
+    return causes;
+  }
+
   function renderDetail() {
-    const row = state.rows.find(item => item.result_id === state.activeRowId) || state.filteredRows[0] || null;
+    const row = rowById(state.activeRowId) || state.filteredRows[0] || null;
     if (!row) {
       el.detailPane.textContent = 'Run normalize to inspect rows.';
       el.previewPane.textContent = 'No projected path yet.';
@@ -137,11 +159,17 @@
     }
     state.activeRowId = row.result_id;
     const changes = row.linked_changes || [];
+    const reviewCauses = buildReviewCauses(row, changes);
     el.detailPane.innerHTML = `
       <div><strong>${escapeHtml(row.current_value)}</strong></div>
       <div>Confidence: <span class="chip">${escapeHtml(row.confidence)}</span></div>
+      <div>Actionable: ${row.actionable ? 'yes' : 'no'}</div>
+      <div>Why this is ${escapeHtml(row.confidence)}:</div>
+      <div>${reviewCauses.length ? reviewCauses.map(message => `- ${escapeHtml(message)}`).join('\n') : 'No extra review cause recorded.'}</div>
       <div>Reason codes: ${(row.reason_codes || []).map(code => `<span class="chip">${escapeHtml(code)}</span>`).join('') || 'none'}</div>
       <div>Warning codes: ${(row.warning_codes || []).map(code => `<span class="chip">${escapeHtml(code)}</span>`).join('') || 'none'}</div>
+      <div>Warning messages:</div>
+      <div>${escapeHtml((row.warning_messages || []).join('\n') || 'none')}</div>
       <div>Title source: ${escapeHtml(row.title_source)}</div>
       <div>Year source: ${escapeHtml(row.year_source)}</div>
       <div>Parse source: ${escapeHtml(row.parse_source_path)}</div>
@@ -154,7 +182,7 @@
       <div><strong>Projected Path</strong></div>
       <div>${escapeHtml(row.projected_path)}</div>
       <div style="margin-top:10px"><strong>Linked Changes</strong></div>
-      <div>${changes.map(change => `${change.change_type}: ${change.current_value} -> ${change.proposed_value}`).join('\n') || 'none'}</div>
+      <div>${changes.map(change => `${change.change_type} [${change.confidence}]: ${change.current_value} -> ${change.proposed_value}${change.reason ? `\n  reason: ${change.reason}` : ''}`).map(escapeHtml).join('\n\n') || 'none'}</div>
     `;
     renderRows();
   }

@@ -188,6 +188,7 @@ ParsedMovieName = ParsedMovieIdentity
 
 @dataclass(slots=True)
 class PlannedMovieFile:
+    source_root: Path
     folder_path: Path
     movie_path: Path
     loose_root_file: bool
@@ -338,7 +339,17 @@ def parse_planned_movie_file(
         )
         return None
 
-    return PlannedMovieFile(folder_path=folder_path, movie_path=movie_path, loose_root_file=loose_root_file, parsed=parsed)
+    return PlannedMovieFile(
+        source_root=plan_source_root(plan),
+        folder_path=folder_path,
+        movie_path=movie_path,
+        loose_root_file=loose_root_file,
+        parsed=parsed,
+    )
+
+
+def plan_source_root(plan: ChangePlan) -> Path:
+    return Path(plan.source_root)
 
 
 def parsed_movie_identity_from_sidecar(movie_path: Path) -> ParsedMovieName | None:
@@ -916,7 +927,56 @@ def planned_movie_differentiator_candidates(planned_file: PlannedMovieFile) -> l
         for token in movie_differentiator_candidates(folder_parsed):
             if token not in candidates:
                 candidates.append(token)
+    for token in local_context_differentiator_candidates(planned_file):
+        if token not in candidates:
+            candidates.append(token)
     return candidates
+
+
+def local_context_differentiator_candidates(planned_file: PlannedMovieFile) -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for folder in relevant_local_context_folders(planned_file):
+        label = local_context_differentiator_label(folder, planned_file.parsed)
+        if not label:
+            continue
+        key = label.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(label)
+    return candidates
+
+
+def relevant_local_context_folders(planned_file: PlannedMovieFile) -> list[Path]:
+    folders: list[Path] = []
+    current = planned_file.folder_path
+    root = planned_file.source_root.resolve()
+    while True:
+        try:
+            if current.resolve() == root:
+                break
+        except OSError:
+            break
+        folders.append(current)
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return folders
+
+
+def local_context_differentiator_label(folder: Path, parsed: ParsedMovieName) -> str:
+    raw_label = cleanup_title_text(folder.name)
+    if not raw_label:
+        return ""
+    folder_parsed = parse_movie_name(folder)
+    same_identity = folder_parsed.title == parsed.title and folder_parsed.year == parsed.year
+    if same_identity:
+        return ""
+    if raw_label.casefold() == concise_movie_base(parsed).casefold():
+        return ""
+    return raw_label
 
 
 def movie_differentiator_candidates(parsed: ParsedMovieName) -> list[str]:
@@ -982,6 +1042,8 @@ def mark_existing_movie_target_collisions(plan: ChangePlan, source_root: Path) -
                 continue
         except OSError:
             pass
+        if try_resolve_existing_target_collision(plan, change, source_root):
+            continue
         mark_change_for_existing_target_collision(change)
         if change.change_type == "folder_rename":
             mark_related_folder_changes_for_existing_target_collision(plan, change)
@@ -1032,6 +1094,105 @@ def movie_change_target_key(change: ProposedChange, source_root: Path) -> str | 
             return None
         return str(relative_parent / change.proposed_value)
     return None
+
+
+def try_resolve_existing_target_collision(plan: ChangePlan, change: ProposedChange, source_root: Path) -> bool:
+    if change.path is None:
+        return False
+    if change.change_type == "file_move":
+        return try_resolve_existing_file_move_collision(change, source_root)
+    if change.change_type == "folder_rename":
+        return try_resolve_existing_folder_collision(plan, change, source_root)
+    return False
+
+
+def try_resolve_existing_file_move_collision(change: ProposedChange, source_root: Path) -> bool:
+    source_path = Path(change.path).resolve()
+    parsed = parse_movie_name_with_sidecar_fallback(source_path)
+    alternate_base = first_available_collision_alternate_base(source_root, source_path, parsed, suffix=source_path.suffix.lower())
+    if alternate_base is None:
+        return False
+    change.proposed_value = str(Path(alternate_base) / f"{alternate_base}{source_path.suffix.lower()}")
+    change.reason = "Multi-movie package file was split into an alternate movie folder because the canonical target already exists."
+    change.reason_codes = [code for code in change.reason_codes if code != "unresolved_duplicate_video_target_collision"]
+    change.warning_codes = [code for code in change.warning_codes if code != "unresolved_duplicate_video_target_collision"]
+    change.confidence = "safe"
+    return True
+
+
+def try_resolve_existing_folder_collision(plan: ChangePlan, folder_change: ProposedChange, source_root: Path) -> bool:
+    if folder_change.path is None:
+        return False
+    folder_path = Path(folder_change.path).resolve()
+    related_file_change = next(
+        (
+            change for change in plan.proposed_changes
+            if change.change_type == "file_rename"
+            and change.path is not None
+            and Path(change.path).resolve().parent == folder_path
+        ),
+        None,
+    )
+    if related_file_change is None or related_file_change.path is None:
+        return False
+    source_path = Path(related_file_change.path).resolve()
+    parsed = parse_movie_name_with_sidecar_fallback(source_path)
+    alternate_base = first_available_collision_alternate_base(source_root, source_path, parsed, suffix=source_path.suffix.lower())
+    if alternate_base is None:
+        return False
+    folder_change.proposed_value = alternate_base
+    folder_change.reason = "Movie folder was normalized into an alternate movie folder because the canonical target already exists."
+    folder_change.reason_codes = [code for code in folder_change.reason_codes if code != "unresolved_duplicate_video_target_collision"]
+    folder_change.warning_codes = [code for code in folder_change.warning_codes if code != "unresolved_duplicate_video_target_collision"]
+    folder_change.confidence = "safe"
+    related_file_change.proposed_value = f"{alternate_base}{source_path.suffix.lower()}"
+    related_file_change.reason = "Movie filename was normalized into an alternate movie folder because the canonical target already exists."
+    related_file_change.reason_codes = [code for code in related_file_change.reason_codes if code != "unresolved_duplicate_video_target_collision"]
+    related_file_change.warning_codes = [code for code in related_file_change.warning_codes if code != "unresolved_duplicate_video_target_collision"]
+    related_file_change.confidence = "safe"
+    return True
+
+
+def first_available_collision_alternate_base(
+    source_root: Path,
+    source_path: Path,
+    parsed: ParsedMovieName,
+    *,
+    suffix: str,
+) -> str | None:
+    if parsed.title is None or parsed.year is None:
+        return None
+    for differentiator in existing_target_collision_differentiators(source_root, source_path, parsed):
+        alternate_base = f"{parsed.title} ({parsed.year}) {differentiator}"
+        alternate_target = Path(alternate_base) / f"{alternate_base}{suffix}"
+        if collision_target_available(alternate_target, source_root, source_path):
+            return alternate_base
+    return None
+
+
+def existing_target_collision_differentiators(source_root: Path, movie_path: Path, parsed: ParsedMovieName) -> list[str]:
+    candidates = list(movie_differentiator_candidates(parsed))
+    planned = PlannedMovieFile(
+        source_root=source_root.resolve(),
+        folder_path=movie_path.parent,
+        movie_path=movie_path,
+        loose_root_file=movie_path.parent.resolve() == source_root.resolve(),
+        parsed=parsed,
+    )
+    for token in local_context_differentiator_candidates(planned):
+        if token not in candidates:
+            candidates.append(token)
+    return candidates
+
+
+def collision_target_available(target_relative: Path, source_root: Path, source_path: Path) -> bool:
+    target_path = source_root.resolve() / target_relative
+    if not target_path.exists():
+        return True
+    try:
+        return target_path.samefile(source_path)
+    except OSError:
+        return False
 
 
 def plan_collection_folder_cleanup(

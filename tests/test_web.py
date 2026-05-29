@@ -487,6 +487,10 @@ class WebTests(unittest.TestCase):
         self.assertIn("collision cases", NORMALIZE_LAB_FRONTEND)
         self.assertIn("artifact cleanup cases", NORMALIZE_LAB_FRONTEND)
         self.assertIn("subtitle-merge cases", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Why this is", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("state.activeRowId = id;", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("row.linked_changes || []", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("row.warning_messages || []", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("/api/movies/apply", NORMALIZE_LAB_FRONTEND)
 
     def test_delete_movie_junk_files_only_deletes_current_candidates(self) -> None:

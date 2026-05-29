@@ -106,6 +106,57 @@ class MoviePlanTests(unittest.TestCase):
             self.assertEqual(file_change.confidence, "safe")
             self.assertNotIn("movie_name_existing_target_collision", {warning.code for warning in plan.warnings})
 
+    def test_build_movie_plan_uses_differentiator_for_package_split_existing_target_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            canonical = source / "Ace Ventura When Nature Calls (1995)"
+            canonical.mkdir()
+            (canonical / "Ace Ventura When Nature Calls (1995).mkv").write_text("video", encoding="utf-8")
+            collection = source / "The Ace Ventura Collection (1994-1995)"
+            collection.mkdir()
+            (
+                collection / "1994.Ace.Ventura-.Pet.Detective.1920x1080.BDRip.x264.DTS-HD.MA.mkv"
+            ).write_text("video", encoding="utf-8")
+            (
+                collection / "1995.Ace.Ventura-.When.Nature.Calls.1920x800.BDRip.x264.DTS-HD.MA.mkv"
+            ).write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            move = next(
+                change for change in plan.proposed_changes
+                if change.change_type == "file_move" and "When.Nature.Calls" in change.current_value
+            )
+            self.assertEqual(
+                move.proposed_value,
+                "Ace Ventura When Nature Calls (1995) BDRip/Ace Ventura When Nature Calls (1995) BDRip.mkv",
+            )
+            self.assertEqual(move.confidence, "safe")
+            self.assertNotIn("unresolved_duplicate_video_target_collision", move.reason_codes)
+            self.assertNotIn("movie_name_existing_target_collision", {warning.code for warning in plan.warnings})
+
+    def test_build_movie_plan_uses_differentiator_for_folder_existing_target_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            canonical = source / "Battle Royale (2000)"
+            canonical.mkdir()
+            (canonical / "Battle Royale (2000).mkv").write_text("video", encoding="utf-8")
+            verbose = source / "Battle.Royale.2000.1080p.BluRay.3D.H-SBS.DTS.x264-PublicHD"
+            verbose.mkdir()
+            (
+                verbose / "battle.royale.2000.1080p.bluray.3D.h-sbs.dts.x264-publichd.mkv"
+            ).write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            folder_change = next(change for change in plan.proposed_changes if change.change_type == "folder_rename")
+            file_change = next(change for change in plan.proposed_changes if change.change_type == "file_rename")
+            self.assertEqual(folder_change.proposed_value, "Battle Royale (2000) 1080p")
+            self.assertEqual(file_change.proposed_value, "Battle Royale (2000) 1080p.mkv")
+            self.assertEqual(folder_change.confidence, "safe")
+            self.assertEqual(file_change.confidence, "safe")
+            self.assertNotIn("movie_name_existing_target_collision", {warning.code for warning in plan.warnings})
+
     def test_build_movie_plan_renames_no_video_movie_artifact_folder(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
@@ -255,7 +306,7 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn(("file_rename", "Collision Movie (2001) 720p.mkv", "safe"), proposed)
             self.assertNotIn("movie_name_target_collision", {warning.code for warning in plan.warnings})
 
-    def test_build_movie_plan_marks_unresolved_concise_target_collisions_for_review(self) -> None:
+    def test_build_movie_plan_uses_local_folder_labels_to_resolve_concise_target_collisions(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
             first = source / "Movie.One"
@@ -269,8 +320,26 @@ class MoviePlanTests(unittest.TestCase):
 
             folder_changes = [change for change in plan.proposed_changes if change.change_type == "folder_rename"]
             self.assertTrue(folder_changes)
-            self.assertTrue(all(change.confidence == "review" for change in folder_changes))
-            self.assertIn("movie_name_target_collision", {warning.code for warning in plan.warnings})
+            proposed = {(change.change_type, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("folder_rename", "Collision Movie (2001) Movie One", "safe"), proposed)
+            self.assertIn(("folder_rename", "Collision Movie (2001) Movie Two", "safe"), proposed)
+            self.assertIn(("file_rename", "Collision Movie (2001) Movie One.mkv", "safe"), proposed)
+            self.assertIn(("file_rename", "Collision Movie (2001) Movie Two.mkv", "safe"), proposed)
+            self.assertNotIn("movie_name_target_collision", {warning.code for warning in plan.warnings})
+
+    def test_build_movie_plan_keeps_root_level_duplicate_titles_as_review_without_local_context(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            normalized = source / "Collision Movie (2001)"
+            normalized.mkdir()
+            (normalized / "Collision Movie (2001).mkv").write_text("video", encoding="utf-8")
+            (source / "Collision.Movie.2001.mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            review_changes = [change for change in plan.proposed_changes if change.change_type in {"file_move", "folder_rename"}]
+            self.assertTrue(any(change.confidence == "review" for change in review_changes))
+            self.assertIn("movie_name_existing_target_collision", {warning.code for warning in plan.warnings})
 
     def test_build_movie_plan_proposes_rich_filename_and_folder_renames(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
