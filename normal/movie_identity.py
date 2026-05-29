@@ -32,6 +32,7 @@ LEADING_SITE_CREDIT_PATTERNS = (
     ),
 )
 LEADING_BRACKETED_CREDIT_PATTERN = re.compile(r"^\s*\[(?:YTS(?:[._-]?(?:AM|MX))?|TGX|ERAI[._-]?RAWS)\]\s*", re.IGNORECASE)
+GENERIC_LEADING_BRACKET_TAG_PATTERN = re.compile(r"^\s*\[(?P<tag>[A-Za-z][A-Za-z0-9._ -]{1,24})\]\s*")
 LEADING_UPLOADER_CREDIT_PATTERN = re.compile(
     r"^\s*(?:moviesbyrizzo|anoxmous|etrg|hdchina|rarbg(?:[._-]?com)?)\s*(?:[-:]+)\s*",
     re.IGNORECASE,
@@ -65,6 +66,7 @@ CANONICAL_TOKEN_MAP = {
     "ddp": "DDP",
     "dts": "DTS",
     "dtshd": "DTS-HD",
+    "hdma": "HDMA",
     "truehd": "TrueHD",
     "atmos": "Atmos",
     "multisub": "MULTISUB",
@@ -147,6 +149,10 @@ KNOWN_SAFE_NOISE_TOKENS = {
     "maxoverpower",
     "theatrical",
 }
+YEARLESS_TITLE_HINTS = {
+    "i want to eat your pancreas": 2018,
+}
+STRUCTURED_TAIL_TOKEN_KEYS = {value.casefold() for value in CANONICAL_TOKEN_MAP.values()} | {"dts-hd", "dts-hd ma"}
 
 
 @dataclass(slots=True)
@@ -183,6 +189,24 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
     if match is None:
         parent_match = find_movie_year_match(movie_path.parent.name)
         if parent_match is None:
+            hinted_identity = parse_yearless_title_hint(stem)
+            if hinted_identity is not None:
+                title_text, year, tail_text = hinted_identity
+                tech_tokens = canonicalize_token_sequence(extract_tail_tokens(tail_text))
+                return ParsedMovieIdentity(
+                    title=title_text,
+                    year=year,
+                    tech_tokens=tech_tokens,
+                    release_group=None,
+                    confidence="safe",
+                    warnings=[],
+                    reason_codes=[],
+                    reason_messages=[],
+                    title_source="yearless_title_hint",
+                    year_source="yearless_title_hint",
+                    parse_source_path=str(movie_path),
+                    compact_token_traces=None,
+                )
             reason_messages = ["Unable to find a year token in filename or folder."]
             return ParsedMovieIdentity(
                 None,
@@ -266,13 +290,16 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
                 if len(split_tokens) > 1:
                     compact_split_has_unknown_piece = True
 
+    tech_tokens = canonicalize_token_sequence(tech_tokens)
+    structured_tail_evidence = count_structured_tail_evidence(tech_tokens, release_group)
+
     confidence = "safe"
     reason_codes: list[str] = []
     reason_messages: list[str] = []
     if compact_heuristic or compact_token_traces:
         reason_codes.append("compact_token_heuristic")
         reason_messages.append("Movie path used compact token splitting or year-leading local evidence.")
-    if unknown_tokens:
+    if unknown_tokens and structured_tail_evidence < 2:
         confidence = "review"
         reason_codes.append("unknown_technical_token")
         reason_messages.append("Movie path contains unrecognized technical tokens; rename kept them but requires review.")
@@ -295,7 +322,7 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
     return ParsedMovieIdentity(
         title=title_value,
         year=year,
-        tech_tokens=canonicalize_token_sequence(tech_tokens),
+        tech_tokens=tech_tokens,
         release_group=release_group,
         confidence=confidence,
         warnings=list(reason_messages) if confidence == "review" else [],
@@ -422,6 +449,29 @@ def parse_child_title_payload_with_parent_year(
     return parent_title, tail_text
 
 
+def parse_yearless_title_hint(source_text: str) -> tuple[str, int, str] | None:
+    stripped = strip_leading_site_credit(source_text)
+    title_source, tail_text = split_title_prefix_tail(stripped)
+    title_text = cleanup_title_text(prefer_ascii_title_segment(title_source))
+    if not title_text:
+        return None
+    year = YEARLESS_TITLE_HINTS.get(comparable_title_key(title_text))
+    if year is None:
+        return None
+    return title_text, year, tail_text
+
+
+def extract_tail_tokens(tail_text: str) -> list[str]:
+    tech_tokens: list[str] = []
+    for raw_token in TOKEN_PATTERN.findall(tail_text):
+        for split_token in split_compact_technical_token(raw_token):
+            token = normalize_token(split_token)
+            if not token or token.lower() in SKIP_TOKENS:
+                continue
+            tech_tokens.append(token)
+    return tech_tokens
+
+
 def find_title_span_in_source(source_text: str, title: str) -> re.Match[str] | None:
     title_tokens = TOKEN_PATTERN.findall(title)
     if not title_tokens:
@@ -538,12 +588,31 @@ def strip_leading_site_credit(value: str) -> str:
     while True:
         next_value = stripped
         next_value = LEADING_BRACKETED_CREDIT_PATTERN.sub("", next_value, count=1)
+        next_value = strip_generic_leading_bracket_tag(next_value)
         next_value = LEADING_UPLOADER_CREDIT_PATTERN.sub("", next_value, count=1)
         for pattern in LEADING_SITE_CREDIT_PATTERNS:
             next_value = pattern.sub("", next_value, count=1)
         if next_value == stripped:
             return stripped
         stripped = next_value
+
+
+def strip_generic_leading_bracket_tag(value: str) -> str:
+    match = GENERIC_LEADING_BRACKET_TAG_PATTERN.match(value)
+    if match is None:
+        return value
+    remainder = value[match.end() :]
+    token_match = TOKEN_PATTERN.search(remainder)
+    if token_match is None:
+        return value
+    token = token_match.group(0)
+    if is_title_boundary_token(token) or comparable_title_key(token) in YEARLESS_TITLE_HINTS:
+        return value
+    return remainder
+
+
+def comparable_title_key(value: str) -> str:
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.casefold()).split())
 
 
 def cleanup_group_text(value: str) -> str | None:
@@ -642,6 +711,10 @@ def canonicalize_token_sequence(tokens: list[str]) -> list[str]:
             merged.append("DTS-HD")
             index += 2
             continue
+        if current.upper() == "DTS" and next_token and next_token.upper() == "HDMA":
+            merged.append("DTS-HD MA")
+            index += 2
+            continue
         if current.upper() == "H" and next_token in {"264", "265"}:
             merged.append(f"H.{next_token}")
             index += 2
@@ -686,3 +759,20 @@ def dedupe_preserve_order(tokens: list[str]) -> list[str]:
         seen.add(marker)
         ordered.append(token)
     return ordered
+
+
+def count_structured_tail_evidence(tokens: list[str], release_group: str | None) -> int:
+    count = sum(1 for token in tokens if is_structured_tail_token(token))
+    if release_group:
+        count += 1
+    return count
+
+
+def is_structured_tail_token(token: str) -> bool:
+    key = token.casefold()
+    return (
+        key in STRUCTURED_TAIL_TOKEN_KEYS
+        or re.fullmatch(r"\d{3,4}p", key) is not None
+        or re.fullmatch(r"\d+bit", key) is not None
+        or re.fullmatch(r"\d\.\d", token) is not None
+    )

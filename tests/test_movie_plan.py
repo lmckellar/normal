@@ -363,6 +363,42 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn("Dune (1984)", proposed_values)
             self.assertEqual([change.confidence for change in plan.proposed_changes], ["safe", "safe"])
 
+    def test_build_movie_plan_keeps_known_structure_safe_despite_long_unknown_tail_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "The Last Starfighter (1984) 25th Anniversary Ed 1080p Blu-ray x264 DTS-HDMA 5.1-DTOne.mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(
+                (
+                    "The Last Starfighter (1984)/The Last Starfighter (1984).mkv",
+                    "safe",
+                ),
+                proposed,
+            )
+            self.assertFalse(plan.warnings)
+
+    def test_build_movie_plan_still_reviews_long_unknown_tail_token_when_structure_is_weak(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Mystery Film (1984) AnniversaryWord.mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(
+                (
+                    "Mystery Film (1984)/Mystery Film (1984).mkv",
+                    "review",
+                ),
+                proposed,
+            )
+            self.assertIn("unknown_technical_token", {warning.code for warning in plan.warnings})
+
     def test_build_movie_plan_prefers_ascii_title_for_mixed_script_movie_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
@@ -680,6 +716,44 @@ class MoviePlanTests(unittest.TestCase):
                 ),
                 proposed,
             )
+
+    def test_build_movie_plan_uses_known_yearless_title_hint_for_pancreas_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "[Arid] I Want to Eat Your Pancreas (BDRip 1080p HEVC OPUS) [BCB2E441].mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(
+                (
+                    "I Want To Eat Your Pancreas (2018)/I Want To Eat Your Pancreas (2018).mkv",
+                    "safe",
+                ),
+                proposed,
+            )
+            self.assertFalse(plan.warnings)
+
+    def test_build_movie_plan_strips_generic_leading_bracket_credit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "The Apartment (1960)"
+            folder.mkdir()
+            movie = folder / "[Arid] The Apartment 1960 1080p BluRay x264-GRP.mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(
+                (
+                    "The Apartment (1960).mkv",
+                    "safe",
+                ),
+                proposed,
+            )
+            self.assertFalse(plan.warnings)
 
     def test_build_movie_plan_allows_nine_character_unknown_tokens(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

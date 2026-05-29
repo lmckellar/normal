@@ -57,7 +57,12 @@ Review remains for:
 
 - weak title inference
 - truly ambiguous compact title recovery
-- unknown technical-token cases that still need human inspection
+- unknown technical-token cases where the tail still lacks enough recognized structure to trust the parse
+
+Provisional current state on the reference scan:
+
+- review-only flagged normalize cases have been driven to zero
+- this should be treated as a hardening checkpoint, not a claim that parser review is globally finished
 
 ### Planner Separation
 
