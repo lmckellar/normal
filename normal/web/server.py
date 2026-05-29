@@ -25,7 +25,7 @@ from .routes_cleanup import (
     handle_movies_subtitle_readiness_history_sync,
 )
 from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
-from .routes_normalize import handle_movies_apply, handle_movies_normalize
+from .routes_normalize import handle_movies_apply, handle_movies_normalize, handle_movies_normalize_lab_export
 from .routes_profile import (
     handle_movies_canonical_lists,
     handle_movies_dashboard_histogram,
@@ -40,9 +40,19 @@ from .state import RequestConflictError
 
 WEB_ASSET_ROOT = "web_assets"
 WEB_ASSET_TEMPLATE = "index.html"
+WORKBENCH_ASSET_TEMPLATE = "workbench.html"
+NORMALIZE_LAB_ASSET_TEMPLATE = "normalize_lab.html"
 WEB_STATIC_ASSETS = {
     "/assets/app.css": ("app.css", "text/css; charset=utf-8"),
     "/assets/app.js": ("app.js", "application/javascript; charset=utf-8"),
+}
+WORKBENCH_STATIC_ASSETS = {
+    "/workbench-assets/workbench.css": ("workbench.css", "text/css; charset=utf-8"),
+    "/workbench-assets/workbench.js": ("workbench.js", "application/javascript; charset=utf-8"),
+}
+NORMALIZE_LAB_STATIC_ASSETS = {
+    "/normalize-lab-assets/normalize_lab.css": ("normalize_lab.css", "text/css; charset=utf-8"),
+    "/normalize-lab-assets/normalize_lab.js": ("normalize_lab.js", "application/javascript; charset=utf-8"),
 }
 WEB_BOOTSTRAP_SENTINEL = "__NORMAL_BOOTSTRAP__"
 
@@ -67,13 +77,30 @@ def render_web_bootstrap(default_source: Path | None = None, omdb_key: str | Non
     )
 
 
-def render_index_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
-    template = read_web_asset_text(WEB_ASSET_TEMPLATE)
+def render_asset_html(
+    template_name: str,
+    default_source: Path | None = None,
+    omdb_key: str | None = None,
+    tmdb_key: str | None = None,
+) -> str:
+    template = read_web_asset_text(template_name)
     return template.replace(
         WEB_BOOTSTRAP_SENTINEL,
         render_web_bootstrap(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key),
         1,
     )
+
+
+def render_index_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
+    return render_asset_html(WEB_ASSET_TEMPLATE, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
+
+
+def render_workbench_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
+    return render_asset_html(WORKBENCH_ASSET_TEMPLATE, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
+
+
+def render_normalize_lab_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
+    return render_asset_html(NORMALIZE_LAB_ASSET_TEMPLATE, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
 
 
 def serve_web_ui(
@@ -96,8 +123,38 @@ def serve_static_asset(ctx: RequestContext, route: str) -> None:
     ctx.respond_bytes(body, content_type=content_type)
 
 
+def serve_workbench_static_asset(ctx: RequestContext, route: str) -> None:
+    asset_name, content_type = WORKBENCH_STATIC_ASSETS[route]
+    body = read_web_asset_bytes(asset_name)
+    ctx.respond_bytes(body, content_type=content_type)
+
+
+def serve_normalize_lab_static_asset(ctx: RequestContext, route: str) -> None:
+    asset_name, content_type = NORMALIZE_LAB_STATIC_ASSETS[route]
+    body = read_web_asset_bytes(asset_name)
+    ctx.respond_bytes(body, content_type=content_type)
+
+
 def serve_index(ctx: RequestContext) -> None:
     body = render_index_html(
+        default_source=ctx.default_source,
+        omdb_key=ctx.omdb_key,
+        tmdb_key=ctx.tmdb_key,
+    ).encode("utf-8")
+    ctx.respond_bytes(body, content_type="text/html; charset=utf-8")
+
+
+def serve_workbench(ctx: RequestContext) -> None:
+    body = render_workbench_html(
+        default_source=ctx.default_source,
+        omdb_key=ctx.omdb_key,
+        tmdb_key=ctx.tmdb_key,
+    ).encode("utf-8")
+    ctx.respond_bytes(body, content_type="text/html; charset=utf-8")
+
+
+def serve_normalize_lab(ctx: RequestContext) -> None:
+    body = render_normalize_lab_html(
         default_source=ctx.default_source,
         omdb_key=ctx.omdb_key,
         tmdb_key=ctx.tmdb_key,
@@ -111,9 +168,17 @@ def build_get_routes() -> dict[str, Callable[[RequestContext], None]]:
         "/api/library-roots": handle_library_roots_get,
         "/": serve_index,
         "/index.html": serve_index,
+        "/workbench": serve_workbench,
+        "/workbench.html": serve_workbench,
+        "/normalize-lab": serve_normalize_lab,
+        "/normalize-lab.html": serve_normalize_lab,
     }
     for route in WEB_STATIC_ASSETS:
         routes[route] = lambda ctx, route=route: serve_static_asset(ctx, route)
+    for route in WORKBENCH_STATIC_ASSETS:
+        routes[route] = lambda ctx, route=route: serve_workbench_static_asset(ctx, route)
+    for route in NORMALIZE_LAB_STATIC_ASSETS:
+        routes[route] = lambda ctx, route=route: serve_normalize_lab_static_asset(ctx, route)
     return routes
 
 
@@ -130,6 +195,7 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/movies/inspect": handle_movies_inspect,
         "/api/movies/normalize": handle_movies_normalize,
         "/api/movies/apply": handle_movies_apply,
+        "/api/movies/normalize-lab/export": handle_movies_normalize_lab_export,
         "/api/movies/junk": handle_movies_junk,
         "/api/movies/junk/delete": handle_movies_junk_delete,
         "/api/movies/replacement-queue/list": handle_movies_replacement_queue_list,

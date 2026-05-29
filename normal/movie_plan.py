@@ -18,8 +18,17 @@ TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
 RELEASE_GROUP_SUFFIX_PATTERN = re.compile(r"-(?P<group>[A-Za-z0-9]{2,12})$")
 BRACKET_CONTENT_PATTERN = re.compile(r"\[(?P<content>[^\]]+)\]")
 LEADING_SITE_CREDIT_PATTERNS = (
-    re.compile(r"^\s*www[._\s-]+[A-Za-z0-9]+[._\s-]+(?:org|com|net)\s*(?:[-:]+)?\s*", re.IGNORECASE),
+    re.compile(r"^\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+(?:org|com|net|mx|to|am|cc|io)\s*(?:[-:]+)?\s*", re.IGNORECASE),
     re.compile(r"^\s*www\.[A-Za-z0-9.-]+\s*(?:[-:]+)?\s*", re.IGNORECASE),
+    re.compile(
+        r"^\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+(?:org|com|net|mx|to|am|cc|io)\s*(?:[-:]+)?\s*",
+        re.IGNORECASE,
+    ),
+)
+LEADING_BRACKETED_CREDIT_PATTERN = re.compile(r"^\s*\[(?:YTS(?:[._-]?(?:AM|MX))?|TGX|ERAI[._-]?RAWS)\]\s*", re.IGNORECASE)
+LEADING_UPLOADER_CREDIT_PATTERN = re.compile(
+    r"^\s*(?:moviesbyrizzo|anoxmous|etrg|hdchina|rarbg(?:[._-]?com)?)\s*(?:[-:]+)\s*",
+    re.IGNORECASE,
 )
 CANONICAL_TOKEN_MAP = {
     "bluray": "BluRay",
@@ -78,6 +87,8 @@ TITLE_BOUNDARY_TOKENS = {
 SKIP_TOKENS = {"sample"}
 SAFE_DELETE_ARTIFACT_EXTENSIONS = {".nfo", ".ds_store"}
 SAFE_DELETE_ARTIFACT_NAMES = {".ds_store"}
+SAFE_DELETE_POSTER_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+SUBTITLE_EXTENSIONS = {".srt", ".sub", ".idx", ".ass", ".ssa", ".vtt"}
 PACKAGE_FOLDER_MARKERS = {
     "collection",
     "duology",
@@ -101,6 +112,7 @@ VERBOSE_KEEP_TOKENS = {
     "HDR",
     "HDR10",
     "HEVC",
+    "International Cut",
     "H.264",
     "H.265",
     "Remux",
@@ -187,6 +199,7 @@ def build_movie_plan(
     naming_style: str = DEFAULT_MOVIE_NAMING_STYLE,
     *,
     movie_files: list[Path] | None = None,
+    parsed_movies: dict[Path, ParsedMovieName] | None = None,
 ) -> ChangePlan:
     naming_style = normalize_movie_naming_style(naming_style)
     plan = build_empty_plan(source_root)
@@ -215,29 +228,59 @@ def build_movie_plan(
     for folder_path, folder_files in sorted(files_by_folder.items()):
         if folder_path.resolve() == source_root.resolve():
             for movie_path in sorted(folder_files):
-                planned_file = parse_planned_movie_file(plan, folder_path, movie_path, loose_root_file=True)
+                planned_file = parse_planned_movie_file(
+                    plan,
+                    folder_path,
+                    movie_path,
+                    loose_root_file=True,
+                    parsed_movies=parsed_movies,
+                )
                 if planned_file is not None:
                     planned_files.append(planned_file)
             continue
 
         if len(folder_files) != 1:
-            multi_changes = plan_multi_part_movie_folder(source_root, folder_path, sorted(folder_files), naming_style)
+            multi_changes = plan_multi_part_movie_folder(
+                source_root,
+                folder_path,
+                sorted(folder_files),
+                naming_style,
+                parsed_movies=parsed_movies,
+            )
             if multi_changes is None:
-                multi_changes = plan_multi_movie_package_folder(source_root, folder_path, sorted(folder_files), naming_style)
+                multi_changes = plan_multi_movie_package_folder(
+                    source_root,
+                    folder_path,
+                    sorted(folder_files),
+                    naming_style,
+                    parsed_movies=parsed_movies,
+                )
             if multi_changes is not None:
                 plan.proposed_changes.extend(multi_changes)
             else:
+                warning_code = "movie_folder_multiple_videos"
+                warning_message = "Folder contains multiple supported video files; movie normalization was skipped for safety."
+                if is_multi_movie_package_folder_name(folder_path.name.casefold()):
+                    warning_code = "multi_video_package_skipped_lack_child_evidence"
+                    warning_message = "Package-style folder contains multiple video files, but child title/year evidence was too weak to split safely."
                 plan.warnings.append(
                     WarningItem(
-                        code="movie_folder_multiple_videos",
-                        message="Folder contains multiple supported video files; movie normalization was skipped for safety.",
+                        code=warning_code,
+                        message=warning_message,
                         path=str(folder_path),
+                        reason_codes=[warning_code],
                     )
                 )
             continue
 
         movie_path = folder_files[0]
-        planned_file = parse_planned_movie_file(plan, folder_path, movie_path, loose_root_file=False)
+        planned_file = parse_planned_movie_file(
+            plan,
+            folder_path,
+            movie_path,
+            loose_root_file=False,
+            parsed_movies=parsed_movies,
+        )
         if planned_file is not None:
             planned_files.append(planned_file)
 
@@ -269,16 +312,20 @@ def parse_planned_movie_file(
     folder_path: Path,
     movie_path: Path,
     loose_root_file: bool,
+    *,
+    parsed_movies: dict[Path, ParsedMovieName] | None = None,
 ) -> PlannedMovieFile | None:
-    parsed = parse_movie_name_with_sidecar_fallback(movie_path)
-    for warning in parsed.warnings:
-        plan.warnings.append(
-            WarningItem(
-                code="movie_name_review",
-                message=warning,
-                path=str(movie_path),
+    parsed = parsed_movie_for_path(movie_path, parsed_movies)
+    if parsed.confidence == "review":
+        for code, message in zip(parsed.reason_codes, parsed.reason_messages, strict=False):
+            plan.warnings.append(
+                WarningItem(
+                    code=code,
+                    message=message,
+                    path=str(movie_path),
+                    reason_codes=[code],
+                )
             )
-        )
 
     if parsed.title is None or parsed.year is None:
         plan.warnings.append(
@@ -286,6 +333,7 @@ def parse_planned_movie_file(
                 code="movie_name_unparsed",
                 message="Movie title/year could not be parsed confidently from the local path.",
                 path=str(movie_path),
+                reason_codes=list(parsed.reason_codes),
             )
         )
         return None
@@ -305,7 +353,17 @@ def parsed_movie_identity_from_sidecar(movie_path: Path) -> ParsedMovieName | No
     year_text = (root.findtext("year") or "").strip()
     if not title or not re.fullmatch(r"(19\d{2}|20\d{2}|2100)", year_text):
         return None
-    return ParsedMovieIdentity(title=title, year=int(year_text), tech_tokens=[], release_group=None, confidence="safe", warnings=[])
+    return ParsedMovieIdentity(
+        title=title,
+        year=int(year_text),
+        tech_tokens=[],
+        release_group=None,
+        confidence="safe",
+        warnings=[],
+        title_source="sidecar_nfo",
+        year_source="sidecar_nfo",
+        parse_source_path=str(nfo_path),
+    )
 
 
 def append_movie_file_changes(
@@ -318,19 +376,19 @@ def append_movie_file_changes(
     movie_path = planned_file.movie_path
     folder_path = planned_file.folder_path
     if planned_file.loose_root_file:
-        file_move = build_loose_file_move_change(source_root, movie_path, canonical_base, parsed.confidence)
+        file_move = build_loose_file_move_change(source_root, movie_path, canonical_base, parsed)
         if file_move is not None:
             plan.proposed_changes.append(file_move)
         return
 
-    file_change = build_file_change(source_root, movie_path, canonical_base, parsed.confidence)
+    file_change = build_file_change(source_root, movie_path, canonical_base, parsed)
     if file_change is not None:
         plan.proposed_changes.append(file_change)
 
     if should_skip_single_movie_folder_change(folder_path, parsed):
         return
 
-    folder_change = build_folder_change(source_root, folder_path, canonical_base, parsed.confidence)
+    folder_change = build_folder_change(source_root, folder_path, canonical_base, parsed)
     if folder_change is not None:
         plan.proposed_changes.append(folder_change)
 
@@ -346,13 +404,26 @@ def parse_movie_name_with_sidecar_fallback(movie_path: Path) -> ParsedMovieName:
     return parsed_movie_identity_from_sidecar(movie_path) or parsed
 
 
+def parsed_movie_for_path(movie_path: Path, parsed_movies: dict[Path, ParsedMovieName] | None = None) -> ParsedMovieName:
+    if parsed_movies is not None:
+        cached = parsed_movies.get(movie_path)
+        if cached is not None:
+            return cached
+    parsed = parse_movie_name_with_sidecar_fallback(movie_path)
+    if parsed_movies is not None:
+        parsed_movies[movie_path] = parsed
+    return parsed
+
+
 def plan_multi_part_movie_folder(
     source_root: Path,
     folder_path: Path,
     folder_files: list[Path],
     naming_style: str,
+    *,
+    parsed_movies: dict[Path, ParsedMovieName] | None = None,
 ) -> list[ProposedChange] | None:
-    parsed_files = [(movie_path, parse_movie_name_with_sidecar_fallback(movie_path)) for movie_path in folder_files]
+    parsed_files = [(movie_path, parsed_movie_for_path(movie_path, parsed_movies)) for movie_path in folder_files]
     if any(parsed.title is None or parsed.year is None for _, parsed in parsed_files):
         return None
     identities = {(parsed.title, parsed.year) for _, parsed in parsed_files}
@@ -381,6 +452,7 @@ def plan_multi_part_movie_folder(
                     confidence="safe",
                     reason="Multi-part movie filename was normalized with its parsed part label.",
                     path=str(movie_path),
+                    reason_codes=["multi_part_movie"],
                 )
             )
     if folder_path.name != base:
@@ -393,6 +465,7 @@ def plan_multi_part_movie_folder(
                 confidence="safe",
                 reason="Multi-part movie folder was normalized to the shared movie title and year.",
                 path=str(folder_path),
+                reason_codes=["multi_part_movie"],
             )
         )
     return changes
@@ -403,11 +476,13 @@ def plan_multi_movie_package_folder(
     folder_path: Path,
     folder_files: list[Path],
     naming_style: str,
+    *,
+    parsed_movies: dict[Path, ParsedMovieName] | None = None,
 ) -> list[ProposedChange] | None:
     if not is_multi_movie_package_folder_name(folder_path.name.casefold()):
         return None
 
-    parsed_files = [(movie_path, parse_movie_name_with_sidecar_fallback(movie_path)) for movie_path in folder_files]
+    parsed_files = [(movie_path, parsed_movie_for_path(movie_path, parsed_movies)) for movie_path in folder_files]
     if any(parsed.title is None or parsed.year is None for _, parsed in parsed_files):
         return None
     if any(movie_title_contains_package_marker(parsed.title or "") for _, parsed in parsed_files):
@@ -432,6 +507,8 @@ def plan_multi_movie_package_folder(
                 confidence=parsed.confidence,
                 reason="Multi-movie package file was split into its parsed movie folder.",
                 path=str(movie_path),
+                reason_codes=merge_reason_codes(parsed.reason_codes, "package_split"),
+                warning_codes=list(parsed.reason_codes) if parsed.confidence == "review" else [],
             )
         )
 
@@ -445,6 +522,7 @@ def plan_multi_movie_package_folder(
                 confidence="safe",
                 reason="Multi-movie package folder was deleted after its movies were split out.",
                 path=str(folder_path),
+                reason_codes=["package_split"],
             )
         )
     return changes
@@ -609,9 +687,15 @@ def strip_leading_collection_index(value: str) -> str:
 
 def strip_leading_site_credit(value: str) -> str:
     stripped = value
-    for pattern in LEADING_SITE_CREDIT_PATTERNS:
-        stripped = pattern.sub("", stripped, count=1)
-    return stripped
+    while True:
+        next_value = stripped
+        next_value = LEADING_BRACKETED_CREDIT_PATTERN.sub("", next_value, count=1)
+        next_value = LEADING_UPLOADER_CREDIT_PATTERN.sub("", next_value, count=1)
+        for pattern in LEADING_SITE_CREDIT_PATTERNS:
+            next_value = pattern.sub("", next_value, count=1)
+        if next_value == stripped:
+            return stripped
+        stripped = next_value
 
 
 def cleanup_group_text(value: str) -> str | None:
@@ -867,6 +951,8 @@ def mark_movie_target_collisions(plan: ChangePlan, source_root: Path) -> None:
             continue
         for change in changes:
             change.confidence = "review"
+            change.reason_codes = merge_reason_codes(change.reason_codes, "unresolved_duplicate_video_target_collision")
+            change.warning_codes = merge_reason_codes(change.warning_codes, "unresolved_duplicate_video_target_collision")
             if "Target path collides with another proposed movie normalization change." not in change.reason:
                 change.reason = f"{change.reason} Target path collides with another proposed movie normalization change."
         plan.warnings.append(
@@ -874,6 +960,7 @@ def mark_movie_target_collisions(plan: ChangePlan, source_root: Path) -> None:
                 code="movie_name_target_collision",
                 message="Multiple movie normalization changes propose the same target path.",
                 path=target,
+                reason_codes=["unresolved_duplicate_video_target_collision"],
             )
         )
 
@@ -903,6 +990,7 @@ def mark_existing_movie_target_collisions(plan: ChangePlan, source_root: Path) -
                 code="movie_name_existing_target_collision",
                 message="Movie normalization target already exists in the library.",
                 path=str(target_path),
+                reason_codes=["unresolved_duplicate_video_target_collision"],
             )
         )
 
@@ -924,6 +1012,8 @@ def mark_related_folder_changes_for_existing_target_collision(plan: ChangePlan, 
 
 def mark_change_for_existing_target_collision(change: ProposedChange) -> None:
     change.confidence = "review"
+    change.reason_codes = merge_reason_codes(change.reason_codes, "unresolved_duplicate_video_target_collision")
+    change.warning_codes = merge_reason_codes(change.warning_codes, "unresolved_duplicate_video_target_collision")
     message = "Target path already exists in the library."
     if message not in change.reason:
         change.reason = f"{change.reason} {message}"
@@ -1021,44 +1111,10 @@ def plan_movie_artifact_folder_cleanup(source_root: Path, movie_files: list[Path
             continue
         target_path = source_root / concise_base
         if target_path.exists():
-            if target_path.name in movie_file_roots and folder_contains_only_safe_delete_artifacts(folder_path):
-                changes.append(
-                    ProposedChange(
-                        item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-delete",
-                        change_type="folder_delete",
-                        current_value=str(folder_path.relative_to(source_root)),
-                        proposed_value="",
-                        confidence="safe",
-                        reason="No-video duplicate movie artifact folder contained only metadata/system files and was deleted.",
-                        path=str(folder_path),
-                    )
-                )
+            residue_changes = plan_existing_target_artifact_residue(source_root, folder_path, target_path)
+            if residue_changes is not None:
+                changes.extend(residue_changes)
                 continue
-            if not target_path.is_dir() or folder_tree_has_relative_collisions(folder_path, target_path):
-                changes.append(
-                    ProposedChange(
-                        item_id=f"{folder_path.relative_to(source_root)}#artifact-folder",
-                        change_type="folder_rename",
-                        current_value=str(folder_path.relative_to(source_root)),
-                        proposed_value=str(target_path.relative_to(source_root)),
-                        confidence="review",
-                        reason="No-video movie artifact folder matched an existing concise target, but merge safety requires review.",
-                        path=str(folder_path),
-                    )
-                )
-                continue
-            changes.append(
-                ProposedChange(
-                    item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-merge",
-                    change_type="folder_merge",
-                    current_value=str(folder_path.relative_to(source_root)),
-                    proposed_value=str(target_path.relative_to(source_root)),
-                    confidence="safe",
-                    reason="No-video movie artifact folder was merged into the existing concise movie folder.",
-                    path=str(folder_path),
-                )
-            )
-            continue
         changes.append(
             ProposedChange(
                 item_id=f"{folder_path.relative_to(source_root)}#artifact-folder",
@@ -1068,6 +1124,8 @@ def plan_movie_artifact_folder_cleanup(source_root: Path, movie_files: list[Path
                 confidence=parsed.confidence,
                 reason="No-video movie artifact folder was normalized from its locally parsed title and year.",
                 path=str(folder_path),
+                reason_codes=merge_reason_codes(parsed.reason_codes, "artifact_cleanup"),
+                warning_codes=list(parsed.reason_codes) if parsed.confidence == "review" else [],
             )
         )
     return changes
@@ -1079,6 +1137,120 @@ def folder_contains_only_safe_delete_artifacts(folder_path: Path) -> bool:
     except OSError:
         return False
     return all(is_safe_delete_artifact_file(path) for path in files)
+
+
+def plan_existing_target_artifact_residue(source_root: Path, folder_path: Path, target_path: Path) -> list[ProposedChange] | None:
+    try:
+        files = [path for path in sorted(folder_path.rglob("*")) if path.is_file()]
+    except OSError:
+        return [
+            ProposedChange(
+                item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-review",
+                change_type="folder_merge",
+                current_value=str(folder_path.relative_to(source_root)),
+                proposed_value=str(target_path.relative_to(source_root)),
+                confidence="review",
+                reason="Existing-target artifact residue could not be inspected safely.",
+                path=str(folder_path),
+                reason_codes=["existing_target_artifact_residue"],
+                warning_codes=["existing_target_artifact_residue"],
+            )
+        ]
+    if not target_path.is_dir():
+        return [
+            ProposedChange(
+                item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-review",
+                change_type="folder_merge",
+                current_value=str(folder_path.relative_to(source_root)),
+                proposed_value=str(target_path.relative_to(source_root)),
+                confidence="review",
+                reason="Existing-target artifact residue matched a non-directory target and requires review.",
+                path=str(folder_path),
+                reason_codes=["existing_target_artifact_residue"],
+                warning_codes=["existing_target_artifact_residue"],
+            )
+        ]
+    if all(is_safe_delete_artifact_file(path) for path in files):
+        return [
+            ProposedChange(
+                item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-delete",
+                change_type="folder_delete",
+                current_value=str(folder_path.relative_to(source_root)),
+                proposed_value="",
+                confidence="safe",
+                reason="No-video duplicate movie artifact folder contained only metadata/poster/system files and was deleted.",
+                path=str(folder_path),
+                reason_codes=["artifact_cleanup"],
+            )
+        ]
+
+    subtitle_files = [path for path in files if is_subtitle_file(path)]
+    substantive_files = [path for path in files if not is_safe_delete_artifact_file(path) and not is_subtitle_file(path)]
+    if substantive_files:
+        return [
+            ProposedChange(
+                item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-review",
+                change_type="folder_merge",
+                current_value=str(folder_path.relative_to(source_root)),
+                proposed_value=str(target_path.relative_to(source_root)),
+                confidence="review",
+                reason="Existing-target artifact residue contains substantive non-subtitle files and requires review.",
+                path=str(folder_path),
+                reason_codes=["existing_target_artifact_residue"],
+                warning_codes=["existing_target_artifact_residue"],
+            )
+        ]
+    if not subtitle_files:
+        return None
+
+    collisions: list[Path] = []
+    subtitle_changes: list[ProposedChange] = []
+    for subtitle_path in subtitle_files:
+        relative = subtitle_path.relative_to(folder_path)
+        target_relative = target_path.relative_to(source_root) / relative
+        if (source_root / target_relative).exists():
+            collisions.append(target_relative)
+            continue
+        subtitle_changes.append(
+            ProposedChange(
+                item_id=f"{subtitle_path.relative_to(source_root)}#subtitle-merge",
+                change_type="file_move",
+                current_value=subtitle_path.name,
+                proposed_value=str(target_relative),
+                confidence="safe",
+                reason="Subtitle-only residue was merged into the surviving movie folder.",
+                path=str(subtitle_path),
+                reason_codes=["subtitle_merge_safe"],
+            )
+        )
+    if collisions:
+        return [
+            ProposedChange(
+                item_id=f"{folder_path.relative_to(source_root)}#subtitle-merge-review",
+                change_type="folder_merge",
+                current_value=str(folder_path.relative_to(source_root)),
+                proposed_value=str(target_path.relative_to(source_root)),
+                confidence="review",
+                reason="Subtitle merge would collide with an existing target path and requires review.",
+                path=str(folder_path),
+                reason_codes=["subtitle_merge_collision"],
+                warning_codes=["subtitle_merge_collision"],
+            )
+        ]
+
+    subtitle_changes.append(
+        ProposedChange(
+            item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-delete",
+            change_type="folder_delete",
+            current_value=str(folder_path.relative_to(source_root)),
+            proposed_value="",
+            confidence="safe",
+            reason="Subtitle-only residue folder was removed after safe subtitle merge.",
+            path=str(folder_path),
+            reason_codes=["artifact_cleanup", "subtitle_merge_safe"],
+        )
+    )
+    return subtitle_changes
 
 
 def plan_root_junk_file_cleanup(source_root: Path) -> list[ProposedChange]:
@@ -1157,7 +1329,12 @@ def is_safe_delete_artifact_file(path: Path) -> bool:
         return True
     if name in SAFE_DELETE_ARTIFACT_NAMES:
         return True
-    return path.suffix.casefold() in SAFE_DELETE_ARTIFACT_EXTENSIONS
+    suffix = path.suffix.casefold()
+    return suffix in SAFE_DELETE_ARTIFACT_EXTENSIONS or suffix in SAFE_DELETE_POSTER_EXTENSIONS
+
+
+def is_subtitle_file(path: Path) -> bool:
+    return path.suffix.casefold() in SUBTITLE_EXTENSIONS
 
 
 def folder_tree_has_relative_collisions(source_folder: Path, target_folder: Path) -> bool:
@@ -1177,7 +1354,7 @@ def build_file_change(
     source_root: Path,
     movie_path: Path,
     canonical_base: str,
-    confidence: str,
+    parsed: ParsedMovieName,
 ) -> ProposedChange | None:
     proposed_name = f"{canonical_base}{movie_path.suffix.lower()}"
     current_name = movie_path.name
@@ -1189,9 +1366,11 @@ def build_file_change(
         change_type="file_rename",
         current_value=current_name,
         proposed_value=proposed_name,
-        confidence=confidence,
+        confidence=parsed.confidence,
         reason="Movie filename was normalized from locally parsed title, year, and technical tokens.",
         path=str(movie_path),
+        reason_codes=list(parsed.reason_codes),
+        warning_codes=list(parsed.reason_codes) if parsed.confidence == "review" else [],
     )
 
 
@@ -1199,7 +1378,7 @@ def build_loose_file_move_change(
     source_root: Path,
     movie_path: Path,
     canonical_base: str,
-    confidence: str,
+    parsed: ParsedMovieName,
 ) -> ProposedChange | None:
     proposed_path = Path(canonical_base) / f"{canonical_base}{movie_path.suffix.lower()}"
     current_value = movie_path.name
@@ -1211,9 +1390,11 @@ def build_loose_file_move_change(
         change_type="file_move",
         current_value=current_value,
         proposed_value=str(proposed_path),
-        confidence=confidence,
+        confidence=parsed.confidence,
         reason="Loose movie file was moved into its canonical movie folder.",
         path=str(movie_path),
+        reason_codes=list(parsed.reason_codes),
+        warning_codes=list(parsed.reason_codes) if parsed.confidence == "review" else [],
     )
 
 
@@ -1221,7 +1402,7 @@ def build_folder_change(
     source_root: Path,
     folder_path: Path,
     canonical_base: str,
-    confidence: str,
+    parsed: ParsedMovieName,
 ) -> ProposedChange | None:
     if folder_path.resolve() == source_root.resolve():
         return None
@@ -1240,10 +1421,20 @@ def build_folder_change(
         change_type="folder_rename",
         current_value=str(folder_path.relative_to(source_root)),
         proposed_value=str(proposed_folder.relative_to(source_root)),
-        confidence=confidence,
+        confidence=parsed.confidence,
         reason=reason,
         path=str(folder_path),
+        reason_codes=list(parsed.reason_codes),
+        warning_codes=list(parsed.reason_codes) if parsed.confidence == "review" else [],
     )
+
+
+def merge_reason_codes(reason_codes: list[str], *extras: str) -> list[str]:
+    merged = list(reason_codes)
+    for extra in extras:
+        if extra not in merged:
+            merged.append(extra)
+    return merged
 
 
 def is_redundant_single_movie_wrapper(source_root: Path, folder_path: Path) -> bool:

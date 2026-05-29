@@ -10,6 +10,9 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 - Web frontend extracted out of `normal/web.py` into package-managed assets under `normal/web_assets/`. The stdlib `http.server` backend remains in place, now serves `/assets/app.css` and `/assets/app.js`, and injects only a small runtime bootstrap into the HTML shell instead of carrying the full UI inline.
 - Web packaging and tests updated to match the split frontend layout. `pyproject.toml` now includes the packaged web assets, and web-layer tests now assert against asset content and static-asset serving instead of a single embedded HTML constant.
+- Movie normalize parser hardening now strips leading site/uploader credit noise more reliably, keeps safe language and edition tokens like `PORTUGUESE` and `International Cut`, and promotes committed round-2 corpus regressions into tests.
+- Normalize web payloads now build only the requested naming style, precompute parsed identities once per request, and serialize movie rows through indexed change/warning lookup instead of reparsing and rescanning per movie. On the reference mounted library this cut normalize from minute-scale behaviour back down to a few seconds.
+- Web normalize surfaces now treat concise naming as the active product path. The main UI, workbench, and `/normalize-lab` no longer build or switch dual style payloads on every request, though verbose parsing support remains in the planner and test corpus for legacy artifact cleanup and regression coverage.
 
 ---
 

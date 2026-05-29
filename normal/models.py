@@ -14,6 +14,7 @@ class WarningItem:
     code: str
     message: str
     path: str | None = None
+    reason_codes: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -25,6 +26,8 @@ class ProposedChange:
     confidence: str
     reason: str
     path: str | None = None
+    reason_codes: list[str] = field(default_factory=list)
+    warning_codes: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)

@@ -11,6 +11,8 @@ from normal.movie_preclean import MOVIE_PRECLEAN_BUCKETS, load_movie_preclean_en
 
 
 class MovieOneShotNormalizeTests(unittest.TestCase):
+    ROUND2_CASES_PATH = Path(__file__).parent / "data" / "normalize_round2_cases.json"
+
     def test_year_leading_collection_files_split_as_safe(self) -> None:
         cases = [
             (
@@ -99,6 +101,56 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
             self.assertTrue(plan.proposed_changes)
             self.assertTrue(all(change.confidence == "safe" for change in plan.proposed_changes))
 
+    def test_leading_release_credit_noise_is_removed_from_title_inference(self) -> None:
+        cases = {
+            "www.YTS.mx.The.Big.Lebowski.1998.1080p.BluRay.x264.AAC.mkv": "The Big Lebowski (1998) [1080p BluRay x264]",
+            "Downloaded.from.TorrentGalaxy.to.The.Thing.1982.1080p.BluRay.x264-GRP.mkv": "The Thing (1982) [1080p BluRay x264]",
+            "MoviesByRizzo - The Sting 1973 1080p BluRay x264 AAC.mkv": "The Sting (1973) [1080p BluRay x264]",
+            "anoXmous - The Godfather 1972 1080p BluRay x264.mp4": "The Godfather (1972) [1080p BluRay x264]",
+            "ETRG - The Social Network 2010 720p BluRay x264.mp4": "The Social Network (2010) [720p BluRay x264]",
+            "[YTS.AM] Casablanca (1942) [1080p] [BluRay] [YTS.AM].mp4": "Casablanca (1942) [1080p BluRay]",
+            "[TGx] The Apartment 1960 1080p BluRay x264-GRP.mkv": "The Apartment (1960) [1080p BluRay x264]",
+            "[Erai-raws] Perfect Blue (1997) [1080p][Multiple Subtitle].mkv": "Perfect Blue (1997) [1080p]",
+        }
+
+        for filename, expected_base in cases.items():
+            with self.subTest(filename=filename):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    source = Path(tmpdir)
+                    movie = source / filename
+                    movie.parent.mkdir(parents=True, exist_ok=True)
+                    movie.write_text("video", encoding="utf-8")
+
+                    plan = build_movie_plan(source, naming_style="verbose", movie_files=[movie])
+
+                    self.assertFalse(plan.warnings)
+                    self.assertIn(
+                        f"{expected_base}/{expected_base}{movie.suffix.lower()}",
+                        {change.proposed_value for change in plan.proposed_changes},
+                    )
+
+    def test_known_language_and_cut_tokens_remain_safe(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            for filename in [
+                "City.of.God.2002.PORTUGUESE.1080p.BluRay.x264.DTS-GRP.mkv",
+                "Leon.The.Professional.1994.International.Cut.1080p.BluRay.x264-GRP.mkv",
+            ]:
+                (source / filename).write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source, naming_style="verbose")
+
+            self.assertFalse(plan.warnings)
+            proposed = {change.proposed_value for change in plan.proposed_changes}
+            self.assertIn(
+                "City Of God (2002) [1080p BluRay x264]/City Of God (2002) [1080p BluRay x264].mkv",
+                proposed,
+            )
+            self.assertIn(
+                "Leon The Professional (1994) [International Cut 1080p BluRay x264]/Leon The Professional (1994) [International Cut 1080p BluRay x264].mkv",
+                proposed,
+            )
+
     def test_ambiguous_single_child_double_feature_folder_is_not_collapsed(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
@@ -138,6 +190,12 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
         }
         review_cases = [
             (
+                "(2001) [ASPACEODYSSEY1968V22160PBLURAYX26510BITHDRTIGOLE]",
+                "(2001) [ASPACEODYSSEY1968V22160PBLURAYX26510BITHDRTIGOLE].mkv",
+            ),
+        ]
+        safe_compact_cases = [
+            (
                 "Basic Instinct (1992) [Unrated 1080PENGITAMULTISUBX264BLURAYSHIV]",
                 "Basic Instinct (1992) [Unrated 1080PENGITAMULTISUBX264BLURAYSHIV].mkv",
             ),
@@ -163,11 +221,36 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
                     movie = folder / filename
                     movie.write_text("video", encoding="utf-8")
                     plan = build_movie_plan(source, naming_style="verbose", movie_files=[movie])
-                    self.assertIn("movie_name_review", {warning.code for warning in plan.warnings})
+                    self.assertIn("compact_token_heuristic", {warning.code for warning in plan.warnings})
                     self.assertTrue(any(change.confidence == "review" for change in plan.proposed_changes))
+
+        for folder_name, filename in safe_compact_cases:
+            with self.subTest(folder_name=folder_name):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    source = Path(tmpdir)
+                    folder = source / folder_name
+                    folder.mkdir()
+                    movie = folder / filename
+                    movie.write_text("video", encoding="utf-8")
+                    plan = build_movie_plan(source, naming_style="verbose", movie_files=[movie])
+                    self.assertFalse(plan.warnings)
+                    self.assertTrue(all(change.confidence == "safe" for change in plan.proposed_changes))
 
     def test_load_movie_preclean_entries_without_path_returns_empty(self) -> None:
         self.assertEqual(load_movie_preclean_entries(), [])
+
+    def test_committed_round2_regression_cases(self) -> None:
+        cases = json.loads(self.ROUND2_CASES_PATH.read_text(encoding="utf-8"))
+        for case in cases:
+            with self.subTest(path=case["path"]):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    source = Path(tmpdir)
+                    movie = source / case["path"]
+                    movie.parent.mkdir(parents=True, exist_ok=True)
+                    movie.write_text("video", encoding="utf-8")
+                    plan = build_movie_plan(source, naming_style=case["naming_style"], movie_files=[movie])
+                    proposed = {(change.proposed_value, change.confidence) for change in plan.proposed_changes}
+                    self.assertIn((case["expected_target"], case["expected_confidence"]), proposed)
 
     def test_load_movie_preclean_entries_with_missing_path_returns_empty(self) -> None:
         missing = Path("/tmp/normal-missing-preclean.jsonl")

@@ -2,6 +2,10 @@
 
 Internal companion to `canonical-cross-section-raw-movie-titles.md`.
 
+For the current round-specific handoff state, shipped hardening scope, and
+resume path against the now-larger live corpus, also read
+`normalize-round2-status.md`.
+
 The high-level concept: treat movie normalization as a local, evidence-based
 pass that turns random file, folder, duplicate, and artifact chaos into a
 concise downstream shape. The pass should be confident where the library itself

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import re
 import unicodedata
@@ -24,8 +24,17 @@ VIDEO_NAME_EXTENSIONS = {
     ".webm",
 }
 LEADING_SITE_CREDIT_PATTERNS = (
-    re.compile(r"^\s*www[._\s-]+[A-Za-z0-9]+[._\s-]+(?:org|com|net)\s*(?:[-:]+)?\s*", re.IGNORECASE),
+    re.compile(r"^\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+(?:org|com|net|mx|to|am|cc|io)\s*(?:[-:]+)?\s*", re.IGNORECASE),
     re.compile(r"^\s*www\.[A-Za-z0-9.-]+\s*(?:[-:]+)?\s*", re.IGNORECASE),
+    re.compile(
+        r"^\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+(?:org|com|net|mx|to|am|cc|io)\s*(?:[-:]+)?\s*",
+        re.IGNORECASE,
+    ),
+)
+LEADING_BRACKETED_CREDIT_PATTERN = re.compile(r"^\s*\[(?:YTS(?:[._-]?(?:AM|MX))?|TGX|ERAI[._-]?RAWS)\]\s*", re.IGNORECASE)
+LEADING_UPLOADER_CREDIT_PATTERN = re.compile(
+    r"^\s*(?:moviesbyrizzo|anoxmous|etrg|hdchina|rarbg(?:[._-]?com)?)\s*(?:[-:]+)\s*",
+    re.IGNORECASE,
 )
 CANONICAL_TOKEN_MAP = {
     "bluray": "BluRay",
@@ -62,6 +71,8 @@ CANONICAL_TOKEN_MAP = {
     "remastered": "Remastered",
     "commentary": "Commentary",
     "multi": "MULTI",
+    "portuguese": "PORTUGUESE",
+    "international": "International",
 }
 TITLE_BOUNDARY_TOKENS = {
     "1080",
@@ -146,6 +157,12 @@ class ParsedMovieIdentity:
     release_group: str | None
     confidence: str
     warnings: list[str]
+    reason_codes: list[str] = field(default_factory=list)
+    reason_messages: list[str] = field(default_factory=list)
+    title_source: str = ""
+    year_source: str = ""
+    parse_source_path: str = ""
+    compact_token_traces: list[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,29 +175,51 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
     stem = movie_path.stem if movie_path.suffix.lower() in VIDEO_NAME_EXTENSIONS else movie_path.name
     match = find_movie_year_match(stem)
     source_text = stem
+    year_source = "filename"
+    parse_source_path = str(movie_path)
     if match is None:
         parent_match = find_movie_year_match(movie_path.parent.name)
         if parent_match is None:
-            return ParsedMovieIdentity(None, None, [], None, "review", ["Unable to find a year token in filename or folder."])
+            reason_messages = ["Unable to find a year token in filename or folder."]
+            return ParsedMovieIdentity(
+                None,
+                None,
+                [],
+                None,
+                "review",
+                reason_messages,
+                reason_codes=["weak_title_inference"],
+                reason_messages=reason_messages,
+                title_source="unparsed",
+                year_source="unparsed",
+                parse_source_path=str(movie_path),
+            )
         source_text = movie_path.parent.name
         match = parent_match
+        year_source = "parent_folder"
+        parse_source_path = str(movie_path.parent)
 
     year = int(match.group(1))
+    title_source_name = "filename_prefix" if year_source == "filename" else "parent_folder_prefix"
     title_source, prefix_tail_text = split_title_prefix_tail(source_text[: match.start()])
     title_text = cleanup_title_text(prefer_ascii_title_segment(title_source))
     tail_text = f"{prefix_tail_text} {source_text[match.end() :]}".strip()
     year_leading_payload = parse_year_leading_title_payload(source_text, match)
     if year_leading_payload is not None and not title_text:
         title_text, tail_text = year_leading_payload
-    compact_review = False
+        title_source_name = "year_leading_child_evidence"
+    compact_heuristic = False
     compact_payload = parse_leading_number_compact_payload(source_text, match)
     if compact_payload is not None:
         title_text, year, tail_text = compact_payload
-        compact_review = title_text != match.group(1)
+        title_source_name = "compact_bracket_payload"
+        year_source = "compact_bracket_payload"
+        compact_heuristic = title_text != match.group(1)
     bracket_payload = parse_year_leading_bracket_payload(source_text, match)
     if bracket_payload is not None and not title_text:
         title_text, tail_text = bracket_payload
-        compact_review = True
+        title_source_name = "year_leading_bracket_payload"
+        compact_heuristic = True
     release_group = None
 
     if " - " in tail_text:
@@ -194,10 +233,12 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
 
     tech_tokens = []
     unknown_tokens = []
+    compact_token_traces: list[str] = []
+    compact_split_has_unknown_piece = False
     for raw_token in TOKEN_PATTERN.findall(tail_text):
         split_tokens = split_compact_technical_token(raw_token)
-        if len(split_tokens) > 1 and should_mark_compact_split_for_review(raw_token):
-            compact_review = True
+        if len(split_tokens) > 1:
+            compact_token_traces.append(f"{raw_token} -> {' | '.join(split_tokens)}")
         for split_token in split_tokens:
             token = normalize_token(split_token)
             if not token or token.lower() in SKIP_TOKENS:
@@ -211,26 +252,48 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
                 and split_token.lower() not in KNOWN_SAFE_NOISE_TOKENS
             ):
                 unknown_tokens.append(token)
+                if len(split_tokens) > 1:
+                    compact_split_has_unknown_piece = True
 
     confidence = "safe"
-    warnings: list[str] = []
-    if compact_review:
-        confidence = "review"
-        warnings.append("Movie path contains compacted title or technical tokens; rename was split heuristically and requires review.")
+    reason_codes: list[str] = []
+    reason_messages: list[str] = []
+    if compact_heuristic or compact_token_traces:
+        reason_codes.append("compact_token_heuristic")
+        reason_messages.append("Movie path used compact token splitting or year-leading local evidence.")
     if unknown_tokens:
         confidence = "review"
-        warnings.append("Movie path contains unrecognized technical tokens; rename kept them but requires review.")
+        reason_codes.append("unknown_technical_token")
+        reason_messages.append("Movie path contains unrecognized technical tokens; rename kept them but requires review.")
     if not title_text:
         confidence = "review"
-        warnings.append("Movie title was weakly inferred from the local path and should be reviewed.")
+        reason_codes.append("weak_title_inference")
+        reason_messages.append("Movie title was weakly inferred from the local path and should be reviewed.")
+    if compact_heuristic or ((compact_token_traces) and (compact_split_has_unknown_piece or not title_text)):
+        confidence = "review"
+        if "compact_token_heuristic" not in reason_codes:
+            reason_codes.append("compact_token_heuristic")
+        heuristic_message = "Movie path contains compacted title or technical tokens; rename was split heuristically and requires review."
+        if heuristic_message not in reason_messages:
+            reason_messages.append(heuristic_message)
+
+    title_value = title_text or fallback_parent_title(movie_path.parent.name, year)
+    if not title_text and title_value:
+        title_source_name = "parent_fallback"
 
     return ParsedMovieIdentity(
-        title=title_text or fallback_parent_title(movie_path.parent.name, year),
+        title=title_value,
         year=year,
         tech_tokens=canonicalize_token_sequence(tech_tokens),
         release_group=release_group,
         confidence=confidence,
-        warnings=warnings,
+        warnings=list(reason_messages) if confidence == "review" else [],
+        reason_codes=reason_codes,
+        reason_messages=reason_messages,
+        title_source=title_source_name,
+        year_source=year_source,
+        parse_source_path=parse_source_path,
+        compact_token_traces=compact_token_traces or None,
     )
 
 
@@ -437,9 +500,15 @@ def strip_leading_collection_index(value: str) -> str:
 
 def strip_leading_site_credit(value: str) -> str:
     stripped = value
-    for pattern in LEADING_SITE_CREDIT_PATTERNS:
-        stripped = pattern.sub("", stripped, count=1)
-    return stripped
+    while True:
+        next_value = stripped
+        next_value = LEADING_BRACKETED_CREDIT_PATTERN.sub("", next_value, count=1)
+        next_value = LEADING_UPLOADER_CREDIT_PATTERN.sub("", next_value, count=1)
+        for pattern in LEADING_SITE_CREDIT_PATTERNS:
+            next_value = pattern.sub("", next_value, count=1)
+        if next_value == stripped:
+            return stripped
+        stripped = next_value
 
 
 def cleanup_group_text(value: str) -> str | None:
@@ -544,6 +613,10 @@ def canonicalize_token_sequence(tokens: list[str]) -> list[str]:
             continue
         if current.upper() == "OPEN" and next_token and next_token.upper() == "MATTE":
             merged.append("Open Matte")
+            index += 2
+            continue
+        if current == "International" and next_token and next_token.upper() == "CUT":
+            merged.append("International Cut")
             index += 2
             continue
         if current.lower() == "director" and next_token == "S" and next_next and next_next.upper() == "CUT":

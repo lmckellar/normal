@@ -7,6 +7,7 @@ import urllib.error
 import urllib.request
 from contextlib import contextmanager
 from http.server import ThreadingHTTPServer
+import json
 from pathlib import Path
 
 from normal.web import (
@@ -14,6 +15,8 @@ from normal.web import (
     delete_movie_junk_files,
     read_web_asset_text,
     render_index_html,
+    render_normalize_lab_html,
+    render_workbench_html,
 )
 
 
@@ -21,6 +24,14 @@ APP_TEMPLATE = read_web_asset_text("index.html")
 APP_CSS = read_web_asset_text("app.css")
 APP_JS = read_web_asset_text("app.js")
 FRONTEND = "\n".join((APP_TEMPLATE, APP_CSS, APP_JS))
+WORKBENCH_TEMPLATE = read_web_asset_text("workbench.html")
+WORKBENCH_CSS = read_web_asset_text("workbench.css")
+WORKBENCH_JS = read_web_asset_text("workbench.js")
+WORKBENCH_FRONTEND = "\n".join((WORKBENCH_TEMPLATE, WORKBENCH_CSS, WORKBENCH_JS))
+NORMALIZE_LAB_TEMPLATE = read_web_asset_text("normalize_lab.html")
+NORMALIZE_LAB_CSS = read_web_asset_text("normalize_lab.css")
+NORMALIZE_LAB_JS = read_web_asset_text("normalize_lab.js")
+NORMALIZE_LAB_FRONTEND = "\n".join((NORMALIZE_LAB_TEMPLATE, NORMALIZE_LAB_CSS, NORMALIZE_LAB_JS))
 
 
 class WebTests(unittest.TestCase):
@@ -60,6 +71,99 @@ class WebTests(unittest.TestCase):
             with urllib.request.urlopen(f"{base_url}/assets/app.js") as response:
                 self.assertEqual(response.headers.get_content_type(), "application/javascript")
                 self.assertIn("function refreshActivityState", response.read().decode("utf-8"))
+            with urllib.request.urlopen(f"{base_url}/workbench-assets/workbench.css") as response:
+                self.assertEqual(response.headers.get_content_type(), "text/css")
+                self.assertIn(".wb-frame", response.read().decode("utf-8"))
+            with urllib.request.urlopen(f"{base_url}/workbench-assets/workbench.js") as response:
+                self.assertEqual(response.headers.get_content_type(), "application/javascript")
+                self.assertIn("Preview Selected Changes", response.read().decode("utf-8"))
+            with urllib.request.urlopen(f"{base_url}/normalize-lab-assets/normalize_lab.css") as response:
+                self.assertEqual(response.headers.get_content_type(), "text/css")
+                self.assertIn(".lab-layout", response.read().decode("utf-8"))
+            with urllib.request.urlopen(f"{base_url}/normalize-lab-assets/normalize_lab.js") as response:
+                self.assertEqual(response.headers.get_content_type(), "application/javascript")
+                self.assertIn("/api/movies/normalize-lab/export", response.read().decode("utf-8"))
+
+    def test_workbench_runtime_keys_are_available_before_initial_render(self) -> None:
+        html = render_workbench_html(Path("/library/movies"), omdb_key="omdb-test", tmdb_key="tmdb-test")
+        self.assertIn('<link rel="stylesheet" href="/workbench-assets/workbench.css">', html)
+        self.assertIn('<script src="/workbench-assets/workbench.js"></script>', html)
+        self.assertLess(html.index("window.OMDB_AVAILABLE"), html.index('<script src="/workbench-assets/workbench.js"></script>'))
+        self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
+        self.assertIn("window.OMDB_AVAILABLE = true;", html)
+        self.assertNotIn("omdb-test", html)
+        self.assertIn('window.TMDB_KEY = "tmdb-test";', html)
+
+    def test_workbench_route_serves_parallel_ui(self) -> None:
+        with self.run_test_server() as base_url:
+            with urllib.request.urlopen(f"{base_url}/workbench") as response:
+                html = response.read().decode("utf-8")
+        self.assertIn("Pamphlet Workbench", html)
+        self.assertIn("/workbench-assets/workbench.js", html)
+
+    def test_normalize_lab_route_serves_internal_ui(self) -> None:
+        html = render_normalize_lab_html(Path("/library/movies"))
+        self.assertIn('/normalize-lab-assets/normalize_lab.css', html)
+        self.assertIn('/normalize-lab-assets/normalize_lab.js', html)
+        self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
+        with self.run_test_server() as base_url:
+            with urllib.request.urlopen(f"{base_url}/normalize-lab") as response:
+                served = response.read().decode("utf-8")
+        self.assertIn("Normalize Lab", served)
+
+    def test_normalize_lab_export_endpoint_writes_jsonl(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "library"
+            source.mkdir()
+            with self.run_test_server() as base_url:
+                body = json.dumps(
+                    {
+                        "source": str(source),
+                        "rows": [
+                            {
+                                "current_value": "Movie.mkv",
+                                "projected_path": "Movie (2000)/Movie (2000).mkv",
+                                "confidence": "safe",
+                                "reason_codes": ["package_split"],
+                                "warning_codes": [],
+                                "title_source": "filename_prefix",
+                                "year_source": "filename",
+                                "linked_change_types": ["file_move"],
+                            }
+                        ],
+                    }
+                ).encode("utf-8")
+                req = urllib.request.Request(
+                    f"{base_url}/api/movies/normalize-lab/export",
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(payload["exported"], 1)
+            export_path = Path(payload["path"])
+            self.assertTrue(export_path.exists())
+            self.assertIn('"raw_path": "Movie.mkv"', export_path.read_text(encoding="utf-8"))
+
+    def test_workbench_frontend_is_wired_for_fixed_spread(self) -> None:
+        self.assertIn("Primary Surface", WORKBENCH_FRONTEND)
+        self.assertIn("Secondary Surface", WORKBENCH_FRONTEND)
+        self.assertIn("Downstream Ledger", WORKBENCH_FRONTEND)
+        self.assertIn("Preview Selected Changes", WORKBENCH_FRONTEND)
+        self.assertIn("Diff View", WORKBENCH_FRONTEND)
+        self.assertIn("Full Preview", WORKBENCH_FRONTEND)
+        self.assertIn("Reveal File Tree", WORKBENCH_FRONTEND)
+        self.assertIn("Collapse File Tree", WORKBENCH_FRONTEND)
+        self.assertIn("state.auditExpanded = !state.auditExpanded;", WORKBENCH_FRONTEND)
+        self.assertIn("buildAuditExpandedContent()", WORKBENCH_FRONTEND)
+        self.assertIn("/api/movies/apply", WORKBENCH_FRONTEND)
+        self.assertIn("/api/movies/junk/delete", WORKBENCH_FRONTEND)
+        self.assertIn("/api/movies/audio-packaging/fix", WORKBENCH_FRONTEND)
+        self.assertIn("/api/movies/subtitle-readiness/fix", WORKBENCH_FRONTEND)
+        self.assertIn("window.confirm(`Permanently delete ${items.length} file", WORKBENCH_FRONTEND)
+        self.assertIn("wb-frame", WORKBENCH_CSS)
+        self.assertIn("grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1fr) 82px;", WORKBENCH_CSS)
 
     def test_handler_returns_404_for_unknown_static_asset(self) -> None:
         with self.run_test_server() as base_url:
@@ -367,15 +471,23 @@ class WebTests(unittest.TestCase):
         )[0]
         self.assertNotIn("id=\"selAllSafe\"", movie_normalize_section)
         self.assertNotIn("id=\"selFlaggedReview\"", movie_normalize_section)
-        self.assertIn("Concise Naming", FRONTEND)
-        self.assertIn("Verbose Naming - Include Extra Information", FRONTEND)
         self.assertIn("function activeMovieNormalizePayload(payload) {", FRONTEND)
-        self.assertIn("proposed_changes_by_naming_style", FRONTEND)
-        self.assertIn("requestBody.naming_style = state.movieNamingStyle", FRONTEND)
-        self.assertIn("naming_style: payload.naming_style || state.movieNamingStyle || 'concise'", FRONTEND)
+        self.assertNotIn("proposed_changes_by_naming_style", FRONTEND)
+        self.assertIn("requestBody.naming_style = 'concise';", FRONTEND)
         self.assertIn("remaining_safe_count", FRONTEND)
         self.assertIn("Apply needs review", FRONTEND)
         self.assertIn("safe rename${remainingSafe === 1 ? '' : 's'} and ${remainingReview} review rename", FRONTEND)
+
+    def test_normalize_lab_frontend_is_read_only_and_reason_aware(self) -> None:
+        self.assertIn("/api/movies/normalize", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("/api/movies/normalize-lab/export", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("reason code", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("warning code", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("package cases", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("collision cases", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("artifact cleanup cases", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("subtitle-merge cases", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("/api/movies/apply", NORMALIZE_LAB_FRONTEND)
 
     def test_delete_movie_junk_files_only_deletes_current_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

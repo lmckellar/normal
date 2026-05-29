@@ -892,7 +892,7 @@
       try {
         const requestBody = { source };
         if (state.lane === 'movies' && pageConfig.id === 'normalize') {
-          requestBody.naming_style = state.movieNamingStyle || 'concise';
+          requestBody.naming_style = 'concise';
         }
         async function fetchPagePayload(body) {
           const response = await fetch(pageConfig.endpoint, {
@@ -966,7 +966,7 @@
         if (page === 'normalize') {
           state.results.movies.normalize = payload;
           state.results.movies.apply = null;
-          state.movieNamingStyle = payload.naming_style || payload.default_naming_style || state.movieNamingStyle || 'concise';
+          state.movieNamingStyle = 'concise';
           state.selectedChangeIds = new Set();
           state.selectedNormalizeResultIds = new Set();
         }
@@ -1461,18 +1461,7 @@
     }
 
     function activeMovieNormalizePayload(payload) {
-      if (!payload) return payload;
-      const style = state.movieNamingStyle || payload.default_naming_style || payload.naming_style || 'concise';
-      const changesByStyle = payload.proposed_changes_by_naming_style || {};
-      const warningsByStyle = payload.warnings_by_naming_style || {};
-      const resultsByStyle = payload.movie_results_by_naming_style || {};
-      return {
-        ...payload,
-        naming_style: style,
-        proposed_changes: changesByStyle[style] || payload.proposed_changes || [],
-        warnings: warningsByStyle[style] || payload.warnings || [],
-        movie_results: resultsByStyle[style] || payload.movie_results || []
-      };
+      return payload;
     }
 
     function selectedProposedChanges(payload) {
@@ -1752,13 +1741,6 @@
       const applyBanner = applyResult ? buildApplyResultBanner(applyResult) : '';
       mainContent.innerHTML = `
         ${applyBanner}
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
-          <label class="subtle" for="movieNamingStyleSelect">Naming</label>
-          <select id="movieNamingStyleSelect" style="min-width:280px">
-            <option value="concise" ${activePayload.naming_style === 'concise' ? 'selected' : ''}>Concise Naming</option>
-            <option value="verbose" ${activePayload.naming_style === 'verbose' ? 'selected' : ''}>Verbose Naming - Include Extra Information</option>
-          </select>
-        </div>
         <div class="subtle" style="margin-bottom:10px;">Warnings: ${warningList || 'none'}</div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
           <button class="secondary sel-toggle" id="selToggle">${allVisibleSelected ? 'Deselect All' : 'Select All'}</button>
@@ -1779,10 +1761,6 @@
         renderMovieNormalize(payload);
       });
       document.getElementById('applyBtn').addEventListener('click', applySelectedMovieChanges);
-      document.getElementById('movieNamingStyleSelect').addEventListener('change', event => {
-        state.movieNamingStyle = event.target.value;
-        renderMovieNormalize(payload);
-      });
 
       mainContent.querySelectorAll('.movie-normalize-checkbox').forEach(cb => {
         cb.addEventListener('change', () => {
@@ -1822,7 +1800,7 @@
         const response = await fetch('/api/movies/apply', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, changes, naming_style: payload.naming_style || state.movieNamingStyle || 'concise' })
+          body: JSON.stringify({ source, changes, naming_style: 'concise' })
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Apply failed.');

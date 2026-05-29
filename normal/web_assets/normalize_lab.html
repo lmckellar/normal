@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>normal / normalize lab</title>
+  <link rel="stylesheet" href="/normalize-lab-assets/normalize_lab.css">
+</head>
+<body>
+  <div class="lab-shell">
+    <header class="lab-topbar">
+      <div>
+        <div class="lab-kicker">internal</div>
+        <h1>Normalize Lab</h1>
+        <p>Read-only normalize diagnostics with row reasoning and local corpus export.</p>
+      </div>
+      <div class="lab-controls">
+        <label for="sourcePath">Source</label>
+        <input id="sourcePath" type="text" placeholder="/path/to/library">
+        <button id="runButton">Run Normalize</button>
+        <button id="exportButton">Export Selected</button>
+      </div>
+    </header>
+
+    <section class="lab-filters">
+      <input id="searchInput" type="search" placeholder="Search current or projected path">
+      <select id="bucketFilter">
+        <option value="all">all</option>
+        <option value="actionable">actionable</option>
+        <option value="unchanged">unchanged</option>
+        <option value="safe">safe</option>
+        <option value="review">review</option>
+      </select>
+      <select id="caseFilter">
+        <option value="all">all cases</option>
+        <option value="package">package cases</option>
+        <option value="collision">collision cases</option>
+        <option value="artifact">artifact cleanup cases</option>
+        <option value="subtitle">subtitle-merge cases</option>
+      </select>
+      <select id="reasonFilter"><option value="">reason code</option></select>
+      <select id="warningFilter"><option value="">warning code</option></select>
+    </section>
+
+    <main class="lab-layout">
+      <section class="lab-table-panel">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th><button class="sort" data-sort="current_value">Current Path</button></th>
+              <th><button class="sort" data-sort="projected_path">Projected Path</button></th>
+              <th><button class="sort" data-sort="confidence">Confidence</button></th>
+              <th><button class="sort" data-sort="reason_bucket">Reason Bucket</button></th>
+            </tr>
+          </thead>
+          <tbody id="rowsBody"></tbody>
+        </table>
+      </section>
+      <aside class="lab-detail">
+        <div class="lab-panel">
+          <h2>Detail</h2>
+          <div id="detailPane" class="lab-pane"></div>
+        </div>
+        <div class="lab-panel">
+          <h2>Preview</h2>
+          <div id="previewPane" class="lab-pane"></div>
+        </div>
+      </aside>
+    </main>
+  </div>
+  <script>__NORMAL_BOOTSTRAP__</script>
+  <script src="/normalize-lab-assets/normalize_lab.js"></script>
+</body>
+</html>

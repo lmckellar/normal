@@ -82,6 +82,8 @@ class WebSerializersTests(unittest.TestCase):
         self.assertEqual(results[0]["confidence"], "review")
         self.assertTrue(results[0]["actionable"])
         self.assertEqual(results[0]["change_ids"], ["rename-zulu"])
+        self.assertEqual(results[0]["projected_path"], "A/Zulu (2001).mkv")
+        self.assertEqual(results[0]["linked_change_types"], ["file_rename"])
         self.assertEqual(results[1]["proposed_value"], "B Renamed/Alpha.mkv")
         self.assertEqual(results[1]["confidence"], "safe")
 

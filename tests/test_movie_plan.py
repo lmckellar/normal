@@ -186,7 +186,7 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn(("file_rename", "White Mischief (1987) CD1.mkv", "safe"), proposed)
             self.assertIn(("file_rename", "White Mischief (1987) CD2.mkv", "safe"), proposed)
 
-    def test_build_movie_plan_merges_no_video_artifact_folder_into_existing_concise_folder(self) -> None:
+    def test_build_movie_plan_deletes_metadata_and_poster_residue_when_winner_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
             concise = source / "A Few Good Men (1992)"
@@ -199,9 +199,9 @@ class MoviePlanTests(unittest.TestCase):
 
             plan = build_movie_plan(source)
 
-            change = next(change for change in plan.proposed_changes if change.change_type == "folder_merge")
+            change = next(change for change in plan.proposed_changes if change.change_type == "folder_delete")
             self.assertEqual(change.current_value, "A Few Good Men (1992) [1080p BluRay AC3 x264 ETRG]")
-            self.assertEqual(change.proposed_value, "A Few Good Men (1992)")
+            self.assertEqual(change.proposed_value, "")
             self.assertEqual(change.confidence, "safe")
 
     def test_build_movie_plan_splits_technical_tokens_before_trailing_year(self) -> None:
@@ -628,14 +628,14 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn(
                 (
                     "Basic Instinct (1992) [Unrated 1080p x264 BluRay].mkv",
-                    "review",
+                    "safe",
                 ),
                 proposed,
             )
             self.assertIn(
                 (
                     "Basic Instinct (1992) [Unrated 1080p x264 BluRay]",
-                    "review",
+                    "safe",
                 ),
                 proposed,
             )
@@ -714,6 +714,39 @@ class MoviePlanTests(unittest.TestCase):
             self.assertNotIn("folder_rename", {change.change_type for change in plan.proposed_changes})
             self.assertNotIn("folder_merge", {change.change_type for change in plan.proposed_changes})
 
+    def test_build_movie_plan_merges_subtitle_only_residue_into_existing_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            clean = source / "The Shining (1980)"
+            residue = source / "The Shining (1980) [1080p BluRay x264]"
+            clean.mkdir()
+            residue.mkdir()
+            (clean / "The Shining (1980).mkv").write_text("video", encoding="utf-8")
+            (residue / "The Shining (1980).eng.srt").write_text("subs", encoding="utf-8")
+            (residue / "poster.jpg").write_text("art", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("file_move", "The Shining (1980)/The Shining (1980).eng.srt", "safe"), proposed)
+            self.assertIn(("folder_delete", "", "safe"), proposed)
+
+    def test_build_movie_plan_keeps_subtitle_collision_as_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            clean = source / "The Shining (1980)"
+            residue = source / "The Shining (1980) [1080p BluRay x264]"
+            clean.mkdir()
+            residue.mkdir()
+            (clean / "The Shining (1980).mkv").write_text("video", encoding="utf-8")
+            (clean / "The Shining (1980).eng.srt").write_text("subs", encoding="utf-8")
+            (residue / "The Shining (1980).eng.srt").write_text("subs", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            review = next(change for change in plan.proposed_changes if change.confidence == "review")
+            self.assertIn("subtitle_merge_collision", review.reason_codes)
+
     def test_build_movie_plan_deletes_empty_package_artifacts_without_year(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
@@ -760,7 +793,7 @@ class MoviePlanTests(unittest.TestCase):
             proposed_values = {change.proposed_value for change in plan.proposed_changes}
             self.assertFalse(any("Mad Max Trilogy" in proposed_value for proposed_value in proposed_values))
             self.assertFalse(any(change.change_type == "file_move" for change in plan.proposed_changes))
-            self.assertIn("movie_folder_multiple_videos", {warning.code for warning in plan.warnings})
+            self.assertIn("multi_video_package_skipped_lack_child_evidence", {warning.code for warning in plan.warnings})
 
     def test_build_movie_plan_splits_trilogy_package_when_child_titles_parse(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
