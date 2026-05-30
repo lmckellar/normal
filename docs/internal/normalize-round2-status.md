@@ -236,6 +236,15 @@ was a genuine planner defect, not a preview artifact.
   `1080p`
 - when technical tokens are not enough, the planner can now reuse local package
   labels from parent folders below the source root
+- repeated parent package-title residue is now stripped back out of child tail
+  text before token classification, so stale post-split filenames do not drag
+  `Grindhouse Planet Terror & Death Proof ...` style junk forward as fake
+  differentiators
+- package-folder context no longer falls back to the whole multi-movie folder
+  label when a shorter tail token such as `1080p` is available
+- once a package-style folder has effectively collapsed to one surviving movie
+  payload, the planner now allows the folder itself to normalize into the same
+  concise differentiated target instead of protecting the stale package shell
 - normalize row payloads now include serialized linked changes plus warning
   messages, not just flattened code lists
 - `/normalize-lab` now shows those linked reasons and warning messages directly
@@ -249,6 +258,8 @@ was a genuine planner defect, not a preview artifact.
   file collisions that were previously missed
 - the Ace Ventura composed-collision shape is covered by a committed planner
   regression test
+- the Grindhouse / Death Proof post-split residue shape is now covered both for
+  child-tail cleanup and for concise differentiated folder recovery
 
 ### Validation Run
 

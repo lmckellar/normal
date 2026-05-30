@@ -4,10 +4,11 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 import re
+from typing import Callable
 import xml.etree.ElementTree as ET
 
 from normal.models import ChangePlan, ProposedChange, WarningItem, build_empty_plan
-from normal.movie_identity import ParsedMovieIdentity, parse_movie_identity, split_title_prefix_tail
+from normal.movie_identity import ParsedMovieIdentity, extract_tail_tokens, parse_movie_identity, split_title_prefix_tail
 from normal.movie_scan import VIDEO_EXTENSIONS, discover_video_files
 
 
@@ -476,6 +477,8 @@ def plan_multi_movie_package_folder(
 def should_skip_single_movie_folder_change(folder_path: Path, parsed: ParsedMovieName) -> bool:
     if not parsed.title or not is_multi_movie_package_folder_name(folder_path.name.casefold()):
         return False
+    if folder_has_single_supported_video_payload(folder_path):
+        return False
     return folder_name_contains_distinct_package_segments(folder_path.name, parsed.title)
 
 
@@ -488,6 +491,17 @@ def folder_name_contains_distinct_package_segments(folder_name: str, parsed_titl
     matching_segments = [title for title in segment_titles if title and comparable_movie_title(title) == parsed_key]
     other_segments = [title for title in segment_titles if title and comparable_movie_title(title) != parsed_key]
     return bool(matching_segments and other_segments)
+
+
+def folder_has_single_supported_video_payload(folder_path: Path) -> bool:
+    try:
+        video_files = [
+            path for path in folder_path.rglob("*")
+            if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS and not path.name.startswith("._")
+        ]
+    except OSError:
+        return False
+    return len(video_files) == 1
 
 
 def segment_title_from_package_name(value: str) -> str:
@@ -833,14 +847,12 @@ def local_context_differentiator_candidates(planned_file: PlannedMovieFile) -> l
     candidates: list[str] = []
     seen: set[str] = set()
     for folder in relevant_local_context_folders(planned_file):
-        label = local_context_differentiator_label(folder, planned_file.parsed)
-        if not label:
-            continue
-        key = label.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        candidates.append(label)
+        for label in local_context_differentiator_labels(folder, planned_file.parsed):
+            key = label.casefold()
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(label)
     return candidates
 
 
@@ -862,17 +874,43 @@ def relevant_local_context_folders(planned_file: PlannedMovieFile) -> list[Path]
     return folders
 
 
-def local_context_differentiator_label(folder: Path, parsed: ParsedMovieName) -> str:
+def local_context_differentiator_labels(folder: Path, parsed: ParsedMovieName) -> list[str]:
     raw_label = cleanup_title_text(folder.name)
     if not raw_label:
-        return ""
+        return []
     folder_parsed = parse_movie_name(folder)
     same_identity = folder_parsed.title == parsed.title and folder_parsed.year == parsed.year
     if same_identity:
-        return ""
+        return []
     if raw_label.casefold() == concise_movie_base(parsed).casefold():
-        return ""
-    return raw_label
+        return []
+    if is_multi_movie_package_folder_name(folder.name.casefold()):
+        tail_candidates = package_folder_differentiator_candidates(folder.name)
+        if tail_candidates:
+            return tail_candidates
+    return [raw_label]
+
+
+def package_folder_differentiator_candidates(folder_name: str) -> list[str]:
+    cleaned = cleanup_collection_folder_name(strip_leading_site_credit(folder_name))
+    _title_prefix, tail_text = split_title_prefix_tail(cleaned)
+    if not tail_text:
+        return []
+    tokens = extract_tail_tokens(tail_text)
+    if not tokens:
+        return []
+    priority_groups = [
+        lambda token: re.fullmatch(r"\d{3,4}p", token) is not None,
+        lambda token: token in {"UHD", "BluRay", "WEB-DL", "WEBRip", "BDRip", "BRRip", "DVDRip", "DVD", "Remux"},
+        lambda token: token in {"AAC", "AC3", "EAC3", "DDP", "DTS", "DTS-HD", "TrueHD", "Atmos"},
+        lambda token: True,
+    ]
+    ordered: list[str] = []
+    for predicate in priority_groups:
+        for token in tokens:
+            if predicate(token) and token not in ordered:
+                ordered.append(token)
+    return ordered
 
 
 def movie_differentiator_candidates(parsed: ParsedMovieName) -> list[str]:
@@ -896,29 +934,33 @@ def movie_differentiator_candidates(parsed: ParsedMovieName) -> list[str]:
 
 
 def mark_movie_target_collisions(plan: ChangePlan, source_root: Path) -> None:
-    targets: dict[str, list[ProposedChange]] = defaultdict(list)
-    for change in plan.proposed_changes:
-        target = movie_change_target_key(change, source_root, plan=plan)
-        if target is not None:
-            targets[target].append(change)
+    while True:
+        targets: dict[str, list[ProposedChange]] = defaultdict(list)
+        for change in plan.proposed_changes:
+            target = movie_change_target_key(change, source_root, plan=plan)
+            if target is not None:
+                targets[target].append(change)
 
-    for target, changes in sorted(targets.items()):
-        if len(changes) < 2:
+        collisions = [(target, changes) for target, changes in sorted(targets.items()) if len(changes) >= 2]
+        if not collisions:
+            break
+
+        if any(try_resolve_proposed_target_collision(plan, change, source_root) for _, changes in collisions for change in changes):
             continue
-        for change in changes:
-            change.confidence = "review"
-            change.reason_codes = merge_reason_codes(change.reason_codes, "unresolved_duplicate_video_target_collision")
-            change.warning_codes = merge_reason_codes(change.warning_codes, "unresolved_duplicate_video_target_collision")
-            if "Target path collides with another proposed movie normalization change." not in change.reason:
-                change.reason = f"{change.reason} Target path collides with another proposed movie normalization change."
-        plan.warnings.append(
-            WarningItem(
-                code="movie_name_target_collision",
-                message="Multiple movie normalization changes propose the same target path.",
-                path=target,
-                reason_codes=["unresolved_duplicate_video_target_collision"],
+
+        for target, changes in collisions:
+            for change in changes:
+                mark_change_for_proposed_target_collision(change)
+                mark_related_path_changes_for_target_collision(plan, change, mark_change_for_proposed_target_collision)
+            plan.warnings.append(
+                WarningItem(
+                    code="movie_name_target_collision",
+                    message="Multiple movie normalization changes propose the same target path.",
+                    path=target,
+                    reason_codes=["unresolved_duplicate_video_target_collision"],
+                )
             )
-        )
+        break
 
     mark_existing_movie_target_collisions(plan, source_root)
 
@@ -942,7 +984,7 @@ def mark_existing_movie_target_collisions(plan: ChangePlan, source_root: Path) -
             continue
         mark_change_for_existing_target_collision(change)
         if change.change_type == "folder_rename":
-            mark_related_folder_changes_for_existing_target_collision(plan, change)
+            mark_related_path_changes_for_target_collision(plan, change, mark_change_for_existing_target_collision)
         plan.warnings.append(
             WarningItem(
                 code="movie_name_existing_target_collision",
@@ -953,19 +995,64 @@ def mark_existing_movie_target_collisions(plan: ChangePlan, source_root: Path) -
         )
 
 
-def mark_related_folder_changes_for_existing_target_collision(plan: ChangePlan, folder_change: ProposedChange) -> None:
-    current = folder_change.current_value
+def mark_related_path_changes_for_target_collision(
+    plan: ChangePlan,
+    anchor_change: ProposedChange,
+    marker: Callable[[ProposedChange], None],
+) -> None:
+    if anchor_change.path is None:
+        return
+    anchor_path = Path(anchor_change.path).resolve()
+    relevant_change_types = {"file_rename", "file_move", "folder_rename", "folder_delete", "folder_merge"}
     for change in plan.proposed_changes:
-        if change is folder_change or change.path is None:
+        if change is anchor_change or change.path is None or change.change_type not in relevant_change_types:
             continue
-        if change.change_type not in {"file_rename", "file_move"}:
-            continue
-        try:
-            relative_path = Path(change.path).resolve().relative_to(Path(folder_change.path or "").resolve())
-        except ValueError:
-            continue
-        if relative_path.parts:
-            mark_change_for_existing_target_collision(change)
+        change_path = Path(change.path).resolve()
+        if paths_overlap_by_ancestry(anchor_path, change_path):
+            marker(change)
+
+
+def paths_overlap_by_ancestry(left: Path, right: Path) -> bool:
+    if left == right:
+        return True
+    try:
+        right.relative_to(left)
+        return True
+    except ValueError:
+        pass
+    try:
+        left.relative_to(right)
+        return True
+    except ValueError:
+        return False
+
+
+def mark_change_for_proposed_target_collision(change: ProposedChange) -> None:
+    change.confidence = "review"
+    change.reason_codes = merge_reason_codes(change.reason_codes, "unresolved_duplicate_video_target_collision")
+    change.warning_codes = merge_reason_codes(change.warning_codes, "unresolved_duplicate_video_target_collision")
+    message = "Target path collides with another proposed movie normalization change."
+    if message not in change.reason:
+        change.reason = f"{change.reason} {message}"
+
+
+def try_resolve_proposed_target_collision(plan: ChangePlan, change: ProposedChange, source_root: Path) -> bool:
+    if change.path is None or change.change_type != "file_move":
+        return False
+    source_path = Path(change.path).resolve()
+    parsed = parse_movie_name_with_sidecar_fallback(source_path)
+    alternate_base = first_available_proposed_collision_alternate_base(plan, change, source_root, source_path, parsed)
+    if alternate_base is None:
+        return False
+    change.proposed_value = str(Path(alternate_base) / f"{alternate_base}{source_path.suffix.lower()}")
+    change.reason = (
+        "Movie file was split into an alternate movie folder because another proposed normalization change already uses "
+        "the canonical target."
+    )
+    change.reason_codes = [code for code in change.reason_codes if code != "unresolved_duplicate_video_target_collision"]
+    change.warning_codes = [code for code in change.warning_codes if code != "unresolved_duplicate_video_target_collision"]
+    change.confidence = "safe"
+    return True
 
 
 def mark_change_for_existing_target_collision(change: ProposedChange) -> None:
@@ -1066,9 +1153,13 @@ def try_resolve_existing_folder_collision(plan: ChangePlan, folder_change: Propo
         ),
         None,
     )
-    if related_file_change is None or related_file_change.path is None:
+    source_path = (
+        Path(related_file_change.path).resolve()
+        if related_file_change is not None and related_file_change.path is not None
+        else single_supported_video_in_folder(folder_path)
+    )
+    if source_path is None:
         return False
-    source_path = Path(related_file_change.path).resolve()
     parsed = parse_movie_name_with_sidecar_fallback(source_path)
     alternate_base = first_available_collision_alternate_base(source_root, source_path, parsed, suffix=source_path.suffix.lower())
     if alternate_base is None:
@@ -1078,12 +1169,33 @@ def try_resolve_existing_folder_collision(plan: ChangePlan, folder_change: Propo
     folder_change.reason_codes = [code for code in folder_change.reason_codes if code != "unresolved_duplicate_video_target_collision"]
     folder_change.warning_codes = [code for code in folder_change.warning_codes if code != "unresolved_duplicate_video_target_collision"]
     folder_change.confidence = "safe"
-    related_file_change.proposed_value = f"{alternate_base}{source_path.suffix.lower()}"
-    related_file_change.reason = "Movie filename was normalized into an alternate movie folder because the canonical target already exists."
-    related_file_change.reason_codes = [code for code in related_file_change.reason_codes if code != "unresolved_duplicate_video_target_collision"]
-    related_file_change.warning_codes = [code for code in related_file_change.warning_codes if code != "unresolved_duplicate_video_target_collision"]
-    related_file_change.confidence = "safe"
+    if related_file_change is None:
+        related_file_change = build_file_change(source_root, source_path, alternate_base, parsed)
+        if related_file_change is not None:
+            related_file_change.reason = (
+                "Movie filename was normalized into an alternate movie folder because the canonical target already exists."
+            )
+            plan.proposed_changes.append(related_file_change)
+    if related_file_change is not None:
+        related_file_change.proposed_value = f"{alternate_base}{source_path.suffix.lower()}"
+        related_file_change.reason = "Movie filename was normalized into an alternate movie folder because the canonical target already exists."
+        related_file_change.reason_codes = [code for code in related_file_change.reason_codes if code != "unresolved_duplicate_video_target_collision"]
+        related_file_change.warning_codes = [code for code in related_file_change.warning_codes if code != "unresolved_duplicate_video_target_collision"]
+        related_file_change.confidence = "safe"
     return True
+
+
+def single_supported_video_in_folder(folder_path: Path) -> Path | None:
+    try:
+        video_files = [
+            path for path in folder_path.iterdir()
+            if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS and not path.name.startswith("._")
+        ]
+    except OSError:
+        return None
+    if len(video_files) != 1:
+        return None
+    return video_files[0]
 
 
 def first_available_collision_alternate_base(
@@ -1099,6 +1211,24 @@ def first_available_collision_alternate_base(
         alternate_base = f"{parsed.title} ({parsed.year}) {differentiator}"
         alternate_target = Path(alternate_base) / f"{alternate_base}{suffix}"
         if collision_target_available(alternate_target, source_root, source_path):
+            return alternate_base
+    return None
+
+
+def first_available_proposed_collision_alternate_base(
+    plan: ChangePlan,
+    anchor_change: ProposedChange,
+    source_root: Path,
+    source_path: Path,
+    parsed: ParsedMovieName,
+) -> str | None:
+    if parsed.title is None or parsed.year is None:
+        return None
+    suffix = source_path.suffix.lower()
+    for differentiator in existing_target_collision_differentiators(source_root, source_path, parsed):
+        alternate_base = f"{parsed.title} ({parsed.year}) {differentiator}"
+        alternate_target = Path(alternate_base) / f"{alternate_base}{suffix}"
+        if proposed_collision_target_available(plan, anchor_change, alternate_target, source_root, source_path):
             return alternate_base
     return None
 
@@ -1126,6 +1256,28 @@ def collision_target_available(target_relative: Path, source_root: Path, source_
         return target_path.samefile(source_path)
     except OSError:
         return False
+
+
+def proposed_collision_target_available(
+    plan: ChangePlan,
+    anchor_change: ProposedChange,
+    target_relative: Path,
+    source_root: Path,
+    source_path: Path,
+) -> bool:
+    if not collision_target_available(target_relative, source_root, source_path):
+        return False
+    target_key = str(target_relative)
+    anchor_path = Path(anchor_change.path or "").resolve()
+    for change in plan.proposed_changes:
+        if change is anchor_change:
+            continue
+        if change.path is not None and paths_overlap_by_ancestry(anchor_path, Path(change.path).resolve()):
+            continue
+        other_target = movie_change_target_key(change, source_root, plan=plan)
+        if other_target == target_key:
+            return False
+    return True
 
 
 def plan_collection_folder_cleanup(

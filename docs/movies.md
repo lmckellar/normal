@@ -45,6 +45,8 @@ That review boundary now also covers composed target collisions: if a file renam
 
 Concise duplicate handling is subtractive but not lossy when two local copies would otherwise collide. If the scan can distinguish them from parsed path or folder-context tokens, it adds the shortest useful suffix to both folder and file stem, such as `Title (Year) 1080p` and `Title (Year) 2160p`. If no local differentiator is available, the collision stays in review rather than inventing `(2)` names.
 
+That same collision path also covers stale post-split residue. If an older partial cleanup left a concise movie file inside a still-garbled multi-movie package folder, normalize can now strip repeated package-title tail junk from the child path and reuse a concise package-tail token such as `1080p` for both the folder and the file stem instead of carrying the whole package label forward.
+
 Normalize also handles common library-chaos cleanup when the evidence is local and high confidence:
 
 - loose root movie files move into `Title (Year)/Title (Year).ext`, including cases where a sibling `.nfo` provides the title/year

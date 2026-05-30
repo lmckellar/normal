@@ -255,6 +255,7 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
         title_text, tail_text = bracket_payload
         title_source_name = "year_leading_bracket_payload"
         compact_heuristic = True
+    tail_text = strip_redundant_parent_title_from_tail(movie_path.parent.name, year, title_text, tail_text)
     release_group = None
 
     if " - " in tail_text:
@@ -447,6 +448,24 @@ def parse_child_title_payload_with_parent_year(
         return None
     tail_text = child_text[title_match.end() :].strip()
     return parent_title, tail_text
+
+
+def strip_redundant_parent_title_from_tail(parent_name: str, year: int, child_title: str, tail_text: str) -> str:
+    if not child_title or not tail_text:
+        return tail_text
+    parent_title = fallback_parent_title(parent_name, year)
+    if not parent_title:
+        return tail_text
+    if comparable_title_key(parent_title) == comparable_title_key(child_title):
+        return tail_text
+    parent_tokens = TOKEN_PATTERN.findall(parent_title)
+    if not parent_tokens:
+        return tail_text
+    pattern = r"^\W*" + r"[\W_]*".join(re.escape(token) for token in parent_tokens)
+    match = re.match(pattern, tail_text, re.IGNORECASE)
+    if match is None:
+        return tail_text
+    return tail_text[match.end() :].lstrip(" ._-)[](&-")
 
 
 def parse_yearless_title_hint(source_text: str) -> tuple[str, int, str] | None:

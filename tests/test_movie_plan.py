@@ -356,11 +356,21 @@ class MoviePlanTests(unittest.TestCase):
                 if "Ace Ventura Pet Detective" in change.proposed_value
             ]
             self.assertEqual(len(pet_changes), 3)
-            self.assertTrue(any(change.confidence == "review" for change in pet_changes))
-            self.assertIn("movie_name_target_collision", {warning.code for warning in plan.warnings})
-            self.assertTrue(
+            move = next(
+                change for change in plan.proposed_changes
+                if change.change_type == "file_move" and "Pet.Detective" in change.current_value
+            )
+            self.assertEqual(
+                move.proposed_value,
+                "Ace Ventura Pet Detective (1994) BDRip/Ace Ventura Pet Detective (1994) BDRip.mkv",
+            )
+            self.assertEqual(move.confidence, "safe")
+            self.assertNotIn("movie_name_target_collision", {warning.code for warning in plan.warnings})
+            self.assertFalse(
                 any("unresolved_duplicate_video_target_collision" in change.reason_codes for change in pet_changes)
             )
+            collection_delete = next(change for change in plan.proposed_changes if change.change_type == "folder_delete")
+            self.assertEqual(collection_delete.confidence, "safe")
 
     def test_build_movie_plan_proposes_rich_filename_and_folder_renames(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1041,6 +1051,44 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn(("file_move", "Planet Terror (2007)/Planet Terror (2007).mkv", "safe"), proposed)
             self.assertIn(("file_move", "Death Proof (2007)/Death Proof (2007).mkv", "safe"), proposed)
             self.assertIn(("folder_delete", "", "safe"), proposed)
+
+    def test_build_movie_plan_recovers_garbled_post_split_double_feature_residue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "Grindhouse Planet Terror & Death Proof 1080p Unrated [mkvonly]"
+            folder.mkdir()
+            (
+                folder / "Death Proof (2007) Grindhouse Planet Terror & Death Proof 1080p Unrated Mkvonly.mkv"
+            ).write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {(change.change_type, change.proposed_value, change.confidence) for change in plan.proposed_changes}
+            self.assertIn(("file_rename", "Death Proof (2007).mkv", "safe"), proposed)
+            self.assertNotIn(("file_rename", "Death Proof (2007) Grindhouse Planet Terror & Death Proof 1080p Unrated Mkvonly.mkv", "review"), proposed)
+            self.assertNotIn("unknown_technical_token", {warning.code for warning in plan.warnings})
+
+    def test_build_movie_plan_uses_concise_package_tail_token_for_existing_target_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            canonical = source / "Death Proof (2007)"
+            canonical.mkdir()
+            (canonical / "Death Proof (2007).mkv").write_text("video", encoding="utf-8")
+            folder = source / "Grindhouse Planet Terror & Death Proof 1080p Unrated [mkvonly]"
+            folder.mkdir()
+            (
+                folder / "Death Proof (2007) Grindhouse Planet Terror & Death Proof 1080p Unrated Mkvonly.mkv"
+            ).write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            file_change = next(change for change in plan.proposed_changes if change.change_type == "file_rename")
+            folder_change = next(change for change in plan.proposed_changes if change.change_type == "folder_rename")
+            self.assertEqual(file_change.proposed_value, "Death Proof (2007) 1080p.mkv")
+            self.assertEqual(file_change.confidence, "safe")
+            self.assertEqual(folder_change.proposed_value, "Death Proof (2007) 1080p")
+            self.assertEqual(folder_change.confidence, "safe")
+            self.assertNotIn("movie_name_existing_target_collision", {warning.code for warning in plan.warnings})
 
     def test_build_movie_plan_trims_reported_verbose_parser_slips(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
