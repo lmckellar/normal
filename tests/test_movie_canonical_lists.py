@@ -197,6 +197,94 @@ class MovieCanonicalListsTests(unittest.TestCase):
             self.assertIn("Return of the King", rotk["path"])
             self.assertIn("Fellowship", fellowship["path"])
 
+    def test_build_canonical_lists_report_matches_punctuation_light_local_title_via_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            (source / "K 19 The Widowmaker (2002)" / "K 19 The Widowmaker (2002).mkv").parent.mkdir(parents=True)
+            (source / "K 19 The Widowmaker (2002)" / "K 19 The Widowmaker (2002).mkv").write_text("video", encoding="utf-8")
+
+            top_entries = [{"title": "K-19: The Widowmaker", "year": 2002}] + [
+                {"title": f"Filler {i}", "year": 2000 + i} for i in range(99)
+            ]
+
+            def fake_http_get(url: str) -> dict[str, object]:
+                if "/movie/top_rated" in url:
+                    page = int(url.split("page=")[1].split("&")[0])
+                    start = (page - 1) * 20
+                    return {
+                        "page": page,
+                        "total_pages": 50,
+                        "results": [
+                            {"title": item["title"], "release_date": f"{item['year']}-01-01"}
+                            for item in top_entries[start : start + 20]
+                        ],
+                    }
+                if "/discover/movie" in url:
+                    return {"page": 1, "total_pages": 1, "results": []}
+                raise AssertionError(url)
+
+            with tempfile.TemporaryDirectory() as data_home:
+                import os
+
+                previous = os.environ.get("XDG_DATA_HOME")
+                os.environ["XDG_DATA_HOME"] = data_home
+                try:
+                    report = build_canonical_lists_report(source, tmdb_key="test-key", http_get=fake_http_get)
+                finally:
+                    if previous is None:
+                        os.environ.pop("XDG_DATA_HOME", None)
+                    else:
+                        os.environ["XDG_DATA_HOME"] = previous
+
+            top_100 = next(item for item in report.list_summaries if item.id == "top_100")
+            k19 = next(e for e in top_100.all_entries if e["title"] == "K-19: The Widowmaker")
+            self.assertTrue(k19["owned"])
+            self.assertIn("K 19 The Widowmaker", k19["path"])
+
+    def test_build_canonical_lists_report_matches_abbreviation_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            (source / "L A Confidential (1997)" / "L A Confidential (1997).mkv").parent.mkdir(parents=True)
+            (source / "L A Confidential (1997)" / "L A Confidential (1997).mkv").write_text("video", encoding="utf-8")
+
+            top_entries = [{"title": "L.A. Confidential", "year": 1997}] + [
+                {"title": f"Filler {i}", "year": 2000 + i} for i in range(99)
+            ]
+
+            def fake_http_get(url: str) -> dict[str, object]:
+                if "/movie/top_rated" in url:
+                    page = int(url.split("page=")[1].split("&")[0])
+                    start = (page - 1) * 20
+                    return {
+                        "page": page,
+                        "total_pages": 50,
+                        "results": [
+                            {"title": item["title"], "release_date": f"{item['year']}-01-01"}
+                            for item in top_entries[start : start + 20]
+                        ],
+                    }
+                if "/discover/movie" in url:
+                    return {"page": 1, "total_pages": 1, "results": []}
+                raise AssertionError(url)
+
+            with tempfile.TemporaryDirectory() as data_home:
+                import os
+
+                previous = os.environ.get("XDG_DATA_HOME")
+                os.environ["XDG_DATA_HOME"] = data_home
+                try:
+                    report = build_canonical_lists_report(source, tmdb_key="test-key", http_get=fake_http_get)
+                finally:
+                    if previous is None:
+                        os.environ.pop("XDG_DATA_HOME", None)
+                    else:
+                        os.environ["XDG_DATA_HOME"] = previous
+
+            top_100 = next(item for item in report.list_summaries if item.id == "top_100")
+            la_confidential = next(e for e in top_100.all_entries if e["title"] == "L.A. Confidential")
+            self.assertTrue(la_confidential["owned"])
+            self.assertIn("L A Confidential", la_confidential["path"])
+
 
 if __name__ == "__main__":
     unittest.main()

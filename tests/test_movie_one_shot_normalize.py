@@ -105,6 +105,10 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
         cases = {
             "www.YTS.mx.The.Big.Lebowski.1998.1080p.BluRay.x264.AAC.mkv": "The Big Lebowski (1998)",
             "Downloaded.from.TorrentGalaxy.to.The.Thing.1982.1080p.BluRay.x264-GRP.mkv": "The Thing (1982)",
+            "Oxtorrent Com Apollo 11 (2019).mkv": "Apollo 11 (2019)",
+            "Apollo 11 (2019) Oxtorrent Com.mkv": "Apollo 11 (2019)",
+            "[Oxtorrent Com] Apollo 11 (2019).mkv": "Apollo 11 (2019)",
+            "www.Oxtorrent.com [TorrentGalaxy.to] Apollo 11 (2019) [Oxtorrent Com].mkv": "Apollo 11 (2019)",
             "MoviesByRizzo - The Sting 1973 1080p BluRay x264 AAC.mkv": "The Sting (1973)",
             "anoXmous - The Godfather 1972 1080p BluRay x264.mp4": "The Godfather (1972)",
             "ETRG - The Social Network 2010 720p BluRay x264.mp4": "The Social Network (2010)",
@@ -128,6 +132,46 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
                         f"{expected_base}/{expected_base}{movie.suffix.lower()}",
                         {change.proposed_value for change in plan.proposed_changes},
                     )
+
+    def test_split_domain_credit_rule_does_not_strip_short_real_title(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Dot.Com.2003.1080p.BluRay.x264.mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source, movie_files=[movie])
+
+            self.assertIn(
+                "Dot Com (2003)/Dot Com (2003).mkv",
+                {change.proposed_value for change in plan.proposed_changes},
+            )
+
+    def test_domain_credit_rules_do_not_strip_short_or_mid_title_tokens(self) -> None:
+        cases = {
+            "Dot.Com.2003.1080p.BluRay.x264.mkv": "Dot Com (2003)",
+            "Coma.1978.1080p.BluRay.x264.mkv": "Coma (1978)",
+            "To.Die.For.1995.1080p.BluRay.x264.mkv": "To Die For (1995)",
+        }
+
+        for filename, expected_base in cases.items():
+            with self.subTest(filename=filename):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    source = Path(tmpdir)
+                    movie = source / filename
+                    movie.write_text("video", encoding="utf-8")
+
+                    plan = build_movie_plan(source, movie_files=[movie])
+
+                    self.assertIn(
+                        f"{expected_base}/{expected_base}.mkv",
+                        {change.proposed_value for change in plan.proposed_changes},
+                    )
+
+    def test_trailing_domain_credit_is_not_preserved_as_technical_tail(self) -> None:
+        parsed = parse_movie_identity(Path("Apollo 11 (2019) Oxtorrent Com.mkv"))
+        self.assertEqual(parsed.title, "Apollo 11")
+        self.assertEqual(parsed.year, 2019)
+        self.assertEqual(parsed.tech_tokens, [])
 
     def test_known_language_and_cut_tokens_remain_safe(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

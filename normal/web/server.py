@@ -42,17 +42,21 @@ WEB_ASSET_ROOT = "web_assets"
 WEB_ASSET_TEMPLATE = "index.html"
 WORKBENCH_ASSET_TEMPLATE = "workbench.html"
 NORMALIZE_LAB_ASSET_TEMPLATE = "normalize_lab.html"
+BOOK_STYLE_ALT_DESIGN_UI_ROUTE = "/book-style-alt-design-ui"
+BOOK_STYLE_ALT_DESIGN_UI_ASSET_ROUTE = "/book-style-alt-design-ui-assets"
+PARSER_TESTER_UI_ROUTE = "/parser-tester-ui"
+PARSER_TESTER_UI_ASSET_ROUTE = "/parser-tester-ui-assets"
 WEB_STATIC_ASSETS = {
     "/assets/app.css": ("app.css", "text/css; charset=utf-8"),
     "/assets/app.js": ("app.js", "application/javascript; charset=utf-8"),
 }
 WORKBENCH_STATIC_ASSETS = {
-    "/workbench-assets/workbench.css": ("workbench.css", "text/css; charset=utf-8"),
-    "/workbench-assets/workbench.js": ("workbench.js", "application/javascript; charset=utf-8"),
+    f"{BOOK_STYLE_ALT_DESIGN_UI_ASSET_ROUTE}/workbench.css": ("workbench.css", "text/css; charset=utf-8"),
+    f"{BOOK_STYLE_ALT_DESIGN_UI_ASSET_ROUTE}/workbench.js": ("workbench.js", "application/javascript; charset=utf-8"),
 }
 NORMALIZE_LAB_STATIC_ASSETS = {
-    "/normalize-lab-assets/normalize_lab.css": ("normalize_lab.css", "text/css; charset=utf-8"),
-    "/normalize-lab-assets/normalize_lab.js": ("normalize_lab.js", "application/javascript; charset=utf-8"),
+    f"{PARSER_TESTER_UI_ASSET_ROUTE}/normalize_lab.css": ("normalize_lab.css", "text/css; charset=utf-8"),
+    f"{PARSER_TESTER_UI_ASSET_ROUTE}/normalize_lab.js": ("normalize_lab.js", "application/javascript; charset=utf-8"),
 }
 WEB_BOOTSTRAP_SENTINEL = "__NORMAL_BOOTSTRAP__"
 
@@ -168,10 +172,10 @@ def build_get_routes() -> dict[str, Callable[[RequestContext], None]]:
         "/api/library-roots": handle_library_roots_get,
         "/": serve_index,
         "/index.html": serve_index,
-        "/workbench": serve_workbench,
-        "/workbench.html": serve_workbench,
-        "/normalize-lab": serve_normalize_lab,
-        "/normalize-lab.html": serve_normalize_lab,
+        BOOK_STYLE_ALT_DESIGN_UI_ROUTE: serve_workbench,
+        f"{BOOK_STYLE_ALT_DESIGN_UI_ROUTE}.html": serve_workbench,
+        PARSER_TESTER_UI_ROUTE: serve_normalize_lab,
+        f"{PARSER_TESTER_UI_ROUTE}.html": serve_normalize_lab,
     }
     for route in WEB_STATIC_ASSETS:
         routes[route] = lambda ctx, route=route: serve_static_asset(ctx, route)
@@ -195,7 +199,7 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/movies/inspect": handle_movies_inspect,
         "/api/movies/normalize": handle_movies_normalize,
         "/api/movies/apply": handle_movies_apply,
-        "/api/movies/normalize-lab/export": handle_movies_normalize_lab_export,
+        "/api/movies/parser-tester-ui/export": handle_movies_normalize_lab_export,
         "/api/movies/junk": handle_movies_junk,
         "/api/movies/junk/delete": handle_movies_junk_delete,
         "/api/movies/replacement-queue/list": handle_movies_replacement_queue_list,

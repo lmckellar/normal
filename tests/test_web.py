@@ -71,24 +71,24 @@ class WebTests(unittest.TestCase):
             with urllib.request.urlopen(f"{base_url}/assets/app.js") as response:
                 self.assertEqual(response.headers.get_content_type(), "application/javascript")
                 self.assertIn("function refreshActivityState", response.read().decode("utf-8"))
-            with urllib.request.urlopen(f"{base_url}/workbench-assets/workbench.css") as response:
+            with urllib.request.urlopen(f"{base_url}/book-style-alt-design-ui-assets/workbench.css") as response:
                 self.assertEqual(response.headers.get_content_type(), "text/css")
                 self.assertIn(".wb-frame", response.read().decode("utf-8"))
-            with urllib.request.urlopen(f"{base_url}/workbench-assets/workbench.js") as response:
+            with urllib.request.urlopen(f"{base_url}/book-style-alt-design-ui-assets/workbench.js") as response:
                 self.assertEqual(response.headers.get_content_type(), "application/javascript")
                 self.assertIn("Preview Selected Changes", response.read().decode("utf-8"))
-            with urllib.request.urlopen(f"{base_url}/normalize-lab-assets/normalize_lab.css") as response:
+            with urllib.request.urlopen(f"{base_url}/parser-tester-ui-assets/normalize_lab.css") as response:
                 self.assertEqual(response.headers.get_content_type(), "text/css")
                 self.assertIn(".lab-layout", response.read().decode("utf-8"))
-            with urllib.request.urlopen(f"{base_url}/normalize-lab-assets/normalize_lab.js") as response:
+            with urllib.request.urlopen(f"{base_url}/parser-tester-ui-assets/normalize_lab.js") as response:
                 self.assertEqual(response.headers.get_content_type(), "application/javascript")
-                self.assertIn("/api/movies/normalize-lab/export", response.read().decode("utf-8"))
+                self.assertIn("/api/movies/parser-tester-ui/export", response.read().decode("utf-8"))
 
     def test_workbench_runtime_keys_are_available_before_initial_render(self) -> None:
         html = render_workbench_html(Path("/library/movies"), omdb_key="omdb-test", tmdb_key="tmdb-test")
-        self.assertIn('<link rel="stylesheet" href="/workbench-assets/workbench.css">', html)
-        self.assertIn('<script src="/workbench-assets/workbench.js"></script>', html)
-        self.assertLess(html.index("window.OMDB_AVAILABLE"), html.index('<script src="/workbench-assets/workbench.js"></script>'))
+        self.assertIn('<link rel="stylesheet" href="/book-style-alt-design-ui-assets/workbench.css">', html)
+        self.assertIn('<script src="/book-style-alt-design-ui-assets/workbench.js"></script>', html)
+        self.assertLess(html.index("window.OMDB_AVAILABLE"), html.index('<script src="/book-style-alt-design-ui-assets/workbench.js"></script>'))
         self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
         self.assertIn("window.OMDB_AVAILABLE = true;", html)
         self.assertNotIn("omdb-test", html)
@@ -96,20 +96,20 @@ class WebTests(unittest.TestCase):
 
     def test_workbench_route_serves_parallel_ui(self) -> None:
         with self.run_test_server() as base_url:
-            with urllib.request.urlopen(f"{base_url}/workbench") as response:
+            with urllib.request.urlopen(f"{base_url}/book-style-alt-design-ui") as response:
                 html = response.read().decode("utf-8")
-        self.assertIn("Pamphlet Workbench", html)
-        self.assertIn("/workbench-assets/workbench.js", html)
+        self.assertIn("Book Style Alt Design UI", html)
+        self.assertIn("/book-style-alt-design-ui-assets/workbench.js", html)
 
     def test_normalize_lab_route_serves_internal_ui(self) -> None:
         html = render_normalize_lab_html(Path("/library/movies"))
-        self.assertIn('/normalize-lab-assets/normalize_lab.css', html)
-        self.assertIn('/normalize-lab-assets/normalize_lab.js', html)
+        self.assertIn('/parser-tester-ui-assets/normalize_lab.css', html)
+        self.assertIn('/parser-tester-ui-assets/normalize_lab.js', html)
         self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
         with self.run_test_server() as base_url:
-            with urllib.request.urlopen(f"{base_url}/normalize-lab") as response:
+            with urllib.request.urlopen(f"{base_url}/parser-tester-ui") as response:
                 served = response.read().decode("utf-8")
-        self.assertIn("Normalize Lab", served)
+        self.assertIn("Parser Tester UI", served)
 
     def test_normalize_lab_export_endpoint_writes_jsonl(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -134,7 +134,7 @@ class WebTests(unittest.TestCase):
                     }
                 ).encode("utf-8")
                 req = urllib.request.Request(
-                    f"{base_url}/api/movies/normalize-lab/export",
+                    f"{base_url}/api/movies/parser-tester-ui/export",
                     data=body,
                     headers={"Content-Type": "application/json"},
                     method="POST",
@@ -480,7 +480,7 @@ class WebTests(unittest.TestCase):
 
     def test_normalize_lab_frontend_is_read_only_and_reason_aware(self) -> None:
         self.assertIn("/api/movies/normalize", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("/api/movies/normalize-lab/export", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("/api/movies/parser-tester-ui/export", NORMALIZE_LAB_FRONTEND)
         self.assertIn("reason code", NORMALIZE_LAB_FRONTEND)
         self.assertIn("warning code", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Select all", NORMALIZE_LAB_FRONTEND)

@@ -31,7 +31,7 @@ Title (Year)/Title (Year).mkv
 
 The production normalizer is concise-first and treated as the intended movie shape. **All Results** includes already-normalized items as no-change rows so the preview shows the full downstream structure, not just the diffs.
 
-The internal testing surface at `/normalize-lab` is now useful for real downstream inspection rather than just row debugging. It renders the projected library shape inline as a compact directory tree, supports staged preview through row selection, and is valuable for checking whether a proposal is merely parsable or actually coherent when viewed as an applied library state.
+The internal testing surface at `/parser-tester-ui` is now useful for real downstream inspection rather than just row debugging. It renders the projected library shape inline as a compact directory tree, supports staged preview through row selection, and is valuable for checking whether a proposal is merely parsable or actually coherent when viewed as an applied library state.
 
 Verbose naming still exists temporarily in the CLI as parser-hardening scaffolding, but it is not the public end state:
 
@@ -56,6 +56,12 @@ Normalize also handles common library-chaos cleanup when the evidence is local a
 - multi-movie package folders can be split into individual movie folders when each video file, or a same-stem NFO, locally parses to its own title/year; package marker words such as `trilogy` are not treated as movie titles
 
 The parser stays local and heuristic. It prefers a clear ASCII title segment when a filename includes both non-Latin and English title text before the year, and it can split technical-token runs that appear before a trailing parenthesized year. Tail-token confidence is now weighted by structured evidence rather than simple token length alone, so harmless edition prose no longer sinks otherwise well-supported concise renames while genuinely weak tail evidence can still stay in review. Those parsed tokens still feed collision differentiation and review reasoning, but normalize output stays concise-only.
+
+Current parser hardening is intentionally narrow:
+
+- it reconstructs a small settled punctuation set when local evidence is already present, such as ordinals (`25th`) and title abbreviations/initialisms (`Mr.`, `Dr.`, `L.A.`)
+- it keeps the existing punctuation-light stance for unresolved subtitle punctuation such as colons and deferred apostrophe recovery
+- it strips stacked tracker or domain credit noise only at the path edges, including `www...`, split-domain forms such as `Oxtorrent Com`, and bracketed domain tags, without trying to clean mid-title words
 
 ![Normalize Movie Files & Folders](assets/normalize_movies.png)
 

@@ -64,6 +64,11 @@ class MovieProfileTests(unittest.TestCase):
             )
         )
 
+    def test_path_matches_normalized_shape_accepts_legacy_concise_punctuation_light_names(self) -> None:
+        self.assertTrue(
+            path_matches_normalized_shape(Path("/movies/K 19 The Widowmaker (2002)/K 19 The Widowmaker (2002).mkv"))
+        )
+
     def test_reference_profile_requires_concise_folder_hygiene(self) -> None:
         facts = MediaFacts(
             width=1920,

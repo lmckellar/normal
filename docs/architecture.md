@@ -21,9 +21,11 @@ The normalize flow is a proposal pipeline first:
 Current normalize contract is intentionally evidence-driven:
 
 - parser evidence and local folder context can promote a collision from `review` to `safe`
+- shared display-title and token cleanup now lives in `movie_naming.py`, with `movie_identity.py` and downstream lookup/matching surfaces reusing that seam
 - normalize web payloads now carry linked change detail plus warning detail for each movie row
-- `/normalize-lab` is an internal inspection surface for that richer backend reasoning, not a second mutation UI
-- `/normalize-lab` now also acts as a downstream-shape harness: selected rows can be staged into an inline tree preview, and the filtered library view can be rendered as a compact projected directory shape
+- `/parser-tester-ui` is an internal inspection surface for that richer backend reasoning, not a second mutation UI
+- `/parser-tester-ui` now also acts as a downstream-shape harness: selected rows can be staged into an inline tree preview, and the filtered library view can be rendered as a compact projected directory shape
+- parser cleanup is still local-only and intentionally narrow: edge tracker/domain credit stripping, compact token cleanup, and a small settled punctuation family; no remote canonical-title recovery
 
 ### Quality and triage pipeline
 

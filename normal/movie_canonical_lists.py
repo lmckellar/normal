@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 
 from normal.models import WarningItem, utc_now_iso
 from normal.movie_identity import MovieIdentityKey, canonical_identity_key, parse_movie_identity
+from normal.movie_naming import title_alias_keys
 from normal.movie_scan import iter_video_files
 
 
@@ -113,14 +114,11 @@ CANONICAL_LISTS: tuple[CanonicalListConfig, ...] = (
 )
 
 
-def _build_suffix_index(inventory: dict) -> dict[tuple[str, int], MovieIdentityKey | None]:
-    """Maps (title_suffix, year) -> inv_key for word-boundary suffixes of each inventory title.
-    Value is None when two inventory movies share the same suffix+year (ambiguous)."""
+def _build_alias_index(inventory: dict[MovieIdentityKey, OwnedMovie]) -> dict[tuple[str, int], MovieIdentityKey | None]:
     index: dict[tuple[str, int], MovieIdentityKey | None] = {}
-    for inv_key in inventory:
-        words = inv_key.title.split()
-        for i in range(1, len(words)):
-            tag = (" ".join(words[i:]), inv_key.year)
+    for inv_key, owned in inventory.items():
+        for alias in title_alias_keys(owned.title):
+            tag = (alias, inv_key.year)
             index[tag] = None if tag in index else inv_key
     return index
 
@@ -128,18 +126,15 @@ def _build_suffix_index(inventory: dict) -> dict[tuple[str, int], MovieIdentityK
 def _find_inventory_match(
     entry: CanonicalListEntry,
     inventory: dict,
-    suffix_index: dict,
+    alias_index: dict,
 ) -> MovieIdentityKey | None:
     primary = entry.to_key()
     if primary in inventory:
         return primary
-    if ": " in entry.title:
-        subtitle_key = canonical_identity_key(entry.title.split(": ", 1)[1], entry.year)
-        if subtitle_key in inventory:
-            return subtitle_key
-    inv_key = suffix_index.get((primary.title, entry.year))
-    if inv_key is not None:
-        return inv_key
+    for alias in title_alias_keys(entry.title):
+        inv_key = alias_index.get((alias, entry.year))
+        if inv_key is not None:
+            return inv_key
     return None
 
 
@@ -155,7 +150,7 @@ def build_canonical_lists_report(
 
     cache_states: list[str] = []
     inventory, unparsed_files, duplicate_files = build_movie_inventory(source_root, should_cancel=should_cancel)
-    suffix_index = _build_suffix_index(inventory)
+    alias_index = _build_alias_index(inventory)
     provider = TMDbCanonicalProvider(tmdb_key=tmdb_key, http_get=http_get, now=now)
     list_summaries: list[CanonicalListSummary] = []
     badges: list[CanonicalBadge] = []
@@ -166,7 +161,7 @@ def build_canonical_lists_report(
         cache_states.append(cache_state)
         entry_inv_key: dict[CanonicalListEntry, MovieIdentityKey] = {}
         for entry in entries:
-            inv_key = _find_inventory_match(entry, inventory, suffix_index)
+            inv_key = _find_inventory_match(entry, inventory, alias_index)
             if inv_key is not None:
                 entry_inv_key[entry] = inv_key
         covered_entries_set = set(entry_inv_key)

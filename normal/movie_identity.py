@@ -3,11 +3,27 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 import re
-import unicodedata
+
+from normal.movie_naming import (
+    canonicalize_token_sequence as shared_canonicalize_token_sequence,
+    cleanup_compact_title_text as shared_cleanup_compact_title_text,
+    cleanup_group_text as shared_cleanup_group_text,
+    extract_tail_tokens as shared_extract_tail_tokens,
+    normalize_display_title as shared_normalize_display_title,
+    normalize_token as shared_normalize_token,
+    prefer_ascii_title_segment as shared_prefer_ascii_title_segment,
+    should_mark_compact_split_for_review as shared_should_mark_compact_split_for_review,
+    should_split_compact_technical_token as shared_should_split_compact_technical_token,
+    split_compact_technical_token as shared_split_compact_technical_token,
+    split_known_compact_title_words as shared_split_known_compact_title_words,
+    split_title_prefix_tail as shared_split_title_prefix_tail,
+    title_match_key,
+)
 
 
 YEAR_PATTERN = re.compile(r"(?<!\d)(19\d{2}|20\d{2}|2100)(?!\d)(?![xX]\d)")
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
+DOMAIN_CREDIT_TLD_PATTERN = r"(?:org|com|net|mx|to|am|cc|io)"
 RELEASE_GROUP_SUFFIX_PATTERN = re.compile(r"-(?P<group>[A-Za-z0-9][A-Za-z0-9-]{1,20})$")
 BRACKET_CONTENT_PATTERN = re.compile(r"\[(?P<content>[^\]]+)\]")
 VIDEO_NAME_EXTENSIONS = {
@@ -24,15 +40,26 @@ VIDEO_NAME_EXTENSIONS = {
     ".webm",
 }
 LEADING_SITE_CREDIT_PATTERNS = (
-    re.compile(r"^\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+(?:org|com|net|mx|to|am|cc|io)\s*(?:[-:]+)?\s*", re.IGNORECASE),
+    re.compile(rf"^\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*(?:[-:]+)?\s*", re.IGNORECASE),
     re.compile(r"^\s*www\.[A-Za-z0-9.-]+\s*(?:[-:]+)?\s*", re.IGNORECASE),
     re.compile(
-        r"^\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+(?:org|com|net|mx|to|am|cc|io)\s*(?:[-:]+)?\s*",
+        rf"^\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*(?:[-:]+)?\s*",
         re.IGNORECASE,
     ),
+    re.compile(rf"^\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*(?:[-:]+)?\s*", re.IGNORECASE),
+)
+TRAILING_SITE_CREDIT_PATTERNS = (
+    re.compile(rf"\s*(?:[-:]+)?\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*$", re.IGNORECASE),
+    re.compile(r"\s*(?:[-:]+)?\s*www\.[A-Za-z0-9.-]+\s*$", re.IGNORECASE),
+    re.compile(
+        rf"\s*(?:[-:]+)?\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(rf"\s*(?:[-:]+)?\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*$", re.IGNORECASE),
 )
 LEADING_BRACKETED_CREDIT_PATTERN = re.compile(r"^\s*\[(?:YTS(?:[._-]?(?:AM|MX))?|TGX|ERAI[._-]?RAWS)\]\s*", re.IGNORECASE)
 GENERIC_LEADING_BRACKET_TAG_PATTERN = re.compile(r"^\s*\[(?P<tag>[A-Za-z][A-Za-z0-9._ -]{1,24})\]\s*")
+GENERIC_TRAILING_BRACKET_TAG_PATTERN = re.compile(r"\s*\[(?P<tag>[A-Za-z][A-Za-z0-9._ -]{1,24})\]\s*$")
 LEADING_UPLOADER_CREDIT_PATTERN = re.compile(
     r"^\s*(?:moviesbyrizzo|anoxmous|etrg|hdchina|rarbg(?:[._-]?com)?)\s*(?:[-:]+)\s*",
     re.IGNORECASE,
@@ -256,6 +283,7 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
         title_source_name = "year_leading_bracket_payload"
         compact_heuristic = True
     tail_text = strip_redundant_parent_title_from_tail(movie_path.parent.name, year, title_text, tail_text)
+    tail_text = strip_leading_site_credit(tail_text)
     release_group = None
 
     if " - " in tail_text:
@@ -337,8 +365,7 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
 
 
 def canonical_identity_key(title: str, year: int) -> MovieIdentityKey:
-    normalized = re.sub(r"[^a-z0-9]+", " ", title.casefold())
-    return MovieIdentityKey(title=" ".join(normalized.split()), year=year)
+    return MovieIdentityKey(title=title_match_key(title), year=year)
 
 
 def find_movie_year_match(value: str) -> re.Match[str] | None:
@@ -481,14 +508,7 @@ def parse_yearless_title_hint(source_text: str) -> tuple[str, int, str] | None:
 
 
 def extract_tail_tokens(tail_text: str) -> list[str]:
-    tech_tokens: list[str] = []
-    for raw_token in TOKEN_PATTERN.findall(tail_text):
-        for split_token in split_compact_technical_token(raw_token):
-            token = normalize_token(split_token)
-            if not token or token.lower() in SKIP_TOKENS:
-                continue
-            tech_tokens.append(token)
-    return tech_tokens
+    return shared_extract_tail_tokens(tail_text)
 
 
 def find_title_span_in_source(source_text: str, title: str) -> re.Match[str] | None:
@@ -500,10 +520,7 @@ def find_title_span_in_source(source_text: str, title: str) -> re.Match[str] | N
 
 
 def split_title_prefix_tail(prefix: str) -> tuple[str, str]:
-    for token_match in TOKEN_PATTERN.finditer(prefix):
-        if is_title_boundary_token(token_match.group(0)):
-            return prefix[: token_match.start()], prefix[token_match.start() :]
-    return prefix, ""
+    return shared_split_title_prefix_tail(prefix)
 
 
 def is_title_boundary_token(token: str) -> bool:
@@ -516,62 +533,19 @@ def is_title_boundary_token(token: str) -> bool:
 
 
 def cleanup_compact_title_text(value: str) -> str:
-    cleaned = cleanup_title_text(value)
-    if not cleaned:
-        return ""
-    if re.search(r"[\s._\-]", value):
-        return cleaned
-    split_words = split_known_compact_title_words(value)
-    return " ".join(split_words) if split_words else cleaned
+    return shared_cleanup_compact_title_text(value)
 
 
 def split_known_compact_title_words(value: str) -> list[str]:
-    upper_value = re.sub(r"[^A-Za-z0-9]+", "", value).upper()
-    words: list[str] = []
-    index = 0
-    ordered_keys = sorted(COMPACT_TITLE_WORDS, key=len, reverse=True)
-    while index < len(upper_value):
-        match_key = next((key for key in ordered_keys if upper_value.startswith(key, index)), None)
-        if match_key is None:
-            return []
-        words.append(COMPACT_TITLE_WORDS[match_key])
-        index += len(match_key)
-    return words
+    return shared_split_known_compact_title_words(value)
 
 
 def cleanup_title_text(value: str) -> str:
-    value = strip_leading_site_credit(value)
-    value = strip_leading_collection_index(value)
-    cleaned = re.sub(r"[._]+", " ", value)
-    cleaned = re.sub(r"[\[\]()\-]+", " ", cleaned)
-    cleaned = " ".join(cleaned.split()).strip()
-    if not cleaned:
-        return ""
-    words = []
-    for word in cleaned.split():
-        if word.isupper() and len(word) <= 4:
-            if word in {"OF", "ON", "IN", "AN", "THE", "FOR", "AND", "FROM", "APES"}:
-                words.append(word.capitalize())
-            else:
-                words.append(word)
-        else:
-            words.append(word.capitalize())
-    return " ".join(words)
+    return shared_normalize_display_title(value)
 
 
 def prefer_ascii_title_segment(value: str) -> str:
-    cleaned = strip_leading_collection_index(strip_leading_site_credit(value))
-    if not has_non_latin_letter(cleaned):
-        return cleaned
-
-    ascii_segments = [
-        segment
-        for segment in re.split(r"[._]+", cleaned)
-        if has_ascii_letter(segment) and not has_non_latin_letter(segment)
-    ]
-    if not ascii_segments:
-        return cleaned
-    return " ".join(ascii_segments)
+    return shared_prefer_ascii_title_segment(value)
 
 
 def has_ascii_letter(value: str) -> bool:
@@ -611,6 +585,9 @@ def strip_leading_site_credit(value: str) -> str:
         next_value = LEADING_UPLOADER_CREDIT_PATTERN.sub("", next_value, count=1)
         for pattern in LEADING_SITE_CREDIT_PATTERNS:
             next_value = pattern.sub("", next_value, count=1)
+        next_value = strip_generic_trailing_bracket_tag(next_value)
+        for pattern in TRAILING_SITE_CREDIT_PATTERNS:
+            next_value = pattern.sub("", next_value, count=1)
         if next_value == stripped:
             return stripped
         stripped = next_value
@@ -620,6 +597,8 @@ def strip_generic_leading_bracket_tag(value: str) -> str:
     match = GENERIC_LEADING_BRACKET_TAG_PATTERN.match(value)
     if match is None:
         return value
+    if is_domain_credit_tag(match.group("tag")):
+        return value[match.end() :]
     remainder = value[match.end() :]
     token_match = TOKEN_PATTERN.search(remainder)
     if token_match is None:
@@ -630,138 +609,43 @@ def strip_generic_leading_bracket_tag(value: str) -> str:
     return remainder
 
 
+def strip_generic_trailing_bracket_tag(value: str) -> str:
+    match = GENERIC_TRAILING_BRACKET_TAG_PATTERN.search(value)
+    if match is None or not is_domain_credit_tag(match.group("tag")):
+        return value
+    return value[: match.start()]
+
+
+def is_domain_credit_tag(value: str) -> bool:
+    return re.fullmatch(rf"(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}", value.strip(), re.IGNORECASE) is not None
+
+
 def comparable_title_key(value: str) -> str:
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.casefold()).split())
+    return title_match_key(value)
 
 
 def cleanup_group_text(value: str) -> str | None:
-    cleaned = re.sub(r"[^A-Za-z0-9]+", "", value).upper()
-    return cleaned or None
+    return shared_cleanup_group_text(value)
 
 
 def normalize_token(token: str) -> str:
-    key = token.lower()
-    if key in CANONICAL_TOKEN_MAP:
-        return CANONICAL_TOKEN_MAP[key]
-    if key == "theatrical":
-        return "Theatrical"
-    if re.fullmatch(r"\d{3,4}p", key):
-        return key
-    if re.fullmatch(r"\d+bit", key):
-        return key
-    if re.fullmatch(r"\d\.\d", token):
-        return token
-    if key.isdigit():
-        return key
-    if len(token) <= 6:
-        return token.upper()
-    return token
+    return shared_normalize_token(token)
 
 
 def split_compact_technical_token(token: str) -> list[str]:
-    audio_match = re.fullmatch(r"(?i)(ddp|dd)(\d)", token)
-    if audio_match is not None:
-        return [audio_match.group(1), audio_match.group(2)]
-    video_match = re.fullmatch(r"(?i)h(26[45])", token)
-    if video_match is not None:
-        return ["h" + video_match.group(1)]
-    if not should_split_compact_technical_token(token):
-        return [token]
-
-    upper_token = token.upper()
-    marker_lookup = {marker.upper(): marker for marker in COMPACT_TECH_MARKERS}
-    marker_keys = sorted(marker_lookup, key=len, reverse=True)
-    pieces: list[str] = []
-    index = 0
-
-    while index < len(token):
-        match_key = next((key for key in marker_keys if upper_token.startswith(key, index)), None)
-        if match_key is not None:
-            pieces.append(marker_lookup[match_key])
-            index += len(match_key)
-            continue
-
-        next_marker_index = len(token)
-        for key in marker_keys:
-            found = upper_token.find(key, index + 1)
-            if found != -1:
-                next_marker_index = min(next_marker_index, found)
-        pieces.append(token[index:next_marker_index])
-        index = next_marker_index
-
-    return [piece for piece in pieces if piece]
+    return shared_split_compact_technical_token(token)
 
 
 def should_mark_compact_split_for_review(token: str) -> bool:
-    if re.fullmatch(r"(?i)(ddp|dd)\d", token):
-        return False
-    if re.fullmatch(r"(?i)h26[45]", token):
-        return False
-    if re.fullmatch(r"(?i)blurayremux", token):
-        return False
-    return True
+    return shared_should_mark_compact_split_for_review(token)
 
 
 def should_split_compact_technical_token(token: str) -> bool:
-    if len(token) <= 8:
-        return False
-    upper_token = token.upper()
-    marker_count = sum(1 for marker in COMPACT_TECH_MARKERS if marker.upper() in upper_token)
-    return marker_count >= 2
+    return shared_should_split_compact_technical_token(token)
 
 
 def canonicalize_token_sequence(tokens: list[str]) -> list[str]:
-    merged: list[str] = []
-    index = 0
-    while index < len(tokens):
-        current = tokens[index]
-        next_token = tokens[index + 1] if index + 1 < len(tokens) else None
-        next_next = tokens[index + 2] if index + 2 < len(tokens) else None
-
-        if current.upper() == "BLU" and next_token and next_token.upper() == "RAY":
-            merged.append("BluRay")
-            index += 2
-            continue
-        if current.upper() == "WEB" and next_token and next_token.upper() == "DL":
-            merged.append("WEB-DL")
-            index += 2
-            continue
-        if current.upper() == "DTS" and next_token and next_token.upper() == "HD":
-            merged.append("DTS-HD")
-            index += 2
-            continue
-        if current.upper() == "DTS" and next_token and next_token.upper() == "HDMA":
-            merged.append("DTS-HD MA")
-            index += 2
-            continue
-        if current.upper() == "H" and next_token in {"264", "265"}:
-            merged.append(f"H.{next_token}")
-            index += 2
-            continue
-        if current.upper() == "OPEN" and next_token and next_token.upper() == "MATTE":
-            merged.append("Open Matte")
-            index += 2
-            continue
-        if current == "International" and next_token and next_token.upper() == "CUT":
-            merged.append("International Cut")
-            index += 2
-            continue
-        if current.lower() == "director" and next_token == "S" and next_next and next_next.upper() == "CUT":
-            merged.append("Director's Cut")
-            index += 3
-            continue
-        if current.upper() in {"DD", "DDP"} and is_single_digit_token(next_token) and is_single_digit_token(next_next):
-            merged.append(f"{current.upper()} {next_token}.{next_next}")
-            index += 3
-            continue
-        if is_single_digit_token(current) and is_single_digit_token(next_token):
-            merged.append(f"{current}.{next_token}")
-            index += 2
-            continue
-
-        merged.append(current)
-        index += 1
-    return dedupe_preserve_order(merged)
+    return shared_canonicalize_token_sequence(tokens)
 
 
 def is_single_digit_token(value: str | None) -> bool:

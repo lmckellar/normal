@@ -10,6 +10,7 @@ import tempfile
 from typing import Any
 
 from normal.models import utc_now_iso
+from normal.movie_naming import title_match_key
 from normal.movie_plan import parse_movie_name
 from normal.movie_scan import VIDEO_EXTENSIONS
 
@@ -73,12 +74,11 @@ def default_queue_path() -> Path:
 
 
 def title_key(title: str) -> str:
-    return " ".join(title.casefold().split())
+    return title_match_key(title)
 
 
 def history_title_key(title: str) -> str:
-    collapsed = HISTORY_TITLE_PATTERN.sub(" ", title.casefold()).strip()
-    return " ".join(collapsed.split())
+    return title_match_key(title)
 
 
 def is_strict_weak_item(raw_item: dict[str, Any]) -> bool:

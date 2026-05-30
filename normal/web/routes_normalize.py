@@ -62,7 +62,7 @@ def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
     ctx.respond_json(response)
 
 
-NORMALIZE_LAB_EXPORT_ROOT = Path(__file__).resolve().parents[2] / "out" / "normalize-lab"
+NORMALIZE_LAB_EXPORT_ROOT = Path(__file__).resolve().parents[2] / "out" / "parser-tester-ui"
 
 
 def handle_movies_normalize_lab_export(ctx: RequestContext, payload: dict[str, Any]) -> None:
@@ -72,7 +72,7 @@ def handle_movies_normalize_lab_export(ctx: RequestContext, payload: dict[str, A
         raise ValueError("rows must be a non-empty list")
     timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     NORMALIZE_LAB_EXPORT_ROOT.mkdir(parents=True, exist_ok=True)
-    filename = f"normalize-lab-{timestamp}.jsonl"
+    filename = f"parser-tester-ui-{timestamp}.jsonl"
     export_path = NORMALIZE_LAB_EXPORT_ROOT / filename
     exported = 0
     with export_path.open("w", encoding="utf-8") as handle:

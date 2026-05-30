@@ -99,7 +99,7 @@ The existing normalize endpoint shape remains compatible.
 
 A separate internal read-only UI now exists at:
 
-`/normalize-lab`
+`/parser-tester-ui`
 
 Its purpose is diagnostic inspection, not product workflow.
 
@@ -122,7 +122,7 @@ Current capabilities:
 
 The lab can export selected rows to git-ignored local analysis artifacts:
 
-`/out/normalize-lab/*.jsonl`
+`/out/parser-tester-ui/*.jsonl`
 
 This is read-only with respect to the movie library.
 
@@ -172,7 +172,7 @@ Start by reopening:
 - `normal/movie_plan.py`
 - `normal/web_assets/normalize_lab.js`
 
-Then use `/normalize-lab` against the local movie corpus and export selected
+Then use `/parser-tester-ui` against the local movie corpus and export selected
 cases from rows that still feel noisy or under-explained.
 
 ## Likely Next Work
@@ -214,11 +214,11 @@ This follow-on slice tightened three connected gaps that still showed up in
 real normalize review output:
 
 - parser/planner collision handling
-- normalize row visibility in `/normalize-lab`
+- normalize row visibility in `/parser-tester-ui`
 - review boundary coverage for existing-target cases
 
 Later on 2026-05-30, one additional live-library hardening issue was confirmed
-through `/normalize-lab` itself:
+through `/parser-tester-ui` itself:
 
 - composed downstream file collisions could still slip through as `safe` when a
   `file_rename` plus `folder_rename` landed on the same final movie file as a
@@ -247,10 +247,10 @@ was a genuine planner defect, not a preview artifact.
   concise differentiated target instead of protecting the stale package shell
 - normalize row payloads now include serialized linked changes plus warning
   messages, not just flattened code lists
-- `/normalize-lab` now shows those linked reasons and warning messages directly
+- `/parser-tester-ui` now shows those linked reasons and warning messages directly
   in the row detail pane, and row checkbox selection updates the active detail
   view immediately
-- `/normalize-lab` preview is now an inline staged tree view rather than a
+- `/parser-tester-ui` preview is now an inline staged tree view rather than a
   second verbose debug card stack, which makes downstream shape inspection
   materially useful against the real library
 - collision marking now uses the composed final movie path for `file_rename`

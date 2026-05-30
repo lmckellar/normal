@@ -341,7 +341,7 @@
   async function exportSelected() {
     const rows = state.rows.filter(row => state.selected.has(row.result_id));
     if (!rows.length) return;
-    const response = await fetch('/api/movies/normalize-lab/export', {
+    const response = await fetch('/api/movies/parser-tester-ui/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: el.sourcePath.value, rows }),

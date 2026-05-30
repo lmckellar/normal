@@ -12,6 +12,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from normal.movie_naming import provider_title_candidates, title_similarity_key
+
 
 OMDB_API_ROOT = "https://www.omdbapi.com/"
 CACHE_SCHEMA_VERSION = "v1"
@@ -168,11 +170,7 @@ def omdb_error_status(payload: dict[str, Any]) -> str | None:
 
 
 def omdb_title_candidates(title: str) -> list[str]:
-    candidates = [clean_lookup_title(title)]
-    candidates.append(punctuate_letter_number_title(candidates[0]))
-    candidates.append(strip_edition_noise(candidates[0]))
-    candidates.append(strip_trailing_noise(candidates[-1]))
-    return unique_nonempty(candidates)
+    return provider_title_candidates(title)
 
 
 def clean_lookup_title(title: str) -> str:
@@ -246,9 +244,7 @@ def title_similarity(a: str, b: str) -> float:
 
 
 def normalized_title_key(title: str) -> str:
-    normalized = re.sub(r"[^a-z0-9]+", " ", title.casefold())
-    tokens = [token for token in normalized.split() if token not in {"the", "a", "an"}]
-    return " ".join(tokens)
+    return title_similarity_key(title)
 
 
 def coerce_year(value: Any) -> int | None:

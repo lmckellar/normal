@@ -11,6 +11,7 @@ normal/
 ├── models.py                    # Shared data models — ProposedChange and core types
 ├── output.py                    # Movie XLSX register (movie-register) and quality CSV export
 ├── movie_apply.py               # Movie apply: executes an existing plan file
+├── movie_naming.py              # Shared movie title/display normalization and token cleanup seam
 ├── movie_scan.py                # Movie scan: ffprobe probing, quality scoring, triage
 ├── movie_plan.py                # Movie plan: title/year parsing, rename proposals
 ├── movie_profile.py             # Movie profile: quality ladder classification, heuristic findings
@@ -68,6 +69,9 @@ python3 -m unittest tests.internal.movie_one_shot_live_acceptance
 # Web server
 source .venv/bin/activate
 python3 -m normal web --host 127.0.0.1 --port 8765 --source /path/to/library
+
+# Local dev/testing movie source default
+/mnt/media_storage/Movies
 ```
 
 ## Launch contract
@@ -220,7 +224,7 @@ For normalize specifically, the route contract now matters beyond a flat change 
 
 - movie rows can carry linked serialized changes
 - movie rows can carry warning messages, not just warning codes
-- this richer row payload is what powers `/normalize-lab` review inspection
+- this richer row payload is what powers `/parser-tester-ui` review inspection
 
 ## Test boundaries
 
@@ -286,6 +290,7 @@ These are deliberate choices, not gaps:
 - **Treat this as a portability question, not just a Linux quirk.** The same hygiene may matter differently under Windows Explorer, Finder, desktop search, AV, cloud-sync clients, automounters, and alternate launch/service paths. Avoid assuming current traversal, temp-file, and process-observability behavior carries cleanly across platforms without measurement.
 - **No cross-platform guarantees before 1.0.** Linux-first. Windows/macOS rough edges are known and deferred.
 - **`--in-place` is always explicit.** Never infer in-place mutation from context; the flag must be present.
-- **Canonical list matching uses three-tier fallback.** `_find_inventory_match` in `movie_canonical_lists.py` tries: (1) exact normalized key — `canonical_identity_key(title, year)` strips non-alphanumeric and lowercases both sides; (2) TMDb subtitle fallback — when the TMDb title contains `": "`, also try matching just the part after the colon (handles files named without a franchise prefix where TMDb uses one, e.g. "The Fellowship of the Ring" matching "The Lord of the Rings: The Fellowship of the Ring"); (3) inventory suffix fallback — a pre-built index maps every word-boundary suffix of each inventory title to its key, so a file named with extra franchise words at the front (e.g. "Star Wars Episode V The Empire Strikes Back") matches a TMDb title that is a suffix of it ("The Empire Strikes Back"). Ambiguous suffix matches (two library files share the same suffix+year) are skipped.
+- **Canonical list matching is alias-based.** `_find_inventory_match` in `movie_canonical_lists.py` tries: (1) exact normalized key via `canonical_identity_key`; then (2) shared title aliases from `title_alias_keys`, which cover punctuation-light equivalence, TMDb colon subtitle fallback, and word-boundary suffix aliases. Ambiguous alias matches are skipped.
+- **Shared movie naming is now a first-class seam.** `movie_naming.py` owns display-title normalization, punctuation reconstruction for the narrow settled families (`K-19`, ordinals, `Mr.`/`Dr.`/`L.A.`), provider lookup title candidates, token cleanup, and edge-only tracker/domain credit stripping. Reuse that module instead of reimplementing title cleanup in parser, matching, or provider code.
 - **Configured canonical lists (in order):** `top_100` (Top 100, top_rated, 75%), `top_250` (Top 250, top_rated, 65%), `animation` (Top 50 Animation, genre 16, 60%), `sci_fi` (Sci-Fi, genre 878, 60%), `fantasy` (Fantasy, genre 14, 60%), `action` (Action, genre 28, 60%), `thriller_mystery` (Thriller / Mystery, genres 53+9648, 60%), `documentary` (Top 50 Documentary, genre 99, 60%), `comedy` (Comedy, genre 35, 60%). Badge threshold is the unlock percentage. Do not reinstate `top_1000` or `suspense_horror` — both were removed as poor fits for this library.
 - **Canonical list inspector View button is always shown**, including for 0/x lists. Clicking View on a 0/x list shows all N titles in the list as "Missing" — this is intentional so the user can see what to acquire. The profile inspector suppresses View at count 0; the canonical list inspector does not. If `all_entries` is absent (stale cache from before this field was added), the inspector shows a "Re-run to load N titles" prompt with a back button instead of a table. Browser localStorage cache key is `n_movie_canonical_lists_cache_v3`; old v2 caches (without `all_entries`) are discarded on first page load.

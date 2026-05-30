@@ -8,6 +8,15 @@ from typing import Callable
 import xml.etree.ElementTree as ET
 
 from normal.models import ChangePlan, ProposedChange, WarningItem, build_empty_plan
+from normal.movie_naming import (
+    canonicalize_token_sequence as shared_canonicalize_token_sequence,
+    cleanup_compact_title_text as shared_cleanup_compact_title_text,
+    cleanup_group_text as shared_cleanup_group_text,
+    normalize_display_title as shared_normalize_display_title,
+    split_known_compact_title_words as shared_split_known_compact_title_words,
+    strip_leading_site_credit as shared_strip_leading_site_credit,
+    title_match_key,
+)
 from normal.movie_identity import ParsedMovieIdentity, extract_tail_tokens, parse_movie_identity, split_title_prefix_tail
 from normal.movie_scan import VIDEO_EXTENSIONS, discover_video_files
 
@@ -133,6 +142,8 @@ COMPACT_TITLE_WORDS = {
 }
 
 ParsedMovieName = ParsedMovieIdentity
+NORMALIZED_MOVIE_BASE_PATTERN = re.compile(r"^(?P<title>.+) \((?P<year>19\d{2}|20\d{2}|2100)\)$")
+LEGACY_TITLE_UPGRADE_REASON = "normalized_title_punctuation_upgrade"
 
 
 @dataclass(slots=True)
@@ -323,20 +334,21 @@ def append_movie_file_changes(
     parsed = planned_file.parsed
     movie_path = planned_file.movie_path
     folder_path = planned_file.folder_path
+    cohort = classify_title_migration_cohort(movie_path, canonical_base, parsed)
     if planned_file.loose_root_file:
-        file_move = build_loose_file_move_change(source_root, movie_path, canonical_base, parsed)
+        file_move = build_loose_file_move_change(source_root, movie_path, canonical_base, parsed, cohort=cohort)
         if file_move is not None:
             plan.proposed_changes.append(file_move)
         return
 
-    file_change = build_file_change(source_root, movie_path, canonical_base, parsed)
+    file_change = build_file_change(source_root, movie_path, canonical_base, parsed, cohort=cohort)
     if file_change is not None:
         plan.proposed_changes.append(file_change)
 
     if should_skip_single_movie_folder_change(folder_path, parsed):
         return
 
-    folder_change = build_folder_change(source_root, folder_path, canonical_base, parsed)
+    folder_change = build_folder_change(source_root, folder_path, canonical_base, parsed, cohort=cohort)
     if folder_change is not None:
         plan.proposed_changes.append(folder_change)
 
@@ -499,7 +511,7 @@ def segment_title_from_package_name(value: str) -> str:
 
 
 def comparable_movie_title(value: str) -> str:
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.casefold()).split())
+    return title_match_key(value)
 
 
 def movie_part_label(parsed: ParsedMovieName) -> str | None:
@@ -577,47 +589,15 @@ def parse_year_leading_bracket_payload(source_text: str, match: re.Match[str], y
 
 
 def cleanup_compact_title_text(value: str) -> str:
-    cleaned = cleanup_title_text(value)
-    if not cleaned:
-        return ""
-    if re.search(r"[\s._\-]", value):
-        return cleaned
-    split_words = split_known_compact_title_words(value)
-    return " ".join(split_words) if split_words else cleaned
+    return shared_cleanup_compact_title_text(value)
 
 
 def split_known_compact_title_words(value: str) -> list[str]:
-    upper_value = re.sub(r"[^A-Za-z0-9]+", "", value).upper()
-    words: list[str] = []
-    index = 0
-    ordered_keys = sorted(COMPACT_TITLE_WORDS, key=len, reverse=True)
-    while index < len(upper_value):
-        match_key = next((key for key in ordered_keys if upper_value.startswith(key, index)), None)
-        if match_key is None:
-            return []
-        words.append(COMPACT_TITLE_WORDS[match_key])
-        index += len(match_key)
-    return words
+    return shared_split_known_compact_title_words(value)
 
 
 def cleanup_title_text(value: str) -> str:
-    value = strip_leading_site_credit(value)
-    value = strip_leading_collection_index(value)
-    cleaned = re.sub(r"[._]+", " ", value)
-    cleaned = re.sub(r"[\[\]()\-]+", " ", cleaned)
-    cleaned = " ".join(cleaned.split()).strip()
-    if not cleaned:
-        return ""
-    words = []
-    for word in cleaned.split():
-        if word.isupper() and len(word) <= 4:
-            if word in {"OF", "ON", "IN", "AN", "THE", "FOR", "AND", "FROM", "APES"}:
-                words.append(word.capitalize())
-            else:
-                words.append(word)
-        else:
-            words.append(word.capitalize())
-    return " ".join(words)
+    return shared_normalize_display_title(value)
 
 
 def fallback_parent_title(parent_name: str, year: int) -> str:
@@ -632,21 +612,11 @@ def strip_leading_collection_index(value: str) -> str:
 
 
 def strip_leading_site_credit(value: str) -> str:
-    stripped = value
-    while True:
-        next_value = stripped
-        next_value = LEADING_BRACKETED_CREDIT_PATTERN.sub("", next_value, count=1)
-        next_value = LEADING_UPLOADER_CREDIT_PATTERN.sub("", next_value, count=1)
-        for pattern in LEADING_SITE_CREDIT_PATTERNS:
-            next_value = pattern.sub("", next_value, count=1)
-        if next_value == stripped:
-            return stripped
-        stripped = next_value
+    return shared_strip_leading_site_credit(value)
 
 
 def cleanup_group_text(value: str) -> str | None:
-    cleaned = re.sub(r"[^A-Za-z0-9]+", "", value).upper()
-    return cleaned or None
+    return shared_cleanup_group_text(value)
 
 
 def cleanup_collection_folder_name(value: str) -> str:
@@ -727,45 +697,7 @@ def should_split_compact_technical_token(token: str) -> bool:
 
 
 def canonicalize_token_sequence(tokens: list[str]) -> list[str]:
-    merged: list[str] = []
-    index = 0
-    while index < len(tokens):
-        current = tokens[index]
-        next_token = tokens[index + 1] if index + 1 < len(tokens) else None
-        next_next = tokens[index + 2] if index + 2 < len(tokens) else None
-
-        if current.upper() == "BLU" and next_token and next_token.upper() == "RAY":
-            merged.append("BluRay")
-            index += 2
-            continue
-        if current.upper() == "WEB" and next_token and next_token.upper() == "DL":
-            merged.append("WEB-DL")
-            index += 2
-            continue
-        if current.upper() == "DTS" and next_token and next_token.upper() == "HD":
-            merged.append("DTS-HD")
-            index += 2
-            continue
-        if current.upper() == "H" and next_token in {"264", "265"}:
-            merged.append(f"H.{next_token}")
-            index += 2
-            continue
-        if current.upper() == "OPEN" and next_token and next_token.upper() == "MATTE":
-            merged.append("Open Matte")
-            index += 2
-            continue
-        if current.upper() in {"DD", "DDP"} and is_single_digit_token(next_token) and is_single_digit_token(next_next):
-            merged.append(f"{current.upper()} {next_token}.{next_next}")
-            index += 3
-            continue
-        if is_single_digit_token(current) and is_single_digit_token(next_token):
-            merged.append(f"{current}.{next_token}")
-            index += 2
-            continue
-
-        merged.append(current)
-        index += 1
-    return dedupe_preserve_order(merged)
+    return shared_canonicalize_token_sequence(tokens)
 
 
 def is_single_digit_token(value: str | None) -> bool:
@@ -784,6 +716,29 @@ def dedupe_preserve_order(tokens: list[str]) -> list[str]:
     return ordered
 def concise_movie_base(parsed: ParsedMovieName) -> str:
     return f"{parsed.title} ({parsed.year})"
+
+
+def path_has_normalized_movie_shape(path: Path) -> bool:
+    if path.parent.name != path.stem:
+        return False
+    return NORMALIZED_MOVIE_BASE_PATTERN.fullmatch(path.stem) is not None
+
+
+def classify_title_migration_cohort(movie_path: Path, canonical_base: str, parsed: ParsedMovieName) -> str:
+    if movie_path.stem == canonical_base and movie_path.parent.name == canonical_base:
+        return "normalized_current"
+    if not path_has_normalized_movie_shape(movie_path):
+        return "raw_or_messy"
+    match = NORMALIZED_MOVIE_BASE_PATTERN.fullmatch(movie_path.stem)
+    if match is None or parsed.title is None or parsed.year is None:
+        return "raw_or_messy"
+    current_year = int(match.group("year"))
+    current_title = match.group("title")
+    if current_year != parsed.year:
+        return "raw_or_messy"
+    if title_match_key(current_title) != title_match_key(parsed.title):
+        return "raw_or_messy"
+    return "legacy_normalized"
 
 
 def movie_bases_for_planned_files(planned_files: list[PlannedMovieFile]) -> dict[Path, str]:
@@ -1588,22 +1543,30 @@ def build_file_change(
     movie_path: Path,
     canonical_base: str,
     parsed: ParsedMovieName,
+    *,
+    cohort: str,
 ) -> ProposedChange | None:
     proposed_name = f"{canonical_base}{movie_path.suffix.lower()}"
     current_name = movie_path.name
     if proposed_name == current_name:
         return None
 
+    confidence, reason_codes, warning_codes, reason = change_metadata_for_cohort(
+        parsed,
+        cohort=cohort,
+        default_reason="Movie filename was normalized from locally parsed title, year, and technical tokens.",
+        legacy_reason="Already-normalized movie filename was upgraded to the newer punctuation/display form.",
+    )
     return ProposedChange(
         item_id=f"{movie_path.relative_to(source_root)}#file",
         change_type="file_rename",
         current_value=current_name,
         proposed_value=proposed_name,
-        confidence=parsed.confidence,
-        reason="Movie filename was normalized from locally parsed title, year, and technical tokens.",
+        confidence=confidence,
+        reason=reason,
         path=str(movie_path),
-        reason_codes=list(parsed.reason_codes),
-        warning_codes=list(parsed.reason_codes) if parsed.confidence == "review" else [],
+        reason_codes=reason_codes,
+        warning_codes=warning_codes,
     )
 
 
@@ -1612,22 +1575,30 @@ def build_loose_file_move_change(
     movie_path: Path,
     canonical_base: str,
     parsed: ParsedMovieName,
+    *,
+    cohort: str,
 ) -> ProposedChange | None:
     proposed_path = Path(canonical_base) / f"{canonical_base}{movie_path.suffix.lower()}"
     current_value = movie_path.name
     if movie_path.relative_to(source_root) == proposed_path:
         return None
 
+    confidence, reason_codes, warning_codes, reason = change_metadata_for_cohort(
+        parsed,
+        cohort=cohort,
+        default_reason="Loose movie file was moved into its canonical movie folder.",
+        legacy_reason="Loose movie file was moved into its upgraded punctuation/display movie folder.",
+    )
     return ProposedChange(
         item_id=f"{movie_path.relative_to(source_root)}#file-move",
         change_type="file_move",
         current_value=current_value,
         proposed_value=str(proposed_path),
-        confidence=parsed.confidence,
-        reason="Loose movie file was moved into its canonical movie folder.",
+        confidence=confidence,
+        reason=reason,
         path=str(movie_path),
-        reason_codes=list(parsed.reason_codes),
-        warning_codes=list(parsed.reason_codes) if parsed.confidence == "review" else [],
+        reason_codes=reason_codes,
+        warning_codes=warning_codes,
     )
 
 
@@ -1636,6 +1607,8 @@ def build_folder_change(
     folder_path: Path,
     canonical_base: str,
     parsed: ParsedMovieName,
+    *,
+    cohort: str,
 ) -> ProposedChange | None:
     if folder_path.resolve() == source_root.resolve():
         return None
@@ -1648,18 +1621,43 @@ def build_folder_change(
     if is_redundant_single_movie_wrapper(source_root, folder_path):
         proposed_folder = folder_path.parent.with_name(canonical_base)
         reason = "Duplicate wrapper folder was collapsed into the canonical movie folder."
+    confidence, reason_codes, warning_codes, final_reason = change_metadata_for_cohort(
+        parsed,
+        cohort=cohort,
+        default_reason=reason,
+        legacy_reason="Already-normalized movie folder was upgraded to the newer punctuation/display form.",
+    )
 
     return ProposedChange(
         item_id=f"{folder_path.relative_to(source_root)}#folder",
         change_type="folder_rename",
         current_value=str(folder_path.relative_to(source_root)),
         proposed_value=str(proposed_folder.relative_to(source_root)),
-        confidence=parsed.confidence,
-        reason=reason,
+        confidence=confidence,
+        reason=final_reason,
         path=str(folder_path),
-        reason_codes=list(parsed.reason_codes),
-        warning_codes=list(parsed.reason_codes) if parsed.confidence == "review" else [],
+        reason_codes=reason_codes,
+        warning_codes=warning_codes,
     )
+
+
+def change_metadata_for_cohort(
+    parsed: ParsedMovieName,
+    *,
+    cohort: str,
+    default_reason: str,
+    legacy_reason: str,
+) -> tuple[str, list[str], list[str], str]:
+    confidence = parsed.confidence
+    reason_codes = list(parsed.reason_codes)
+    warning_codes = list(parsed.reason_codes) if parsed.confidence == "review" else []
+    reason = default_reason
+    if cohort == "legacy_normalized":
+        confidence = "review"
+        reason_codes = merge_reason_codes(reason_codes, LEGACY_TITLE_UPGRADE_REASON)
+        warning_codes = merge_reason_codes(warning_codes, LEGACY_TITLE_UPGRADE_REASON)
+        reason = legacy_reason
+    return confidence, reason_codes, warning_codes, reason
 
 
 def merge_reason_codes(reason_codes: list[str], *extras: str) -> list[str]:

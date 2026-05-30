@@ -29,6 +29,27 @@ class MovieOmdbTests(unittest.TestCase):
         self.assertEqual(result["rating"], 6.7)
         self.assertIn({"t": "K-19: The Widowmaker", "y": "2002"}, calls)
 
+    def test_punctuated_title_candidate_matches_abbreviation_title(self) -> None:
+        calls: list[dict[str, str]] = []
+
+        def fake_get(params: dict[str, str]) -> dict:
+            calls.append(params)
+            if params.get("t") == "Mr. Nobody":
+                return {"Response": "True", "Title": "Mr. Nobody", "Year": "2009", "imdbRating": "7.7", "imdbID": "tt0485947"}
+            return {"Response": "False", "Error": "Movie not found!"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = lookup_omdb_ratings(
+                [{"key": "mr_nobody", "title": "Mr Nobody", "year": 2009}],
+                "key",
+                http_get=fake_get,
+                cache_dir=Path(tmpdir),
+            )["items"][0]
+
+        self.assertEqual(result["status"], "matched")
+        self.assertEqual(result["matched_title"], "Mr. Nobody")
+        self.assertIn({"t": "Mr. Nobody", "y": "2009"}, calls)
+
     def test_strips_unrated_edition_noise(self) -> None:
         def fake_get(params: dict[str, str]) -> dict:
             if params.get("t") == "Step Brothers":

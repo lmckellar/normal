@@ -582,6 +582,118 @@ class MoviePlanTests(unittest.TestCase):
             )
             self.assertFalse(plan.warnings)
 
+    def test_build_movie_plan_reconstructs_k19_punctuation_for_raw_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "K.19.The.Widowmaker.2002.1080p.mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            move = next(change for change in plan.proposed_changes if change.change_type == "file_move")
+            self.assertEqual(move.proposed_value, "K-19: The Widowmaker (2002)/K-19: The Widowmaker (2002).mkv")
+            self.assertEqual(move.confidence, "safe")
+
+    def test_build_movie_plan_reconstructs_ordinal_suffixes_for_raw_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            (source / "25Th.Hour.2002.1080p.mkv").write_text("video", encoding="utf-8")
+            (source / "Friday.The.13Th.1980.1080p.mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed_values = {change.proposed_value for change in plan.proposed_changes}
+            self.assertIn("25th Hour (2002)/25th Hour (2002).mkv", proposed_values)
+            self.assertIn("Friday The 13th (1980)/Friday The 13th (1980).mkv", proposed_values)
+
+    def test_build_movie_plan_reconstructs_abbreviation_punctuation_for_raw_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            (source / "L.A.Confidential.1997.1080p.mkv").write_text("video", encoding="utf-8")
+            (source / "Mr.Nobody.2009.1080p.mkv").write_text("video", encoding="utf-8")
+            (source / "Dr.Strangelove.1964.1080p.mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed_values = {change.proposed_value for change in plan.proposed_changes}
+            self.assertIn("L.A. Confidential (1997)/L.A. Confidential (1997).mkv", proposed_values)
+            self.assertIn("Mr. Nobody (2009)/Mr. Nobody (2009).mkv", proposed_values)
+            self.assertIn("Dr. Strangelove (1964)/Dr. Strangelove (1964).mkv", proposed_values)
+
+    def test_build_movie_plan_marks_legacy_normalized_punctuation_upgrade_for_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "K 19 The Widowmaker (2002)"
+            folder.mkdir()
+            movie = folder / "K 19 The Widowmaker (2002).mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            folder_change = next(change for change in plan.proposed_changes if change.change_type == "folder_rename")
+            file_change = next(change for change in plan.proposed_changes if change.change_type == "file_rename")
+            self.assertEqual(folder_change.proposed_value, "K-19: The Widowmaker (2002)")
+            self.assertEqual(file_change.proposed_value, "K-19: The Widowmaker (2002).mkv")
+            self.assertEqual(folder_change.confidence, "review")
+            self.assertEqual(file_change.confidence, "review")
+            self.assertIn("normalized_title_punctuation_upgrade", folder_change.reason_codes)
+            self.assertIn("normalized_title_punctuation_upgrade", file_change.reason_codes)
+
+    def test_build_movie_plan_marks_legacy_normalized_ordinal_and_abbreviation_upgrades_for_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            ordinal_folder = source / "25Th Hour (2002)"
+            ordinal_folder.mkdir()
+            (ordinal_folder / "25Th Hour (2002).mkv").write_text("video", encoding="utf-8")
+            abbreviation_folder = source / "Mr Nobody (2009)"
+            abbreviation_folder.mkdir()
+            (abbreviation_folder / "Mr Nobody (2009).mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            ordinal_folder_change = next(
+                change for change in plan.proposed_changes if change.current_value == "25Th Hour (2002)"
+            )
+            ordinal_file_change = next(
+                change for change in plan.proposed_changes if change.current_value == "25Th Hour (2002).mkv"
+            )
+            abbreviation_folder_change = next(
+                change for change in plan.proposed_changes if change.current_value == "Mr Nobody (2009)"
+            )
+            abbreviation_file_change = next(
+                change for change in plan.proposed_changes if change.current_value == "Mr Nobody (2009).mkv"
+            )
+
+            self.assertEqual(ordinal_folder_change.proposed_value, "25th Hour (2002)")
+            self.assertEqual(ordinal_file_change.proposed_value, "25th Hour (2002).mkv")
+            self.assertEqual(abbreviation_folder_change.proposed_value, "Mr. Nobody (2009)")
+            self.assertEqual(abbreviation_file_change.proposed_value, "Mr. Nobody (2009).mkv")
+            for change in (
+                ordinal_folder_change,
+                ordinal_file_change,
+                abbreviation_folder_change,
+                abbreviation_file_change,
+            ):
+                self.assertEqual(change.confidence, "review")
+                self.assertIn("normalized_title_punctuation_upgrade", change.reason_codes)
+
+    def test_build_movie_plan_does_not_overreach_into_unsettled_punctuation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            (source / "21.Jump.Street.2012.1080p.mkv").write_text("video", encoding="utf-8")
+            (source / "Mission.Impossible.Dead.Reckoning.Part.One.2023.1080p.mkv").write_text("video", encoding="utf-8")
+            (source / "The.Devils.Advocate.1997.1080p.mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed_values = {change.proposed_value for change in plan.proposed_changes}
+            self.assertIn("21 Jump Street (2012)/21 Jump Street (2012).mkv", proposed_values)
+            self.assertIn(
+                "Mission Impossible Dead Reckoning Part One (2023)/Mission Impossible Dead Reckoning Part One (2023).mkv",
+                proposed_values,
+            )
+            self.assertIn("The Devils Advocate (1997)/The Devils Advocate (1997).mkv", proposed_values)
+
     def test_build_movie_plan_splits_leading_number_compact_bracket_payload(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)

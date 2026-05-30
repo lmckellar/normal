@@ -14,7 +14,7 @@ from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
 from normal.movie_junk import detect_movie_junk_document_reasons
-from normal.movie_plan import concise_movie_base, parse_movie_name
+from normal.movie_plan import concise_movie_base, parse_movie_name, path_has_normalized_movie_shape
 from normal.movie_scan import (
     MovieScanProgress,
     emit_progress,
@@ -903,13 +903,7 @@ def evaluate_folder_hygiene_domain(path: Path, facts: MediaFacts, standards: dic
 
 
 def path_matches_normalized_shape(path: Path) -> bool:
-    parsed = parse_movie_name(path)
-    if parsed.title is None or parsed.year is None:
-        return False
-    concise_base = concise_movie_base(parsed)
-    if path.stem != concise_base:
-        return False
-    return path.parent.name == concise_base
+    return path_has_normalized_movie_shape(path)
 
 
 def standard_result(domain: str, status: str, code: str, summary: str, confidence: str) -> dict[str, Any]:

@@ -56,10 +56,10 @@ Lane-agnostic today or trivially extractable:
 |---|---|---|
 | Change contract | `models.py` | `ProposedChange`/`ChangePlan` have zero movie concepts. `change_type` is a free string: `file_rename`, `file_move`, `folder_rename`, `folder_merge`, `folder_delete`, `file_delete`. |
 | Executor | `movie_apply.py` (`apply_change` :177) | Dispatches purely on `change_type`. Safe/review gate, drift detection (`current_value` must still match on disk), depth-ordered folder ops, target-exists guards, `prune_empty_parents`, target-root copy — all generic. **Only** movie-specific bit: `MOVIE_SIDECAR_EXTENSIONS` + sidecar stem matching (:289–327). Effectively this is `apply.py`. |
-| Token/crud hygiene | `movie_identity.py` lower half | `canonicalize_token_sequence`, `split_compact_technical_token`, `normalize_token`, `strip_leading_site_credit`, `cleanup_title_text`, `CANONICAL_TOKEN_MAP`, year-finding. A `www.tracker.com` prefix, `x265`, `BluRay`, a `sample` file — identical for TV. |
+| Token/crud hygiene | `movie_naming.py` + shared calls from `movie_identity.py` | `canonicalize_token_sequence`, `split_compact_technical_token`, `normalize_token`, `strip_leading_site_credit`, `cleanup_title_text`, `CANONICAL_TOKEN_MAP`, year-finding. Edge tracker/domain credit stripping (`www.tracker.com`, split domains, bracketed domain tags), `x265`, `BluRay`, a `sample` file — identical for TV. |
 | Junk/artifact cleanup | `movie_junk.py`, `plan_*_artifact_folder_cleanup` | Same crud (samples, nfo, posters, AppleDouble `._*`). |
 | Media analysis | `movie_scan.py` → `movie_profile.py`, `probe_cache.py` | ffprobe/MediaFacts/quality scoring are identical for an episode file. Probe cache is keyed by path+mtime — lane-neutral. |
-| Web plumbing | `normal/web/` | activity tracker, scan guard, single-flight, the normalize-lab row-shaping pattern in `serializers.py`. |
+| Web plumbing | `normal/web/` | activity tracker, scan guard, single-flight, the parser-tester row-shaping pattern in `serializers.py`. |
 
 ## Lane-specific — fork deliberately
 
@@ -74,9 +74,9 @@ TV violates every one of these *by design*. 24 files in a folder is the correct 
 
 ## Recommended shape
 
-1. **Pre-work (do regardless of TV):** the parser helpers are currently **duplicated** between `movie_identity.py` and `movie_plan.py` — two `canonicalize_token_sequence`, two `cleanup_title_text`, two `CANONICAL_TOKEN_MAP`, two `split_compact_technical_token`, etc. Forking TV off a module that already double-maintains these is a trap. Extract into a shared `naming.py`/`tokens.py` first. (Already implied by the 0.7.x "parser hardening carry-overs" line.) **This is the single highest-leverage move before any TV code is written.**
+1. **Pre-work status:** the movie parser/display cleanup seam has already been extracted into `movie_naming.py`, and `movie_identity.py` / `movie_plan.py` now reuse it. TV should build on that seam rather than recreating parser hygiene locally.
 2. **Parallel, not nested:** new `tv_identity.py` + `tv_plan.py` that emit the *same* `ChangePlan`/`ProposedChange`. The executor consumes them unchanged — that is the entire payoff of the clean contract. No new `change_type` values should be needed; `file_move` + `folder_rename`/`folder_delete` already cover the restructure.
-3. **Serializer sibling, not branch:** `build_tv_normalize_results` reusing the change-indexing pattern from `serializers.py:22` but yielding a hierarchical series→season→episode payload. The richer-row contract the normalize-lab already expects (linked changes, warning messages) generalizes cleanly.
+3. **Serializer sibling, not branch:** `build_tv_normalize_results` reusing the change-indexing pattern from `serializers.py:22` but yielding a hierarchical series→season→episode payload. The richer-row contract the parser tester already expects (linked changes, warning messages) generalizes cleanly.
 4. **Lane is user-chosen.** Separate TV page/source (roadmap already frames it this way). **Do not build a mixed-tree "is this TV or movies" auto-classifier for 0.8** — that classifier is a brand-new cross-lane bug source. Separate sources sidesteps it.
 
 ## Existing TV hooks worth knowing
