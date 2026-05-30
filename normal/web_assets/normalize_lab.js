@@ -7,6 +7,8 @@
     activeRowId: '',
     sort: { key: 'current_value', dir: 'asc' },
     runInFlight: false,
+    activePane: 'detail',
+    previewMode: 'selected',
   };
 
   const el = {
@@ -18,7 +20,14 @@
     caseFilter: document.getElementById('caseFilter'),
     reasonFilter: document.getElementById('reasonFilter'),
     warningFilter: document.getElementById('warningFilter'),
+    selectAllButton: document.getElementById('selectAllButton'),
+    deselectAllButton: document.getElementById('deselectAllButton'),
     rowsBody: document.getElementById('rowsBody'),
+    detailTab: document.getElementById('detailTab'),
+    previewTab: document.getElementById('previewTab'),
+    previewModeBar: document.getElementById('previewModeBar'),
+    selectedPreviewButton: document.getElementById('selectedPreviewButton'),
+    libraryPreviewButton: document.getElementById('libraryPreviewButton'),
     detailPane: document.getElementById('detailPane'),
     previewPane: document.getElementById('previewPane'),
   };
@@ -29,6 +38,26 @@
     el.runButton.textContent = state.runInFlight ? 'Running' : 'Run Normalize';
     el.runButton.disabled = state.runInFlight;
     el.runButton.classList.toggle('is-running', state.runInFlight);
+  }
+
+  function renderSelectionButtons() {
+    const filteredCount = state.filteredRows.length;
+    const selectedVisibleCount = state.filteredRows.filter(row => state.selected.has(row.result_id)).length;
+    el.selectAllButton.disabled = !filteredCount;
+    el.deselectAllButton.disabled = !selectedVisibleCount;
+    el.selectAllButton.textContent = filteredCount ? `Select all (${filteredCount})` : 'Select all';
+    el.deselectAllButton.textContent = selectedVisibleCount ? `Deselect all (${selectedVisibleCount})` : 'Deselect all';
+  }
+
+  function renderPaneTabs() {
+    const previewVisible = state.activePane === 'preview';
+    el.detailTab.classList.toggle('is-active', !previewVisible);
+    el.previewTab.classList.toggle('is-active', previewVisible);
+    el.detailPane.hidden = previewVisible;
+    el.previewPane.hidden = !previewVisible;
+    el.previewModeBar.hidden = !previewVisible;
+    el.selectedPreviewButton.classList.toggle('is-active', state.previewMode === 'selected');
+    el.libraryPreviewButton.classList.toggle('is-active', state.previewMode === 'library');
   }
 
   function escapeHtml(value) {
@@ -99,6 +128,7 @@
 
   function renderRows() {
     applyFilters();
+    renderSelectionButtons();
     if (!state.filteredRows.length) {
       el.rowsBody.innerHTML = '<tr><td colspan="5">No rows for the active filters.</td></tr>';
       return;
@@ -116,7 +146,7 @@
       rowEl.addEventListener('click', event => {
         if (event.target instanceof HTMLInputElement) return;
         state.activeRowId = rowEl.dataset.rowId || '';
-        renderDetail();
+        renderSidePanel();
       });
     });
     el.rowsBody.querySelectorAll('input[data-row-check]').forEach(input => {
@@ -125,7 +155,7 @@
         if (input.checked) state.selected.add(id);
         else state.selected.delete(id);
         state.activeRowId = id;
-        renderDetail();
+        renderSidePanel();
       });
     });
   }
@@ -150,11 +180,10 @@
     return causes;
   }
 
-  function renderDetail() {
+  function renderDetailPane() {
     const row = rowById(state.activeRowId) || state.filteredRows[0] || null;
     if (!row) {
       el.detailPane.textContent = 'Run normalize to inspect rows.';
-      el.previewPane.textContent = 'No projected path yet.';
       return;
     }
     state.activeRowId = row.result_id;
@@ -178,13 +207,110 @@
       <div>Compact token traces:</div>
       <div>${escapeHtml((row.compact_token_traces || []).join('\n') || 'none')}</div>
     `;
-    el.previewPane.innerHTML = `
-      <div><strong>Projected Path</strong></div>
-      <div>${escapeHtml(row.projected_path)}</div>
-      <div style="margin-top:10px"><strong>Linked Changes</strong></div>
-      <div>${changes.map(change => `${change.change_type} [${change.confidence}]: ${change.current_value} -> ${change.proposed_value}${change.reason ? `\n  reason: ${change.reason}` : ''}`).map(escapeHtml).join('\n\n') || 'none'}</div>
+  }
+
+  function selectedRows() {
+    return state.filteredRows.filter(row => state.selected.has(row.result_id));
+  }
+
+  function flattenPreviewTree(node, lines, depth) {
+    Object.keys(node).filter(key => !key.startsWith('_')).sort((a, b) => a.localeCompare(b)).forEach(key => {
+      const entry = node[key];
+      lines.push({ label: `${key}/`, depth, mutated: Boolean(entry._mutated), selected: Boolean(entry._selected), kind: 'dir' });
+      flattenPreviewTree(entry, lines, depth + 1);
+    });
+    (node._files || []).sort((a, b) => a.name.localeCompare(b.name)).forEach(file => {
+      lines.push({ label: file.name, depth, mutated: Boolean(file.mutated), selected: Boolean(file.selected), kind: 'file' });
+    });
+  }
+
+  function buildPreviewTree(rows) {
+    if (!rows.length) return '';
+    const tree = {};
+    rows.forEach(row => {
+      const path = String(row.projected_path || row.current_value || '');
+      const parts = path.split('/').filter(Boolean);
+      const mutated = row.projected_path !== row.current_value;
+      const selected = state.selected.has(row.result_id);
+      let node = tree;
+      parts.forEach((part, index) => {
+        const isFile = index === parts.length - 1;
+        if (isFile) {
+          if (!node._files) node._files = [];
+          node._files.push({ name: part, mutated, selected });
+          return;
+        }
+        node[part] = node[part] || {};
+        if (mutated) node[part]._mutated = true;
+        if (selected) node[part]._selected = true;
+        node = node[part];
+      });
+    });
+    const lines = [];
+    flattenPreviewTree(tree, lines, 0);
+    return `
+      <div class="lab-tree">
+        ${lines.map(line => `
+          <div class="lab-tree-line lab-indent-${Math.min(line.depth, 5)} ${line.mutated ? 'is-mutated' : ''} ${line.selected ? 'is-selected' : ''}">
+            ${escapeHtml(line.label)}
+          </div>
+        `).join('')}
+      </div>
     `;
-    renderRows();
+  }
+
+  function renderSelectedPreview() {
+    const rows = selectedRows();
+    if (!state.payload) {
+      el.previewPane.textContent = 'Run normalize to inspect projected output.';
+      return;
+    }
+    if (!rows.length) {
+      el.previewPane.innerHTML = `
+        <div class="lab-preview-empty">
+          <strong>No rows selected.</strong>
+          <div>Select rows in the table to stage a preview of the output that would change.</div>
+        </div>
+      `;
+      return;
+    }
+    el.previewPane.innerHTML = `
+      <div class="lab-preview-summary">
+        <strong>${rows.length}</strong> selected row${rows.length === 1 ? '' : 's'} in preview.
+      </div>
+      ${buildPreviewTree(rows)}
+    `;
+  }
+
+  function renderLibraryPreview() {
+    if (!state.payload) {
+      el.previewPane.textContent = 'Run normalize to inspect projected output.';
+      return;
+    }
+    const rows = state.filteredRows;
+    if (!rows.length) {
+      el.previewPane.textContent = 'No rows match the current filters.';
+      return;
+    }
+    const mutatedCount = rows.filter(row => row.projected_path !== row.current_value).length;
+    el.previewPane.innerHTML = `
+      <div class="lab-preview-summary">
+        <strong>${rows.length}</strong> row${rows.length === 1 ? '' : 's'} in the current filtered library view.
+        ${mutatedCount ? `<span class="chip">${mutatedCount} mutated</span>` : '<span class="chip">0 mutated</span>'}
+      </div>
+      ${buildPreviewTree(rows)}
+    `;
+  }
+
+  function renderPreviewPane() {
+    if (state.previewMode === 'library') renderLibraryPreview();
+    else renderSelectedPreview();
+  }
+
+  function renderSidePanel() {
+    renderPaneTabs();
+    renderDetailPane();
+    renderPreviewPane();
   }
 
   async function runNormalize() {
@@ -199,9 +325,13 @@
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'normalize failed');
       state.payload = payload;
+      state.selected = new Set();
+      state.activeRowId = '';
+      state.activePane = 'detail';
+      state.previewMode = 'selected';
       renderFilters();
       renderRows();
-      renderDetail();
+      renderSidePanel();
     } finally {
       state.runInFlight = false;
       renderRunButton();
@@ -227,14 +357,46 @@
       if (!key) return;
       state.sort = { key, dir: state.sort.key === key && state.sort.dir === 'asc' ? 'desc' : 'asc' };
       renderRows();
-      renderDetail();
+      renderSidePanel();
     });
   });
   [el.searchInput, el.bucketFilter, el.caseFilter, el.reasonFilter, el.warningFilter].forEach(control => {
-    control.addEventListener('change', () => { renderRows(); renderDetail(); });
-    if (control === el.searchInput) control.addEventListener('input', () => { renderRows(); renderDetail(); });
+    control.addEventListener('change', () => { renderRows(); renderSidePanel(); });
+    if (control === el.searchInput) control.addEventListener('input', () => { renderRows(); renderSidePanel(); });
+  });
+  el.selectAllButton.addEventListener('click', () => {
+    state.filteredRows.forEach(row => state.selected.add(row.result_id));
+    if (state.filteredRows[0]) state.activeRowId = state.filteredRows[0].result_id;
+    state.activePane = 'preview';
+    state.previewMode = 'selected';
+    renderRows();
+    renderSidePanel();
+  });
+  el.deselectAllButton.addEventListener('click', () => {
+    state.filteredRows.forEach(row => state.selected.delete(row.result_id));
+    renderRows();
+    renderSidePanel();
+  });
+  el.detailTab.addEventListener('click', () => {
+    state.activePane = 'detail';
+    renderSidePanel();
+  });
+  el.previewTab.addEventListener('click', () => {
+    state.activePane = 'preview';
+    renderSidePanel();
+  });
+  el.selectedPreviewButton.addEventListener('click', () => {
+    state.previewMode = 'selected';
+    renderSidePanel();
+  });
+  el.libraryPreviewButton.addEventListener('click', () => {
+    state.previewMode = 'library';
+    renderSidePanel();
   });
   renderRunButton();
+  renderSelectionButtons();
+  renderPaneTabs();
+  renderSidePanel();
   el.runButton.addEventListener('click', () => { runNormalize().catch(error => { el.detailPane.textContent = error.message; }); });
   el.exportButton.addEventListener('click', () => { exportSelected().catch(error => { el.previewPane.textContent = error.message; }); });
 })();

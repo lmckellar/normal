@@ -110,9 +110,12 @@ Current capabilities:
 - filters for all, actionable, unchanged, safe, review
 - filters for reason code and warning code
 - package / collision / artifact / subtitle merge case filters
+- select all / deselect all against the current filtered result set
 - sortable current path, projected path, confidence, reason bucket columns
 - detail pane with parse evidence and exact review causes
-- preview pane with projected path and linked changes
+- inline detail / preview toggle in one container instead of stacked panels
+- preview pane with staged selected preview and full filtered-library preview
+- compact projected directory-tree render for downstream shape inspection
 - selected-row export to local JSONL
 
 ### Local Corpus Export
@@ -214,6 +217,17 @@ real normalize review output:
 - normalize row visibility in `/normalize-lab`
 - review boundary coverage for existing-target cases
 
+Later on 2026-05-30, one additional live-library hardening issue was confirmed
+through `/normalize-lab` itself:
+
+- composed downstream file collisions could still slip through as `safe` when a
+  `file_rename` plus `folder_rename` landed on the same final movie file as a
+  separate `file_move`
+
+The Ace Ventura Pet Detective live-library case exposed this clearly in the
+Preview tree even while the proposal table still showed zero review flags. That
+was a genuine planner defect, not a preview artifact.
+
 ### What Changed
 
 - existing-target collisions now attempt a safe alternate concise target before
@@ -227,6 +241,14 @@ real normalize review output:
 - `/normalize-lab` now shows those linked reasons and warning messages directly
   in the row detail pane, and row checkbox selection updates the active detail
   view immediately
+- `/normalize-lab` preview is now an inline staged tree view rather than a
+  second verbose debug card stack, which makes downstream shape inspection
+  materially useful against the real library
+- collision marking now uses the composed final movie path for `file_rename`
+  rows after any paired `folder_rename`, so the planner catches downstream
+  file collisions that were previously missed
+- the Ace Ventura composed-collision shape is covered by a committed planner
+  regression test
 
 ### Validation Run
 

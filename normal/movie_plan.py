@@ -898,7 +898,7 @@ def movie_differentiator_candidates(parsed: ParsedMovieName) -> list[str]:
 def mark_movie_target_collisions(plan: ChangePlan, source_root: Path) -> None:
     targets: dict[str, list[ProposedChange]] = defaultdict(list)
     for change in plan.proposed_changes:
-        target = movie_change_target_key(change, source_root)
+        target = movie_change_target_key(change, source_root, plan=plan)
         if target is not None:
             targets[target].append(change)
 
@@ -926,7 +926,7 @@ def mark_movie_target_collisions(plan: ChangePlan, source_root: Path) -> None:
 def mark_existing_movie_target_collisions(plan: ChangePlan, source_root: Path) -> None:
     source_resolved = source_root.resolve()
     for change in plan.proposed_changes:
-        target = movie_change_target_key(change, source_root)
+        target = movie_change_target_key(change, source_root, plan=plan)
         if target is None or change.path is None:
             continue
         target_path = source_resolved / target
@@ -977,19 +977,56 @@ def mark_change_for_existing_target_collision(change: ProposedChange) -> None:
         change.reason = f"{change.reason} {message}"
 
 
-def movie_change_target_key(change: ProposedChange, source_root: Path) -> str | None:
+def movie_change_target_key(change: ProposedChange, source_root: Path, *, plan: ChangePlan | None = None) -> str | None:
     if change.change_type == "file_move":
         return change.proposed_value
     if change.change_type == "folder_rename":
         return change.proposed_value
     if change.change_type == "file_rename" and change.path is not None:
-        source_path = Path(change.path)
-        try:
-            relative_parent = source_path.parent.resolve().relative_to(source_root.resolve())
-        except ValueError:
+        source_path = Path(change.path).resolve()
+        relative_parent = projected_relative_parent_for_file_change(source_path, source_root, plan)
+        if relative_parent is None:
             return None
-        return str(relative_parent / change.proposed_value)
+        return str(relative_parent / change.proposed_value) if str(relative_parent) else change.proposed_value
     return None
+
+
+def projected_relative_parent_for_file_change(
+    source_path: Path,
+    source_root: Path,
+    plan: ChangePlan | None,
+) -> Path | None:
+    try:
+        relative_parent = source_path.parent.resolve().relative_to(source_root.resolve())
+    except ValueError:
+        return None
+    if plan is None:
+        return relative_parent
+
+    projected_parent = relative_parent
+    folder_changes = sorted(
+        (
+            change for change in plan.proposed_changes
+            if change.change_type == "folder_rename" and change.path is not None
+        ),
+        key=lambda change: len(Path(change.current_value).parts),
+        reverse=True,
+    )
+    for change in folder_changes:
+        folder_path = Path(change.path).resolve()
+        try:
+            folder_relative = folder_path.relative_to(source_root.resolve())
+        except ValueError:
+            continue
+        if projected_parent == folder_relative:
+            projected_parent = Path(change.proposed_value)
+            continue
+        try:
+            suffix = projected_parent.relative_to(folder_relative)
+        except ValueError:
+            continue
+        projected_parent = Path(change.proposed_value) / suffix
+    return projected_parent
 
 
 def try_resolve_existing_target_collision(plan: ChangePlan, change: ProposedChange, source_root: Path) -> bool:

@@ -40,6 +40,8 @@
       </select>
       <select id="reasonFilter"><option value="">reason code</option></select>
       <select id="warningFilter"><option value="">warning code</option></select>
+      <button id="selectAllButton" type="button">Select all</button>
+      <button id="deselectAllButton" type="button">Deselect all</button>
     </section>
 
     <main class="lab-layout">
@@ -59,12 +61,18 @@
       </section>
       <aside class="lab-detail">
         <div class="lab-panel">
-          <h2>Detail</h2>
+          <div class="lab-panel-header">
+            <div class="lab-view-toggle" role="tablist" aria-label="Detail or preview">
+              <button id="detailTab" class="lab-tab" type="button">Detail</button>
+              <button id="previewTab" class="lab-tab" type="button">Preview</button>
+            </div>
+            <div id="previewModeBar" class="lab-preview-modes" hidden>
+              <button id="selectedPreviewButton" class="lab-mode-button" type="button">Selected</button>
+              <button id="libraryPreviewButton" class="lab-mode-button" type="button">Full library</button>
+            </div>
+          </div>
           <div id="detailPane" class="lab-pane"></div>
-        </div>
-        <div class="lab-panel">
-          <h2>Preview</h2>
-          <div id="previewPane" class="lab-pane"></div>
+          <div id="previewPane" class="lab-pane" hidden></div>
         </div>
       </aside>
     </main>

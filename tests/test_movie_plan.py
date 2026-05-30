@@ -334,6 +334,34 @@ class MoviePlanTests(unittest.TestCase):
             self.assertTrue(any(change.confidence == "review" for change in review_changes))
             self.assertIn("movie_name_existing_target_collision", {warning.code for warning in plan.warnings})
 
+    def test_build_movie_plan_marks_composed_file_target_collision_for_review(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            verbose = source / "Ace Ventura Pet Detective (1994) 1080p"
+            verbose.mkdir()
+            (verbose / "Ace Ventura Pet Detective (1994) 1080p.mkv").write_text("video", encoding="utf-8")
+            collection = source / "The Ace Ventura Collection (1994-1995)"
+            collection.mkdir()
+            (
+                collection / "1994.Ace.Ventura-.Pet.Detective.1920x1080.BDRip.x264.DTS-HD.MA.mkv"
+            ).write_text("video", encoding="utf-8")
+            (
+                collection / "1995.Ace.Ventura-.When.Nature.Calls.1920x800.BDRip.x264.DTS-HD.MA.mkv"
+            ).write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            pet_changes = [
+                change for change in plan.proposed_changes
+                if "Ace Ventura Pet Detective" in change.proposed_value
+            ]
+            self.assertEqual(len(pet_changes), 3)
+            self.assertTrue(any(change.confidence == "review" for change in pet_changes))
+            self.assertIn("movie_name_target_collision", {warning.code for warning in plan.warnings})
+            self.assertTrue(
+                any("unresolved_duplicate_video_target_collision" in change.reason_codes for change in pet_changes)
+            )
+
     def test_build_movie_plan_proposes_rich_filename_and_folder_renames(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)

@@ -15,6 +15,7 @@ The normalize flow is a proposal pipeline first:
 - `movie-plan` and the web normalize page parse local paths and build a rename or cleanup plan.
 - The plan can include file renames, file moves, folder renames, safe folder merges, and a narrow set of safe cleanup deletes.
 - Existing-target collisions are not all treated the same. The planner first tries to resolve them into safe alternate concise targets when local evidence is strong enough, then leaves only the unresolved cases in review.
+- Collision checks now use the composed final movie target, not just raw per-change target fragments. This matters for cases where a `file_rename` and `folder_rename` together would land on the same downstream file as another move or rename.
 - Nothing is changed during planning. Mutation only happens when the user applies selected changes.
 
 Current normalize contract is intentionally evidence-driven:
@@ -22,6 +23,7 @@ Current normalize contract is intentionally evidence-driven:
 - parser evidence and local folder context can promote a collision from `review` to `safe`
 - normalize web payloads now carry linked change detail plus warning detail for each movie row
 - `/normalize-lab` is an internal inspection surface for that richer backend reasoning, not a second mutation UI
+- `/normalize-lab` now also acts as a downstream-shape harness: selected rows can be staged into an inline tree preview, and the filtered library view can be rendered as a compact projected directory shape
 
 ### Quality and triage pipeline
 

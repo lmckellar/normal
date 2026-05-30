@@ -31,6 +31,8 @@ Title (Year)/Title (Year).mkv
 
 The production normalizer is concise-first and treated as the intended movie shape. **All Results** includes already-normalized items as no-change rows so the preview shows the full downstream structure, not just the diffs.
 
+The internal testing surface at `/normalize-lab` is now useful for real downstream inspection rather than just row debugging. It renders the projected library shape inline as a compact directory tree, supports staged preview through row selection, and is valuable for checking whether a proposal is merely parsable or actually coherent when viewed as an applied library state.
+
 Verbose naming still exists temporarily in the CLI as parser-hardening scaffolding, but it is not the public end state:
 
 ```
@@ -38,6 +40,8 @@ Title (Year) [technical tokens]/Title (Year) [technical tokens].mkv
 ```
 
 Ambiguous parses and unsafe target collisions are flagged as `review`. Everything else is `safe`. You review the plan before anything moves.
+
+That review boundary now also covers composed target collisions: if a file rename plus folder rename would land on the same final movie path as another proposal, the planner downgrades the case to `review` instead of letting two `safe` actions converge silently on one downstream file.
 
 Concise duplicate handling is subtractive but not lossy when two local copies would otherwise collide. If the scan can distinguish them from parsed path or folder-context tokens, it adds the shortest useful suffix to both folder and file stem, such as `Title (Year) 1080p` and `Title (Year) 2160p`. If no local differentiator is available, the collision stays in review rather than inventing `(2)` names.
 
