@@ -594,6 +594,18 @@ class MoviePlanTests(unittest.TestCase):
             self.assertEqual(move.proposed_value, "K-19: The Widowmaker (2002)/K-19: The Widowmaker (2002).mkv")
             self.assertEqual(move.confidence, "safe")
 
+    def test_build_movie_plan_reconstructs_compact_k19_punctuation_for_raw_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "K19.The.Widowmaker.2002.1080p.mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            move = next(change for change in plan.proposed_changes if change.change_type == "file_move")
+            self.assertEqual(move.proposed_value, "K-19: The Widowmaker (2002)/K-19: The Widowmaker (2002).mkv")
+            self.assertEqual(move.confidence, "safe")
+
     def test_build_movie_plan_reconstructs_ordinal_suffixes_for_raw_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)

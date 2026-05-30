@@ -29,6 +29,27 @@ class MovieOmdbTests(unittest.TestCase):
         self.assertEqual(result["rating"], 6.7)
         self.assertIn({"t": "K-19: The Widowmaker", "y": "2002"}, calls)
 
+    def test_punctuated_title_candidate_matches_compact_k19(self) -> None:
+        calls: list[dict[str, str]] = []
+
+        def fake_get(params: dict[str, str]) -> dict:
+            calls.append(params)
+            if params.get("t") == "K-19: The Widowmaker":
+                return {"Response": "True", "Title": "K-19: The Widowmaker", "Year": "2002", "imdbRating": "6.7", "imdbID": "tt0267626"}
+            return {"Response": "False", "Error": "Movie not found!"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = lookup_omdb_ratings(
+                [{"key": "k19_compact", "title": "K19 The Widowmaker", "year": 2002}],
+                "key",
+                http_get=fake_get,
+                cache_dir=Path(tmpdir),
+            )["items"][0]
+
+        self.assertEqual(result["status"], "matched")
+        self.assertEqual(result["rating"], 6.7)
+        self.assertIn({"t": "K-19: The Widowmaker", "y": "2002"}, calls)
+
     def test_punctuated_title_candidate_matches_abbreviation_title(self) -> None:
         calls: list[dict[str, str]] = []
 

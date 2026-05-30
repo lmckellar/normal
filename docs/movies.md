@@ -59,7 +59,7 @@ The parser stays local and heuristic. It prefers a clear ASCII title segment whe
 
 Current parser hardening is intentionally narrow:
 
-- it reconstructs a small settled punctuation set when local evidence is already present, such as ordinals (`25th`) and title abbreviations/initialisms (`Mr.`, `Dr.`, `L.A.`)
+- it reconstructs a small settled punctuation set when local evidence is already present, such as ordinals (`25th`), title abbreviations/initialisms (`Mr.`, `Dr.`, `L.A.`), and the compact `K19` / spaced `K 19` title family into `K-19: ...`
 - it keeps the existing punctuation-light stance for unresolved subtitle punctuation such as colons and deferred apostrophe recovery
 - it strips stacked tracker or domain credit noise only at the path edges, including `www...`, split-domain forms such as `Oxtorrent Com`, and bracketed domain tags, without trying to clean mid-title words
 

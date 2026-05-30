@@ -561,7 +561,8 @@ def clean_lookup_title(title: str) -> str:
 def punctuate_letter_number_title(title: str) -> str:
     if ":" in title:
         return " ".join(title.split()).strip()
-    replaced = re.sub(r"\b([A-Za-z])\s*-\s*(\d+)\b", r"\1-\2", title, count=1)
+    replaced = re.sub(r"\b([A-Za-z])(\d+)\b", r"\1-\2", title, count=1)
+    replaced = re.sub(r"\b([A-Za-z])\s*-\s*(\d+)\b", r"\1-\2", replaced, count=1)
     replaced = re.sub(r"\b([A-Za-z])\s+(\d+)\b", r"\1-\2", replaced, count=1)
     return re.sub(r"^([A-Za-z]-\d+)\s+(.+)$", r"\1: \2", replaced, count=1)
 
