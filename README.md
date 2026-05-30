@@ -20,11 +20,13 @@ Documentation authorship policy: [docs/writing.md](docs/writing.md).
 - Lets you compare your collection directly against canonical movie lists (TMDB Top 100, 250, etc.) and identify what's missing
 - One Click Export your entire library as a cleanly organized spreadsheet
 
+All packaged with a clean and modern Web GUI, minimal dependencies and all core features are local only. 
+
 The fuller stance on why these choices are adopted is in [docs/statement.md](docs/statement.md).
 
 ## The Opinionated Part
 
-`normal` is built around two principles that lead to two primary claims:
+`normal` is built around the following principles that lead to some loud claims:
 
 **Physical Storage Economics**
 
@@ -36,14 +38,19 @@ Conversely, beneath a certain perceptual threshold even small files are objectiv
 
 Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
 
-**The Dual Claims**
+**Universal Naming Convention**
+
+While preference on the specifics of naming and oraganisation may vary occasionally in response to obscure user preference, the expectations of downstream clients such as Plex and Jellyfin are explicit and should be targeted with a Uiversal Naming Convention that translates as freely between media API databases like IMDB/TMBD as it does into other clients like Emby, etc. 
+
+**The Holy Trinity Of Snobby Claims**
 
 1. A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 weak, mediocre and chaotic ones. 
 
 2. A maintenance process of 1,000 concise, respectful drive read/write events is preferable to one of 5,000 less consise ones if it acheives the same downstream shape.
 
+3. Title (Year)/Title (Year).mkv is The Way.
+
 ## Before You Point It at Your Real Library
-`User-written`
 
 `normal` has become confident and efficient enough in flagging to take an aggressive by default stance. It renames, moves, deletes files and folders, uses recursive probe walks to gather metadata where unable to derive useful information via cheaper heuristic methods, calls remuxing workloads via `ffmpeg`, and will seek to move "from A to B" as fast as you let it. It does this by combining workflows while still providing visibility into what is being modified and what its output shape will be, but the net effect is that the tool can feel a little "in a hurry to clean your room" compared to more traditional and stage based implementations of this concept. This accumulates to big savings in terms of drive read/write and time spent tending to the process of maintenance yet does require the user to excercise adequate dilligence. 
 
@@ -71,12 +78,12 @@ Watching the tool purify a test library for the first time is a good experience.
   If you do not provide these keys:
 
   - the app still launches and the main movie workflows still work as you would expect
-  - `Canonical Lists` cannot fetch TMDb coverage data without `TMDB_KEY` and will not render useable lists in the UI
-  - replacement-history-list IMDb ratings do not pull and instead render as a '-' in the otherwise fully functioning output table
+  - `Canonical Lists` cannot fetch TMDb coverage data so this 'non core' feature will simply not return a list
+  - replacement-history-list IMDb ratings are entwined into core workflow with a graceful fallback; if no API Key is present normal simply does not pull ratings into the render table and instead rends a '-' in the otherwise fully functioning output table.
 
-  Keys are free with basic usage plans and can be passed either by environment variable or via `normal web --tmdb-key ... --omdb-key ...`.
+  API Keys can be obtained from the respective websites and are free with basic usage plans and can be passed either by environment variable or via `normal web --tmdb-key ... --omdb-key ...`.
 
-  `normal` thoughtfully provides an internal local caching feature that minimises progressive API calls after initial scan. This allows users to stay comfortably within free usage plan rate limits for the API service providers even if managing a very large replacement queue and avoids needlessly hammering the provider endpoints with wasteful API requests. In the event the user gets rate limited (likely on initial scan of huge library if many weak encodes get nuked, unlikely otherwise) they can simply wait 24 hours for the TMBD rate limit to refresh and perform another scan in normal - it will rebuild whatever was not initially scanned, update anything that has gone stale, while deliberately avoiding any wasteful re-queries against the API endpoint for known values from prior scans. 
+  `normal` thoughtfully provides an internal local caching feature that minimises progressive API calls after initial scan. This allows users to stay comfortably within free usage plan rate limits for the API service providers even if managing a very large replacement queue and avoids needlessly hammering the provider endpoints with wasteful API requests. In the event the user gets rate limited (possible on initial scan of huge library if many weak encodes get nuked, unlikely otherwise) they can simply wait 24 hours for the TMBD rate limit to refresh and perform another scan in normal - it will rebuild whatever was not initially scanned, update anything that has gone stale, while deliberately avoiding any wasteful re-queries against the API endpoint for known values from prior scans. 
 
   See [docs/safety.md](docs/safety.md#networking-behaviour) for the networking posture and [docs/movies.md](docs/movies.md) for where these features appear in the UI.
 
