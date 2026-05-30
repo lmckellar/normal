@@ -477,8 +477,6 @@ def plan_multi_movie_package_folder(
 def should_skip_single_movie_folder_change(folder_path: Path, parsed: ParsedMovieName) -> bool:
     if not parsed.title or not is_multi_movie_package_folder_name(folder_path.name.casefold()):
         return False
-    if folder_has_single_supported_video_payload(folder_path):
-        return False
     return folder_name_contains_distinct_package_segments(folder_path.name, parsed.title)
 
 
@@ -491,17 +489,6 @@ def folder_name_contains_distinct_package_segments(folder_name: str, parsed_titl
     matching_segments = [title for title in segment_titles if title and comparable_movie_title(title) == parsed_key]
     other_segments = [title for title in segment_titles if title and comparable_movie_title(title) != parsed_key]
     return bool(matching_segments and other_segments)
-
-
-def folder_has_single_supported_video_payload(folder_path: Path) -> bool:
-    try:
-        video_files = [
-            path for path in folder_path.rglob("*")
-            if path.is_file() and path.suffix.lower() in VIDEO_EXTENSIONS and not path.name.startswith("._")
-        ]
-    except OSError:
-        return False
-    return len(video_files) == 1
 
 
 def segment_title_from_package_name(value: str) -> str:

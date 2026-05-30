@@ -1068,7 +1068,7 @@ class MoviePlanTests(unittest.TestCase):
             self.assertNotIn(("file_rename", "Death Proof (2007) Grindhouse Planet Terror & Death Proof 1080p Unrated Mkvonly.mkv", "review"), proposed)
             self.assertNotIn("unknown_technical_token", {warning.code for warning in plan.warnings})
 
-    def test_build_movie_plan_uses_concise_package_tail_token_for_existing_target_collision(self) -> None:
+    def test_build_movie_plan_keeps_package_folder_when_existing_target_collision_needs_salvage(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
             canonical = source / "Death Proof (2007)"
@@ -1083,12 +1083,10 @@ class MoviePlanTests(unittest.TestCase):
             plan = build_movie_plan(source)
 
             file_change = next(change for change in plan.proposed_changes if change.change_type == "file_rename")
-            folder_change = next(change for change in plan.proposed_changes if change.change_type == "folder_rename")
             self.assertEqual(file_change.proposed_value, "Death Proof (2007) 1080p.mkv")
             self.assertEqual(file_change.confidence, "safe")
-            self.assertEqual(folder_change.proposed_value, "Death Proof (2007) 1080p")
-            self.assertEqual(folder_change.confidence, "safe")
             self.assertNotIn("movie_name_existing_target_collision", {warning.code for warning in plan.warnings})
+            self.assertFalse(any(change.change_type == "folder_rename" for change in plan.proposed_changes))
 
     def test_build_movie_plan_trims_reported_verbose_parser_slips(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
