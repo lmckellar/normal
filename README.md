@@ -40,7 +40,7 @@ Reading and writing to a physical hard drive repeatedly is not free. `normal` tr
 
 **Universal Naming Convention**
 
-While preference on the specifics of naming and oraganisation may vary occasionally in response to obscure user preference, the expectations of downstream clients such as Plex and Jellyfin are explicit and should be targeted with a Uiversal Naming Convention that translates as freely between media API databases like IMDB/TMBD as it does into other clients like Emby, etc. 
+While preference on the specifics of naming and organisation may vary occasionally in response to obscure user preference, the expectations of downstream clients such as Plex and Jellyfin are explicit and should be targeted with a Universal Naming Convention that translates as freely between media API databases like IMDB/TMBD as it does into other clients like Emby, etc. 
 
 **The Holy Trinity Of Snobby Claims**
 
