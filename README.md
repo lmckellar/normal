@@ -1,6 +1,6 @@
 # normal
 
-*Authorship: Human/AI-authored.*
+*Authorship: Human authored.*
 
 Restoring order to your chaotic movie library
 
