@@ -66,7 +66,6 @@ Recommended testing process is in [docs/quickstart.md](docs/quickstart.md) and [
 Watching the tool purify a test library for the first time is a good experience. Watching it touch your real library before you're ready is not.
 
 ## Optional API Keys
-`Agent-written`
 
   `normal` works without external API keys for its core local workflows: movie normalize, profile scans, junk detection, repair defaults, inspect, and exports all run against local files.
 
