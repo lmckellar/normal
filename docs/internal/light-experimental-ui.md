@@ -40,12 +40,16 @@ Shared shell:
 
 Normalize:
 
-- existing row/detail/preview split remains
+- table shows source `File Name` rather than full source path
+- existing row reasoning remains visible alongside preview in the right column
 - confirm path still uses `/api/movies/normalize` and `/api/movies/apply`
 
 Weak encodes:
 
 - scan table owns inspection details
+- table shows source `File Name` rather than full source path
+- issue labels should stay short and semantic rather than expose raw thresholds or
+  diagnostic prose where avoidable
 - right column owns preview and destructive confirm only
 - row source is `/api/movies/profile`
 - preview source is `/api/movies/replacement-queue/delete-preview`

@@ -11,7 +11,7 @@
 
   const NORMALIZE_HEADERS = [
     { key: 'select', label: '' },
-    { key: 'current_value', label: 'Current Path' },
+    { key: 'current_value', label: 'File Name' },
     { key: 'projected_path', label: 'Projected Path' },
     { key: 'confidence', label: 'Confidence' },
     { key: 'reason_bucket', label: 'Reason Bucket' },
@@ -19,7 +19,7 @@
 
   const WEAK_HEADERS = [
     { key: 'select', label: '' },
-    { key: 'current_path', label: 'Current Path' },
+    { key: 'current_path', label: 'File Name' },
     { key: 'issue', label: 'Issue' },
     { key: 'resolution', label: 'Resolution' },
     { key: 'video_bitrate', label: 'Video Bitrate' },
@@ -27,7 +27,6 @@
     { key: 'channels', label: 'Channels' },
     { key: 'audio_summary', label: 'Audio Summary' },
     { key: 'file_size', label: 'File Size' },
-    { key: 'status', label: 'Status' },
   ];
 
   const state = {
@@ -40,7 +39,6 @@
     activeRowId: '',
     sort: { key: 'current_value', dir: 'asc' },
     runInFlight: false,
-    activePane: 'detail',
     previewMode: 'selected',
     applyInFlight: false,
     weakPreview: null,
@@ -67,9 +65,6 @@
     deselectAllButton: document.getElementById('deselectAllButton'),
     tableHeaderRow: document.getElementById('tableHeaderRow'),
     rowsBody: document.getElementById('rowsBody'),
-    paneTabs: document.getElementById('paneTabs'),
-    detailTab: document.getElementById('detailTab'),
-    previewTab: document.getElementById('previewTab'),
     previewControls: document.getElementById('previewControls'),
     selectedPreviewButton: document.getElementById('selectedPreviewButton'),
     libraryPreviewButton: document.getElementById('libraryPreviewButton'),
@@ -125,6 +120,11 @@
     return raw ? `${Math.round(raw).toLocaleString()} kbps` : '—';
   }
 
+  function fileNameFromPath(path) {
+    const parts = String(path || '').split('/').filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : String(path || '');
+  }
+
   function humanProfileLabel(label) {
     if (label === 'standard_definition') return 'Standard Definition';
     if (label === 'library_grade') return 'Library Grade';
@@ -136,12 +136,47 @@
     return String(label || '').split('_').filter(Boolean).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   }
 
+  function firstMovieProfileIssueResult(item) {
+    const domainResults = item?.profile?.domain_results || [];
+    return domainResults.find(result => result?.status === 'fail')
+      || domainResults.find(result => result?.status === 'review_low_confidence')
+      || null;
+  }
+
+  function movieProfileIssueThreshold(summary) {
+    const match = String(summary || '').match(/(\d[\d,]*)/);
+    return match ? match[1] : '';
+  }
+
+  function humanMovieProfileIssueLabel(code, summary = '') {
+    if (code === 'video_below_minimum') return 'Below Min. Video Bitrate';
+    if (code === 'video_signal_missing') return 'Video Signal Missing';
+    if (code === 'audio_channels_below_minimum') {
+      const threshold = movieProfileIssueThreshold(summary);
+      return threshold ? `Main Audio Below ${threshold} Channels` : 'Main Audio Below Minimum Channels';
+    }
+    if (code === 'audio_bitrate_below_minimum') return 'Main Audio Below Min. Bitrate';
+    if (code === 'audio_codec_below_minimum') return 'Main Audio Codec Below Minimum';
+    if (code === 'audio_signal_missing') return 'Audio Signal Missing';
+    if (code === 'audio_default_unknown') return 'Default Audio Unknown';
+    if (code === 'audio_default_non_english_no_english_alt') return 'Non-English Default Audio';
+    if (code === 'audio_default_non_english') return 'Wrong Default Audio Language';
+    if (code === 'multiple_default_subtitles') return 'Multiple Default Subtitles';
+    if (code === 'english_forced_not_default') return 'Forced English Not Default';
+    if (code === 'wrong_default_forced_subtitle') return 'Wrong Forced Subtitle Default';
+    if (code === 'missing_default_english_subtitle') return 'Missing Default English Subtitle';
+    if (code === 'wrong_default_subtitle_language') return 'Wrong Default Subtitle Language';
+    if (code === 'unnecessary_default_subtitle') return 'Unnecessary Default Subtitle';
+    if (code === 'path_not_normalized') return 'Non-Standard Path';
+    if (code === 'promo_sidecar_present') return 'Promo Sidecar Present';
+    if (code === 'subtitle_policy_unknown') return 'Subtitle Policy Unknown';
+    return code ? code.split('_').filter(Boolean).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : '';
+  }
+
   function movieProfileInlineSummary(item) {
-    const failed = (item?.profile?.domain_results || []).filter(result => result?.status === 'fail');
-    const reviews = (item?.profile?.domain_results || []).filter(result => result?.status === 'review_low_confidence');
-    if (failed.length) return failed[0]?.summary || '';
-    if (reviews.length) return `Low confidence: ${reviews[0]?.summary || ''}`.trim();
-    if (item?.profile?.legacy_bitrate_label) return `Legacy bitrate: ${item.profile.legacy_bitrate_label.replaceAll('_', ' ')}`;
+    const issue = firstMovieProfileIssueResult(item);
+    if (issue) return humanMovieProfileIssueLabel(issue.code || '', issue.summary || '');
+    if (item?.profile?.legacy_bitrate_label) return `Legacy ${item.profile.legacy_bitrate_label.replaceAll('_', ' ')}`;
     return '';
   }
 
@@ -150,23 +185,6 @@
     return (currentWeakQueue()?.items || []).find(item =>
       item.original_path === path && ['pending', 'deleted', 'completed'].includes(item.status)
     ) || null;
-  }
-
-  function replacementQueueStatusLabel(item) {
-    if (!item) return 'delete candidate';
-    if (item.status === 'pending') return 'queued';
-    if (item.status === 'deleted') return 'deleted, waiting replacement';
-    if (item.status === 'dismissed') return 'deleted from queue';
-    if (item.status === 'completed') return 'replaced';
-    return '—';
-  }
-
-  function replacementQueueStatusChip(item) {
-    if (!item) return '<span class="chip delete">delete candidate</span>';
-    if (item.status === 'pending') return '<span class="chip queue">queued</span>';
-    if (item.status === 'deleted') return '<span class="chip">deleted, waiting replacement</span>';
-    if (item.status === 'completed') return '<span class="chip">replaced</span>';
-    return '<span class="chip">deleted from queue</span>';
   }
 
   function renderWorkflowHeader() {
@@ -252,14 +270,13 @@
       item,
       selectable: isStrictWeakMovie(item) && !queueItem,
       current_path: item.path || '',
-      issue: `${humanProfileLabel(item?.profile?.label || '')}${movieProfileInlineSummary(item) ? ` · ${movieProfileInlineSummary(item)}` : ''}`,
+      issue: movieProfileInlineSummary(item) || humanProfileLabel(item?.profile?.label || ''),
       resolution: item?.facts?.resolution_bucket || '',
       video_bitrate: item?.facts?.video_bitrate_kbps || 0,
       audio_bitrate: item?.facts?.audio_bitrate_kbps || 0,
       channels: item?.facts?.audio_channels || 0,
       audio_summary: item?.facts?.audio_summary || '',
       file_size: item?.facts?.file_size_bytes || 0,
-      status: replacementQueueStatusLabel(queueItem),
       workflow_status: queueItem?.status === 'pending'
         ? 'queued'
         : (item?.profile?.label === 'needs_review' ? 'review' : 'delete-candidates'),
@@ -280,7 +297,7 @@
         if (status === 'review' && row.workflow_status !== 'review') return false;
         if (status === 'queued' && row.workflow_status !== 'queued') return false;
         if (query) {
-          const haystack = `${row.current_path} ${row.issue} ${row.audio_summary} ${row.status}`.toLowerCase();
+          const haystack = `${row.current_path} ${row.issue} ${row.audio_summary}`.toLowerCase();
           if (!haystack.includes(query)) return false;
         }
         return true;
@@ -401,14 +418,10 @@
     el.confirmButton.textContent = state.applyInFlight ? `Confirming (${changeCount} Changes)` : `Confirm (${changeCount} Changes)`;
   }
 
-  function renderPaneTabs() {
-    const previewVisible = state.activePane === 'preview' || isWeakMode();
-    el.paneTabs.hidden = isWeakMode();
-    el.detailTab.classList.toggle('is-active', !previewVisible);
-    el.previewTab.classList.toggle('is-active', previewVisible);
-    el.detailPane.hidden = previewVisible;
-    el.previewPane.hidden = !previewVisible;
-    el.previewControls.hidden = !previewVisible;
+  function renderPanelVisibility() {
+    el.detailPane.hidden = isWeakMode();
+    el.previewPane.hidden = false;
+    el.previewControls.hidden = false;
     el.selectedPreviewButton.classList.toggle('is-active', state.previewMode === 'selected');
     el.libraryPreviewButton.classList.toggle('is-active', state.previewMode === 'library');
     renderConfirmButton();
@@ -433,7 +446,7 @@
     return `
       <tr class="${state.activeRowId === row.result_id ? 'active' : ''}" data-row-id="${escapeHtml(row.result_id)}">
         <td><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
-        <td>${escapeHtml(row.current_value)}</td>
+        <td>${escapeHtml(fileNameFromPath(row.current_value))}</td>
         <td>${escapeHtml(row.projected_path)}</td>
         <td>${escapeHtml(row.confidence)}</td>
         <td>${escapeHtml(row.reason_bucket)}</td>
@@ -446,7 +459,7 @@
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
         <td>${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
-        <td>${escapeHtml(row.current_path)}</td>
+        <td>${escapeHtml(fileNameFromPath(row.current_path))}</td>
         <td>${escapeHtml(row.issue)}</td>
         <td>${escapeHtml(row.resolution)}</td>
         <td>${escapeHtml(formatBitrate(row.video_bitrate))}</td>
@@ -454,7 +467,6 @@
         <td>${row.channels ? escapeHtml(String(row.channels)) : '—'}</td>
         <td>${escapeHtml(row.audio_summary || '—')}</td>
         <td>${escapeHtml(formatFileSize(row.file_size))}</td>
-        <td>${replacementQueueStatusChip(row.queue_item)}</td>
       </tr>
     `;
   }
@@ -464,7 +476,6 @@
       rowEl.addEventListener('click', event => {
         if (event.target instanceof HTMLInputElement) return;
         state.activeRowId = rowEl.dataset.rowId || '';
-        if (isWeakMode()) state.activePane = 'preview';
         renderSidePanel();
       });
     });
@@ -476,7 +487,6 @@
         state.activeRowId = id;
         state.weakPreview = null;
         state.weakPreviewKey = '';
-        if (isWeakMode()) state.activePane = 'preview';
         renderSidePanel();
       });
     });
@@ -756,7 +766,7 @@
   }
 
   function renderSidePanel() {
-    renderPaneTabs();
+    renderPanelVisibility();
     renderDetailPane();
     renderPreviewPane();
   }
@@ -772,7 +782,6 @@
     state.normalizePayload = payload;
     state.selected = new Set();
     state.activeRowId = '';
-    state.activePane = 'detail';
     state.previewMode = 'selected';
     renderFilters();
     renderRows();
@@ -790,7 +799,6 @@
     state.weakPayload = payload;
     state.selected = new Set();
     state.activeRowId = '';
-    state.activePane = 'preview';
     state.previewMode = 'selected';
     state.weakPreview = null;
     state.weakPreviewKey = '';
@@ -848,7 +856,6 @@
         state.weakPreview = null;
         state.weakPreviewKey = '';
         state.activeRowId = '';
-        state.activePane = 'preview';
         state.previewMode = 'selected';
         renderRows();
         renderSidePanel();
@@ -873,7 +880,6 @@
       state.normalizePayload = payload.remaining_plan || null;
       state.selected = new Set();
       state.activeRowId = '';
-      state.activePane = 'preview';
       state.previewMode = 'selected';
       renderFilters();
       renderRows();
@@ -885,7 +891,7 @@
             <div>Run normalize again to refresh the library view.</div>
           </div>
         `;
-        renderPaneTabs();
+        renderPanelVisibility();
         return;
       }
       renderSidePanel();
@@ -899,7 +905,6 @@
     state.workflow = workflow === 'weak-encodes' ? 'weak-encodes' : 'normalize';
     state.selected = new Set();
     state.activeRowId = '';
-    state.activePane = state.workflow === 'weak-encodes' ? 'preview' : 'detail';
     state.previewMode = 'selected';
     state.sort = state.workflow === 'weak-encodes' ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' };
     state.weakPreview = null;
@@ -961,7 +966,6 @@
     const rows = isWeakMode() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
     rows.forEach(row => state.selected.add(isWeakMode() ? row.row_id : row.result_id));
     if (rows[0]) state.activeRowId = isWeakMode() ? rows[0].row_id : rows[0].result_id;
-    state.activePane = 'preview';
     state.previewMode = 'selected';
     state.weakPreview = null;
     state.weakPreviewKey = '';
@@ -984,24 +988,6 @@
     state.weakPreviewKey = '';
     renderRows();
     renderSidePanel();
-  });
-
-  el.detailTab.addEventListener('click', () => {
-    state.activePane = 'detail';
-    renderSidePanel();
-  });
-
-  el.previewTab.addEventListener('click', async () => {
-    state.activePane = 'preview';
-    renderSidePanel();
-    if (isWeakMode() && selectedWeakPaths().length) {
-      try {
-        await ensureWeakPreview();
-        renderPreviewPane();
-      } catch (error) {
-        el.previewPane.textContent = error.message;
-      }
-    }
   });
 
   el.selectedPreviewButton.addEventListener('click', async () => {
@@ -1035,7 +1021,7 @@
   renderRunButton();
   renderTableHeader();
   renderSelectionButtons();
-  renderPaneTabs();
+  renderPanelVisibility();
   renderSidePanel();
   syncWorkflowUrl();
 

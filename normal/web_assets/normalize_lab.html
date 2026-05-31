@@ -64,7 +64,7 @@
           <thead>
             <tr id="tableHeaderRow">
               <th></th>
-              <th><button class="sort" data-sort="current_value">Current Path</button></th>
+              <th><button class="sort" data-sort="current_value">File Name</button></th>
               <th><button class="sort" data-sort="projected_path">Projected Path</button></th>
               <th><button class="sort" data-sort="confidence">Confidence</button></th>
               <th><button class="sort" data-sort="reason_bucket">Reason Bucket</button></th>
@@ -76,10 +76,7 @@
       <aside class="lab-detail">
         <div class="lab-panel">
           <div class="lab-panel-header">
-            <div id="paneTabs" class="lab-view-toggle" role="tablist" aria-label="Detail or preview">
-              <button id="detailTab" class="lab-tab" type="button">Detail</button>
-              <button id="previewTab" class="lab-tab" type="button">Preview</button>
-            </div>
+            <div class="lab-panel-title">Preview</div>
             <div id="previewControls" class="lab-preview-controls" hidden>
               <div class="lab-preview-modes">
                 <button id="selectedPreviewButton" class="lab-mode-button" type="button">Selected</button>
@@ -88,8 +85,8 @@
               <button id="confirmButton" class="lab-confirm-button" type="button" disabled>Confirm (0 Changes)</button>
             </div>
           </div>
-          <div id="detailPane" class="lab-pane"></div>
-          <div id="previewPane" class="lab-pane" hidden></div>
+          <div id="detailPane" class="lab-pane lab-detail-pane"></div>
+          <div id="previewPane" class="lab-pane lab-preview-pane"></div>
         </div>
       </aside>
     </main>

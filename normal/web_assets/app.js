@@ -1909,15 +1909,6 @@
       return label.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
     }
 
-    function movieProfileInlineSummary(item) {
-      const failed = (item?.profile?.domain_results || []).filter(result => result?.status === 'fail');
-      const reviews = (item?.profile?.domain_results || []).filter(result => result?.status === 'review_low_confidence');
-      if (failed.length) return failed[0]?.summary || '';
-      if (reviews.length) return `Low confidence: ${reviews[0]?.summary || ''}`.trim();
-      if (item?.profile?.legacy_bitrate_label) return `Legacy bitrate: ${humanLegacyBitrateLabel(item.profile.legacy_bitrate_label)}`;
-      return '';
-    }
-
     function humanLegacyBitrateLabel(label) {
       if (!label) return '';
       if (label === '1080p_uhd') return '1080p UHD';
@@ -1926,6 +1917,50 @@
       if (label === 'compressed_4k') return 'Compressed 4K';
       if (label === '4k_remux') return '4K Remux';
       return label.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    }
+
+    function firstMovieProfileIssueResult(item) {
+      const domainResults = item?.profile?.domain_results || [];
+      return domainResults.find(result => result?.status === 'fail')
+        || domainResults.find(result => result?.status === 'review_low_confidence')
+        || null;
+    }
+
+    function movieProfileIssueThreshold(summary) {
+      const match = String(summary || '').match(/(\d[\d,]*)/);
+      return match ? match[1] : '';
+    }
+
+    function humanMovieProfileIssueLabel(code, summary = '') {
+      if (code === 'video_below_minimum') return 'Below Min. Video Bitrate';
+      if (code === 'video_signal_missing') return 'Video Signal Missing';
+      if (code === 'audio_channels_below_minimum') {
+        const threshold = movieProfileIssueThreshold(summary);
+        return threshold ? `Main Audio Below ${threshold} Channels` : 'Main Audio Below Minimum Channels';
+      }
+      if (code === 'audio_bitrate_below_minimum') return 'Main Audio Below Min. Bitrate';
+      if (code === 'audio_codec_below_minimum') return 'Main Audio Codec Below Minimum';
+      if (code === 'audio_signal_missing') return 'Audio Signal Missing';
+      if (code === 'audio_default_unknown') return 'Default Audio Unknown';
+      if (code === 'audio_default_non_english_no_english_alt') return 'Non-English Default Audio';
+      if (code === 'audio_default_non_english') return 'Wrong Default Audio Language';
+      if (code === 'multiple_default_subtitles') return 'Multiple Default Subtitles';
+      if (code === 'english_forced_not_default') return 'Forced English Not Default';
+      if (code === 'wrong_default_forced_subtitle') return 'Wrong Forced Subtitle Default';
+      if (code === 'missing_default_english_subtitle') return 'Missing Default English Subtitle';
+      if (code === 'wrong_default_subtitle_language') return 'Wrong Default Subtitle Language';
+      if (code === 'unnecessary_default_subtitle') return 'Unnecessary Default Subtitle';
+      if (code === 'path_not_normalized') return 'Non-Standard Path';
+      if (code === 'promo_sidecar_present') return 'Promo Sidecar Present';
+      if (code === 'subtitle_policy_unknown') return 'Subtitle Policy Unknown';
+      return code ? code.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : '';
+    }
+
+    function movieProfileInlineSummary(item) {
+      const issue = firstMovieProfileIssueResult(item);
+      if (issue) return humanMovieProfileIssueLabel(issue.code || '', issue.summary || '');
+      if (item?.profile?.legacy_bitrate_label) return `Legacy ${humanLegacyBitrateLabel(item.profile.legacy_bitrate_label)}`;
+      return '';
     }
 
     function buildMovieTable(items) {
