@@ -20,6 +20,8 @@
       --surface: rgba(255,255,255,0.55);
       --bar-track: #ebdfce;
       --accent-glow: rgba(15,92,77,0.08);
+      --shell-pad-inline: clamp(12px, 1.2vw, 20px);
+      --shell-pad-block: clamp(16px, 2vw, 24px);
     }
     * { box-sizing: border-box; }
     body {
@@ -32,9 +34,10 @@
       min-height: 100vh;
     }
     .shell {
-      max-width: 3000px;
-      margin: 0 auto;
-      padding: 24px;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: var(--shell-pad-block) var(--shell-pad-inline);
     }
     .card {
       background: color-mix(in srgb, var(--panel) 92%, white);

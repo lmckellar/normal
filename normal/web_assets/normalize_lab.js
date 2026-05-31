@@ -10,23 +10,23 @@
   };
 
   const NORMALIZE_HEADERS = [
-    { key: 'select', label: '' },
-    { key: 'current_value', label: 'File Name' },
-    { key: 'projected_path', label: 'Projected Path' },
-    { key: 'confidence', label: 'Confidence' },
-    { key: 'reason_bucket', label: 'Reason Bucket' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential' },
+    { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential' },
+    { key: 'projected_path', label: 'Projected Path', columnClass: 'lab-col-path', cellClass: 'lab-cell-path lab-cell-mono', priority: 'desktop' },
+    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential' },
+    { key: 'reason_bucket', label: 'Reason', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'medium' },
   ];
 
   const WEAK_HEADERS = [
-    { key: 'select', label: '' },
-    { key: 'current_path', label: 'File Name' },
-    { key: 'issue', label: 'Issue' },
-    { key: 'resolution', label: 'Resolution' },
-    { key: 'video_bitrate', label: 'Video Bitrate' },
-    { key: 'audio_bitrate', label: 'Audio Bitrate' },
-    { key: 'channels', label: 'Channels' },
-    { key: 'audio_summary', label: 'Audio Summary' },
-    { key: 'file_size', label: 'File Size' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential' },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential' },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential' },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium' },
+    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential' },
+    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop' },
+    { key: 'channels', label: 'Ch', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium' },
+    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop' },
+    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium' },
   ];
 
   const state = {
@@ -213,8 +213,10 @@
   function renderTableHeader() {
     const headers = isWeakMode() ? WEAK_HEADERS : NORMALIZE_HEADERS;
     el.tableHeaderRow.innerHTML = headers.map(header => {
-      if (header.key === 'select') return '<th></th>';
-      return `<th><button class="sort" data-sort="${escapeHtml(header.key)}">${escapeHtml(header.label)}</button></th>`;
+      const classAttr = header.columnClass ? ` class="${header.columnClass}"` : '';
+      const priorityAttr = header.priority ? ` data-priority="${header.priority}"` : '';
+      if (header.key === 'select') return `<th${classAttr}${priorityAttr}></th>`;
+      return `<th${classAttr}${priorityAttr}><button class="sort" data-sort="${escapeHtml(header.key)}">${escapeHtml(header.label)}</button></th>`;
     }).join('');
     el.tableHeaderRow.querySelectorAll('.sort').forEach(button => {
       button.addEventListener('click', () => {
@@ -445,11 +447,11 @@
   function renderNormalizeRow(row) {
     return `
       <tr class="${state.activeRowId === row.result_id ? 'active' : ''}" data-row-id="${escapeHtml(row.result_id)}">
-        <td><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
-        <td>${escapeHtml(fileNameFromPath(row.current_value))}</td>
-        <td>${escapeHtml(row.projected_path)}</td>
-        <td>${escapeHtml(row.confidence)}</td>
-        <td>${escapeHtml(row.reason_bucket)}</td>
+        <td class="lab-cell-select" data-priority="essential"><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
+        <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_value)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_value))}</span></td>
+        <td class="lab-cell-path lab-cell-mono" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${escapeHtml(row.projected_path)}</span></td>
+        <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${normalizeConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
+        <td class="lab-cell-status" data-priority="medium"><span class="lab-cell-pill">${escapeHtml(row.reason_bucket)}</span></td>
       </tr>
     `;
   }
@@ -458,17 +460,24 @@
     const checked = state.selected.has(row.row_id) ? 'checked' : '';
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
-        <td>${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
-        <td>${escapeHtml(fileNameFromPath(row.current_path))}</td>
-        <td>${escapeHtml(row.issue)}</td>
-        <td>${escapeHtml(row.resolution)}</td>
-        <td>${escapeHtml(formatBitrate(row.video_bitrate))}</td>
-        <td>${escapeHtml(formatBitrate(row.audio_bitrate))}</td>
-        <td>${row.channels ? escapeHtml(String(row.channels)) : '—'}</td>
-        <td>${escapeHtml(row.audio_summary || '—')}</td>
-        <td>${escapeHtml(formatFileSize(row.file_size))}</td>
+        <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
+        <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
+        <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
+        <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-text">${escapeHtml(row.resolution || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(formatBitrate(row.video_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.video_bitrate))}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="desktop" title="${escapeHtml(formatBitrate(row.audio_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${row.channels ? escapeHtml(String(row.channels)) : '—'}"><span class="lab-cell-text">${row.channels ? escapeHtml(String(row.channels)) : '—'}</span></td>
+        <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(formatFileSize(row.file_size))}"><span class="lab-cell-text">${escapeHtml(formatFileSize(row.file_size))}</span></td>
       </tr>
     `;
+  }
+
+  function normalizeConfidenceClass(confidence) {
+    if (confidence === 'safe') return 'is-safe';
+    if (confidence === 'review') return 'is-review';
+    if (confidence === 'unchanged') return 'is-unchanged';
+    return 'is-actionable';
   }
 
   function attachRowHandlers() {
