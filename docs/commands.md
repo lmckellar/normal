@@ -102,10 +102,13 @@ Quality-profile labels:
 
 | Profile | Meaning |
 |---|---|
-| `Standard Definition` | Weak HD encodes and standard-definition material still worth keeping |
+| `Standard Definition` | Catch-all fallback bucket for weak HD, standard-definition titles, and obvious outliers that miss every stricter stance |
+| `Compact Grade` | Benign compact encodes that clear a modest floor but do not yet meet full library-grade posture |
 | `Library Grade` | Good enough for casual viewing and broad library selection |
 | `Collector Grade` | Solid compact encodes that hold up better on difficult material |
 | `Reference` | Mild to no visual compression with lossless-audio posture |
+
+The bottom stance is intentionally a fallback bucket, not a strict authored threshold. Its dashboard editor only exposes label and summary.
 
 Config source:
 - repo-local `movie_standards.json`

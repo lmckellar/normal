@@ -1900,6 +1900,7 @@
 
     function humanProfileLabel(label) {
       if (label === 'standard_definition') return 'Standard Definition';
+      if (label === 'compact_grade') return 'Compact Grade';
       if (label === 'library_grade') return 'Library Grade';
       if (label === 'collector_grade') return 'Collector Grade';
       if (label === 'reference') return 'Reference';

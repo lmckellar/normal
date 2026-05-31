@@ -82,17 +82,19 @@ PROFILE_RANKS = {
     "reference": 4,
 }
 
-SAFE_WEAK_ENCODE_FLOORS = ("standard_definition", "library_grade")
+SAFE_WEAK_ENCODE_FLOORS = ("standard_definition", "compact_grade", "library_grade")
 
 QUALITY_STANCE_RANKS = {
     "standard_definition": 1,
-    "library_grade": 2,
-    "collector_grade": 3,
-    "reference": 4,
+    "compact_grade": 2,
+    "library_grade": 3,
+    "collector_grade": 4,
+    "reference": 5,
 }
 
 QUALITY_STANCE_ORDER = [
     "standard_definition",
+    "compact_grade",
     "library_grade",
     "collector_grade",
     "reference",
@@ -121,10 +123,25 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
     },
     "quality_stances": {
         "standard_definition": {
-            "display_name": "Standard Definition",
-            "summary": "Edge cases and legacy files that are still worth keeping.",
+            "display_name": "Weak HD / Legacy Catch-All",
+            "summary": "Fallback bucket for weak HD, standard-definition material, and outliers that miss every stricter stance.",
             "video_floor": "minimum",
             "audio_floor": "minimum",
+            "audio_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
+            "require_audio_language_hygiene": False,
+            "require_subtitle_setup": False,
+            "require_folder_hygiene": False,
+            "require_lossless_audio": False,
+        },
+        "compact_grade": {
+            "display_name": "Compact Grade",
+            "summary": "Benign compact encodes that clear a modest quality floor without aiming for full library grade.",
+            "video_floor": "custom",
+            "video_custom": {"1080p": 4500, "2160p": 12000},
+            "audio_floor": "custom",
+            "audio_channels": 2,
+            "audio_channels_mono_cutoff": 1970,
+            "audio_bitrate_kbps": 320,
             "audio_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
             "require_audio_language_hygiene": False,
             "require_subtitle_setup": False,
@@ -138,6 +155,7 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
             "video_custom": {"1080p": 4500, "2160p": 12000},
             "audio_floor": "custom",
             "audio_channels": 2,
+            "audio_channels_mono_cutoff": 1970,
             "audio_bitrate_kbps": 192,
             "audio_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
             "require_audio_language_hygiene": True,
@@ -363,27 +381,23 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
     for label in QUALITY_STANCE_ORDER:
         stance = stances.get(label) or {}
         video_custom = stance.get("video_custom") or {}
-        definitions.append(
+        fields = [
             {
-                "label": label,
-                "display_name": str(stance.get("display_name") or human_quality_stance_label(label)),
-                "group": "Quality Profile",
-                "summary": str(stance.get("summary") or ""),
-                "rule_summary": build_quality_stance_rule_summary(label, stance, active),
-                "inherits_summary": build_quality_stance_inherits_summary(label, stance),
-                "fields": [
-                    {
-                        "key": "display_name",
-                        "label": "Card label",
-                        "type": "text",
-                        "value": str(stance.get("display_name") or human_quality_stance_label(label)),
-                    },
-                    {
-                        "key": "summary",
-                        "label": "Card summary",
-                        "type": "text",
-                        "value": str(stance.get("summary") or ""),
-                    },
+                "key": "display_name",
+                "label": "Card label",
+                "type": "text",
+                "value": str(stance.get("display_name") or human_quality_stance_label(label)),
+            },
+            {
+                "key": "summary",
+                "label": "Card summary",
+                "type": "text",
+                "value": str(stance.get("summary") or ""),
+            },
+        ]
+        if label != "standard_definition":
+            fields.extend(
+                [
                     {
                         "key": "video_1080p_kbps",
                         "label": "1080p video kbps floor",
@@ -454,6 +468,20 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
                         ],
                     },
                     {
+                        "key": "audio_channels_mono_cutoff",
+                        "label": "Allow original mono before year",
+                        "type": "select",
+                        "value": int(stance.get("audio_channels_mono_cutoff", 0)),
+                        "options": [
+                            {"value": 0, "label": "Off — mono never exempt"},
+                            {"value": 1950, "label": "Pre-1950 films"},
+                            {"value": 1960, "label": "Pre-1960 films"},
+                            {"value": 1970, "label": "Pre-1970 films"},
+                            {"value": 1980, "label": "Pre-1980 films"},
+                            {"value": 1990, "label": "Pre-1990 films"},
+                        ],
+                    },
+                    {
                         "key": "audio_bitrate_kbps",
                         "label": "Minimum main-audio kbps",
                         "type": "select",
@@ -492,7 +520,17 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
                         "type": "toggle",
                         "value": bool(stance.get("require_lossless_audio", False)),
                     },
-                ],
+                ]
+            )
+        definitions.append(
+            {
+                "label": label,
+                "display_name": str(stance.get("display_name") or human_quality_stance_label(label)),
+                "group": "Quality Profile",
+                "summary": str(stance.get("summary") or ""),
+                "rule_summary": build_quality_stance_rule_summary(label, stance, active),
+                "inherits_summary": build_quality_stance_inherits_summary(label, stance),
+                "fields": fields,
             }
         )
     return definitions
@@ -550,6 +588,8 @@ def update_movie_profile_definition(
         stance = active.setdefault("quality_stances", {}).setdefault(label, {})
         stance["display_name"] = str(values.get("display_name") or human_quality_stance_label(label)).strip() or human_quality_stance_label(label)
         stance["summary"] = str(values.get("summary") or "").strip()
+        if label == "standard_definition":
+            return save_movie_standards(active)
         stance["video_floor"] = "custom"
         stance["audio_floor"] = "custom"
         stance.setdefault("video_custom", {})
@@ -569,6 +609,8 @@ def update_movie_profile_definition(
         stance["audio_channels_vintage_cutoff"] = int(cutoff_raw) if cutoff_raw is not None and str(cutoff_raw).isdigit() else 0
         atmos_raw = values.get("audio_channels_atmos_cutoff")
         stance["audio_channels_atmos_cutoff"] = int(atmos_raw) if atmos_raw is not None and str(atmos_raw).isdigit() else 0
+        mono_raw = values.get("audio_channels_mono_cutoff")
+        stance["audio_channels_mono_cutoff"] = int(mono_raw) if mono_raw is not None and str(mono_raw).isdigit() else 0
         stance["audio_bitrate_kbps"] = normalize_positive_int(
             values.get("audio_bitrate_kbps"),
             int(resolve_stance_audio_bitrate(label, stance, active)),
@@ -663,6 +705,8 @@ def normalize_subtitle_mode(value: Any) -> str:
 def human_quality_stance_label(label: str) -> str:
     if label == "standard_definition":
         return "Standard Definition"
+    if label == "compact_grade":
+        return "Compact Grade"
     if label == "library_grade":
         return "Library Grade"
     if label == "collector_grade":
@@ -673,11 +717,16 @@ def human_quality_stance_label(label: str) -> str:
 
 
 def build_quality_stance_rule_summary(label: str, stance: dict[str, Any], standards: dict[str, Any]) -> str:
+    if label == "standard_definition":
+        return "Fallback bucket below Compact Grade. Includes weak HD, standard-definition titles, and obvious outliers."
     parts = [
         f"1080p >= {resolve_stance_video_floor(label, stance, standards, '1080p')} kbps",
         f"4K >= {resolve_stance_video_floor(label, stance, standards, '2160p')} kbps",
         f"audio >= {resolve_stance_audio_channels(label, stance, standards)} ch / {resolve_stance_audio_bitrate(label, stance, standards)} kbps",
     ]
+    mono_cutoff = int(stance.get("audio_channels_mono_cutoff") or 0)
+    if mono_cutoff:
+        parts.append(f"original mono allowed before {mono_cutoff}")
     if stance.get("require_lossless_audio"):
         parts.append("lossless audio required")
     return "; ".join(parts) + "."
@@ -685,7 +734,9 @@ def build_quality_stance_rule_summary(label: str, stance: dict[str, Any], standa
 
 def build_quality_stance_inherits_summary(label: str, stance: dict[str, Any]) -> str:
     if label == "standard_definition":
-        return "Inherited default: tolerant keep posture for legacy and edge-case files."
+        return "Inherited default: catch-all keep posture rather than a strict floor."
+    if label == "compact_grade":
+        return "Inherited default: modest compact-encode floor between the catch-all bucket and Library Grade."
     if label == "library_grade":
         return "Inherited default: casual-viewing baseline with relaxed subtitle and folder hygiene."
     if label == "collector_grade":
@@ -953,20 +1004,28 @@ def movie_matches_quality_stance(
     channels = facts.audio_channels or 0
     bitrate = facts.audio_bitrate_kbps or 0
     required_channels = resolve_stance_audio_channels(label, stance, standards)
+    mono_exempt = False
     if required_channels and channels < required_channels:
         vintage_cutoff = int(stance.get("audio_channels_vintage_cutoff") or 0)
         atmos_cutoff = int(stance.get("audio_channels_atmos_cutoff") or 0)
+        mono_cutoff = int(stance.get("audio_channels_mono_cutoff") or 0)
         exempt = False
-        if vintage_cutoff or atmos_cutoff:
+        if vintage_cutoff or atmos_cutoff or mono_cutoff:
             parsed_identity = parse_movie_name(path)
             year = parsed_identity.year
             if vintage_cutoff and year and year < vintage_cutoff:
                 exempt = True
             if not exempt and atmos_cutoff and required_channels > 6 and channels >= 6 and year and year < atmos_cutoff:
                 exempt = True
+            if not exempt and mono_cutoff and channels == 1 and year and year < mono_cutoff:
+                exempt = True
+                mono_exempt = True
         if not exempt:
             return False
-    if resolve_stance_audio_bitrate(label, stance, standards) and bitrate < resolve_stance_audio_bitrate(label, stance, standards):
+    required_bitrate = resolve_stance_audio_bitrate(label, stance, standards)
+    if mono_exempt and required_bitrate and required_channels > 1:
+        required_bitrate = max(1, (required_bitrate + 1) // 2)
+    if required_bitrate and bitrate < required_bitrate:
         return False
     if stance.get("require_lossless_audio") and codec not in {"truehd", "dtshd", "flac", "pcm", "pcm_s16le", "pcm_s24le"}:
         return False

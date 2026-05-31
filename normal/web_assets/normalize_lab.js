@@ -113,9 +113,10 @@
 
   const QUALITY_STANCE_RANKS = {
     standard_definition: 0,
-    library_grade: 1,
-    collector_grade: 2,
-    reference: 3,
+    compact_grade: 1,
+    library_grade: 2,
+    collector_grade: 3,
+    reference: 4,
   };
 
   const WEAK_QUALITY_CODES = new Set([
@@ -131,11 +132,12 @@
     const options = state.weakPayload?.replacement_candidate_definition?.fields?.[0]?.options;
     const fallback = [
       { value: 'standard_definition', label: 'Standard Definition' },
+      { value: 'compact_grade', label: 'Compact Grade' },
       { value: 'library_grade', label: 'Library Grade' },
     ];
     if (!Array.isArray(options)) return fallback;
     const filtered = options
-      .filter(option => option?.value === 'standard_definition' || option?.value === 'library_grade')
+      .filter(option => option?.value === 'standard_definition' || option?.value === 'compact_grade' || option?.value === 'library_grade')
       .map(option => ({ value: option.value, label: option.label || humanProfileLabel(option.value) }));
     return filtered.length ? filtered : fallback;
   }
@@ -199,6 +201,7 @@
 
   function humanProfileLabel(label) {
     if (label === 'standard_definition') return 'Standard Definition';
+    if (label === 'compact_grade') return 'Compact Grade';
     if (label === 'library_grade') return 'Library Grade';
     if (label === 'collector_grade') return 'Collector Grade';
     if (label === 'reference') return 'Reference';

@@ -194,6 +194,7 @@ class MovieProfileTests(unittest.TestCase):
         standards = {"replacement_candidate_rules": {"quality_profile_floor": "library_grade"}}
 
         self.assertTrue(is_replacement_candidate_quality("standard_definition", standards))
+        self.assertTrue(is_replacement_candidate_quality("compact_grade", standards))
         self.assertTrue(is_replacement_candidate_quality("library_grade", standards))
         self.assertFalse(is_replacement_candidate_quality("collector_grade", standards))
         self.assertFalse(is_replacement_candidate_quality("reference", standards))
@@ -202,6 +203,7 @@ class MovieProfileTests(unittest.TestCase):
         standards = {"replacement_candidate_rules": {"quality_profile_floor": "reference"}}
 
         self.assertEqual(normalize_weak_encode_floor("collector_grade", standards), "standard_definition")
+        self.assertEqual(normalize_weak_encode_floor("compact_grade", standards), "compact_grade")
         self.assertEqual(normalize_weak_encode_floor("standard_definition", standards), "standard_definition")
 
     def test_build_movie_profile_item_routes_good_english_packaging_issue_out_of_weak_candidate(self) -> None:
@@ -233,14 +235,18 @@ class MovieProfileTests(unittest.TestCase):
 
     def test_build_movie_profile_definitions_exposes_dashboard_owned_controls(self) -> None:
         definitions = build_movie_profile_definitions()
-        video_1080p_options = definitions[0]["fields"][2]["options"]
-        video_2160p_options = definitions[0]["fields"][3]["options"]
+        compact_definition = next(definition for definition in definitions if definition["label"] == "compact_grade")
+        video_1080p_options = compact_definition["fields"][2]["options"]
+        video_2160p_options = compact_definition["fields"][3]["options"]
 
         self.assertEqual(
             [definition["label"] for definition in definitions],
-            ["standard_definition", "library_grade", "collector_grade", "reference"],
+            ["standard_definition", "compact_grade", "library_grade", "collector_grade", "reference"],
         )
         self.assertEqual(definitions[0]["fields"][0]["key"], "display_name")
+        self.assertEqual(definitions[0]["fields"][1]["key"], "summary")
+        self.assertEqual(len(definitions[0]["fields"]), 2)
+        self.assertIn("audio_channels_mono_cutoff", [field["key"] for field in compact_definition["fields"]])
         self.assertEqual(definitions[-1]["fields"][2]["key"], "video_1080p_kbps")
         self.assertEqual(
             video_1080p_options,
@@ -283,6 +289,7 @@ class MovieProfileTests(unittest.TestCase):
                 "replacement_candidate_rules": {"quality_profile_floor": "library_grade"},
                 "quality_stances": {
                     "standard_definition": {"display_name": "Weak Encodes & Standard Definition"},
+                    "compact_grade": {"display_name": "Compact Grade"},
                     "library_grade": {"display_name": "Library Grade"},
                     "collector_grade": {"display_name": "Collector Grade"},
                     "reference": {"display_name": "Reference"},
@@ -330,6 +337,12 @@ class MovieProfileTests(unittest.TestCase):
     def test_quality_stance_matching_ignores_profile_audio_codec_allowlists(self) -> None:
         standards = {
             "quality_stances": {
+                "compact_grade": {
+                    "video_custom": {"1080p": 4500, "2160p": 12000},
+                    "audio_channels": 2,
+                    "audio_bitrate_kbps": 320,
+                    "audio_channels_mono_cutoff": 1970,
+                },
                 "collector_grade": {
                     "video_custom": {"1080p": 8000, "2160p": 18000},
                     "audio_channels": 6,
@@ -367,6 +380,62 @@ class MovieProfileTests(unittest.TestCase):
         )
 
         self.assertEqual(label, "collector_grade")
+
+    def test_old_mono_audio_can_meet_compact_grade_with_mono_cutoff(self) -> None:
+        standards = {
+            "quality_stances": {
+                "compact_grade": {
+                    "video_custom": {"1080p": 4500, "2160p": 12000},
+                    "audio_channels": 2,
+                    "audio_channels_mono_cutoff": 1970,
+                    "audio_bitrate_kbps": 320,
+                }
+            }
+        }
+
+        label = classify_quality_stance(
+            Path("Movie (1954)/Movie (1954).mkv"),
+            MediaFacts(
+                width=1920,
+                height=1080,
+                video_bitrate_kbps=5000,
+                audio_codec="aac",
+                audio_channels=1,
+                audio_bitrate_kbps=192,
+            ),
+            [],
+            standards,
+        )
+
+        self.assertEqual(label, "compact_grade")
+
+    def test_recent_mono_audio_still_misses_compact_grade_when_cutoff_does_not_apply(self) -> None:
+        standards = {
+            "quality_stances": {
+                "compact_grade": {
+                    "video_custom": {"1080p": 4500, "2160p": 12000},
+                    "audio_channels": 2,
+                    "audio_channels_mono_cutoff": 1970,
+                    "audio_bitrate_kbps": 320,
+                }
+            }
+        }
+
+        label = classify_quality_stance(
+            Path("Movie (1984)/Movie (1984).mkv"),
+            MediaFacts(
+                width=1920,
+                height=1080,
+                video_bitrate_kbps=5000,
+                audio_codec="aac",
+                audio_channels=1,
+                audio_bitrate_kbps=192,
+            ),
+            [],
+            standards,
+        )
+
+        self.assertEqual(label, "standard_definition")
 
     def test_require_lossless_audio_still_gates_reference_profile(self) -> None:
         standards = {
@@ -420,10 +489,10 @@ class MovieProfileTests(unittest.TestCase):
             with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", path):
                 standards = update_movie_profile_definition(
                     "replacement_candidate",
-                    {"quality_profile_floor": "library_grade"},
+                    {"quality_profile_floor": "compact_grade"},
                 )
 
-            self.assertEqual(standards["replacement_candidate_rules"]["quality_profile_floor"], "library_grade")
+            self.assertEqual(standards["replacement_candidate_rules"]["quality_profile_floor"], "compact_grade")
             self.assertIn('"replacement_candidate_rules"', path.read_text(encoding="utf-8"))
 
     def test_update_movie_profile_definition_rejects_stale_revision(self) -> None:

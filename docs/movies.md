@@ -83,12 +83,13 @@ Quality profile cards:
 
 | Profile | What it means |
 |---|---|
-| `Standard Definition` | Weak HD encodes and standard-definition material still worth keeping |
+| `Standard Definition` | Catch-all fallback bucket for weak HD, standard-definition titles, and obvious outliers that miss every stricter stance |
+| `Compact Grade` | Benign compact encodes that clear a modest floor but do not yet meet full library-grade posture |
 | `Library Grade` | Good enough for casual viewing and broad library selection |
 | `Collector Grade` | Solid compact encodes that hold up better on difficult material |
 | `Reference` | Mild to no visual compression with lossless-audio posture |
 
-The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Replacement Candidate uses a simpler inline **Edit** control: choose the quality-profile cutoff, then save.
+The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Replacement Candidate uses a simpler inline **Edit** control: choose the quality-profile cutoff, then save. The bottom `Standard Definition` card is intentionally treated differently from the stricter tiers because it remains the fallback bucket below `Compact Grade`; only its label and summary are editable.
 
 Current video-floor presets are intentionally trimmed to plausible movie-library ranges rather than ultra-weak encodes. The 1080p dropdown starts at `4,500 kbps — compact encode` and steps through `5,500 library grade`, `7,500 strong library`, `10,000 collector grade`, `12,500 strong collector`, and `15,000 reference grade` before the higher near-lossless/remux tiers. The 4K dropdown starts at `10,000 kbps — compact encode`, then `15,000 library grade`, `20,000 strong library`, `25,000 reference grade`, followed by the existing `30,000`, `40,000`, and `50,000` upper tiers.
 
@@ -102,6 +103,8 @@ Persistence posture:
 - writes are done with an atomic temp-file replace so interrupted writes do not leave a partial JSON file behind
 
 The audio channel minimum has a companion **Exempt pre-surround era films** setting. Set it to a release-year cutoff (Pre-1970 through Pre-1990) and films released before that year bypass the channel floor check — useful when Library Grade or higher requires 5.1 but classic titles with mono or stereo-only audio have no higher-channel release to replace them with.
+
+Profiles also expose **Allow original mono before year**. This is narrower than the general vintage channel exemption: it is specifically for preserving legitimate mono presentations on older films without weakening the broader surround expectation for later material. When this exemption applies, the profile engine also relaxes the audio bitrate floor to a mono-aware threshold instead of forcing a stereo-style bitrate minimum onto the file.
 
 Quality scan results include a normalized main-audio summary for the playback-relevant stream alongside audio bitrate — `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`, and similar labels.
 

@@ -8,6 +8,9 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 ### Changed
 
+- Movie quality profiling now has an explicit `Compact Grade` stance between the weak catch-all bucket and `Library Grade`, giving the dashboard and Weak Encodes testing UI a saner middle band for benign compact encodes.
+- The former bottom stance is now framed as a true fallback bucket rather than a strict threshold profile. In the dashboard editor it only exposes card label and summary, removing the previous illusion that its numeric controls were authoritative while it still functioned as the unconditional catch-all.
+- Quality profiles now support an `Allow original mono before year` control. When enabled for a stance, pre-cutoff mono titles can satisfy that stance without being penalized for missing stereo/surround channels, and the audio bitrate floor is relaxed to a mono-aware threshold for those exempt titles.
 - Movie profile probing now keeps all `main audio` facts aligned to the same chosen playback-relevant stream instead of mixing first-stream codec/channel metadata with default-stream bitrate/summary data. This removes a misleading weak-encode edge case where multi-audio MKVs could look internally contradictory in scans and tables.
 - `/parser-tester-ui?workflow=weak-encodes` now lets the audio bitrate cell open a small anchored track inspector showing every audio stream's language, bitrate, channel layout, and default flag without disturbing table shape.
 - Weak-encode triage now has a clearer ownership boundary: files with a good in-container English track but wrong default-language packaging no longer count as strict weak delete candidates, and the internal weak-floor selector defaults to the weakest safe posture (`Standard Definition`) rather than inheriting a harsher library-grade floor.
