@@ -14,6 +14,7 @@ from normal.movie_replacement_queue import (
     clear_pending_queue_items,
     delete_replacement_queue_media,
     dismiss_replacement_queue_items,
+    preview_replacement_queue_delete,
     queue_for_source,
 )
 from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
@@ -100,6 +101,14 @@ def handle_movies_replacement_queue_delete(ctx: RequestContext, payload: dict[st
     if not isinstance(item_ids, list):
         raise ValueError("item_ids must be a list")
     ctx.respond_json(delete_replacement_queue_media(source, item_ids))
+
+
+def handle_movies_replacement_queue_delete_preview(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    source = ctx.resolve_source(payload.get("source"))
+    paths = payload.get("paths")
+    if not isinstance(paths, list):
+        raise ValueError("paths must be a list")
+    ctx.respond_json(preview_replacement_queue_delete(source, paths))
 
 
 def handle_movies_replacement_queue_dismiss(ctx: RequestContext, payload: dict[str, Any]) -> None:

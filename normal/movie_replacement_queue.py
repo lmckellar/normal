@@ -487,6 +487,46 @@ def delete_replacement_queue_media(
     return response
 
 
+def preview_replacement_queue_delete(
+    source_root: Path,
+    paths: list[Any],
+) -> dict[str, Any]:
+    source = source_root.resolve()
+    deleted: list[str] = []
+    cleaned_sidecars: list[str] = []
+    removed_folders: list[str] = []
+    skipped: list[dict[str, str]] = []
+
+    for raw_path in paths:
+        resolved = Path(str(raw_path)).expanduser().resolve()
+        try:
+            resolved.relative_to(source)
+        except ValueError:
+            skipped.append({"path": str(resolved), "reason": "outside_source"})
+            continue
+        if resolved == source:
+            skipped.append({"path": str(resolved), "reason": "source_root"})
+            continue
+        if not resolved.exists():
+            skipped.append({"path": str(resolved), "reason": "missing"})
+            continue
+        if not resolved.is_file():
+            skipped.append({"path": str(resolved), "reason": "not_file"})
+            continue
+        deleted.append(str(resolved))
+        cleanup = preview_safe_movie_sidecar_cleanup(source, resolved.parent, deleted_paths={resolved})
+        cleaned_sidecars.extend(cleanup["sidecars"])
+        if cleanup["folder"]:
+          removed_folders.append(cleanup["folder"])
+
+    return {
+        "deleted": deleted,
+        "cleaned_sidecars": cleaned_sidecars,
+        "removed_folders": removed_folders,
+        "skipped": skipped,
+    }
+
+
 def dismiss_replacement_queue_items(
     source_root: Path,
     item_ids: list[Any],
@@ -543,6 +583,37 @@ def cleanup_safe_movie_sidecars(source: Path, folder: Path) -> dict[str, Any]:
         entry.unlink()
         result["sidecars"].append(str(entry))
     folder.rmdir()
+    result["folder"] = str(folder)
+    return result
+
+
+def preview_safe_movie_sidecar_cleanup(
+    source: Path,
+    folder: Path,
+    deleted_paths: set[Path] | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {"sidecars": [], "folder": None}
+    if not folder.exists() or not folder.is_dir() or folder == source:
+        return result
+    try:
+        folder.relative_to(source)
+    except ValueError:
+        return result
+
+    deleted = {path.resolve() for path in (deleted_paths or set())}
+    entries = [entry for entry in folder.iterdir() if entry.resolve() not in deleted]
+    if not entries:
+        result["folder"] = str(folder)
+        return result
+
+    if any(entry.is_dir() for entry in entries):
+        return result
+    if any(entry.suffix.lower() in VIDEO_EXTENSIONS for entry in entries):
+        return result
+    if any(not is_safe_movie_sidecar(entry) for entry in entries):
+        return result
+
+    result["sidecars"] = [str(entry) for entry in entries]
     result["folder"] = str(folder)
     return result
 

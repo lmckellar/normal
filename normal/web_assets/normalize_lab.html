@@ -11,8 +11,17 @@
     <header class="lab-topbar">
       <div>
         <div class="lab-kicker">internal</div>
-      <h1>Parser Tester UI</h1>
-        <p>Normalize diagnostics with row reasoning and direct confirm/apply.</p>
+        <div class="lab-workflow-switch">
+          <button id="workflowButton" class="lab-workflow-button" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span id="workflowTitle">Parser Testing UI</span>
+            <span class="lab-workflow-caret" aria-hidden="true">▾</span>
+          </button>
+          <div id="workflowMenu" class="lab-workflow-menu" role="listbox" hidden>
+            <button id="workflowNormalize" class="lab-workflow-option" type="button" data-workflow="normalize" role="option">Parser Testing UI</button>
+            <button id="workflowWeakEncodes" class="lab-workflow-option" type="button" data-workflow="weak-encodes" role="option">Weak Encodes Testing UI</button>
+          </div>
+        </div>
+        <p id="workflowDescription">Normalize diagnostics with row reasoning and direct confirm/apply.</p>
       </div>
       <div class="lab-controls">
         <label for="sourcePath">Source</label>
@@ -39,6 +48,12 @@
       </select>
       <select id="reasonFilter"><option value="">reason code</option></select>
       <select id="warningFilter"><option value="">warning code</option></select>
+      <select id="workflowStatusFilter" hidden>
+        <option value="all">all</option>
+        <option value="delete-candidates">delete candidates</option>
+        <option value="review">review</option>
+        <option value="queued">queued</option>
+      </select>
       <button id="selectAllButton" type="button">Select all</button>
       <button id="deselectAllButton" type="button">Deselect all</button>
     </section>
@@ -47,7 +62,7 @@
       <section class="lab-table-panel">
         <table>
           <thead>
-            <tr>
+            <tr id="tableHeaderRow">
               <th></th>
               <th><button class="sort" data-sort="current_value">Current Path</button></th>
               <th><button class="sort" data-sort="projected_path">Projected Path</button></th>
@@ -61,7 +76,7 @@
       <aside class="lab-detail">
         <div class="lab-panel">
           <div class="lab-panel-header">
-            <div class="lab-view-toggle" role="tablist" aria-label="Detail or preview">
+            <div id="paneTabs" class="lab-view-toggle" role="tablist" aria-label="Detail or preview">
               <button id="detailTab" class="lab-tab" type="button">Detail</button>
               <button id="previewTab" class="lab-tab" type="button">Preview</button>
             </div>

@@ -64,6 +64,11 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/Example\ Movies
 
 Open `http://127.0.0.1:8765` in a browser.
 
+For the internal focused tester shell, use:
+
+- `http://127.0.0.1:8765/parser-tester-ui?workflow=normalize`
+- `http://127.0.0.1:8765/parser-tester-ui?workflow=weak-encodes`
+
 Use the test library to exercise the full workflow in order:
 
 1. `Dashboard View` to understand current library shape

@@ -11,6 +11,7 @@ from normal.movie_replacement_queue import (
     dismiss_replacement_queue_items,
     history_title_key,
     load_queue,
+    preview_replacement_queue_delete,
     reconcile_replacement_queue,
 )
 
@@ -360,6 +361,59 @@ class MovieReplacementQueueTests(unittest.TestCase):
             self.assertEqual(result["deleted"][0]["path"], str(movie.resolve()))
             self.assertEqual(result["items"][0]["status"], "deleted")
             self.assertEqual(result["skipped"], [])
+
+    def test_delete_preview_includes_selected_file_and_is_non_mutating(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "movies"
+            movie = source / "Bad Movie (2001)" / "Bad Movie (2001).mkv"
+            poster = movie.parent / "poster.jpg"
+            movie.parent.mkdir(parents=True)
+            movie.write_text("video", encoding="utf-8")
+            poster.write_text("poster", encoding="utf-8")
+
+            result = preview_replacement_queue_delete(source, [str(movie)])
+
+            self.assertEqual(result["deleted"], [str(movie.resolve())])
+            self.assertTrue(movie.exists())
+            self.assertTrue(poster.exists())
+
+    def test_delete_preview_includes_safe_sidecars_and_folder_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "movies"
+            movie = source / "Bad Movie (2001)" / "Bad Movie (2001).mkv"
+            movie.parent.mkdir(parents=True)
+            movie.write_text("video", encoding="utf-8")
+            poster = movie.parent / "poster.jpg"
+            subtitle = movie.parent / "subtitle.srt"
+            poster.write_text("image", encoding="utf-8")
+            subtitle.write_text("subtitle", encoding="utf-8")
+
+            result = preview_replacement_queue_delete(source, [str(movie)])
+
+            self.assertEqual(set(result["cleaned_sidecars"]), {str(poster.resolve()), str(subtitle.resolve())})
+            self.assertEqual(result["removed_folders"], [str(movie.parent.resolve())])
+            self.assertTrue(movie.exists())
+            self.assertTrue(poster.exists())
+            self.assertTrue(subtitle.exists())
+
+    def test_delete_preview_skips_outside_source_and_missing_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "movies"
+            source.mkdir()
+            outside = root / "outside.mkv"
+            outside.write_text("video", encoding="utf-8")
+            missing = source / "Missing Movie (2001)" / "Missing Movie (2001).mkv"
+
+            result = preview_replacement_queue_delete(source, [str(outside), str(missing)])
+
+            self.assertEqual(
+                result["skipped"],
+                [
+                    {"path": str(outside.resolve()), "reason": "outside_source"},
+                    {"path": str(missing.resolve()), "reason": "missing"},
+                ],
+            )
 
     def test_deleted_items_await_replacement_then_complete_on_good_profile(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

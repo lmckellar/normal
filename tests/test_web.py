@@ -109,7 +109,8 @@ class WebTests(unittest.TestCase):
         with self.run_test_server() as base_url:
             with urllib.request.urlopen(f"{base_url}/parser-tester-ui") as response:
                 served = response.read().decode("utf-8")
-        self.assertIn("Parser Tester UI", served)
+        self.assertIn("Parser Testing UI", served)
+        self.assertIn("Weak Encodes Testing UI", served)
         self.assertIn("Confirm (0 Changes)", served)
 
     def test_normalize_lab_export_endpoint_is_removed(self) -> None:
@@ -463,6 +464,10 @@ class WebTests(unittest.TestCase):
     def test_normalize_lab_frontend_is_confirm_wired_and_reason_aware(self) -> None:
         self.assertIn("/api/movies/normalize", NORMALIZE_LAB_FRONTEND)
         self.assertIn("/api/movies/apply", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("/api/movies/profile", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("/api/movies/replacement-queue/delete-preview", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Parser Testing UI", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Weak Encodes Testing UI", NORMALIZE_LAB_FRONTEND)
         self.assertIn("reason code", NORMALIZE_LAB_FRONTEND)
         self.assertIn("warning code", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Select all", NORMALIZE_LAB_FRONTEND)
@@ -484,6 +489,33 @@ class WebTests(unittest.TestCase):
         self.assertIn("function renderConfirmButton()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("change.change_type !== 'folder_delete' || change.confidence !== 'safe' || !change.current_value", NORMALIZE_LAB_FRONTEND)
         self.assertIn("selectedRelatedCount !== relatedRows.length", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Delete Selected Files (", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Weak mode keeps item inspection in the scan table", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("Replacement History", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("buildReplacementHistoryTable", NORMALIZE_LAB_FRONTEND)
+
+    def test_replacement_queue_delete_preview_route(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "movies"
+            movie = source / "Bad Movie (2001)" / "Bad Movie (2001).mkv"
+            poster = movie.parent / "poster.jpg"
+            movie.parent.mkdir(parents=True)
+            movie.write_text("video", encoding="utf-8")
+            poster.write_text("poster", encoding="utf-8")
+            with self.run_test_server() as base_url:
+                body = json.dumps({"source": str(source), "paths": [str(movie)]}).encode("utf-8")
+                req = urllib.request.Request(
+                    f"{base_url}/api/movies/replacement-queue/delete-preview",
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(payload["deleted"], [str(movie.resolve())])
+                self.assertEqual(payload["cleaned_sidecars"], [str(poster.resolve())])
+                self.assertEqual(payload["removed_folders"], [str(movie.parent.resolve())])
+                self.assertTrue(movie.exists())
 
     def test_delete_movie_junk_files_only_deletes_current_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
