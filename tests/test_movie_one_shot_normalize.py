@@ -151,6 +151,7 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
             "Dot.Com.2003.1080p.BluRay.x264.mkv": "Dot Com (2003)",
             "Coma.1978.1080p.BluRay.x264.mkv": "Coma (1978)",
             "To.Die.For.1995.1080p.BluRay.x264.mkv": "To Die For (1995)",
+            "Bone.Tomahawk.2015.1080p.BluRay.x264.mkv": "Bone Tomahawk (2015)",
         }
 
         for filename, expected_base in cases.items():
@@ -166,6 +167,33 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
                         f"{expected_base}/{expected_base}.mkv",
                         {change.proposed_value for change in plan.proposed_changes},
                     )
+
+    def test_shouting_titles_normalize_to_title_case_when_safe(self) -> None:
+        cases = {
+            "DEEP BLUE SEA.1999.mkv": "Deep Blue Sea (1999)",
+            "STAR WARS.1977.mkv": "Star Wars (1977)",
+            "X MEN.2000.mkv": "X Men (2000)",
+        }
+
+        for filename, expected_base in cases.items():
+            with self.subTest(filename=filename):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    source = Path(tmpdir)
+                    movie = source / filename
+                    movie.write_text("video", encoding="utf-8")
+
+                    plan = build_movie_plan(source, movie_files=[movie])
+
+                    self.assertIn(
+                        f"{expected_base}/{expected_base}.mkv",
+                        {change.proposed_value for change in plan.proposed_changes},
+                    )
+
+    def test_already_normalized_parent_child_title_is_not_truncated_by_domain_credit_rule(self) -> None:
+        parsed = parse_movie_identity(Path("Bone Tomahawk (2015)/Bone Tomahawk (2015).mkv"))
+        self.assertEqual(parsed.title, "Bone Tomahawk")
+        self.assertEqual(parsed.year, 2015)
+        self.assertEqual(parsed.confidence, "safe")
 
     def test_trailing_domain_credit_is_not_preserved_as_technical_tail(self) -> None:
         parsed = parse_movie_identity(Path("Apollo 11 (2019) Oxtorrent Com.mkv"))

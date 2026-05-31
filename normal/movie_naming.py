@@ -7,22 +7,34 @@ import unicodedata
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
 DOMAIN_CREDIT_TLD_PATTERN = r"(?:org|com|net|mx|to|am|cc|io)"
 LEADING_SITE_CREDIT_PATTERNS = (
-    re.compile(rf"^\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*(?:[-:]+)?\s*", re.IGNORECASE),
+    re.compile(
+        rf"^\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*(?:[-:]+)?\s*",
+        re.IGNORECASE,
+    ),
     re.compile(r"^\s*www\.[A-Za-z0-9.-]+\s*(?:[-:]+)?\s*", re.IGNORECASE),
     re.compile(
-        rf"^\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*(?:[-:]+)?\s*",
+        rf"^\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*(?:[-:]+)?\s*",
         re.IGNORECASE,
     ),
-    re.compile(rf"^\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*(?:[-:]+)?\s*", re.IGNORECASE),
+    re.compile(
+        rf"^\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*(?:[-:]+)?\s*",
+        re.IGNORECASE,
+    ),
 )
 TRAILING_SITE_CREDIT_PATTERNS = (
-    re.compile(rf"\s*(?:[-:]+)?\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*$", re.IGNORECASE),
-    re.compile(r"\s*(?:[-:]+)?\s*www\.[A-Za-z0-9.-]+\s*$", re.IGNORECASE),
     re.compile(
-        rf"\s*(?:[-:]+)?\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*$",
+        rf"\s*(?:[-:]+)?\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*$",
         re.IGNORECASE,
     ),
-    re.compile(rf"\s*(?:[-:]+)?\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*$", re.IGNORECASE),
+    re.compile(r"\s*(?:[-:]+)?\s*www\.[A-Za-z0-9.-]+\s*$", re.IGNORECASE),
+    re.compile(
+        rf"\s*(?:[-:]+)?\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\s*(?:[-:]+)?\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*$",
+        re.IGNORECASE,
+    ),
 )
 LEADING_BRACKETED_CREDIT_PATTERN = re.compile(r"^\s*\[(?:YTS(?:[._-]?(?:AM|MX))?|TGX|ERAI[._-]?RAWS)\]\s*", re.IGNORECASE)
 GENERIC_LEADING_BRACKET_TAG_PATTERN = re.compile(r"^\s*\[(?P<tag>[A-Za-z][A-Za-z0-9._ -]{1,24})\]\s*")
@@ -182,6 +194,7 @@ def normalize_display_title(value: str) -> str:
     cleaned = " ".join(cleaned.split()).strip(" -")
     if not cleaned:
         return ""
+    cleaned = maybe_normalize_shouting_title(cleaned)
     cleaned = punctuate_letter_number_title(cleaned)
     words = [_display_word(word) for word in cleaned.split()]
     normalized = reconstruct_display_title(words)
@@ -190,6 +203,19 @@ def normalize_display_title(value: str) -> str:
     normalized = re.sub(r",(?=[^\s])", ", ", normalized)
     normalized = re.sub(r"'([A-Z])\b", lambda match: "'" + match.group(1).lower(), normalized)
     return " ".join(normalized.split())
+
+
+def maybe_normalize_shouting_title(value: str) -> str:
+    words = re.findall(r"[A-Za-z]+", value)
+    if len(words) < 2:
+        return value
+    if any(not word.isupper() for word in words if len(word) > 1):
+        return value
+    if sum(1 for word in words if len(word) > 3) < 2 and not (
+        len(words) == 2 and len(words[0]) == 1 and len(words[1]) >= 2
+    ):
+        return value
+    return re.sub(r"[A-Za-z]+", lambda match: match.group(0).lower(), value)
 
 
 def _display_word(word: str) -> str:

@@ -40,22 +40,34 @@ VIDEO_NAME_EXTENSIONS = {
     ".webm",
 }
 LEADING_SITE_CREDIT_PATTERNS = (
-    re.compile(rf"^\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*(?:[-:]+)?\s*", re.IGNORECASE),
+    re.compile(
+        rf"^\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*(?:[-:]+)?\s*",
+        re.IGNORECASE,
+    ),
     re.compile(r"^\s*www\.[A-Za-z0-9.-]+\s*(?:[-:]+)?\s*", re.IGNORECASE),
     re.compile(
-        rf"^\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*(?:[-:]+)?\s*",
+        rf"^\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*(?:[-:]+)?\s*",
         re.IGNORECASE,
     ),
-    re.compile(rf"^\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*(?:[-:]+)?\s*", re.IGNORECASE),
+    re.compile(
+        rf"^\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*(?:[-:]+)?\s*",
+        re.IGNORECASE,
+    ),
 )
 TRAILING_SITE_CREDIT_PATTERNS = (
-    re.compile(rf"\s*(?:[-:]+)?\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*$", re.IGNORECASE),
-    re.compile(r"\s*(?:[-:]+)?\s*www\.[A-Za-z0-9.-]+\s*$", re.IGNORECASE),
     re.compile(
-        rf"\s*(?:[-:]+)?\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*$",
+        rf"\s*(?:[-:]+)?\s*www[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*$",
         re.IGNORECASE,
     ),
-    re.compile(rf"\s*(?:[-:]+)?\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}\s*$", re.IGNORECASE),
+    re.compile(r"\s*(?:[-:]+)?\s*www\.[A-Za-z0-9.-]+\s*$", re.IGNORECASE),
+    re.compile(
+        rf"\s*(?:[-:]+)?\s*downloaded[._\s-]+from[._\s-]+(?:[A-Za-z0-9-]+[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\s*(?:[-:]+)?\s*(?:[A-Za-z0-9-]{{4,}}[._\s-]+)+{DOMAIN_CREDIT_TLD_PATTERN}(?![A-Za-z0-9])\s*$",
+        re.IGNORECASE,
+    ),
 )
 LEADING_BRACKETED_CREDIT_PATTERN = re.compile(r"^\s*\[(?:YTS(?:[._-]?(?:AM|MX))?|TGX|ERAI[._-]?RAWS)\]\s*", re.IGNORECASE)
 GENERIC_LEADING_BRACKET_TAG_PATTERN = re.compile(r"^\s*\[(?P<tag>[A-Za-z][A-Za-z0-9._ -]{1,24})\]\s*")
