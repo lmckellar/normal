@@ -178,6 +178,15 @@ TITLE_ABBREVIATIONS = {
     "ms": "Ms.",
 }
 ORDINAL_SUFFIXES = {"st", "nd", "rd", "th"}
+CANONICAL_TITLE_PUNCTUATION_OVERRIDES = {
+    "fantastic mr fox": "Fantastic Mr. Fox",
+    "k pax": "K-Pax",
+    "mr brooks": "Mr. Brooks",
+    "shoot em up": "Shoot 'Em Up",
+    "sympathy for mr vengeance": "Sympathy For Mr. Vengeance",
+    "tron legacy": "TRON: Legacy",
+    "wall e": "WALL-E",
+}
 
 
 def normalize_display_title(value: str) -> str:
@@ -202,7 +211,12 @@ def normalize_display_title(value: str) -> str:
     normalized = re.sub(r":(?!\s|$)", ": ", normalized)
     normalized = re.sub(r",(?=[^\s])", ", ", normalized)
     normalized = re.sub(r"'([A-Z])\b", lambda match: "'" + match.group(1).lower(), normalized)
-    return " ".join(normalized.split())
+    normalized = " ".join(normalized.split())
+    return apply_canonical_title_punctuation_override(normalized)
+
+
+def apply_canonical_title_punctuation_override(title: str) -> str:
+    return CANONICAL_TITLE_PUNCTUATION_OVERRIDES.get(title_match_key(title), title)
 
 
 def maybe_normalize_shouting_title(value: str) -> str:

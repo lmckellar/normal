@@ -25,7 +25,7 @@ Current normalize contract is intentionally evidence-driven:
 - normalize web payloads now carry linked change detail plus warning detail for each movie row
 - `/parser-tester-ui` is an internal inspection surface for that richer backend reasoning, not a second mutation UI
 - `/parser-tester-ui` now also acts as a downstream-shape harness: selected rows can be staged into an inline tree preview, and the filtered library view can be rendered as a compact projected directory shape
-- parser cleanup is still local-only and intentionally narrow: edge tracker/domain credit stripping, compact token cleanup, and a small settled punctuation family; no remote canonical-title recovery
+- parser cleanup is still local-only and intentionally narrow: edge tracker/domain credit stripping, compact token cleanup, a small settled punctuation family, and a tiny explicit canonical-title exception seam for non-generalizable settled cases; no remote canonical-title recovery
 
 ### Quality and triage pipeline
 

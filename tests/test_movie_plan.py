@@ -632,7 +632,7 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn("Mr. Nobody (2009)/Mr. Nobody (2009).mkv", proposed_values)
             self.assertIn("Dr. Strangelove (1964)/Dr. Strangelove (1964).mkv", proposed_values)
 
-    def test_build_movie_plan_marks_legacy_normalized_punctuation_upgrade_for_review(self) -> None:
+    def test_build_movie_plan_marks_safe_legacy_normalized_punctuation_upgrade(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
             folder = source / "K 19 The Widowmaker (2002)"
@@ -646,12 +646,12 @@ class MoviePlanTests(unittest.TestCase):
             file_change = next(change for change in plan.proposed_changes if change.change_type == "file_rename")
             self.assertEqual(folder_change.proposed_value, "K-19: The Widowmaker (2002)")
             self.assertEqual(file_change.proposed_value, "K-19: The Widowmaker (2002).mkv")
-            self.assertEqual(folder_change.confidence, "review")
-            self.assertEqual(file_change.confidence, "review")
+            self.assertEqual(folder_change.confidence, "safe")
+            self.assertEqual(file_change.confidence, "safe")
             self.assertIn("normalized_title_punctuation_upgrade", folder_change.reason_codes)
             self.assertIn("normalized_title_punctuation_upgrade", file_change.reason_codes)
 
-    def test_build_movie_plan_marks_legacy_normalized_ordinal_and_abbreviation_upgrades_for_review(self) -> None:
+    def test_build_movie_plan_marks_safe_legacy_normalized_ordinal_and_abbreviation_upgrades(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
             ordinal_folder = source / "25Th Hour (2002)"
@@ -686,8 +686,48 @@ class MoviePlanTests(unittest.TestCase):
                 abbreviation_folder_change,
                 abbreviation_file_change,
             ):
-                self.assertEqual(change.confidence, "review")
+                self.assertEqual(change.confidence, "safe")
                 self.assertIn("normalized_title_punctuation_upgrade", change.reason_codes)
+
+    def test_build_movie_plan_promotes_known_canonical_punctuation_upgrades_to_safe(self) -> None:
+        cases = {
+            "Fantastic Mr Fox (2009)": "Fantastic Mr. Fox (2009)",
+            "K Pax (2001)": "K-Pax (2001)",
+            "Mr Brooks (2007)": "Mr. Brooks (2007)",
+            "Shoot Em Up (2007)": "Shoot 'Em Up (2007)",
+            "Sympathy For Mr Vengeance (2002)": "Sympathy For Mr. Vengeance (2002)",
+            "TRON Legacy (2010)": "TRON: Legacy (2010)",
+            "WALL E (2008)": "WALL-E (2008)",
+        }
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            for current_base, expected_base in cases.items():
+                folder = source / current_base
+                folder.mkdir()
+                (folder / f"{current_base}.mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            proposed = {
+                (change.current_value, change.proposed_value, change.confidence)
+                for change in plan.proposed_changes
+            }
+            for current_base, expected_base in cases.items():
+                with self.subTest(current_base=current_base):
+                    self.assertIn((current_base, expected_base, "safe"), proposed)
+                    self.assertIn((f"{current_base}.mkv", f"{expected_base}.mkv", "safe"), proposed)
+
+    def test_build_movie_plan_does_not_overreach_into_stable_numeric_title_punctuation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            folder = source / "THX 1138 (1971)"
+            folder.mkdir()
+            (folder / "THX 1138 (1971).mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            self.assertEqual(plan.proposed_changes, [])
 
     def test_build_movie_plan_does_not_overreach_into_unsettled_punctuation(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -1553,6 +1553,8 @@ def build_file_change(
 
     confidence, reason_codes, warning_codes, reason = change_metadata_for_cohort(
         parsed,
+        current_title=movie_title_from_normalized_value(movie_path.stem),
+        proposed_title=parsed.title,
         cohort=cohort,
         default_reason="Movie filename was normalized from locally parsed title, year, and technical tokens.",
         legacy_reason="Already-normalized movie filename was upgraded to the newer punctuation/display form.",
@@ -1585,6 +1587,8 @@ def build_loose_file_move_change(
 
     confidence, reason_codes, warning_codes, reason = change_metadata_for_cohort(
         parsed,
+        current_title=movie_title_from_normalized_value(current_value),
+        proposed_title=parsed.title,
         cohort=cohort,
         default_reason="Loose movie file was moved into its canonical movie folder.",
         legacy_reason="Loose movie file was moved into its upgraded punctuation/display movie folder.",
@@ -1623,6 +1627,8 @@ def build_folder_change(
         reason = "Duplicate wrapper folder was collapsed into the canonical movie folder."
     confidence, reason_codes, warning_codes, final_reason = change_metadata_for_cohort(
         parsed,
+        current_title=movie_title_from_normalized_value(current_name),
+        proposed_title=parsed.title,
         cohort=cohort,
         default_reason=reason,
         legacy_reason="Already-normalized movie folder was upgraded to the newer punctuation/display form.",
@@ -1644,6 +1650,8 @@ def build_folder_change(
 def change_metadata_for_cohort(
     parsed: ParsedMovieName,
     *,
+    current_title: str | None,
+    proposed_title: str | None,
     cohort: str,
     default_reason: str,
     legacy_reason: str,
@@ -1653,11 +1661,30 @@ def change_metadata_for_cohort(
     warning_codes = list(parsed.reason_codes) if parsed.confidence == "review" else []
     reason = default_reason
     if cohort == "legacy_normalized":
-        confidence = "review"
+        if not is_safe_legacy_punctuation_upgrade(current_title, proposed_title):
+            confidence = "review"
         reason_codes = merge_reason_codes(reason_codes, LEGACY_TITLE_UPGRADE_REASON)
-        warning_codes = merge_reason_codes(warning_codes, LEGACY_TITLE_UPGRADE_REASON)
+        if confidence == "review":
+            warning_codes = merge_reason_codes(warning_codes, LEGACY_TITLE_UPGRADE_REASON)
         reason = legacy_reason
     return confidence, reason_codes, warning_codes, reason
+
+
+def movie_title_from_normalized_value(value: str) -> str | None:
+    match = NORMALIZED_MOVIE_BASE_PATTERN.fullmatch(value)
+    if match is None:
+        return None
+    return match.group("title")
+
+
+def is_safe_legacy_punctuation_upgrade(current_title: str | None, proposed_title: str | None) -> bool:
+    if not current_title or not proposed_title:
+        return False
+    if current_title == proposed_title:
+        return False
+    if title_match_key(current_title) != title_match_key(proposed_title):
+        return False
+    return shared_normalize_display_title(current_title) == proposed_title
 
 
 def merge_reason_codes(reason_codes: list[str], *extras: str) -> list[str]:
