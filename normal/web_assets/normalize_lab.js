@@ -9,12 +9,12 @@
     runInFlight: false,
     activePane: 'detail',
     previewMode: 'selected',
+    applyInFlight: false,
   };
 
   const el = {
     sourcePath: document.getElementById('sourcePath'),
     runButton: document.getElementById('runButton'),
-    exportButton: document.getElementById('exportButton'),
     searchInput: document.getElementById('searchInput'),
     bucketFilter: document.getElementById('bucketFilter'),
     caseFilter: document.getElementById('caseFilter'),
@@ -25,9 +25,10 @@
     rowsBody: document.getElementById('rowsBody'),
     detailTab: document.getElementById('detailTab'),
     previewTab: document.getElementById('previewTab'),
-    previewModeBar: document.getElementById('previewModeBar'),
+    previewControls: document.getElementById('previewControls'),
     selectedPreviewButton: document.getElementById('selectedPreviewButton'),
     libraryPreviewButton: document.getElementById('libraryPreviewButton'),
+    confirmButton: document.getElementById('confirmButton'),
     detailPane: document.getElementById('detailPane'),
     previewPane: document.getElementById('previewPane'),
   };
@@ -49,15 +50,52 @@
     el.deselectAllButton.textContent = selectedVisibleCount ? `Deselect all (${selectedVisibleCount})` : 'Deselect all';
   }
 
+  function selectedProposedChanges() {
+    const changesById = new Map((state.payload?.proposed_changes || []).map(change => [change.item_id, change]));
+    const selectedChanges = [];
+    const seen = new Set();
+    const selectedRows = state.rows.filter(row => state.selected.has(row.result_id));
+    state.rows.forEach(row => {
+      if (!state.selected.has(row.result_id)) return;
+      (row.change_ids || []).forEach(changeId => {
+        if (seen.has(changeId)) return;
+        const change = changesById.get(changeId);
+        if (!change) return;
+        seen.add(changeId);
+        selectedChanges.push(change);
+      });
+    });
+    (state.payload?.proposed_changes || []).forEach(change => {
+      if (seen.has(change.item_id)) return;
+      if (change.change_type !== 'folder_delete' || change.confidence !== 'safe' || !change.current_value) return;
+      const folderPrefix = `${change.current_value}/`;
+      const relatedRows = state.rows.filter(row => row.actionable && String(row.current_value || '').startsWith(folderPrefix));
+      if (!relatedRows.length) return;
+      const selectedRelatedCount = relatedRows.filter(row => state.selected.has(row.result_id)).length;
+      if (selectedRelatedCount !== relatedRows.length) return;
+      if (!selectedRows.some(row => String(row.current_value || '').startsWith(folderPrefix))) return;
+      seen.add(change.item_id);
+      selectedChanges.push(change);
+    });
+    return selectedChanges;
+  }
+
+  function renderConfirmButton() {
+    const changeCount = selectedProposedChanges().length;
+    el.confirmButton.disabled = changeCount === 0 || state.applyInFlight;
+    el.confirmButton.textContent = state.applyInFlight ? `Confirming (${changeCount} Changes)` : `Confirm (${changeCount} Changes)`;
+  }
+
   function renderPaneTabs() {
     const previewVisible = state.activePane === 'preview';
     el.detailTab.classList.toggle('is-active', !previewVisible);
     el.previewTab.classList.toggle('is-active', previewVisible);
     el.detailPane.hidden = previewVisible;
     el.previewPane.hidden = !previewVisible;
-    el.previewModeBar.hidden = !previewVisible;
+    el.previewControls.hidden = !previewVisible;
     el.selectedPreviewButton.classList.toggle('is-active', state.previewMode === 'selected');
     el.libraryPreviewButton.classList.toggle('is-active', state.previewMode === 'library');
+    renderConfirmButton();
   }
 
   function escapeHtml(value) {
@@ -158,6 +196,7 @@
         renderSidePanel();
       });
     });
+    renderConfirmButton();
   }
 
   function rowById(rowId) {
@@ -338,17 +377,42 @@
     }
   }
 
-  async function exportSelected() {
-    const rows = state.rows.filter(row => state.selected.has(row.result_id));
-    if (!rows.length) return;
-    const response = await fetch('/api/movies/parser-tester-ui/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: el.sourcePath.value, rows }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'export failed');
-    el.previewPane.textContent = `Exported ${payload.exported} rows to ${payload.path}`;
+  async function confirmSelected() {
+    const changes = selectedProposedChanges();
+    if (!changes.length) return;
+    state.applyInFlight = true;
+    renderConfirmButton();
+    try {
+      const response = await fetch('/api/movies/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: el.sourcePath.value, changes }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'confirm failed');
+      state.payload = payload.remaining_plan || null;
+      state.selected = new Set();
+      state.activeRowId = '';
+      state.activePane = 'preview';
+      state.previewMode = 'selected';
+      renderFilters();
+      renderRows();
+      if (!state.payload) {
+        el.detailPane.textContent = 'No remaining normalize changes.';
+        el.previewPane.innerHTML = `
+          <div class="lab-preview-empty">
+            <strong>No remaining normalize changes.</strong>
+            <div>Run normalize again to refresh the library view.</div>
+          </div>
+        `;
+        renderPaneTabs();
+        return;
+      }
+      renderSidePanel();
+    } finally {
+      state.applyInFlight = false;
+      renderConfirmButton();
+    }
   }
 
   document.querySelectorAll('.sort').forEach(button => {
@@ -398,5 +462,5 @@
   renderPaneTabs();
   renderSidePanel();
   el.runButton.addEventListener('click', () => { runNormalize().catch(error => { el.detailPane.textContent = error.message; }); });
-  el.exportButton.addEventListener('click', () => { exportSelected().catch(error => { el.previewPane.textContent = error.message; }); });
+  el.confirmButton.addEventListener('click', () => { confirmSelected().catch(error => { el.previewPane.textContent = error.message; }); });
 })();

@@ -82,7 +82,7 @@ class WebTests(unittest.TestCase):
                 self.assertIn(".lab-layout", response.read().decode("utf-8"))
             with urllib.request.urlopen(f"{base_url}/parser-tester-ui-assets/normalize_lab.js") as response:
                 self.assertEqual(response.headers.get_content_type(), "application/javascript")
-                self.assertIn("/api/movies/parser-tester-ui/export", response.read().decode("utf-8"))
+                self.assertIn("/api/movies/apply", response.read().decode("utf-8"))
 
     def test_workbench_runtime_keys_are_available_before_initial_render(self) -> None:
         html = render_workbench_html(Path("/library/movies"), omdb_key="omdb-test", tmdb_key="tmdb-test")
@@ -110,41 +110,23 @@ class WebTests(unittest.TestCase):
             with urllib.request.urlopen(f"{base_url}/parser-tester-ui") as response:
                 served = response.read().decode("utf-8")
         self.assertIn("Parser Tester UI", served)
+        self.assertIn("Confirm (0 Changes)", served)
 
-    def test_normalize_lab_export_endpoint_writes_jsonl(self) -> None:
+    def test_normalize_lab_export_endpoint_is_removed(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "library"
             source.mkdir()
             with self.run_test_server() as base_url:
-                body = json.dumps(
-                    {
-                        "source": str(source),
-                        "rows": [
-                            {
-                                "current_value": "Movie.mkv",
-                                "projected_path": "Movie (2000)/Movie (2000).mkv",
-                                "confidence": "safe",
-                                "reason_codes": ["package_split"],
-                                "warning_codes": [],
-                                "title_source": "filename_prefix",
-                                "year_source": "filename",
-                                "linked_change_types": ["file_move"],
-                            }
-                        ],
-                    }
-                ).encode("utf-8")
+                body = json.dumps({"source": str(source), "rows": [{"current_value": "Movie.mkv"}]}).encode("utf-8")
                 req = urllib.request.Request(
                     f"{base_url}/api/movies/parser-tester-ui/export",
                     data=body,
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
-                with urllib.request.urlopen(req) as response:
-                    payload = json.loads(response.read().decode("utf-8"))
-            self.assertEqual(payload["exported"], 1)
-            export_path = Path(payload["path"])
-            self.assertTrue(export_path.exists())
-            self.assertIn('"raw_path": "Movie.mkv"', export_path.read_text(encoding="utf-8"))
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(req)
+        self.assertEqual(ctx.exception.code, 404)
 
     def test_workbench_frontend_is_wired_for_fixed_spread(self) -> None:
         self.assertIn("Primary Surface", WORKBENCH_FRONTEND)
@@ -478,14 +460,15 @@ class WebTests(unittest.TestCase):
         self.assertIn("Apply needs review", FRONTEND)
         self.assertIn("safe rename${remainingSafe === 1 ? '' : 's'} and ${remainingReview} review rename", FRONTEND)
 
-    def test_normalize_lab_frontend_is_read_only_and_reason_aware(self) -> None:
+    def test_normalize_lab_frontend_is_confirm_wired_and_reason_aware(self) -> None:
         self.assertIn("/api/movies/normalize", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("/api/movies/parser-tester-ui/export", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("/api/movies/apply", NORMALIZE_LAB_FRONTEND)
         self.assertIn("reason code", NORMALIZE_LAB_FRONTEND)
         self.assertIn("warning code", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Select all", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Deselect all", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Full library", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Confirm (0 Changes)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("package cases", NORMALIZE_LAB_FRONTEND)
         self.assertIn("collision cases", NORMALIZE_LAB_FRONTEND)
         self.assertIn("artifact cleanup cases", NORMALIZE_LAB_FRONTEND)
@@ -497,7 +480,10 @@ class WebTests(unittest.TestCase):
         self.assertIn("state.activeRowId = id;", NORMALIZE_LAB_FRONTEND)
         self.assertIn("row.linked_changes || []", NORMALIZE_LAB_FRONTEND)
         self.assertIn("row.warning_messages || []", NORMALIZE_LAB_FRONTEND)
-        self.assertNotIn("/api/movies/apply", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function selectedProposedChanges()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function renderConfirmButton()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("change.change_type !== 'folder_delete' || change.confidence !== 'safe' || !change.current_value", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("selectedRelatedCount !== relatedRows.length", NORMALIZE_LAB_FRONTEND)
 
     def test_delete_movie_junk_files_only_deletes_current_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

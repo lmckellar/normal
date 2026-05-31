@@ -25,7 +25,7 @@ from .routes_cleanup import (
     handle_movies_subtitle_readiness_history_sync,
 )
 from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
-from .routes_normalize import handle_movies_apply, handle_movies_normalize, handle_movies_normalize_lab_export
+from .routes_normalize import handle_movies_apply, handle_movies_normalize
 from .routes_profile import (
     handle_movies_canonical_lists,
     handle_movies_dashboard_histogram,
@@ -199,7 +199,6 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/movies/inspect": handle_movies_inspect,
         "/api/movies/normalize": handle_movies_normalize,
         "/api/movies/apply": handle_movies_apply,
-        "/api/movies/parser-tester-ui/export": handle_movies_normalize_lab_export,
         "/api/movies/junk": handle_movies_junk,
         "/api/movies/junk/delete": handle_movies_junk_delete,
         "/api/movies/replacement-queue/list": handle_movies_replacement_queue_list,

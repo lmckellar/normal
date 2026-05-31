@@ -108,6 +108,7 @@ class MovieOneShotNormalizeTests(unittest.TestCase):
             "Oxtorrent Com Apollo 11 (2019).mkv": "Apollo 11 (2019)",
             "Apollo 11 (2019) Oxtorrent Com.mkv": "Apollo 11 (2019)",
             "[Oxtorrent Com] Apollo 11 (2019).mkv": "Apollo 11 (2019)",
+            "[ OxTorrent.com ] Apollo.11.2019.MULTi.1080p.BluRay.DTS-HDMA.x264-EXTREME.mkv": "Apollo 11 (2019)",
             "www.Oxtorrent.com [TorrentGalaxy.to] Apollo 11 (2019) [Oxtorrent Com].mkv": "Apollo 11 (2019)",
             "MoviesByRizzo - The Sting 1973 1080p BluRay x264 AAC.mkv": "The Sting (1973)",
             "anoXmous - The Godfather 1972 1080p BluRay x264.mp4": "The Godfather (1972)",

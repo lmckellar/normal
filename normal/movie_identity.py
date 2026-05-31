@@ -70,8 +70,8 @@ TRAILING_SITE_CREDIT_PATTERNS = (
     ),
 )
 LEADING_BRACKETED_CREDIT_PATTERN = re.compile(r"^\s*\[(?:YTS(?:[._-]?(?:AM|MX))?|TGX|ERAI[._-]?RAWS)\]\s*", re.IGNORECASE)
-GENERIC_LEADING_BRACKET_TAG_PATTERN = re.compile(r"^\s*\[(?P<tag>[A-Za-z][A-Za-z0-9._ -]{1,24})\]\s*")
-GENERIC_TRAILING_BRACKET_TAG_PATTERN = re.compile(r"\s*\[(?P<tag>[A-Za-z][A-Za-z0-9._ -]{1,24})\]\s*$")
+GENERIC_LEADING_BRACKET_TAG_PATTERN = re.compile(r"^\s*\[\s*(?P<tag>[A-Za-z][A-Za-z0-9._ -]{1,24})\s*\]\s*")
+GENERIC_TRAILING_BRACKET_TAG_PATTERN = re.compile(r"\s*\[\s*(?P<tag>[A-Za-z][A-Za-z0-9._ -]{1,24})\s*\]\s*$")
 LEADING_UPLOADER_CREDIT_PATTERN = re.compile(
     r"^\s*(?:moviesbyrizzo|anoxmous|etrg|hdchina|rarbg(?:[._-]?com)?)\s*(?:[-:]+)\s*",
     re.IGNORECASE,

@@ -116,15 +116,12 @@ Current capabilities:
 - inline detail / preview toggle in one container instead of stacked panels
 - preview pane with staged selected preview and full filtered-library preview
 - compact projected directory-tree render for downstream shape inspection
-- selected-row export to local JSONL
+- selected-row confirm/apply using the normal normalize mutation path
 
-### Local Corpus Export
+### Local Corpus Confirm
 
-The lab can export selected rows to git-ignored local analysis artifacts:
-
-`/out/parser-tester-ui/*.jsonl`
-
-This is read-only with respect to the movie library.
+The lab can now confirm selected normalize changes directly against the local
+library through the same apply endpoint used by the main normalize UI.
 
 ## Files Touched In This Round
 
@@ -172,14 +169,14 @@ Start by reopening:
 - `normal/movie_plan.py`
 - `normal/web_assets/normalize_lab.js`
 
-Then use `/parser-tester-ui` against the local movie corpus and export selected
-cases from rows that still feel noisy or under-explained.
+Then use `/parser-tester-ui` against the local movie corpus and confirm
+selected cases only after the projected output shape looks coherent.
 
 ## Likely Next Work
 
 - tighten reason bucketing and phrasing if the lab shows noisy or redundant row
   explanations
-- promote exported live-corpus cases into committed synthetic tests
+- promote confirmed live-corpus parser misses into committed synthetic tests
 - refine subtitle residue handling if real libraries expose nested or
   language-tag edge cases not covered yet
 - decide whether any remaining planner warnings should be split further for UI

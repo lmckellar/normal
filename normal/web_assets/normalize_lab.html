@@ -12,13 +12,12 @@
       <div>
         <div class="lab-kicker">internal</div>
       <h1>Parser Tester UI</h1>
-        <p>Read-only normalize diagnostics with row reasoning and local corpus export.</p>
+        <p>Normalize diagnostics with row reasoning and direct confirm/apply.</p>
       </div>
       <div class="lab-controls">
         <label for="sourcePath">Source</label>
         <input id="sourcePath" type="text" placeholder="/path/to/library">
         <button id="runButton">Run Normalize</button>
-        <button id="exportButton">Export Selected</button>
       </div>
     </header>
 
@@ -66,9 +65,12 @@
               <button id="detailTab" class="lab-tab" type="button">Detail</button>
               <button id="previewTab" class="lab-tab" type="button">Preview</button>
             </div>
-            <div id="previewModeBar" class="lab-preview-modes" hidden>
-              <button id="selectedPreviewButton" class="lab-mode-button" type="button">Selected</button>
-              <button id="libraryPreviewButton" class="lab-mode-button" type="button">Full library</button>
+            <div id="previewControls" class="lab-preview-controls" hidden>
+              <div class="lab-preview-modes">
+                <button id="selectedPreviewButton" class="lab-mode-button" type="button">Selected</button>
+                <button id="libraryPreviewButton" class="lab-mode-button" type="button">Full library</button>
+              </div>
+              <button id="confirmButton" class="lab-confirm-button" type="button" disabled>Confirm (0 Changes)</button>
             </div>
           </div>
           <div id="detailPane" class="lab-pane"></div>

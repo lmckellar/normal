@@ -23,8 +23,8 @@ Current normalize contract is intentionally evidence-driven:
 - parser evidence and local folder context can promote a collision from `review` to `safe`
 - shared display-title and token cleanup now lives in `movie_naming.py`, with `movie_identity.py` and downstream lookup/matching surfaces reusing that seam
 - normalize web payloads now carry linked change detail plus warning detail for each movie row
-- `/parser-tester-ui` is an internal inspection surface for that richer backend reasoning, not a second mutation UI
-- `/parser-tester-ui` now also acts as a downstream-shape harness: selected rows can be staged into an inline tree preview, and the filtered library view can be rendered as a compact projected directory shape
+- `/parser-tester-ui` is an internal inspection and apply surface for that richer backend reasoning; it reuses the same normalize confirm/apply endpoint as the main UI rather than introducing a separate mutation contract
+- `/parser-tester-ui` also acts as a downstream-shape harness: selected rows can be staged into an inline tree preview, the filtered library view can be rendered as a compact projected directory shape, and safe wrapper-folder deletes implied by a fully selected package split can be confirmed alongside the row-linked movie moves
 - parser cleanup is still local-only and intentionally narrow: edge tracker/domain credit stripping, compact token cleanup, a small settled punctuation family, and a tiny explicit canonical-title exception seam for non-generalizable settled cases; no remote canonical-title recovery
 
 ### Quality and triage pipeline
