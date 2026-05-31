@@ -9,6 +9,12 @@
     'weak-encodes': 'Weak encode triage with delete preview and explicit destructive confirm.',
   };
 
+  const LAYOUT_MODES = {
+    default: '2-page-lopsided',
+    book: '3-page-book',
+    ledger: '4-page-ledger',
+  };
+
   const NORMALIZE_HEADERS = [
     { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential' },
     { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential' },
@@ -31,6 +37,7 @@
 
   const state = {
     workflow: workflowFromUrl(),
+    layoutMode: LAYOUT_MODES.default,
     normalizePayload: null,
     weakPayload: null,
     rows: [],
@@ -47,6 +54,8 @@
   };
 
   const el = {
+    shell: document.querySelector('.lab-shell'),
+    pages: Array.from(document.querySelectorAll('.lab-page')),
     workflowButton: document.getElementById('workflowButton'),
     workflowTitle: document.getElementById('workflowTitle'),
     workflowDescription: document.getElementById('workflowDescription'),
@@ -69,7 +78,6 @@
     selectedPreviewButton: document.getElementById('selectedPreviewButton'),
     libraryPreviewButton: document.getElementById('libraryPreviewButton'),
     confirmButton: document.getElementById('confirmButton'),
-    detailPane: document.getElementById('detailPane'),
     previewPane: document.getElementById('previewPane'),
   };
 
@@ -192,6 +200,18 @@
     el.workflowDescription.textContent = WORKFLOW_DESCRIPTIONS[state.workflow];
     el.workflowNormalize.classList.toggle('is-active', state.workflow === 'normalize');
     el.workflowWeakEncodes.classList.toggle('is-active', state.workflow === 'weak-encodes');
+  }
+
+  function renderShellLayout() {
+    if (el.shell) el.shell.dataset.layoutMode = state.layoutMode;
+    el.pages.forEach(page => {
+      const role = page.dataset.pageRole || '';
+      const hidden = false;
+      page.dataset.panelState = hidden ? 'collapsed' : 'expanded';
+      if (!page.dataset.collapseMode) {
+        page.dataset.collapseMode = role === 'preview' ? 'anchored-slot' : 'reflow';
+      }
+    });
   }
 
   function renderRunButton() {
@@ -421,7 +441,7 @@
   }
 
   function renderPanelVisibility() {
-    el.detailPane.hidden = isWeakMode();
+    renderShellLayout();
     el.previewPane.hidden = false;
     el.previewControls.hidden = false;
     el.selectedPreviewButton.classList.toggle('is-active', state.previewMode === 'selected');
@@ -504,55 +524,6 @@
   function rowById(rowId) {
     const key = isWeakMode() ? 'row_id' : 'result_id';
     return state.rows.find(item => item[key] === rowId) || state.filteredRows.find(item => item[key] === rowId) || null;
-  }
-
-  function buildReviewCauses(row, changes) {
-    const seen = new Set();
-    const causes = [];
-    [
-      ...(row.warning_messages || []),
-      ...(row.reason_messages || []),
-      ...changes.map(change => change.reason).filter(Boolean),
-    ].forEach(message => {
-      const key = String(message || '').trim();
-      if (!key || seen.has(key)) return;
-      seen.add(key);
-      causes.push(key);
-    });
-    return causes;
-  }
-
-  function renderDetailPane() {
-    if (isWeakMode()) {
-      el.detailPane.innerHTML = '<div class="lab-pane-note">Weak mode keeps item inspection in the scan table. The right column only shows mutation preview.</div>';
-      return;
-    }
-    const row = rowById(state.activeRowId) || state.filteredRows[0] || null;
-    if (!row) {
-      el.detailPane.textContent = 'Run normalize to inspect rows.';
-      return;
-    }
-    state.activeRowId = row.result_id;
-    const changes = row.linked_changes || [];
-    const reviewCauses = buildReviewCauses(row, changes);
-    el.detailPane.innerHTML = `
-      <div><strong>${escapeHtml(row.current_value)}</strong></div>
-      <div>Confidence: <span class="chip">${escapeHtml(row.confidence)}</span></div>
-      <div>Actionable: ${row.actionable ? 'yes' : 'no'}</div>
-      <div>Why this is ${escapeHtml(row.confidence)}:</div>
-      <div>${reviewCauses.length ? reviewCauses.map(message => `- ${escapeHtml(message)}`).join('\n') : 'No extra review cause recorded.'}</div>
-      <div>Reason codes: ${(row.reason_codes || []).map(code => `<span class="chip">${escapeHtml(code)}</span>`).join('') || 'none'}</div>
-      <div>Warning codes: ${(row.warning_codes || []).map(code => `<span class="chip">${escapeHtml(code)}</span>`).join('') || 'none'}</div>
-      <div>Warning messages:</div>
-      <div>${escapeHtml((row.warning_messages || []).join('\n') || 'none')}</div>
-      <div>Title source: ${escapeHtml(row.title_source)}</div>
-      <div>Year source: ${escapeHtml(row.year_source)}</div>
-      <div>Parse source: ${escapeHtml(row.parse_source_path)}</div>
-      <div>Parse evidence:</div>
-      <div>${escapeHtml((row.reason_messages || []).join('\n') || 'none')}</div>
-      <div>Compact token traces:</div>
-      <div>${escapeHtml((row.compact_token_traces || []).join('\n') || 'none')}</div>
-    `;
   }
 
   function flattenPreviewTree(node, lines, depth) {
@@ -776,7 +747,6 @@
 
   function renderSidePanel() {
     renderPanelVisibility();
-    renderDetailPane();
     renderPreviewPane();
   }
 
@@ -893,7 +863,6 @@
       renderFilters();
       renderRows();
       if (!state.normalizePayload) {
-        el.detailPane.textContent = 'No remaining normalize changes.';
         el.previewPane.innerHTML = `
           <div class="lab-preview-empty">
             <strong>No remaining normalize changes.</strong>
@@ -912,6 +881,7 @@
 
   function setWorkflow(workflow) {
     state.workflow = workflow === 'weak-encodes' ? 'weak-encodes' : 'normalize';
+    state.layoutMode = LAYOUT_MODES.default;
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
@@ -1036,8 +1006,7 @@
 
   el.runButton.addEventListener('click', () => {
     runActiveWorkflow().catch(error => {
-      if (isWeakMode()) el.previewPane.textContent = error.message;
-      else el.detailPane.textContent = error.message;
+      el.previewPane.textContent = error.message;
     });
   });
 

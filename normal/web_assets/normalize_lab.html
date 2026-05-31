@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/parser-tester-ui-assets/normalize_lab.css">
 </head>
 <body>
-  <div class="lab-shell">
+  <div class="lab-shell" data-layout-mode="2-page-lopsided">
     <header class="lab-topbar">
       <div>
         <div class="lab-kicker">internal</div>
@@ -59,34 +59,41 @@
     </section>
 
     <main class="lab-layout">
-      <section class="lab-table-panel">
-        <table class="lab-scan-table">
-          <thead>
-            <tr id="tableHeaderRow">
-              <th></th>
-              <th><button class="sort" data-sort="current_value">File Name</button></th>
-              <th><button class="sort" data-sort="projected_path">Projected Path</button></th>
-              <th><button class="sort" data-sort="confidence">Confidence</button></th>
-              <th><button class="sort" data-sort="reason_bucket">Reason Bucket</button></th>
-            </tr>
-          </thead>
-          <tbody id="rowsBody"></tbody>
-        </table>
+      <section class="lab-page lab-page-scan" data-page-role="scan" data-collapse-mode="reflow" data-panel-state="expanded">
+        <div class="lab-page-frame">
+          <section class="lab-table-panel lab-rhythm-surface" data-rhythm-surface="rows">
+            <table class="lab-scan-table">
+              <thead>
+                <tr id="tableHeaderRow">
+                  <th></th>
+                  <th><button class="sort" data-sort="current_value">File Name</button></th>
+                  <th><button class="sort" data-sort="projected_path">Projected Path</button></th>
+                  <th><button class="sort" data-sort="confidence">Confidence</button></th>
+                  <th><button class="sort" data-sort="reason_bucket">Reason Bucket</button></th>
+                </tr>
+              </thead>
+              <tbody id="rowsBody"></tbody>
+            </table>
+          </section>
+        </div>
       </section>
-      <aside class="lab-detail">
-        <div class="lab-panel">
-          <div class="lab-panel-header">
-            <div class="lab-panel-title">Preview</div>
-            <div id="previewControls" class="lab-preview-controls" hidden>
-              <div class="lab-preview-modes">
-                <button id="selectedPreviewButton" class="lab-mode-button" type="button">Selected</button>
-                <button id="libraryPreviewButton" class="lab-mode-button" type="button">Full library</button>
+      <aside class="lab-page lab-page-preview" data-page-role="preview" data-collapse-mode="anchored-slot" data-panel-state="expanded">
+        <div class="lab-page-frame">
+          <div class="lab-detail">
+            <div class="lab-panel">
+              <div class="lab-panel-header">
+                <div class="lab-panel-title">Preview</div>
+                <div id="previewControls" class="lab-preview-controls" hidden>
+                  <div class="lab-preview-modes">
+                    <button id="selectedPreviewButton" class="lab-mode-button" type="button">Selected</button>
+                    <button id="libraryPreviewButton" class="lab-mode-button" type="button">Full library</button>
+                  </div>
+                  <button id="confirmButton" class="lab-confirm-button" type="button" disabled>Confirm (0 Changes)</button>
+                </div>
               </div>
-              <button id="confirmButton" class="lab-confirm-button" type="button" disabled>Confirm (0 Changes)</button>
+              <div id="previewPane" class="lab-pane lab-preview-pane lab-rhythm-surface" data-rhythm-surface="rows"></div>
             </div>
           </div>
-          <div id="detailPane" class="lab-pane lab-detail-pane"></div>
-          <div id="previewPane" class="lab-pane lab-preview-pane"></div>
         </div>
       </aside>
     </main>

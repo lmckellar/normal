@@ -244,12 +244,13 @@ was a genuine planner defect, not a preview artifact.
   concise differentiated target instead of protecting the stale package shell
 - normalize row payloads now include serialized linked changes plus warning
   messages, not just flattened code lists
-- `/parser-tester-ui` now shows those linked reasons and warning messages directly
-  in the row detail pane, and row checkbox selection updates the active detail
-  view immediately
 - `/parser-tester-ui` preview is now an inline staged tree view rather than a
   second verbose debug card stack, which makes downstream shape inspection
   materially useful against the real library
+- `/parser-tester-ui` now also carries an invisible shell contract for future
+  expansion: named layout modes, semantic page roles, shared row-rhythm tokens,
+  and explicit collapse-role hooks, while the live default still renders as the
+  same 2-page spread
 - collision marking now uses the composed final movie path for `file_rename`
   rows after any paired `folder_rename`, so the planner catches downstream
   file collisions that were previously missed

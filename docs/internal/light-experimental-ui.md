@@ -35,13 +35,26 @@ Assets served at `/parser-tester-ui-assets/<file>`.
 Shared shell:
 
 - top title is the workflow switcher
-- layout stays two-column
+- default visible mode stays two-column
 - source input and run button stay in the header
+- shell now owns named layout modes: `2-page-lopsided`, `3-page-book`,
+  `4-page-ledger`
+- page roles are semantic rather than positional: current parser UI uses `scan`
+  and `preview`, leaving room for future `inspection` and `audit` pages without
+  rewriting layout primitives
+- row-like surfaces opt into one shared rhythm contract from shell scope rather
+  than tuning table rows and preview tree rows independently
+- collapse behavior is defined at shell scope:
+  `anchored-slot` keeps a narrow visible stub, `reflow` disappears and frees the
+  track
+- this contract is intentionally invisible in the current parser UI pass; live
+  default remains `2-page-lopsided`
 
 Normalize:
 
 - table shows source `File Name` rather than full source path
-- existing row reasoning remains visible alongside preview in the right column
+- right page is preview-first; detailed row debug copy is no longer part of the
+  live shell
 - confirm path still uses `/api/movies/normalize` and `/api/movies/apply`
 
 Weak encodes:
@@ -64,6 +77,13 @@ Keep the names JS toggles/emits: `#runButton.is-running`,
 (`.is-mutated`, `.is-selected`, `.is-deleted`, `.is-cleanup`,
 `.lab-indent-0..5`), `.sort`, workflow menu/button ids, and the weak preview
 confirm label `Delete Selected Files (N)`.
+
+Shell contract hooks:
+
+- `.lab-shell[data-layout-mode]`
+- `.lab-page[data-page-role][data-collapse-mode][data-panel-state]`
+- `.lab-rhythm-surface[data-rhythm-surface="rows"]`
+- shell rhythm tokens such as `--lab-track-*` and `--lab-rhythm-*`
 
 ## Run
 
