@@ -23,6 +23,7 @@ from normal.movie_profile import (
     load_movie_standards,
     MovieStandardsConflictError,
     movie_standards_revision,
+    normalize_weak_encode_floor,
     path_matches_normalized_shape,
     scan_movie_profiles,
     update_movie_profile_definition,
@@ -196,6 +197,39 @@ class MovieProfileTests(unittest.TestCase):
         self.assertTrue(is_replacement_candidate_quality("library_grade", standards))
         self.assertFalse(is_replacement_candidate_quality("collector_grade", standards))
         self.assertFalse(is_replacement_candidate_quality("reference", standards))
+
+    def test_normalize_weak_encode_floor_clamps_to_safe_options(self) -> None:
+        standards = {"replacement_candidate_rules": {"quality_profile_floor": "reference"}}
+
+        self.assertEqual(normalize_weak_encode_floor("collector_grade", standards), "standard_definition")
+        self.assertEqual(normalize_weak_encode_floor("standard_definition", standards), "standard_definition")
+
+    def test_build_movie_profile_item_routes_good_english_packaging_issue_out_of_weak_candidate(self) -> None:
+        facts = MediaFacts(
+            width=1920,
+            height=1080,
+            video_bitrate_kbps=15000,
+            audio_codec="ac3",
+            audio_channels=2,
+            audio_bitrate_kbps=192,
+            audio_streams=[
+                AudioStreamFacts(index=1, codec="ac3", bitrate_kbps=192, channels=2, language="ukr", is_default=True),
+                AudioStreamFacts(index=2, codec="truehd", bitrate_kbps=4000, channels=8, language="eng", is_default=False),
+            ],
+            default_audio_streams=1,
+            default_audio_stream_index=1,
+        )
+
+        item = build_movie_profile_item(
+            Path("/movies"),
+            Path("/movies/American Psycho (2000)/American Psycho (2000).mkv"),
+            facts,
+            standards=DEFAULT_MOVIE_STANDARDS,
+        )
+
+        self.assertFalse(item.profile.weak_candidate)
+        self.assertEqual(item.profile.label, "needs_review")
+        self.assertIn("default_non_english_audio", [finding.code for finding in item.profile.diagnostics])
 
     def test_build_movie_profile_definitions_exposes_dashboard_owned_controls(self) -> None:
         definitions = build_movie_profile_definitions()

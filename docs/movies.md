@@ -111,6 +111,17 @@ showing each audio stream's language, bitrate, channel layout, and which stream
 is marked default. This is primarily there to expose multi-audio packaging
 mistakes without bloating the table.
 
+That internal weak-encode shell also exposes a compact `Weak Floor of` control.
+Its default is intentionally conservative: `Standard Definition`, not
+`Library Grade`. The point of the delete workflow is to identify the weakest
+safe replacement candidates first, not to drag stronger library-grade titles
+into an aggressive destructive lane by default.
+
+Weak-encode ownership is also narrower than general review ownership. If a file
+already contains a good English audio track and the real defect is wrong
+default-language packaging, that belongs to `Repair Defaults` rather than
+`Delete Weak Encodes`.
+
 The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue. When a better encode for the same title shows up in a future scan, it is automatically marked complete.
 
 Queue history has four hard filters: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Deleted rows can be dismissed from queue history inline when the release is no longer worth replacing. That action only changes queue state; it does not touch media files.

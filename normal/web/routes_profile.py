@@ -13,9 +13,13 @@ from normal.movie_profile import (
     build_histogram_payload_from_items,
     build_movie_profile_definitions,
     build_replacement_candidate_definition,
+    deep_merge_dicts,
     load_movie_standards,
     movie_standards_revision,
     MovieStandardsConflictError,
+    normalize_weak_encode_floor,
+    replacement_candidate_quality_floor,
+    reclassify_report_with_standards,
     scan_movie_profiles,
     update_movie_profile_definition,
 )
@@ -29,9 +33,13 @@ from .state import MOVIE_PROFILE_CACHE, PROBE_CACHE, RequestConflictError
 
 def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
+    standards = load_movie_standards()
+    effective_standards = profile_request_standards(payload, standards)
+    floor_overridden = replacement_candidate_quality_floor(effective_standards) != replacement_candidate_quality_floor(standards)
     cached = MOVIE_PROFILE_CACHE.get(source)
     if cached is not None:
-        ctx.respond_json(build_profile_response(source, cached, load_movie_standards()))
+        response_report = reclassify_report_with_standards(cached, effective_standards) if floor_overridden else cached
+        ctx.respond_json(build_profile_response(source, response_report, effective_standards))
         return
     with guarded_heavy_scan(source, "Movie profile scan"):
         with ctx.handler.activity_tracker.track(source, "Movie profile scan") as activity_id:
@@ -54,9 +62,19 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
                 should_cancel=ctx.client_disconnected,
             )
         MOVIE_PROFILE_CACHE.put(source, report)
-        standards = load_movie_standards()
-        response = build_profile_response(source, report, standards)
+        response_report = reclassify_report_with_standards(report, effective_standards) if floor_overridden else report
+        response = build_profile_response(source, response_report, effective_standards)
     ctx.respond_json(response)
+
+
+def profile_request_standards(payload: dict[str, Any], standards: dict[str, Any]) -> dict[str, Any]:
+    if "weak_floor" not in payload:
+        return standards
+    weak_floor = normalize_weak_encode_floor(payload.get("weak_floor"), standards)
+    return deep_merge_dicts(
+        standards,
+        {"replacement_candidate_rules": {"quality_profile_floor": weak_floor}},
+    )
 
 
 def handle_movies_dashboard_histogram(ctx: RequestContext, payload: dict[str, Any]) -> None:

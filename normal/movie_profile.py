@@ -82,6 +82,8 @@ PROFILE_RANKS = {
     "reference": 4,
 }
 
+SAFE_WEAK_ENCODE_FLOORS = ("standard_definition", "library_grade")
+
 QUALITY_STANCE_RANKS = {
     "standard_definition": 1,
     "library_grade": 2,
@@ -283,9 +285,9 @@ def build_movie_profile_item(
     legacy_label = classify_profile_label(facts)
     domain_results = evaluate_movie_standards(movie_path, facts, active_standards)
     quality_label = classify_quality_stance(movie_path, facts, domain_results, active_standards)
-    weak_candidate = is_replacement_candidate_quality(quality_label, active_standards)
-    label = classify_standard_label(domain_results, active_standards, weak_candidate=weak_candidate)
     diagnostics = detect_plex_diagnostics(movie_path, facts)
+    weak_candidate = is_replacement_candidate_quality(quality_label, active_standards) and not is_audio_packaging_owned_movie(diagnostics)
+    label = classify_standard_label(domain_results, active_standards, weak_candidate=weak_candidate)
     diagnostics.extend(domain_results_to_diagnostics(domain_results))
     confidence = "low" if any(result["confidence"] == "low" for result in domain_results) else "high"
     return MovieProfileItem(
@@ -642,6 +644,15 @@ def normalize_quality_stance_label(value: Any, default: str | None = None) -> st
 def replacement_candidate_quality_floor(standards: dict[str, Any]) -> str:
     config = standards.get("replacement_candidate_rules") or {}
     return normalize_quality_stance_label(config.get("quality_profile_floor"), QUALITY_STANCE_ORDER[0])
+
+
+def normalize_weak_encode_floor(value: Any, standards: dict[str, Any] | None = None) -> str:
+    active = standards or load_movie_standards()
+    fallback = replacement_candidate_quality_floor(active)
+    if fallback not in SAFE_WEAK_ENCODE_FLOORS:
+        fallback = "standard_definition"
+    label = normalize_quality_stance_label(value, fallback)
+    return label if label in SAFE_WEAK_ENCODE_FLOORS else fallback
 
 
 def normalize_subtitle_mode(value: Any) -> str:
@@ -1267,6 +1278,10 @@ def detect_audio_language_selection_risks(facts: MediaFacts) -> list[DiagnosticF
             remedy="Set the intended English stream as default or remux the file so stream flags match playback preference.",
         )
     ]
+
+
+def is_audio_packaging_owned_movie(diagnostics: list[DiagnosticFinding]) -> bool:
+    return any(diagnostic.code == "default_non_english_audio" for diagnostic in diagnostics)
 
 
 def choose_default_audio_stream(streams: list[AudioStreamFacts]) -> AudioStreamFacts | None:

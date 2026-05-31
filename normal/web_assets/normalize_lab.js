@@ -48,6 +48,7 @@
     runInFlight: false,
     previewMode: 'selected',
     applyInFlight: false,
+    weakFloor: 'standard_definition',
     weakPreview: null,
     weakPreviewKey: '',
     weakPreviewLoading: false,
@@ -71,6 +72,8 @@
     reasonFilter: document.getElementById('reasonFilter'),
     warningFilter: document.getElementById('warningFilter'),
     workflowStatusFilter: document.getElementById('workflowStatusFilter'),
+    weakFloorLabel: document.getElementById('weakFloorLabel'),
+    weakFloorSelect: document.getElementById('weakFloorSelect'),
     selectAllButton: document.getElementById('selectAllButton'),
     deselectAllButton: document.getElementById('deselectAllButton'),
     tableHeaderRow: document.getElementById('tableHeaderRow'),
@@ -106,6 +109,35 @@
 
   function currentWeakQueue() {
     return state.weakPayload?.replacement_queue || null;
+  }
+
+  const QUALITY_STANCE_RANKS = {
+    standard_definition: 0,
+    library_grade: 1,
+    collector_grade: 2,
+    reference: 3,
+  };
+
+  const WEAK_QUALITY_CODES = new Set([
+    'video_below_minimum',
+    'video_signal_missing',
+    'audio_channels_below_minimum',
+    'audio_bitrate_below_minimum',
+    'audio_codec_below_minimum',
+    'audio_signal_missing',
+  ]);
+
+  function weakFloorDefinitionOptions() {
+    const options = state.weakPayload?.replacement_candidate_definition?.fields?.[0]?.options;
+    const fallback = [
+      { value: 'standard_definition', label: 'Standard Definition' },
+      { value: 'library_grade', label: 'Library Grade' },
+    ];
+    if (!Array.isArray(options)) return fallback;
+    const filtered = options
+      .filter(option => option?.value === 'standard_definition' || option?.value === 'library_grade')
+      .map(option => ({ value: option.value, label: option.label || humanProfileLabel(option.value) }));
+    return filtered.length ? filtered : fallback;
   }
 
   function escapeHtml(value) {
@@ -176,6 +208,10 @@
     return String(label || '').split('_').filter(Boolean).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   }
 
+  function qualityStanceRank(label) {
+    return QUALITY_STANCE_RANKS[String(label || '')] ?? -1;
+  }
+
   function firstMovieProfileIssueResult(item) {
     const domainResults = item?.profile?.domain_results || [];
     return domainResults.find(result => result?.status === 'fail')
@@ -220,6 +256,25 @@
     return '';
   }
 
+  function movieHasPackagingOwnedIssue(item) {
+    const diagnostics = item?.profile?.diagnostics || [];
+    return diagnostics.some(diag => diag?.code === 'default_non_english_audio');
+  }
+
+  function movieHasWeakQualityIssue(item) {
+    const domainResults = item?.profile?.domain_results || [];
+    return domainResults.some(result => {
+      const code = String(result?.code || '');
+      const status = String(result?.status || '');
+      return WEAK_QUALITY_CODES.has(code) && (status === 'fail' || status === 'review_low_confidence');
+    });
+  }
+
+  function movieMeetsWeakFloor(item) {
+    const qualityLabel = item?.profile?.quality_label || '';
+    return qualityStanceRank(qualityLabel) <= qualityStanceRank(state.weakFloor);
+  }
+
   function replacementQueueItemForPath(path) {
     if (!path) return null;
     return (currentWeakQueue()?.items || []).find(item =>
@@ -260,6 +315,20 @@
     el.reasonFilter.hidden = weak;
     el.warningFilter.hidden = weak;
     el.workflowStatusFilter.hidden = !weak;
+    el.weakFloorLabel.hidden = !weak;
+    el.weakFloorSelect.hidden = !weak;
+    renderWeakFloorControl();
+  }
+
+  function renderWeakFloorControl() {
+    const options = weakFloorDefinitionOptions();
+    el.weakFloorSelect.innerHTML = options.map(option => (
+      `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`
+    )).join('');
+    if (!options.some(option => option.value === state.weakFloor)) {
+      state.weakFloor = options[0]?.value || 'standard_definition';
+    }
+    el.weakFloorSelect.value = state.weakFloor;
   }
 
   function renderTableHeader() {
@@ -305,14 +374,19 @@
   }
 
   function isStrictWeakMovie(item) {
-    return !!item?.profile?.weak_candidate;
+    return !!item?.profile?.weak_candidate && !movieHasPackagingOwnedIssue(item);
+  }
+
+  function isWeakReviewMovie(item) {
+    if (isStrictWeakMovie(item)) return false;
+    if (movieHasPackagingOwnedIssue(item)) return false;
+    if (item?.profile?.label !== 'needs_review') return false;
+    if (!movieHasWeakQualityIssue(item)) return false;
+    return movieMeetsWeakFloor(item);
   }
 
   function weakWorkflowItems() {
-    return (state.weakPayload?.movies || []).filter(item => {
-      const label = item?.profile?.label || '';
-      return item?.profile?.weak_candidate || label === 'needs_review';
-    });
+    return (state.weakPayload?.movies || []).filter(item => isStrictWeakMovie(item) || isWeakReviewMovie(item));
   }
 
   function weakRowForItem(item) {
@@ -333,7 +407,7 @@
       file_size: item?.facts?.file_size_bytes || 0,
       workflow_status: queueItem?.status === 'pending'
         ? 'queued'
-        : (item?.profile?.label === 'needs_review' ? 'review' : 'delete-candidates'),
+        : (isWeakReviewMovie(item) ? 'review' : 'delete-candidates'),
     };
   }
 
@@ -873,16 +947,18 @@
     const response = await fetch('/api/movies/profile', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: el.sourcePath.value }),
+      body: JSON.stringify({ source: el.sourcePath.value, weak_floor: state.weakFloor }),
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || 'weak encodes failed');
     state.weakPayload = payload;
+    state.weakFloor = payload?.replacement_candidate_definition?.fields?.[0]?.value || state.weakFloor;
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
     state.weakPreview = null;
     state.weakPreviewKey = '';
+    renderWeakFloorControl();
     renderRows();
     renderSidePanel();
   }
@@ -1062,6 +1138,24 @@
         renderSidePanel();
       });
     }
+  });
+
+  el.weakFloorSelect.addEventListener('change', async () => {
+    state.weakFloor = el.weakFloorSelect.value || 'standard_definition';
+    state.selected = new Set();
+    state.activeRowId = '';
+    state.weakPreview = null;
+    state.weakPreviewKey = '';
+    if (isWeakMode() && state.weakPayload) {
+      try {
+        await runWeakEncodes();
+      } catch (error) {
+        el.previewPane.textContent = error.message;
+      }
+      return;
+    }
+    renderRows();
+    renderSidePanel();
   });
 
   el.selectAllButton.addEventListener('click', async () => {

@@ -61,10 +61,14 @@ Weak encodes:
 
 - scan table owns inspection details
 - table shows source `File Name` rather than full source path
+- weak floor selector defaults to `Standard Definition`; this is product
+  posture, not a temporary tester quirk
 - issue labels should stay short and semantic rather than expose raw thresholds or
   diagnostic prose where avoidable
 - audio bitrate can open a tiny anchored speech-bubble inspector for the full
   audio-track list when the row needs stream-level verification
+- packaging-owned cases such as wrong default-language audio with a good English
+  track already present should route out of strict weak delete ownership
 - right column owns preview and destructive confirm only
 - row source is `/api/movies/profile`
 - preview source is `/api/movies/replacement-queue/delete-preview`
