@@ -90,6 +90,8 @@ Quality profile cards:
 
 The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Replacement Candidate uses a simpler inline **Edit** control: choose the quality-profile cutoff, then save.
 
+Current video-floor presets are intentionally trimmed to plausible movie-library ranges rather than ultra-weak encodes. The 1080p dropdown starts at `4,500 kbps — compact encode` and steps through `5,500 library grade`, `7,500 strong library`, `10,000 collector grade`, `12,500 strong collector`, and `15,000 reference grade` before the higher near-lossless/remux tiers. The 4K dropdown starts at `10,000 kbps — compact encode`, then `15,000 library grade`, `20,000 strong library`, `25,000 reference grade`, followed by the existing `30,000`, `40,000`, and `50,000` upper tiers.
+
 Dashboard movie profile scans stream progress without pre-counting the whole tree. During a scan, the drive activity bar shows processed file count, elapsed time, current `ffprobe` target when visible, and ETA only when a bounded total is known. This avoids false precision on large rebuilds while still showing forward movement.
 
 Persistence posture:

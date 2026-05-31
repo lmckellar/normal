@@ -156,6 +156,8 @@ Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_ri
 
 The dashboard payload also carries `movie_standards`, `movie_standards_revision`, `quality_profile_definitions`, and `replacement_candidate_definition`. The movie dashboard uses that payload to split **Action Based** cards from **Quality Profile** cards, summarize each rule shape, and expose inline definition controls on the quality-profile cards and Replacement Candidate card. Do not reintroduce per-profile allowed audio codec controls; audio codec arrays may exist in older standards files, but profile matching now relies on channel/bitrate floors, vintage channel exemptions, hygiene toggles, and `require_lossless_audio`.
 
+Current built-in video-floor select ladders are deliberately constrained. `video_1080p_kbps` options are `4500`, `5500`, `7500`, `10000`, `12500`, `15000`, `20000`, `25000` with labels from `compact encode` up through `remux tier`. `video_2160p_kbps` options are `10000`, `15000`, `20000`, `25000`, `30000`, `40000`, `50000`. If product language changes again, update the server-side option contract in `normal/movie_profile.py` and the assertions in `tests/test_movie_profile.py` together.
+
 Quality stance channel matching supports two graduated exemptions:
 
 - `audio_channels_vintage_cutoff` — exempts films with year < cutoff from the channel minimum entirely (pre-surround era). Options: 1970, 1980, 1985, 1990, 1999.

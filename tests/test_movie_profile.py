@@ -199,6 +199,8 @@ class MovieProfileTests(unittest.TestCase):
 
     def test_build_movie_profile_definitions_exposes_dashboard_owned_controls(self) -> None:
         definitions = build_movie_profile_definitions()
+        video_1080p_options = definitions[0]["fields"][2]["options"]
+        video_2160p_options = definitions[0]["fields"][3]["options"]
 
         self.assertEqual(
             [definition["label"] for definition in definitions],
@@ -206,6 +208,37 @@ class MovieProfileTests(unittest.TestCase):
         )
         self.assertEqual(definitions[0]["fields"][0]["key"], "display_name")
         self.assertEqual(definitions[-1]["fields"][2]["key"], "video_1080p_kbps")
+        self.assertEqual(
+            video_1080p_options,
+            [
+                {"value": 4500, "label": "4,500 kbps — compact encode"},
+                {"value": 5500, "label": "5,500 kbps — library grade"},
+                {"value": 7500, "label": "7,500 kbps — strong library"},
+                {"value": 10000, "label": "10,000 kbps — collector grade"},
+                {"value": 12500, "label": "12,500 kbps — strong collector"},
+                {"value": 15000, "label": "15,000 kbps — reference grade"},
+                {"value": 20000, "label": "20,000 kbps — near-lossless"},
+                {"value": 25000, "label": "25,000 kbps — remux tier"},
+            ],
+        )
+        self.assertNotIn({"value": 1200, "label": "1,200 kbps — SD minimum"}, video_1080p_options)
+        self.assertNotIn({"value": 1800, "label": "1,800 kbps — 720p minimum"}, video_1080p_options)
+        self.assertNotIn({"value": 3000, "label": "3,000 kbps — compact encode"}, video_1080p_options)
+        self.assertEqual(
+            video_2160p_options,
+            [
+                {"value": 10000, "label": "10,000 kbps — compact encode"},
+                {"value": 15000, "label": "15,000 kbps — library grade"},
+                {"value": 20000, "label": "20,000 kbps — strong library"},
+                {"value": 25000, "label": "25,000 kbps — reference grade"},
+                {"value": 30000, "label": "30,000 kbps — near-lossless"},
+                {"value": 40000, "label": "40,000 kbps — remux tier"},
+                {"value": 50000, "label": "50,000 kbps — full remux"},
+            ],
+        )
+        self.assertNotIn({"value": 5000, "label": "5,000 kbps — compact 4K"}, video_2160p_options)
+        self.assertNotIn({"value": 8000, "label": "8,000 kbps — efficient encode"}, video_2160p_options)
+        self.assertNotIn({"value": 12000, "label": "12,000 kbps — solid 4K"}, video_2160p_options)
         for definition in definitions:
             self.assertNotIn("audio_codecs", [field["key"] for field in definition["fields"]])
             self.assertNotIn("codecs:", definition["rule_summary"])
