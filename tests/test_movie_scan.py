@@ -174,10 +174,66 @@ class MovieScanTests(unittest.TestCase):
             self.assertEqual(facts.audio_streams[1].title, "English stereo")
             self.assertEqual(facts.audio_display_stream_index, 1)
             self.assertEqual(facts.default_audio_stream_index, 1)
+            self.assertEqual(facts.audio_codec, "ac3")
+            self.assertEqual(facts.audio_channels, 6)
+            self.assertEqual(facts.audio_profile, "Dolby Digital")
             self.assertEqual(facts.audio_format_family, "ac3")
             self.assertEqual(facts.audio_format_variant, "dolby_digital")
             self.assertEqual(facts.audio_channel_layout, "5.1")
             self.assertIsNone(facts.audio_immersive_extension)
+            self.assertEqual(facts.audio_summary, "Dolby Digital 5.1")
+
+    def test_media_facts_from_ffprobe_payload_aligns_main_audio_fields_with_single_default_stream(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x" * 100)
+
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {
+                        "duration": "7200",
+                        "size": "1048576000",
+                        "bit_rate": "16000000",
+                        "format_name": "matroska,webm",
+                    },
+                    "streams": [
+                        {
+                            "index": 0,
+                            "codec_type": "video",
+                            "codec_name": "h264",
+                            "width": 1920,
+                            "height": 1080,
+                            "bit_rate": "15000000",
+                        },
+                        {
+                            "index": 1,
+                            "codec_type": "audio",
+                            "codec_name": "aac",
+                            "channels": 2,
+                            "bit_rate": "192000",
+                            "disposition": {"default": 0},
+                            "tags": {"language": "eng", "title": "Commentary Stereo"},
+                        },
+                        {
+                            "index": 2,
+                            "codec_type": "audio",
+                            "codec_name": "ac3",
+                            "channels": 6,
+                            "bit_rate": "640000",
+                            "profile": "Dolby Digital",
+                            "disposition": {"default": 1},
+                            "tags": {"language": "eng", "title": "Main Audio"},
+                        },
+                    ],
+                },
+                movie_path,
+            )
+
+            self.assertEqual(facts.audio_display_stream_index, 2)
+            self.assertEqual(facts.audio_codec, "ac3")
+            self.assertEqual(facts.audio_channels, 6)
+            self.assertEqual(facts.audio_profile, "Dolby Digital")
+            self.assertEqual(facts.audio_bitrate_kbps, 640)
             self.assertEqual(facts.audio_summary, "Dolby Digital 5.1")
 
     def test_media_facts_from_ffprobe_payload_captures_subtitle_stream_details(self) -> None:

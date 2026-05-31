@@ -63,6 +63,8 @@ Weak encodes:
 - table shows source `File Name` rather than full source path
 - issue labels should stay short and semantic rather than expose raw thresholds or
   diagnostic prose where avoidable
+- audio bitrate can open a tiny anchored speech-bubble inspector for the full
+  audio-track list when the row needs stream-level verification
 - right column owns preview and destructive confirm only
 - row source is `/api/movies/profile`
 - preview source is `/api/movies/replacement-queue/delete-preview`
@@ -75,8 +77,9 @@ Keep the names JS toggles/emits: `#runButton.is-running`,
 `.lab-tab/.lab-mode-button.is-active`, `tr.active`, `.chip`,
 `.lab-preview-summary/.lab-preview-empty`, `.lab-tree/.lab-tree-line`
 (`.is-mutated`, `.is-selected`, `.is-deleted`, `.is-cleanup`,
-`.lab-indent-0..5`), `.sort`, workflow menu/button ids, and the weak preview
-confirm label `Delete Selected Files (N)`.
+`.lab-indent-0..5`), `.sort`, workflow menu/button ids,
+`.lab-audio-popover*`, and the weak preview confirm label
+`Delete Selected Files (N)`.
 
 Shell contract hooks:
 

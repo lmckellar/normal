@@ -51,6 +51,7 @@
     weakPreview: null,
     weakPreviewKey: '',
     weakPreviewLoading: false,
+    audioPopoverRowId: '',
   };
 
   const el = {
@@ -79,6 +80,7 @@
     libraryPreviewButton: document.getElementById('libraryPreviewButton'),
     confirmButton: document.getElementById('confirmButton'),
     previewPane: document.getElementById('previewPane'),
+    audioTrackPopover: document.getElementById('audioTrackPopover'),
   };
 
   el.sourcePath.value = window.DEFAULT_SOURCE || '';
@@ -126,6 +128,36 @@
   function formatBitrate(kbps) {
     const raw = Number(kbps || 0);
     return raw ? `${Math.round(raw).toLocaleString()} kbps` : '—';
+  }
+
+  function audioChannelLayout(channels) {
+    const raw = Number(channels || 0);
+    if (!raw) return '—';
+    if (raw === 1) return '1.0';
+    if (raw === 2) return '2.0';
+    if (raw === 6) return '5.1';
+    if (raw === 8) return '7.1';
+    return `${raw}ch`;
+  }
+
+  function displayAudioLanguage(language) {
+    const code = String(language || '').trim().toLowerCase();
+    if (!code) return 'Unknown';
+    const known = {
+      eng: 'English',
+      ita: 'Italian',
+      jpn: 'Japanese',
+      fra: 'French',
+      fre: 'French',
+      spa: 'Spanish',
+      ger: 'German',
+      deu: 'German',
+    };
+    return known[code] || (code.length <= 3 ? code.toUpperCase() : code.charAt(0).toUpperCase() + code.slice(1));
+  }
+
+  function audioTracksForRow(row) {
+    return Array.isArray(row?.item?.facts?.audio_streams) ? row.item.facts.audio_streams : [];
   }
 
   function fileNameFromPath(path) {
@@ -441,6 +473,7 @@
   }
 
   function renderPanelVisibility() {
+    if (!isWeakMode()) closeAudioPopover();
     renderShellLayout();
     el.previewPane.hidden = false;
     el.previewControls.hidden = false;
@@ -453,6 +486,7 @@
     applyFilters();
     renderSelectionButtons();
     if (!state.filteredRows.length) {
+      closeAudioPopover();
       const colspan = isWeakMode() ? String(WEAK_HEADERS.length) : String(NORMALIZE_HEADERS.length);
       el.rowsBody.innerHTML = `<tr><td colspan="${colspan}">No rows for the active filters.</td></tr>`;
       return;
@@ -461,6 +495,7 @@
       ? state.filteredRows.map(renderWeakRow).join('')
       : state.filteredRows.map(renderNormalizeRow).join('');
     attachRowHandlers();
+    renderAudioPopover();
     renderConfirmButton();
   }
 
@@ -478,6 +513,10 @@
 
   function renderWeakRow(row) {
     const checked = state.selected.has(row.row_id) ? 'checked' : '';
+    const hasAudioTracks = audioTracksForRow(row).length > 0;
+    const audioBitrateMarkup = hasAudioTracks
+      ? `<button class="lab-audio-popover-trigger" type="button" data-audio-popover="${escapeHtml(row.row_id)}" aria-expanded="${state.audioPopoverRowId === row.row_id ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
+      : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
@@ -485,7 +524,7 @@
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
         <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-text">${escapeHtml(row.resolution || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(formatBitrate(row.video_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.video_bitrate))}</span></td>
-        <td class="lab-cell-signal lab-cell-mono" data-priority="desktop" title="${escapeHtml(formatBitrate(row.audio_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="desktop" title="${escapeHtml(formatBitrate(row.audio_bitrate))}">${audioBitrateMarkup}</td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${row.channels ? escapeHtml(String(row.channels)) : '—'}"><span class="lab-cell-text">${row.channels ? escapeHtml(String(row.channels)) : '—'}</span></td>
         <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(formatFileSize(row.file_size))}"><span class="lab-cell-text">${escapeHtml(formatFileSize(row.file_size))}</span></td>
@@ -518,6 +557,69 @@
         state.weakPreviewKey = '';
         renderSidePanel();
       });
+    });
+    el.rowsBody.querySelectorAll('button[data-audio-popover]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        const rowId = button.dataset.audioPopover || '';
+        if (!rowId) return;
+        state.audioPopoverRowId = state.audioPopoverRowId === rowId ? '' : rowId;
+        renderAudioPopover();
+      });
+    });
+  }
+
+  function renderAudioPopover() {
+    const popover = el.audioTrackPopover;
+    if (!popover) return;
+    const row = rowById(state.audioPopoverRowId);
+    const anchor = state.audioPopoverRowId
+      ? el.rowsBody.querySelector(`button[data-audio-popover="${CSS.escape(state.audioPopoverRowId)}"]`)
+      : null;
+    const tracks = audioTracksForRow(row);
+    if (!isWeakMode() || !row || !anchor || !tracks.length) {
+      closeAudioPopover();
+      return;
+    }
+    popover.innerHTML = `
+      <div class="lab-audio-popover-title">Audio Tracks</div>
+      <ul class="lab-audio-popover-list">
+        ${tracks.map(track => `
+          <li class="lab-audio-popover-row">
+            <span class="lab-audio-popover-lang">${escapeHtml(displayAudioLanguage(track.language))}</span>
+            <span class="lab-audio-popover-facts">${escapeHtml(`${formatBitrate(track.bitrate_kbps)} · ${audioChannelLayout(track.channels)}`)}</span>
+            ${track.is_default ? '<span class="lab-audio-popover-default">default</span>' : ''}
+          </li>
+        `).join('')}
+      </ul>
+    `;
+    popover.hidden = false;
+    positionAudioPopover(anchor, popover);
+    el.rowsBody.querySelectorAll('button[data-audio-popover]').forEach(button => {
+      button.setAttribute('aria-expanded', button.dataset.audioPopover === state.audioPopoverRowId ? 'true' : 'false');
+    });
+  }
+
+  function positionAudioPopover(anchor, popover) {
+    const anchorRect = anchor.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const margin = 12;
+    let left = anchorRect.right;
+    let top = anchorRect.top - popoverRect.height;
+    left = Math.min(left, window.innerWidth - popoverRect.width - margin);
+    left = Math.max(margin, left);
+    if (top < margin) top = Math.min(anchorRect.bottom + 14, window.innerHeight - popoverRect.height - margin);
+    popover.style.left = `${left}px`;
+    popover.style.top = `${Math.max(margin, top)}px`;
+  }
+
+  function closeAudioPopover() {
+    state.audioPopoverRowId = '';
+    if (!el.audioTrackPopover) return;
+    el.audioTrackPopover.hidden = true;
+    el.audioTrackPopover.innerHTML = '';
+    el.rowsBody.querySelectorAll('button[data-audio-popover]').forEach(button => {
+      button.setAttribute('aria-expanded', 'false');
     });
   }
 
@@ -888,6 +990,7 @@
     state.sort = state.workflow === 'weak-encodes' ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' };
     state.weakPreview = null;
     state.weakPreviewKey = '';
+    closeAudioPopover();
     syncWorkflowUrl();
     renderWorkflowHeader();
     renderFilterVisibility();
@@ -918,7 +1021,27 @@
       el.workflowMenu.hidden = true;
       el.workflowButton.setAttribute('aria-expanded', 'false');
     }
+    if (
+      el.audioTrackPopover
+      && !el.audioTrackPopover.hidden
+      && !el.audioTrackPopover.contains(event.target)
+      && !(event.target instanceof Element && event.target.closest('button[data-audio-popover]'))
+    ) {
+      closeAudioPopover();
+    }
   });
+
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeAudioPopover();
+  });
+
+  window.addEventListener('resize', () => {
+    if (state.audioPopoverRowId) renderAudioPopover();
+  });
+
+  window.addEventListener('scroll', () => {
+    if (state.audioPopoverRowId) renderAudioPopover();
+  }, true);
 
   [el.searchInput, el.bucketFilter, el.caseFilter, el.reasonFilter, el.warningFilter, el.workflowStatusFilter].forEach(control => {
     control.addEventListener('change', async () => {

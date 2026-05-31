@@ -394,6 +394,102 @@ thead th {
 .lab-cell-pill.is-unchanged { color: var(--muted); }
 .lab-cell-pill.is-actionable { color: var(--accent); }
 
+.lab-audio-popover-trigger {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  line-height: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.lab-audio-popover-trigger:hover:not(:disabled) {
+  background: transparent;
+  color: #32507c;
+}
+
+.lab-audio-popover {
+  position: fixed;
+  z-index: 20;
+  inline-size: min(320px, calc(100vw - 24px));
+  padding: 10px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  background: #fffdfa;
+  box-shadow: 0 16px 36px rgba(28, 29, 31, 0.16);
+}
+
+.lab-audio-popover::after {
+  content: "";
+  position: absolute;
+  inset-block-end: -7px;
+  inset-inline-start: 14px;
+  inline-size: 12px;
+  block-size: 12px;
+  background: #fffdfa;
+  border-inline-start: 1px solid var(--accent-line);
+  border-block-end: 1px solid var(--accent-line);
+  transform: rotate(45deg);
+}
+
+.lab-audio-popover-title {
+  margin: 0 0 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lab-audio-popover-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lab-audio-popover-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-top: 1px solid rgba(28, 29, 31, 0.06);
+}
+
+.lab-audio-popover-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.lab-audio-popover-lang {
+  min-width: 0;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.lab-audio-popover-facts {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.lab-audio-popover-default {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent-wash);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 th .sort {
   background: transparent;
   border: 0;

@@ -277,6 +277,10 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         display_audio_stream.title if display_audio_stream else None,
     )
 
+    primary_audio_codec = display_audio_stream.codec if display_audio_stream else audio_stream.get("codec_name")
+    primary_audio_channels = display_audio_stream.channels if display_audio_stream else parse_int(audio_stream.get("channels"))
+    primary_audio_profile = display_audio_stream.profile if display_audio_stream else (audio_stream.get("profile") or None)
+
     return MediaFacts(
         runtime_seconds=parse_seconds(format_payload.get("duration")),
         file_size_bytes=parse_int(format_payload.get("size")) or path.stat().st_size,
@@ -285,10 +289,10 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         height=parse_int(video_stream.get("height")),
         video_codec=video_stream.get("codec_name"),
         video_bitrate_kbps=video_bitrate_kbps,
-        audio_codec=audio_stream.get("codec_name"),
+        audio_codec=primary_audio_codec,
         audio_bitrate_kbps=primary_audio_bitrate,
-        audio_channels=parse_int(audio_stream.get("channels")),
-        audio_profile=audio_stream.get("profile") or None,
+        audio_channels=primary_audio_channels,
+        audio_profile=primary_audio_profile,
         audio_display_stream_index=display_audio_stream.index if display_audio_stream else None,
         audio_format_family=audio_format_family,
         audio_format_variant=audio_format_variant,

@@ -105,6 +105,12 @@ The audio channel minimum has a companion **Exempt pre-surround era films** sett
 
 Quality scan results include a normalized main-audio summary for the playback-relevant stream alongside audio bitrate — `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`, and similar labels.
 
+In the internal testing shell at `/parser-tester-ui?workflow=weak-encodes`, the
+audio bitrate value is clickable. It opens a compact adjacent track inspector
+showing each audio stream's language, bitrate, channel layout, and which stream
+is marked default. This is primarily there to expose multi-audio packaging
+mistakes without bloating the table.
+
 The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue. When a better encode for the same title shows up in a future scan, it is automatically marked complete.
 
 Queue history has four hard filters: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Deleted rows can be dismissed from queue history inline when the release is no longer worth replacing. That action only changes queue state; it does not touch media files.
