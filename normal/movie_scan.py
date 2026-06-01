@@ -208,6 +208,22 @@ def codec_bitrate_floor(codec: str | None, profile: str | None, channels: int | 
     codec_lower = (codec or "").casefold()
     profile_lower = (profile or "").casefold()
     ch = channels or 2
+    if codec_lower == "aac":
+        if ch <= 1:
+            return 96
+        if ch <= 2:
+            return 192
+        if ch <= 6:
+            return 320
+        return 384
+    if codec_lower == "opus":
+        if ch <= 1:
+            return 80
+        if ch <= 2:
+            return 160
+        if ch <= 6:
+            return 256
+        return 320
     if codec_lower == "truehd":
         return 3000 if ch >= 6 else 1500
     if codec_lower == "dts":

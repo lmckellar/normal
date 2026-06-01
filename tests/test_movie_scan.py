@@ -462,6 +462,78 @@ class MovieScanTests(unittest.TestCase):
             self.assertEqual(facts.video_bitrate_kbps, 8654)
             self.assertTrue(facts.video_bitrate_approximate)
 
+    def test_media_facts_from_ffprobe_payload_estimates_missing_aac_audio_bitrate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x" * 100)
+
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {
+                        "duration": "7200",
+                        "size": "1048576000",
+                        "format_name": "matroska,webm",
+                    },
+                    "streams": [
+                        {
+                            "index": 0,
+                            "codec_type": "video",
+                            "codec_name": "h264",
+                            "width": 1920,
+                            "height": 1080,
+                            "bit_rate": "3500000",
+                        },
+                        {
+                            "index": 1,
+                            "codec_type": "audio",
+                            "codec_name": "aac",
+                            "channels": 2,
+                            "disposition": {"default": 1},
+                        },
+                    ],
+                },
+                movie_path,
+            )
+
+            self.assertEqual(facts.audio_bitrate_kbps, 192)
+            self.assertTrue(facts.audio_bitrate_estimated)
+
+    def test_media_facts_from_ffprobe_payload_estimates_missing_opus_audio_bitrate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.webm"
+            movie_path.write_bytes(b"x" * 100)
+
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {
+                        "duration": "7200",
+                        "size": "1048576000",
+                        "format_name": "matroska,webm",
+                    },
+                    "streams": [
+                        {
+                            "index": 0,
+                            "codec_type": "video",
+                            "codec_name": "vp9",
+                            "width": 1920,
+                            "height": 1080,
+                            "bit_rate": "3500000",
+                        },
+                        {
+                            "index": 1,
+                            "codec_type": "audio",
+                            "codec_name": "opus",
+                            "channels": 2,
+                            "disposition": {"default": 1},
+                        },
+                    ],
+                },
+                movie_path,
+            )
+
+            self.assertEqual(facts.audio_bitrate_kbps, 160)
+            self.assertTrue(facts.audio_bitrate_estimated)
+
     def test_scan_movie_library_scores_and_sorts_movies(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
