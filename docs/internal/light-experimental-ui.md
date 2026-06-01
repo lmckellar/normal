@@ -7,19 +7,21 @@ This route now carries three internal workflows inside one shell:
 
 - `Parser Testing UI`
 - `Weak Encodes Testing UI`
+- `Repair Defaults Testing UI`
 - `Delete Junk & Spam Files`
 
 Workflow is URL-stable:
 
 - `/parser-tester-ui?workflow=normalize`
 - `/parser-tester-ui?workflow=weak-encodes`
+- `/parser-tester-ui?workflow=repair-defaults`
 - `/parser-tester-ui?workflow=junk`
 
 ## Files (`normal/web_assets/`)
 
 - `normalize_lab.html` — shared shell
 - `normalize_lab.css` — the restyle
-- `normalize_lab.js` — normalize, weak-encode, and junk-delete workflow logic
+- `normalize_lab.js` — normalize, weak-encode, repair-defaults, and junk-delete workflow logic
 
 Assets served at `/parser-tester-ui-assets/<file>`.
 
@@ -77,6 +79,14 @@ Weak encodes:
 - confirm still reuses queue-add then queue-delete
 - replacement history widgets are intentionally not part of this page
 
+Repair defaults:
+
+- reuses the same tester shell and table rhythm as weak encodes rather than inventing a separate route
+- covers both audio-packaging and subtitle-readiness sub-tabs inside the tester shell
+- row source is `/api/movies/profile`
+- consequence preview stays local to the current payload rather than requiring a repair-specific preview API
+- the point is inspection and workflow-shape verification, not a second independent mutation contract
+
 Junk delete:
 
 - reuses the weak table scaffold rather than inventing a separate junk table
@@ -111,5 +121,6 @@ source .venv/bin/activate
 python3 -m normal web --host 127.0.0.1 --port 8765 --source /mnt/media_storage/Movies
 # http://127.0.0.1:8765/parser-tester-ui?workflow=normalize
 # http://127.0.0.1:8765/parser-tester-ui?workflow=weak-encodes
+# http://127.0.0.1:8765/parser-tester-ui?workflow=repair-defaults
 # http://127.0.0.1:8765/parser-tester-ui?workflow=junk
 ```

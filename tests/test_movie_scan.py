@@ -65,6 +65,8 @@ class MovieScanTests(unittest.TestCase):
                             "codec_name": "h264",
                             "width": 1920,
                             "height": 1080,
+                            "sample_aspect_ratio": "1:1",
+                            "display_aspect_ratio": "16:9",
                             "bit_rate": "3500000",
                         },
                         {
@@ -84,6 +86,37 @@ class MovieScanTests(unittest.TestCase):
             self.assertEqual(facts.video_bitrate_kbps, 3500)
             self.assertEqual(facts.audio_bitrate_kbps, 128)
             self.assertEqual(facts.total_bitrate_kbps, 4200)
+            self.assertEqual(facts.sample_aspect_ratio, "1:1")
+            self.assertEqual(facts.display_aspect_ratio, "16:9")
+
+    def test_media_facts_from_ffprobe_payload_captures_aspect_ratio_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x" * 100)
+
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {
+                        "duration": "7200",
+                        "size": "1048576000",
+                        "format_name": "matroska,webm",
+                    },
+                    "streams": [
+                        {
+                            "codec_type": "video",
+                            "codec_name": "mpeg2video",
+                            "width": 1440,
+                            "height": 1080,
+                            "sample_aspect_ratio": "4:3",
+                            "display_aspect_ratio": "16:9",
+                        }
+                    ],
+                },
+                movie_path,
+            )
+
+            self.assertEqual(facts.sample_aspect_ratio, "4:3")
+            self.assertEqual(facts.display_aspect_ratio, "16:9")
 
     def test_media_facts_from_ffprobe_payload_reads_mkv_bps_tags(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

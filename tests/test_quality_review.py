@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from normal.quality_review import MediaFacts, classify_resolution, parse_name_resolution_hint, score_quality_review
+from normal.quality_review import (
+    MediaFacts,
+    classify_resolution,
+    effective_display_dimensions,
+    parse_name_resolution_hint,
+    score_quality_review,
+)
 
 
 class QualityReviewTests(unittest.TestCase):
@@ -10,6 +16,15 @@ class QualityReviewTests(unittest.TestCase):
         self.assertEqual(classify_resolution(1916, 952), "1080p")
         self.assertEqual(classify_resolution(1920, 800), "1080p")
         self.assertEqual(classify_resolution(1440, 1080), "720p")
+        self.assertEqual(classify_resolution(1440, 1080, sample_aspect_ratio="4:3"), "1080p")
+
+    def test_classify_resolution_falls_back_when_aspect_ratio_is_unusable(self) -> None:
+        self.assertEqual(classify_resolution(1440, 1080, sample_aspect_ratio="0:1"), "720p")
+        self.assertEqual(classify_resolution(1440, 1080, sample_aspect_ratio="N/A"), "720p")
+
+    def test_effective_display_dimensions_respects_orientation(self) -> None:
+        self.assertEqual(effective_display_dimensions(1440, 1080, "4:3"), (1920, 1080))
+        self.assertEqual(effective_display_dimensions(1080, 1440, "3:4"), (810, 1440))
 
     def test_score_quality_review_marks_low_bitrate_1080p_as_severe(self) -> None:
         review = score_quality_review(

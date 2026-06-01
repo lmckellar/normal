@@ -68,6 +68,7 @@ For the internal focused tester shell, use:
 
 - `http://127.0.0.1:8765/parser-tester-ui?workflow=normalize`
 - `http://127.0.0.1:8765/parser-tester-ui?workflow=weak-encodes`
+- `http://127.0.0.1:8765/parser-tester-ui?workflow=repair-defaults`
 
 Use the test library to exercise the full workflow in order:
 

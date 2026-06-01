@@ -12,7 +12,7 @@ from normal.quality_review import MediaFacts
 
 class ProbeCache:
     _PATH = Path.home() / ".local" / "share" / "normal" / "probe-cache.json"
-    _VERSION = 1
+    _VERSION = 2
 
     def __init__(self) -> None:
         self._lock = threading.Lock()

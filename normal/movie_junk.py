@@ -372,7 +372,12 @@ def file_size_for(path: Path, facts: MediaFacts | None) -> int | None:
 def movie_junk_facts(facts: MediaFacts | None) -> dict[str, Any] | None:
     if facts is None:
         return None
-    resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
+    resolution_bucket = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    )
     return {
         "resolution_bucket": resolution_bucket,
         "video_bitrate_kbps": facts.video_bitrate_kbps,

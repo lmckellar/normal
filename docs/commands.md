@@ -71,6 +71,9 @@ normal movie-scan --source /path/to/movies --report out/scan.json --progress
 
 Requires `ffprobe`. No changes made.
 
+Resolution bucket note:
+- `resolution_bucket` is display-class oriented when usable aspect metadata is present. That keeps cropped `1920x796` films in `1080p` and allows anamorphic `1440x1080` HD masters to classify as `1080p` when the stream exposes valid aspect ratio data.
+
 ---
 
 ### movie-profile
@@ -223,6 +226,13 @@ Movie pages currently exposed in the web UI:
 - `Repair Defaults`
 - `Delete Junk & Spam Files`
 - `Canonical Lists`
+
+Internal focused tester routes:
+
+- `/parser-tester-ui?workflow=normalize`
+- `/parser-tester-ui?workflow=weak-encodes`
+- `/parser-tester-ui?workflow=repair-defaults`
+- `/parser-tester-ui?workflow=junk`
 
 Heavy recursive web scans now show a confirmation warning for risky sources such as drive-root style paths and NTFS/FUSE mounts. The server also rejects overlapping heavy scans for the same source instead of running them concurrently.
 

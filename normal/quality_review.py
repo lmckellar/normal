@@ -72,6 +72,8 @@ class MediaFacts:
     container: str | None = None
     width: int | None = None
     height: int | None = None
+    sample_aspect_ratio: str | None = None
+    display_aspect_ratio: str | None = None
     video_codec: str | None = None
     video_bitrate_kbps: int | None = None
     audio_codec: str | None = None
@@ -198,11 +200,53 @@ def build_audio_summary(
     return family, variant, layout, immersive, summary or None
 
 
-def classify_resolution(width: int | None, height: int | None) -> str | None:
+def parse_aspect_ratio(value: str | None) -> tuple[int, int] | None:
+    if not value:
+        return None
+    left, sep, right = value.strip().partition(":")
+    if not sep:
+        return None
+    try:
+        numerator = int(left)
+        denominator = int(right)
+    except ValueError:
+        return None
+    if numerator <= 0 or denominator <= 0:
+        return None
+    return numerator, denominator
+
+
+def effective_display_dimensions(
+    width: int | None,
+    height: int | None,
+    sample_aspect_ratio: str | None = None,
+) -> tuple[int, int] | None:
     if not width or not height:
         return None
+    sar = parse_aspect_ratio(sample_aspect_ratio)
+    if sar is None:
+        return width, height
+    sar_num, sar_den = sar
+    if sar_num == sar_den:
+        return width, height
+    display_width = round(width * sar_num / sar_den)
+    if display_width <= 0:
+        return width, height
+    return display_width, height
 
-    long_edge = max(width, height)
+
+def classify_resolution(
+    width: int | None,
+    height: int | None,
+    sample_aspect_ratio: str | None = None,
+    display_aspect_ratio: str | None = None,
+) -> str | None:
+    dimensions = effective_display_dimensions(width, height, sample_aspect_ratio)
+    if dimensions is None:
+        return None
+    display_width, display_height = dimensions
+
+    long_edge = max(display_width, display_height)
     if long_edge >= 3000:
         return "2160p"
     if long_edge >= 1800:
@@ -267,7 +311,12 @@ def approximate_video_bitrate_kbps(
 
 def score_quality_review(facts: MediaFacts, path: str | Path | None = None) -> QualityReview:
     resolved_hint = facts.name_resolution_hint or parse_name_resolution_hint(path)
-    resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
+    resolution_bucket = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    )
     video_bitrate_kbps, bitrate_is_approximate = approximate_video_bitrate_kbps(
         facts.video_bitrate_kbps,
         facts.total_bitrate_kbps,
@@ -283,6 +332,8 @@ def score_quality_review(facts: MediaFacts, path: str | Path | None = None) -> Q
         container=facts.container,
         width=facts.width,
         height=facts.height,
+        sample_aspect_ratio=facts.sample_aspect_ratio,
+        display_aspect_ratio=facts.display_aspect_ratio,
         video_codec=facts.video_codec,
         video_bitrate_kbps=video_bitrate_kbps,
         audio_codec=facts.audio_codec,

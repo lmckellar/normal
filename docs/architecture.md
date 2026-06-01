@@ -34,6 +34,7 @@ The quality workflow starts with local media facts, then classifies them into ac
 `probe_cache.py` -> `movie_scan.py` / `movie_profile.py` -> dashboard, weak-encode triage, repair pages
 
 - `ffprobe` gathers per-file media facts.
+- Probe facts now include stream aspect metadata, so `resolution_bucket` can represent effective display class rather than raw stored raster when the container exposes usable SAR/DAR data.
 - `movie_profile.py` classifies those facts against repo-local movie standards.
 - The same profile result feeds the Dashboard, Delete Weak Encodes, Audio Packaging, and Subtitle Readiness flows.
 - This shared-scan model is deliberate. It avoids separate full-library rescans for each page.
@@ -119,6 +120,7 @@ There are four main freshness models in the current architecture.
 - Probe cache entries are keyed by resolved path, file mtime, and file size.
 - If any of those change, the old entry no longer matches and the file is reprobed.
 - This is the main reason warm scans are much faster than cold scans.
+- Cache schema changes can still force a one-time warm-cache reset when the stored `MediaFacts` contract changes materially, such as adding new ffprobe fields needed for resolution classification.
 - The current execution model also reduces the cold-scan penalty because discovery and probe work are interleaved instead of paying a large up-front enumeration cost first.
 
 ### Server-side movie profile cache

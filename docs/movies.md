@@ -10,6 +10,8 @@ The movie workflow is the product now. It is not a generic media organizer. It i
 
 A library-wide view of encode quality, resolution mix, standards posture, and replacement pressure. This is the first stop if you want to understand what kind of library you actually have rather than what you imagine you have.
 
+`Resolution` in these movie surfaces is display-class oriented, not just stored raster size. Cropped widescreen encodes such as `1920x796` still count as `1080p`, and anamorphic HD encodes such as `1440x1080` can also count as `1080p` when the stream carries usable aspect metadata. If that metadata is missing or malformed, the bucket falls back to the stored raster dimensions.
+
 To export a formatted XLSX catalogue of the current library, use the **Export** button on the Movies library card in the Library Switcher.
 
 ## Canonical Lists
@@ -32,6 +34,13 @@ Title (Year)/Title (Year).mkv
 The production normalizer is concise-first and treated as the intended movie shape. **All Results** includes already-normalized items as no-change rows so the preview shows the full downstream structure, not just the diffs.
 
 The internal testing surface at `/parser-tester-ui` is now useful for real downstream inspection rather than just row debugging. It renders the projected library shape inline as a compact directory tree, supports staged preview through row selection, and can confirm the same normalize apply action the main UI uses. That makes it useful both for checking whether a proposal is merely parsable and for checking whether the selected downstream shape is coherent before applying it.
+
+Current internal tester routes:
+
+- `/parser-tester-ui?workflow=normalize`
+- `/parser-tester-ui?workflow=weak-encodes`
+- `/parser-tester-ui?workflow=repair-defaults`
+- `/parser-tester-ui?workflow=junk`
 
 Verbose naming still exists temporarily in the CLI as parser-hardening scaffolding, but it is not the public end state:
 
@@ -137,6 +146,8 @@ This is one of the few optional outbound API paths; see [Safety](safety.md#netwo
 ## Repair defaults
 
 `Repair Defaults` is one page with two sub-tabs: `Audio Packaging` and `Subtitle Readiness`.
+
+The same lane is also available in the focused internal shell at `/parser-tester-ui?workflow=repair-defaults`, which is useful when you want to inspect repair consequences without the rest of the main dashboard chrome.
 
 ### Audio Packaging
 

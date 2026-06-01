@@ -253,7 +253,12 @@ def scan_movie_profiles(
             emit_progress(progress_callback, processed, 0, movie_path, started, "warning")
             continue
 
-        facts.resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
+        facts.resolution_bucket = facts.resolution_bucket or classify_resolution(
+            facts.width,
+            facts.height,
+            facts.sample_aspect_ratio,
+            facts.display_aspect_ratio,
+        )
         report.movies.append(build_movie_profile_item(source_root, movie_path, facts, standards))
         processed = index
         emit_progress(progress_callback, processed, 0, movie_path, started, "running")
@@ -298,7 +303,12 @@ def build_movie_profile_item(
     facts: MediaFacts,
     standards: dict[str, Any] | None = None,
 ) -> MovieProfileItem:
-    facts.resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
+    facts.resolution_bucket = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    )
     active_standards = standards or load_movie_standards()
     legacy_label = classify_profile_label(facts)
     domain_results = evaluate_movie_standards(movie_path, facts, active_standards)
@@ -804,7 +814,12 @@ def resolve_stance_audio_codecs(label: str, stance: dict[str, Any], standards: d
 
 
 def classify_profile_label(facts: MediaFacts) -> str:
-    resolution = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
+    resolution = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    )
     video = facts.video_bitrate_kbps or 0
 
     if resolution == "2160p":
@@ -843,7 +858,12 @@ def evaluate_movie_standards(path: Path, facts: MediaFacts, standards: dict[str,
 
 
 def evaluate_video_domain(facts: MediaFacts, standards: dict[str, Any]) -> dict[str, Any]:
-    resolution = facts.resolution_bucket or classify_resolution(facts.width, facts.height) or "unknown"
+    resolution = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    ) or "unknown"
     bitrate = facts.video_bitrate_kbps or 0
     config = (standards.get("video") or {}).get(resolution) or {}
     minimum = int(config.get("minimum_kbps") or 0)
@@ -995,7 +1015,12 @@ def movie_matches_quality_stance(
     domain_results: list[dict[str, Any]],
     standards: dict[str, Any],
 ) -> bool:
-    resolution = facts.resolution_bucket or classify_resolution(facts.width, facts.height) or "unknown"
+    resolution = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    ) or "unknown"
     required_video = resolve_stance_video_floor(label, stance, standards, resolution)
     if required_video and (facts.video_bitrate_kbps or 0) < required_video:
         return False
@@ -1090,7 +1115,12 @@ def domain_results_to_diagnostics(domain_results: list[dict[str, Any]]) -> list[
 
 
 def compute_anchor_distance(facts: MediaFacts) -> float | None:
-    resolution = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
+    resolution = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    )
     anchor = ANCHOR_KBPS.get(resolution or "")
     bitrate = facts.video_bitrate_kbps
     if not anchor or not bitrate:

@@ -27,7 +27,12 @@ def inspect_movie_file(path: Path, probe_media: Callable[[Path], MediaFacts] | N
     if probe_media is None:
         probe_media = probe_media_facts
     facts = probe_media(path)
-    facts.resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
+    facts.resolution_bucket = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    )
     findings = detect_plex_diagnostics(path, facts)
     return MovieInspectReport(
         path=str(path),

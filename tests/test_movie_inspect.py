@@ -26,6 +26,20 @@ class MovieInspectTests(unittest.TestCase):
         self.assertTrue(report.remedy_plan)
         self.assertIn("Plex", report.playback_gap_summary)
 
+    def test_inspect_movie_file_uses_display_class_for_anamorphic_hd(self) -> None:
+        with patch(
+            "normal.movie_inspect.probe_media_facts",
+            return_value=MediaFacts(
+                width=1440,
+                height=1080,
+                sample_aspect_ratio="4:3",
+                display_aspect_ratio="16:9",
+            ),
+        ):
+            report = inspect_movie_file(Path("/movies/Seven Samurai (1957).mkv"))
+
+        self.assertEqual(report.facts.resolution_bucket, "1080p")
+
 
 if __name__ == "__main__":
     unittest.main()
