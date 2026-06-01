@@ -255,7 +255,26 @@ def build_movie_plan(
         plan.proposed_changes.append(junk_change)
 
     mark_movie_target_collisions(plan, source_root)
+    drop_noop_movie_changes(plan, source_root)
     return plan
+
+
+def drop_noop_movie_changes(plan: ChangePlan, source_root: Path) -> None:
+    source_resolved = source_root.resolve()
+    filtered: list[ProposedChange] = []
+    for change in plan.proposed_changes:
+        if change.change_type == "file_rename" and change.current_value == change.proposed_value:
+            continue
+        if change.change_type == "folder_rename" and change.current_value == change.proposed_value:
+            continue
+        if change.change_type == "file_move" and change.path is not None:
+            try:
+                if str(Path(change.path).resolve().relative_to(source_resolved)) == change.proposed_value:
+                    continue
+            except ValueError:
+                pass
+        filtered.append(change)
+    plan.proposed_changes = filtered
 def parse_planned_movie_file(
     plan: ChangePlan,
     folder_path: Path,

@@ -58,6 +58,13 @@ Small safe default:
 - keep supporting columns few
 - treat verbose reasoning/path text as overflow unless proven otherwise
 
+Fixed-width exception:
+
+- only the untitled checkbox/select column may use fixed width
+- that lane should keep one stable width across related table views so the anchor column does not drift horizontally between dense and sparse tables
+- define fixed internal padding for that lane and reuse it rather than letting extra space bloat the control cell
+- outside that lane, surplus width should resolve into the anchor column first, not into utility columns
+
 ### 3. Padding must serve density and alignment
 
 Padding is not the main width control.
@@ -69,6 +76,7 @@ Default stance:
 - compact horizontal padding
 - consistent cell rhythm across the table
 - extra width belongs to the anchor column, not to repeated padding inflation
+- the checkbox/select lane should use one sane fixed padding contract and keep it unchanged across sibling workflows
 
 ### 4. Tables must degrade by priority
 

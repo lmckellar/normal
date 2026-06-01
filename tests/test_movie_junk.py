@@ -10,10 +10,11 @@ from normal.movie_junk import (
     detect_movie_junk_reasons,
     format_file_size,
     format_runtime,
+    scan_movie_cleanup,
     scan_movie_junk,
     scan_movie_promo_documents,
 )
-from normal.quality_review import MediaFacts
+from normal.quality_review import AudioStreamFacts, MediaFacts
 
 
 class MovieJunkTests(unittest.TestCase):
@@ -175,6 +176,53 @@ class MovieJunkTests(unittest.TestCase):
             self.assertEqual(item.file_name, "Movie.sample.mkv")
             self.assertIsNotNone(item.file_size_label)
             self.assertIsNone(item.runtime_label)
+
+    def test_scan_movie_cleanup_enriches_video_junk_with_probe_facts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            sample = source / "Movie" / "Movie.sample.mkv"
+            sample.parent.mkdir()
+            sample.write_text("video", encoding="utf-8")
+
+            def probe_media(_: Path) -> MediaFacts:
+                return MediaFacts(
+                    runtime_seconds=301,
+                    file_size_bytes=75 * 1024 * 1024,
+                    width=1920,
+                    height=1080,
+                    resolution_bucket="1080p",
+                    video_bitrate_kbps=3200,
+                    audio_bitrate_kbps=640,
+                    audio_channels=6,
+                    audio_summary="Dolby Digital 5.1",
+                    audio_streams=[
+                        AudioStreamFacts(index=1, language="eng", channels=6, bitrate_kbps=640, is_default=True),
+                    ],
+                )
+
+            report = scan_movie_cleanup(source, probe_media=probe_media)
+
+            item = report.junk[0]
+            self.assertEqual(item.runtime_label, "5:01")
+            self.assertEqual(item.facts["resolution_bucket"], "1080p")
+            self.assertEqual(item.facts["video_bitrate_kbps"], 3200)
+            self.assertEqual(item.facts["audio_bitrate_kbps"], 640)
+            self.assertEqual(item.facts["audio_channels"], 6)
+            self.assertEqual(item.facts["audio_summary"], "Dolby Digital 5.1")
+            self.assertEqual(item.facts["audio_streams"][0]["language"], "eng")
+
+    def test_scan_movie_cleanup_keeps_promo_document_media_facts_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            promo = source / "Movie" / "RARBG.txt"
+            promo.parent.mkdir()
+            promo.write_text("Downloaded from RARBG", encoding="utf-8")
+
+            report = scan_movie_cleanup(source, probe_media=lambda _: self.fail("promo docs should not be probed"))
+
+            item = report.junk[0]
+            self.assertEqual(item.relative_path, "Movie/RARBG.txt")
+            self.assertIsNone(item.facts)
 
     def test_scan_movie_junk_suppresses_large_marker_only_case(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

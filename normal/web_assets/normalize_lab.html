@@ -19,6 +19,7 @@
           <div id="workflowMenu" class="lab-workflow-menu" role="listbox" hidden>
             <button id="workflowNormalize" class="lab-workflow-option" type="button" data-workflow="normalize" role="option">Parser Testing UI</button>
             <button id="workflowWeakEncodes" class="lab-workflow-option" type="button" data-workflow="weak-encodes" role="option">Weak Encodes Testing UI</button>
+            <button id="workflowJunk" class="lab-workflow-option" type="button" data-workflow="junk" role="option">Delete Junk &amp; Spam Files</button>
           </div>
         </div>
         <p id="workflowDescription">Normalize diagnostics with row reasoning and direct confirm/apply.</p>
@@ -69,6 +70,7 @@
         <div class="lab-page-frame">
           <section class="lab-table-panel lab-rhythm-surface" data-rhythm-surface="rows">
             <table class="lab-scan-table">
+              <colgroup id="tableColGroup"></colgroup>
               <thead>
                 <tr id="tableHeaderRow">
                   <th></th>
@@ -94,7 +96,7 @@
                     <button id="selectedPreviewButton" class="lab-mode-button" type="button">Selected</button>
                     <button id="libraryPreviewButton" class="lab-mode-button" type="button">Full library</button>
                   </div>
-                  <button id="confirmButton" class="lab-confirm-button" type="button" disabled>Confirm (0 Changes)</button>
+                  <button id="confirmButton" class="lab-confirm-button" type="button" disabled>Confirm (0 Operations)</button>
                 </div>
               </div>
               <div id="previewPane" class="lab-pane lab-preview-pane lab-rhythm-surface" data-rhythm-surface="rows"></div>

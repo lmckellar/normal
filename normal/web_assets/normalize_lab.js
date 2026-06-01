@@ -2,11 +2,13 @@
   const WORKFLOW_LABELS = {
     normalize: 'Parser Testing UI',
     'weak-encodes': 'Weak Encodes Testing UI',
+    junk: 'Delete Junk & Spam Files',
   };
 
   const WORKFLOW_DESCRIPTIONS = {
     normalize: 'Normalize diagnostics with row reasoning and direct confirm/apply.',
     'weak-encodes': 'Weak encode triage with delete preview and explicit destructive confirm.',
+    junk: 'Destructive junk triage with explicit confirm and local delete preview.',
   };
 
   const LAYOUT_MODES = {
@@ -35,11 +37,24 @@
     { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium' },
   ];
 
+  const JUNK_HEADERS = [
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential' },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential' },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential' },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium' },
+    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential' },
+    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop' },
+    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium' },
+    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop' },
+    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium' },
+  ];
+
   const state = {
     workflow: workflowFromUrl(),
     layoutMode: LAYOUT_MODES.default,
     normalizePayload: null,
     weakPayload: null,
+    junkPayload: null,
     rows: [],
     filteredRows: [],
     selected: new Set(),
@@ -53,6 +68,9 @@
     weakPreviewKey: '',
     weakPreviewLoading: false,
     audioPopoverRowId: '',
+    junkDeleteSkipped: [],
+    junkFilenameResizeObserver: null,
+    junkFilenameResizeFrame: 0,
   };
 
   const el = {
@@ -64,6 +82,7 @@
     workflowMenu: document.getElementById('workflowMenu'),
     workflowNormalize: document.getElementById('workflowNormalize'),
     workflowWeakEncodes: document.getElementById('workflowWeakEncodes'),
+    workflowJunk: document.getElementById('workflowJunk'),
     sourcePath: document.getElementById('sourcePath'),
     runButton: document.getElementById('runButton'),
     searchInput: document.getElementById('searchInput'),
@@ -76,6 +95,7 @@
     weakFloorSelect: document.getElementById('weakFloorSelect'),
     selectAllButton: document.getElementById('selectAllButton'),
     deselectAllButton: document.getElementById('deselectAllButton'),
+    tableColGroup: document.getElementById('tableColGroup'),
     tableHeaderRow: document.getElementById('tableHeaderRow'),
     rowsBody: document.getElementById('rowsBody'),
     previewControls: document.getElementById('previewControls'),
@@ -90,7 +110,9 @@
 
   function workflowFromUrl() {
     const params = new URLSearchParams(window.location.search);
-    return params.get('workflow') === 'weak-encodes' ? 'weak-encodes' : 'normalize';
+    const workflow = params.get('workflow');
+    if (workflow === 'weak-encodes' || workflow === 'junk') return workflow;
+    return 'normalize';
   }
 
   function syncWorkflowUrl() {
@@ -100,11 +122,21 @@
   }
 
   function activePayload() {
-    return state.workflow === 'weak-encodes' ? state.weakPayload : state.normalizePayload;
+    if (state.workflow === 'weak-encodes') return state.weakPayload;
+    if (state.workflow === 'junk') return state.junkPayload;
+    return state.normalizePayload;
   }
 
   function isWeakMode() {
     return state.workflow === 'weak-encodes';
+  }
+
+  function isJunkMode() {
+    return state.workflow === 'junk';
+  }
+
+  function usesDeletePreviewShell() {
+    return isWeakMode() || isJunkMode();
   }
 
   function currentWeakQueue() {
@@ -127,6 +159,14 @@
     'audio_codec_below_minimum',
     'audio_signal_missing',
   ]);
+
+  const JUNK_REASON_LABELS = {
+    promo_document_name: 'promo document marker',
+    promo_document_content: 'promo document marker',
+    junk_file_token: 'filename junk marker',
+    junk_ancestor_token: 'ancestor junk marker',
+    small_video_file: 'very small video',
+  };
 
   function weakFloorDefinitionOptions() {
     const options = state.weakPayload?.replacement_candidate_definition?.fields?.[0]?.options;
@@ -290,6 +330,7 @@
     el.workflowDescription.textContent = WORKFLOW_DESCRIPTIONS[state.workflow];
     el.workflowNormalize.classList.toggle('is-active', state.workflow === 'normalize');
     el.workflowWeakEncodes.classList.toggle('is-active', state.workflow === 'weak-encodes');
+    el.workflowJunk.classList.toggle('is-active', state.workflow === 'junk');
   }
 
   function renderShellLayout() {
@@ -306,21 +347,49 @@
 
   function renderRunButton() {
     const normalize = state.workflow === 'normalize';
-    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize' : 'Run Weak Encodes');
+    const junk = state.workflow === 'junk';
+    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize' : (junk ? 'Run Delete Junk & Spam Files' : 'Run Weak Encodes'));
     el.runButton.disabled = state.runInFlight;
     el.runButton.classList.toggle('is-running', state.runInFlight);
   }
 
   function renderFilterVisibility() {
     const weak = isWeakMode();
-    el.bucketFilter.hidden = weak;
-    el.caseFilter.hidden = weak;
-    el.reasonFilter.hidden = weak;
-    el.warningFilter.hidden = weak;
-    el.workflowStatusFilter.hidden = !weak;
+    const junk = isJunkMode();
+    el.bucketFilter.hidden = weak || junk;
+    el.caseFilter.hidden = weak || junk;
+    el.reasonFilter.hidden = weak || junk;
+    el.warningFilter.hidden = weak || junk;
+    el.workflowStatusFilter.hidden = !(weak || junk);
     el.weakFloorLabel.hidden = !weak;
     el.weakFloorSelect.hidden = !weak;
+    renderWorkflowStatusFilter();
     renderWeakFloorControl();
+  }
+
+  function renderWorkflowStatusFilter() {
+    if (isWeakMode()) {
+      el.workflowStatusFilter.innerHTML = `
+        <option value="all">all</option>
+        <option value="delete-candidates">delete candidates</option>
+        <option value="review">review</option>
+        <option value="queued">queued</option>
+      `;
+      if (!['all', 'delete-candidates', 'review', 'queued'].includes(el.workflowStatusFilter.value)) {
+        el.workflowStatusFilter.value = 'all';
+      }
+      return;
+    }
+    if (isJunkMode()) {
+      el.workflowStatusFilter.innerHTML = `
+        <option value="all">all</option>
+        <option value="high">high</option>
+        <option value="review">review</option>
+      `;
+      if (!['all', 'high', 'review'].includes(el.workflowStatusFilter.value)) {
+        el.workflowStatusFilter.value = 'all';
+      }
+    }
   }
 
   function renderWeakFloorControl() {
@@ -334,8 +403,18 @@
     el.weakFloorSelect.value = state.weakFloor;
   }
 
+  function currentHeaders() {
+    if (isWeakMode()) return WEAK_HEADERS;
+    if (isJunkMode()) return JUNK_HEADERS;
+    return NORMALIZE_HEADERS;
+  }
+
   function renderTableHeader() {
-    const headers = isWeakMode() ? WEAK_HEADERS : NORMALIZE_HEADERS;
+    const headers = currentHeaders();
+    el.tableColGroup.innerHTML = headers.map(header => {
+      const classAttr = header.columnClass ? ` class="${header.columnClass}"` : '';
+      return `<col${classAttr}>`;
+    }).join('');
     el.tableHeaderRow.innerHTML = headers.map(header => {
       const classAttr = header.columnClass ? ` class="${header.columnClass}"` : '';
       const priorityAttr = header.priority ? ` data-priority="${header.priority}"` : '';
@@ -414,8 +493,37 @@
     };
   }
 
+  function junkIssueSummary(item) {
+    const labels = [];
+    (item?.reasons || []).forEach(reason => {
+      const label = JUNK_REASON_LABELS[reason?.code] || '';
+      if (label && !labels.includes(label)) labels.push(label);
+    });
+    return labels.join(', ');
+  }
+
+  function junkRowForItem(item) {
+    return {
+      row_id: item.path || '',
+      path: item.path || '',
+      item,
+      selectable: Boolean(item.path),
+      current_path: item.relative_path || item.path || '',
+      issue: junkIssueSummary(item) || 'junk candidate',
+      reason_codes: (item.reasons || []).map(reason => reason.code || '').filter(Boolean),
+      resolution: item?.facts?.resolution_bucket || '',
+      video_bitrate: item?.facts?.video_bitrate_kbps || 0,
+      audio_bitrate: item?.facts?.audio_bitrate_kbps || 0,
+      confidence: item?.confidence || 'review',
+      audio_summary: item?.facts?.audio_summary || '',
+      file_size: item?.file_size_bytes || 0,
+    };
+  }
+
   function activeRows() {
-    return isWeakMode() ? weakWorkflowItems().map(weakRowForItem) : normalizeRows();
+    if (isWeakMode()) return weakWorkflowItems().map(weakRowForItem);
+    if (isJunkMode()) return (state.junkPayload?.junk || []).map(junkRowForItem);
+    return normalizeRows();
   }
 
   function applyFilters() {
@@ -429,6 +537,17 @@
         if (status === 'queued' && row.workflow_status !== 'queued') return false;
         if (query) {
           const haystack = `${row.current_path} ${row.issue} ${row.audio_summary}`.toLowerCase();
+          if (!haystack.includes(query)) return false;
+        }
+        return true;
+      });
+    } else if (isJunkMode()) {
+      const status = el.workflowStatusFilter.value;
+      rows = rows.filter(row => {
+        if (status === 'high' && row.confidence !== 'high') return false;
+        if (status === 'review' && row.confidence !== 'review') return false;
+        if (query) {
+          const haystack = `${row.current_path} ${row.issue} ${(row.reason_codes || []).join(' ')}`.toLowerCase();
           if (!haystack.includes(query)) return false;
         }
         return true;
@@ -462,7 +581,7 @@
 
   function compareRows(a, b, key, dir) {
     const mult = dir === 'asc' ? 1 : -1;
-    if (isWeakMode()) {
+    if (isWeakMode() || isJunkMode()) {
       const read = row => {
         if (key === 'video_bitrate' || key === 'audio_bitrate' || key === 'channels' || key === 'file_size') return Number(row[key] || 0);
         return String(row[key] || '').toLowerCase();
@@ -477,7 +596,7 @@
   }
 
   function renderFilters() {
-    if (isWeakMode()) return;
+    if (isWeakMode() || isJunkMode()) return;
     const rows = normalizeRows();
     const reasonCodes = [...new Set(rows.flatMap(row => row.reason_codes || []))].sort();
     const warningCodes = [...new Set(rows.flatMap(row => row.warning_codes || []))].sort();
@@ -493,10 +612,18 @@
     return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable).map(row => row.item);
   }
 
+  function selectedJunkPaths() {
+    return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable).map(row => row.path);
+  }
+
+  function selectedJunkItems() {
+    return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable).map(row => row.item);
+  }
+
   function renderSelectionButtons() {
-    const selectableRows = isWeakMode() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
+    const selectableRows = usesDeletePreviewShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
     const filteredCount = selectableRows.length;
-    const selectedVisibleCount = selectableRows.filter(row => state.selected.has(isWeakMode() ? row.row_id : row.result_id)).length;
+    const selectedVisibleCount = selectableRows.filter(row => state.selected.has(usesDeletePreviewShell() ? row.row_id : row.result_id)).length;
     el.selectAllButton.disabled = !filteredCount;
     el.deselectAllButton.disabled = !selectedVisibleCount;
     el.selectAllButton.textContent = filteredCount ? `Select all (${filteredCount})` : 'Select all';
@@ -537,6 +664,44 @@
     return state.filteredRows.filter(row => state.selected.has(row.result_id));
   }
 
+  function summarizeNormalizeRows(rows) {
+    const operationCounts = {
+      total: 0,
+      file_move: 0,
+      file_rename: 0,
+      folder_rename: 0,
+      folder_delete: 0,
+      folder_merge: 0,
+      file_delete: 0,
+    };
+    const seen = new Set();
+    rows.forEach(row => {
+      (row.linked_changes || []).forEach(change => {
+        if (!change?.item_id || seen.has(change.item_id)) return;
+        seen.add(change.item_id);
+        operationCounts.total += 1;
+        if (Object.hasOwn(operationCounts, change.change_type)) {
+          operationCounts[change.change_type] += 1;
+        }
+      });
+    });
+    const visibleMutationCount = rows.filter(row => row.projected_path !== row.current_value).length;
+    return { operationCounts, visibleMutationCount };
+  }
+
+  function renderNormalizeSummaryChips(operationCounts, visibleMutationCount) {
+    return [
+      `<span class="chip">${operationCounts.total} planned operation${operationCounts.total === 1 ? '' : 's'}</span>`,
+      `<span class="chip">${visibleMutationCount} visible path mutation${visibleMutationCount === 1 ? '' : 's'}</span>`,
+      operationCounts.file_move ? `<span class="chip">${operationCounts.file_move} file move${operationCounts.file_move === 1 ? '' : 's'}</span>` : '',
+      operationCounts.file_rename ? `<span class="chip">${operationCounts.file_rename} file rename${operationCounts.file_rename === 1 ? '' : 's'}</span>` : '',
+      operationCounts.folder_rename ? `<span class="chip">${operationCounts.folder_rename} folder rename${operationCounts.folder_rename === 1 ? '' : 's'}</span>` : '',
+      operationCounts.folder_delete ? `<span class="chip">${operationCounts.folder_delete} folder delete${operationCounts.folder_delete === 1 ? '' : 's'}</span>` : '',
+      operationCounts.folder_merge ? `<span class="chip">${operationCounts.folder_merge} folder merge${operationCounts.folder_merge === 1 ? '' : 's'}</span>` : '',
+      operationCounts.file_delete ? `<span class="chip">${operationCounts.file_delete} file delete${operationCounts.file_delete === 1 ? '' : 's'}</span>` : '',
+    ].filter(Boolean).join('');
+  }
+
   function renderConfirmButton() {
     if (isWeakMode()) {
       const count = selectedWeakPaths().length;
@@ -544,13 +709,21 @@
       el.confirmButton.textContent = state.applyInFlight ? `Deleting Selected Files (${count})` : `Delete Selected Files (${count})`;
       return;
     }
-    const changeCount = selectedProposedChanges().length;
-    el.confirmButton.disabled = changeCount === 0 || state.applyInFlight;
-    el.confirmButton.textContent = state.applyInFlight ? `Confirming (${changeCount} Changes)` : `Confirm (${changeCount} Changes)`;
+    if (isJunkMode()) {
+      const count = selectedJunkPaths().length;
+      el.confirmButton.disabled = count === 0 || state.applyInFlight;
+      el.confirmButton.textContent = state.applyInFlight ? `Deleting Selected Files (${count})` : `Delete Selected Files (${count})`;
+      return;
+    }
+    const operationCount = selectedProposedChanges().length;
+    el.confirmButton.disabled = operationCount === 0 || state.applyInFlight;
+    el.confirmButton.textContent = state.applyInFlight
+      ? `Confirming (${operationCount} Operations)`
+      : `Confirm (${operationCount} Operations)`;
   }
 
   function renderPanelVisibility() {
-    if (!isWeakMode()) closeAudioPopover();
+    if (!usesDeletePreviewShell()) closeAudioPopover();
     renderShellLayout();
     el.previewPane.hidden = false;
     el.previewControls.hidden = false;
@@ -564,14 +737,17 @@
     renderSelectionButtons();
     if (!state.filteredRows.length) {
       closeAudioPopover();
-      const colspan = isWeakMode() ? String(WEAK_HEADERS.length) : String(NORMALIZE_HEADERS.length);
+      const colspan = String(currentHeaders().length);
       el.rowsBody.innerHTML = `<tr><td colspan="${colspan}">No rows for the active filters.</td></tr>`;
       return;
     }
     el.rowsBody.innerHTML = isWeakMode()
       ? state.filteredRows.map(renderWeakRow).join('')
-      : state.filteredRows.map(renderNormalizeRow).join('');
+      : (isJunkMode()
+        ? state.filteredRows.map(renderJunkRow).join('')
+        : state.filteredRows.map(renderNormalizeRow).join(''));
     attachRowHandlers();
+    renderJunkFilenameCells();
     renderAudioPopover();
     renderConfirmButton();
   }
@@ -609,11 +785,110 @@
     `;
   }
 
+  function junkConfidenceClass(confidence) {
+    return confidence === 'high' ? 'is-safe' : 'is-review';
+  }
+
+  function renderJunkRow(row) {
+    const checked = state.selected.has(row.row_id) ? 'checked' : '';
+    const hasAudioTracks = audioTracksForRow(row).length > 0;
+    const audioBitrateMarkup = hasAudioTracks
+      ? `<button class="lab-audio-popover-trigger" type="button" data-audio-popover="${escapeHtml(row.row_id)}" aria-expanded="${state.audioPopoverRowId === row.row_id ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
+      : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
+    return `
+      <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
+        <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
+        <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}" data-junk-filename-cell>
+          <span class="lab-cell-text" data-junk-filename-full="${escapeHtml(fileNameFromPath(row.current_path))}">${escapeHtml(fileNameFromPath(row.current_path))}</span>
+        </td>
+        <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
+        <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-text">${escapeHtml(row.resolution || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(formatBitrate(row.video_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.video_bitrate))}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="desktop" title="${escapeHtml(formatBitrate(row.audio_bitrate))}">${audioBitrateMarkup}</td>
+        <td class="lab-cell-signal" data-priority="medium" title="${escapeHtml(row.confidence)}"><span class="lab-cell-pill ${junkConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
+        <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(formatFileSize(row.file_size))}"><span class="lab-cell-text">${escapeHtml(formatFileSize(row.file_size))}</span></td>
+      </tr>
+    `;
+  }
+
+  function junkFilenameMeasureCanvas() {
+    if (!junkFilenameMeasureCanvas.canvas) {
+      junkFilenameMeasureCanvas.canvas = document.createElement('canvas');
+      junkFilenameMeasureCanvas.context = junkFilenameMeasureCanvas.canvas.getContext('2d');
+    }
+    return junkFilenameMeasureCanvas.context;
+  }
+
+  function middleTruncateJunkFileName(value, maxWidth, font) {
+    const text = String(value || '');
+    if (!text || !maxWidth || maxWidth <= 0) return text;
+    const context = junkFilenameMeasureCanvas();
+    if (!context) return text;
+    context.font = font;
+    if (context.measureText(text).width <= maxWidth) return text;
+    const omission = '[...]';
+    const extensionIndex = text.lastIndexOf('.');
+    const suffixFloor = Math.min(text.length - 1, Math.max(extensionIndex >= 0 ? text.length - extensionIndex + 6 : 10, 8));
+    const prefixFloor = Math.min(8, Math.max(4, text.length - suffixFloor - 1));
+    let prefix = Math.min(24, Math.max(prefixFloor, text.length - suffixFloor - 1));
+    let suffix = Math.min(Math.max(suffixFloor, 8), text.length - prefixFloor - 1);
+    let compact = `${text.slice(0, prefix)}${omission}${text.slice(-suffix)}`;
+    while (context.measureText(compact).width > maxWidth && (prefix > prefixFloor || suffix > suffixFloor)) {
+      if (prefix > prefixFloor && (prefix >= suffix || suffix <= suffixFloor)) prefix -= 1;
+      else if (suffix > suffixFloor) suffix -= 1;
+      compact = `${text.slice(0, prefix)}${omission}${text.slice(-suffix)}`;
+    }
+    while (context.measureText(compact).width > maxWidth && prefix > 4) {
+      prefix -= 1;
+      compact = `${text.slice(0, prefix)}${omission}${text.slice(-suffix)}`;
+    }
+    return compact;
+  }
+
+  function applyJunkFilenameCompaction(cell) {
+    const label = cell?.querySelector('[data-junk-filename-full]');
+    if (!(label instanceof HTMLElement)) return;
+    const full = label.dataset.junkFilenameFull || label.textContent || '';
+    label.title = full;
+    if (!isJunkMode()) {
+      label.textContent = full;
+      return;
+    }
+    const style = window.getComputedStyle(label);
+    const compact = middleTruncateJunkFileName(full, label.clientWidth || cell.clientWidth || 0, style.font);
+    label.textContent = compact || full;
+  }
+
+  function renderJunkFilenameCells() {
+    if (!isJunkMode()) return;
+    el.rowsBody.querySelectorAll('[data-junk-filename-cell]').forEach(cell => applyJunkFilenameCompaction(cell));
+    ensureJunkFilenameResizeObserver();
+  }
+
+  function ensureJunkFilenameResizeObserver() {
+    if (!isJunkMode() || state.junkFilenameResizeObserver) return;
+    state.junkFilenameResizeObserver = new ResizeObserver(() => {
+      if (state.junkFilenameResizeFrame) window.cancelAnimationFrame(state.junkFilenameResizeFrame);
+      state.junkFilenameResizeFrame = window.requestAnimationFrame(() => {
+        state.junkFilenameResizeFrame = 0;
+        renderJunkFilenameCells();
+      });
+    });
+    state.junkFilenameResizeObserver.observe(el.rowsBody);
+  }
+
   function normalizeConfidenceClass(confidence) {
     if (confidence === 'safe') return 'is-safe';
     if (confidence === 'review') return 'is-review';
     if (confidence === 'unchanged') return 'is-unchanged';
     return 'is-actionable';
+  }
+
+  function clearDeletePreviewState() {
+    state.weakPreview = null;
+    state.weakPreviewKey = '';
+    state.junkDeleteSkipped = [];
   }
 
   function attachRowHandlers() {
@@ -630,8 +905,7 @@
         if (input.checked) state.selected.add(id);
         else state.selected.delete(id);
         state.activeRowId = id;
-        state.weakPreview = null;
-        state.weakPreviewKey = '';
+        clearDeletePreviewState();
         renderSidePanel();
       });
     });
@@ -654,7 +928,7 @@
       ? el.rowsBody.querySelector(`button[data-audio-popover="${CSS.escape(state.audioPopoverRowId)}"]`)
       : null;
     const tracks = audioTracksForRow(row);
-    if (!isWeakMode() || !row || !anchor || !tracks.length) {
+    if (!usesDeletePreviewShell() || !row || !anchor || !tracks.length) {
       closeAudioPopover();
       return;
     }
@@ -701,7 +975,7 @@
   }
 
   function rowById(rowId) {
-    const key = isWeakMode() ? 'row_id' : 'result_id';
+    const key = usesDeletePreviewShell() ? 'row_id' : 'result_id';
     return state.rows.find(item => item[key] === rowId) || state.filteredRows.find(item => item[key] === rowId) || null;
   }
 
@@ -803,9 +1077,11 @@
       `;
       return;
     }
+    const { operationCounts, visibleMutationCount } = summarizeNormalizeRows(rows);
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
-        <strong>${rows.length}</strong> selected row${rows.length === 1 ? '' : 's'} in preview.
+        <strong>${visibleMutationCount}</strong> mutated media file${visibleMutationCount === 1 ? '' : 's'}.
+        ${renderNormalizeSummaryChips(operationCounts, visibleMutationCount)}
       </div>
       ${buildPreviewTree(rows)}
     `;
@@ -821,11 +1097,11 @@
       el.previewPane.textContent = 'No rows match the current filters.';
       return;
     }
-    const mutatedCount = rows.filter(row => row.projected_path !== row.current_value).length;
+    const { operationCounts, visibleMutationCount } = summarizeNormalizeRows(rows);
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
-        <strong>${rows.length}</strong> row${rows.length === 1 ? '' : 's'} in the current filtered library view.
-        ${mutatedCount ? `<span class="chip">${mutatedCount} mutated</span>` : '<span class="chip">0 mutated</span>'}
+        <strong>${visibleMutationCount}</strong> mutated media file${visibleMutationCount === 1 ? '' : 's'}.
+        ${renderNormalizeSummaryChips(operationCounts, visibleMutationCount)}
       </div>
       ${buildPreviewTree(rows)}
     `;
@@ -915,9 +1191,55 @@
     `;
   }
 
+  function junkSelectedPreviewTree(rows) {
+    const tree = {};
+    rows.forEach(row => addPathToTree(tree, row.item?.relative_path || row.current_path || '', { deleted: true, selected: true }));
+    return renderPreviewTreeMarkup(tree);
+  }
+
+  function junkLibraryPreviewTree(rows) {
+    const tree = {};
+    rows.forEach(row => addPathToTree(tree, row.item?.relative_path || row.current_path || '', { deleted: true }));
+    return renderPreviewTreeMarkup(tree);
+  }
+
+  function renderJunkPreviewPane() {
+    const selected = selectedJunkItems();
+    if (!state.junkPayload) {
+      el.previewPane.textContent = 'Run Delete Junk & Spam Files to inspect delete preview.';
+      return;
+    }
+    if (state.previewMode === 'selected' && !selected.length) {
+      el.previewPane.innerHTML = `
+        <div class="lab-preview-empty">
+          <strong>No rows selected.</strong>
+          <div>Select junk candidates to preview files marked as deleted.</div>
+        </div>
+      `;
+      return;
+    }
+    const previewRows = state.previewMode === 'library'
+      ? state.filteredRows
+      : state.filteredRows.filter(row => state.selected.has(row.row_id));
+    const tree = state.previewMode === 'library' ? junkLibraryPreviewTree(previewRows) : junkSelectedPreviewTree(previewRows);
+    const label = state.previewMode === 'library' ? 'currently filtered junk candidate' : 'selected junk file';
+    el.previewPane.innerHTML = `
+      <div class="lab-preview-summary">
+        <strong>${previewRows.length}</strong> ${label}${previewRows.length === 1 ? '' : 's'} marked as deleted.
+        ${state.junkDeleteSkipped.length ? `<span class="chip">${state.junkDeleteSkipped.length} skipped on last delete</span>` : ''}
+      </div>
+      ${tree}
+      ${state.junkDeleteSkipped.length ? `<div class="lab-preview-summary">Skipped: ${escapeHtml(state.junkDeleteSkipped.map(item => `${relativeToSource(item.path || '')} ${item.reason || ''}`.trim()).join(' | '))}</div>` : ''}
+    `;
+  }
+
   function renderPreviewPane() {
     if (isWeakMode()) {
       renderWeakPreviewPane();
+      return;
+    }
+    if (isJunkMode()) {
+      renderJunkPreviewPane();
       return;
     }
     if (state.previewMode === 'library') renderLibraryPreview();
@@ -959,9 +1281,25 @@
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
-    state.weakPreview = null;
-    state.weakPreviewKey = '';
+    clearDeletePreviewState();
     renderWeakFloorControl();
+    renderRows();
+    renderSidePanel();
+  }
+
+  async function runJunk() {
+    const response = await fetch('/api/movies/junk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: el.sourcePath.value }),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || 'junk scan failed');
+    state.junkPayload = payload;
+    state.selected = new Set();
+    state.activeRowId = '';
+    state.previewMode = 'selected';
+    clearDeletePreviewState();
     renderRows();
     renderSidePanel();
   }
@@ -971,6 +1309,7 @@
     renderRunButton();
     try {
       if (isWeakMode()) await runWeakEncodes();
+      else if (isJunkMode()) await runJunk();
       else await runNormalize();
     } finally {
       state.runInFlight = false;
@@ -984,6 +1323,15 @@
     return {
       ...payload,
       movies: (payload.movies || []).filter(item => !deleted.has(item.path || '')),
+    };
+  }
+
+  function removeJunkDeletedItems(payload, deletedPaths) {
+    if (!payload) return payload;
+    const deleted = new Set(deletedPaths);
+    return {
+      ...payload,
+      junk: (payload.junk || []).filter(item => !deleted.has(item.path || '')),
     };
   }
 
@@ -1013,10 +1361,37 @@
         state.weakPayload = removeWeakDeletedItems(state.weakPayload, (delPayload.deleted || []).map(item => item.path));
         if (state.weakPayload) state.weakPayload.replacement_queue = delPayload;
         state.selected = new Set();
-        state.weakPreview = null;
-        state.weakPreviewKey = '';
+        clearDeletePreviewState();
         state.activeRowId = '';
         state.previewMode = 'selected';
+        renderRows();
+        renderSidePanel();
+      } finally {
+        state.applyInFlight = false;
+        renderConfirmButton();
+      }
+      return;
+    }
+    if (isJunkMode()) {
+      const items = selectedJunkItems();
+      if (!items.length) return;
+      state.applyInFlight = true;
+      renderConfirmButton();
+      try {
+        const source = el.sourcePath.value.trim();
+        const paths = items.map(item => item.path).filter(Boolean);
+        const response = await fetch('/api/movies/junk/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source, paths }),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'junk delete failed');
+        state.junkPayload = removeJunkDeletedItems(state.junkPayload, payload.deleted || []);
+        state.selected = new Set();
+        state.activeRowId = '';
+        state.previewMode = 'selected';
+        state.junkDeleteSkipped = payload.skipped || [];
         renderRows();
         renderSidePanel();
       } finally {
@@ -1061,14 +1436,13 @@
   }
 
   function setWorkflow(workflow) {
-    state.workflow = workflow === 'weak-encodes' ? 'weak-encodes' : 'normalize';
+    state.workflow = workflow === 'weak-encodes' || workflow === 'junk' ? workflow : 'normalize';
     state.layoutMode = LAYOUT_MODES.default;
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
-    state.sort = state.workflow === 'weak-encodes' ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' };
-    state.weakPreview = null;
-    state.weakPreviewKey = '';
+    state.sort = usesDeletePreviewShell() ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' };
+    clearDeletePreviewState();
     closeAudioPopover();
     syncWorkflowUrl();
     renderWorkflowHeader();
@@ -1086,7 +1460,7 @@
     el.workflowButton.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 
-  [el.workflowNormalize, el.workflowWeakEncodes].forEach(button => {
+  [el.workflowNormalize, el.workflowWeakEncodes, el.workflowJunk].forEach(button => {
     button.addEventListener('click', async () => {
       el.workflowMenu.hidden = true;
       el.workflowButton.setAttribute('aria-expanded', 'false');
@@ -1147,8 +1521,7 @@
     state.weakFloor = el.weakFloorSelect.value || 'standard_definition';
     state.selected = new Set();
     state.activeRowId = '';
-    state.weakPreview = null;
-    state.weakPreviewKey = '';
+    clearDeletePreviewState();
     if (isWeakMode() && state.weakPayload) {
       try {
         await runWeakEncodes();
@@ -1162,12 +1535,11 @@
   });
 
   el.selectAllButton.addEventListener('click', async () => {
-    const rows = isWeakMode() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
-    rows.forEach(row => state.selected.add(isWeakMode() ? row.row_id : row.result_id));
-    if (rows[0]) state.activeRowId = isWeakMode() ? rows[0].row_id : rows[0].result_id;
+    const rows = usesDeletePreviewShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
+    rows.forEach(row => state.selected.add(usesDeletePreviewShell() ? row.row_id : row.result_id));
+    if (rows[0]) state.activeRowId = usesDeletePreviewShell() ? rows[0].row_id : rows[0].result_id;
     state.previewMode = 'selected';
-    state.weakPreview = null;
-    state.weakPreviewKey = '';
+    clearDeletePreviewState();
     renderRows();
     renderSidePanel();
     if (isWeakMode() && selectedWeakPaths().length) {
@@ -1181,10 +1553,9 @@
   });
 
   el.deselectAllButton.addEventListener('click', () => {
-    const rows = isWeakMode() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
-    rows.forEach(row => state.selected.delete(isWeakMode() ? row.row_id : row.result_id));
-    state.weakPreview = null;
-    state.weakPreviewKey = '';
+    const rows = usesDeletePreviewShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
+    rows.forEach(row => state.selected.delete(usesDeletePreviewShell() ? row.row_id : row.result_id));
+    clearDeletePreviewState();
     renderRows();
     renderSidePanel();
   });

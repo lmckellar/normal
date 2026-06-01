@@ -47,6 +47,9 @@ body {
   --lab-rhythm-row-font-size: 12px;
   --lab-rhythm-row-line-height: 1.25;
   --lab-rhythm-row-inline-pad: 10px;
+  --lab-table-select-column-width: 42px;
+  --lab-table-select-pad-inline-start: 12px;
+  --lab-table-select-pad-inline-end: 8px;
   --lab-rhythm-row-rule: rgba(28, 29, 31, 0.08);
   --lab-rhythm-panel-header-gap: 12px;
   --lab-rhythm-panel-header-pad: 12px;
@@ -325,13 +328,18 @@ thead th {
   text-overflow: ellipsis;
 }
 
+.lab-scan-table col.lab-col-select,
 .lab-scan-table th.lab-col-select,
 .lab-scan-table td.lab-cell-select {
-  width: 42px;
-  min-width: 42px;
-  max-width: 42px;
-  padding-left: 12px;
-  padding-right: 8px;
+  width: var(--lab-table-select-column-width);
+  min-width: var(--lab-table-select-column-width);
+  max-width: var(--lab-table-select-column-width);
+}
+
+.lab-scan-table th.lab-col-select,
+.lab-scan-table td.lab-cell-select {
+  padding-left: var(--lab-table-select-pad-inline-start);
+  padding-right: var(--lab-table-select-pad-inline-end);
 }
 
 .lab-scan-table th.lab-col-anchor { width: 32%; }

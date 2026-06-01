@@ -689,6 +689,21 @@ class MoviePlanTests(unittest.TestCase):
                 self.assertEqual(change.confidence, "safe")
                 self.assertIn("normalized_title_punctuation_upgrade", change.reason_codes)
 
+    def test_build_movie_plan_drops_noop_collision_resolution_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            canonical = source / "Legend (1985)"
+            canonical.mkdir()
+            (canonical / "Legend (1985).mkv").write_text("video", encoding="utf-8")
+
+            alternate = source / "Legend (1985) 1080p"
+            alternate.mkdir()
+            (alternate / "Legend (1985) 1080p.mkv").write_text("video", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            self.assertEqual(plan.proposed_changes, [])
+
     def test_build_movie_plan_promotes_known_canonical_punctuation_upgrades_to_safe(self) -> None:
         cases = {
             "Fantastic Mr Fox (2009)": "Fantastic Mr. Fox (2009)",

@@ -3,21 +3,23 @@
 Internal, local-only note.
 
 Restyle and workflow-merge note for **Parser Tester UI** (`/parser-tester-ui`).
-This route now carries two internal workflows inside one shell:
+This route now carries three internal workflows inside one shell:
 
 - `Parser Testing UI`
 - `Weak Encodes Testing UI`
+- `Delete Junk & Spam Files`
 
 Workflow is URL-stable:
 
 - `/parser-tester-ui?workflow=normalize`
 - `/parser-tester-ui?workflow=weak-encodes`
+- `/parser-tester-ui?workflow=junk`
 
 ## Files (`normal/web_assets/`)
 
 - `normalize_lab.html` — shared shell
 - `normalize_lab.css` — the restyle
-- `normalize_lab.js` — normalize plus weak-encode workflow logic
+- `normalize_lab.js` — normalize, weak-encode, and junk-delete workflow logic
 
 Assets served at `/parser-tester-ui-assets/<file>`.
 
@@ -75,6 +77,16 @@ Weak encodes:
 - confirm still reuses queue-add then queue-delete
 - replacement history widgets are intentionally not part of this page
 
+Junk delete:
+
+- reuses the weak table scaffold rather than inventing a separate junk table
+- `File Name` is junk-only middle truncation so the identifying front and release tail stay visible
+- row source is `/api/movies/junk`
+- confirm source is `/api/movies/junk/delete`
+- preview is local-only from current `relative_path` values; no junk-specific preview endpoint
+- video junk rows can surface probe-backed resolution, bitrate, channels, and audio-stream inspection
+- promo docs and other non-media spam leave media cells honestly blank
+
 ## CSS / JS hooks
 
 Keep the names JS toggles/emits: `#runButton.is-running`,
@@ -99,4 +111,5 @@ source .venv/bin/activate
 python3 -m normal web --host 127.0.0.1 --port 8765 --source /mnt/media_storage/Movies
 # http://127.0.0.1:8765/parser-tester-ui?workflow=normalize
 # http://127.0.0.1:8765/parser-tester-ui?workflow=weak-encodes
+# http://127.0.0.1:8765/parser-tester-ui?workflow=junk
 ```

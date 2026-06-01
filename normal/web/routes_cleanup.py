@@ -65,7 +65,10 @@ def handle_movies_junk(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
     with guarded_heavy_scan(source, "Movie junk scan"):
         with ctx.handler.activity_tracker.track(source, "Movie junk scan"):
-            report = scan_movie_cleanup(source)
+            report = scan_movie_cleanup(
+                source,
+                probe_media=tracked_probe(source, "ffprobe movie junk", cache=PROBE_CACHE),
+            )
     ctx.respond_json(report.to_dict())
 
 

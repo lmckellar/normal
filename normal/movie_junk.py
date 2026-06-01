@@ -3,11 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
 from normal.movie_scan import discover_video_files, movie_id_for
-from normal.quality_review import MediaFacts
+from normal.quality_review import MediaFacts, classify_resolution
 
 
 SMALL_VIDEO_BYTES = 100 * 1024 * 1024
@@ -62,6 +62,7 @@ class MovieJunkItem:
     runtime_seconds: int | None
     runtime_label: str | None
     confidence: str
+    facts: dict[str, Any] | None = None
     reasons: list[MovieJunkReason] = field(default_factory=list)
 
 
@@ -78,6 +79,7 @@ class MovieJunkReport:
 
 def scan_movie_junk(
     source_root: Path,
+    probe_media: Callable[[Path], MediaFacts] | None = None,
 ) -> MovieJunkReport:
     report = MovieJunkReport(source_root=str(source_root.resolve()), generated_at=utc_now_iso())
     movie_files = discover_video_files(source_root)
@@ -94,9 +96,22 @@ def scan_movie_junk(
 
     for movie_path in movie_files:
         file_size_bytes = safe_file_size(movie_path)
-        reasons = detect_movie_junk_reasons(movie_path)
+        facts = None
+        if probe_media is not None:
+            try:
+                facts = probe_media(movie_path)
+            except Exception:
+                facts = None
+        reasons = detect_movie_junk_reasons(movie_path, facts)
         if not reasons:
             continue
+        fact_payload = movie_junk_facts(facts)
+        if facts is not None and facts.runtime_seconds is not None:
+            runtime_seconds = facts.runtime_seconds
+            runtime_label = format_runtime(facts.runtime_seconds)
+        else:
+            runtime_seconds = None
+            runtime_label = None
         report.junk.append(
             MovieJunkItem(
                 movie_id=movie_id_for(movie_path, source_root),
@@ -105,9 +120,10 @@ def scan_movie_junk(
                 file_name=movie_path.name,
                 file_size_bytes=file_size_bytes,
                 file_size_label=format_file_size(file_size_bytes),
-                runtime_seconds=None,
-                runtime_label=None,
+                runtime_seconds=runtime_seconds,
+                runtime_label=runtime_label,
                 confidence=highest_confidence(reasons),
+                facts=fact_payload,
                 reasons=reasons,
             )
         )
@@ -156,8 +172,9 @@ def scan_movie_promo_documents(source_root: Path) -> MovieJunkReport:
 
 def scan_movie_cleanup(
     source_root: Path,
+    probe_media: Callable[[Path], MediaFacts] | None = None,
 ) -> MovieJunkReport:
-    video_report = scan_movie_junk(source_root)
+    video_report = scan_movie_junk(source_root, probe_media=probe_media)
     doc_report = scan_movie_promo_documents(source_root)
     merged = MovieJunkReport(
         source_root=str(source_root.resolve()),
@@ -350,6 +367,20 @@ def safe_file_size(path: Path) -> int | None:
 
 def file_size_for(path: Path, facts: MediaFacts | None) -> int | None:
     return facts.file_size_bytes if facts is not None else safe_file_size(path)
+
+
+def movie_junk_facts(facts: MediaFacts | None) -> dict[str, Any] | None:
+    if facts is None:
+        return None
+    resolution_bucket = facts.resolution_bucket or classify_resolution(facts.width, facts.height)
+    return {
+        "resolution_bucket": resolution_bucket,
+        "video_bitrate_kbps": facts.video_bitrate_kbps,
+        "audio_bitrate_kbps": facts.audio_bitrate_kbps,
+        "audio_channels": facts.audio_channels,
+        "audio_summary": facts.audio_summary,
+        "audio_streams": [asdict(stream) for stream in facts.audio_streams],
+    }
 
 
 def format_file_size(size_bytes: int | None) -> str | None:
