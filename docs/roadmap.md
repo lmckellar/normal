@@ -6,33 +6,35 @@
 
 ### Headline
 
-`normal` is now in a semi-stable alpha state with main lanes built and
-materially useful: normalize, quality triage, junk cleanup, repair defaults,
-canonical list coverage, and export. The recent scan/cache work means the
-product shape feels coherent rather than exploratory, but it is still pre-1.0
-and the remaining work will need to focus heavily on UI and UX improvements.
-Present v0.7.0-alpha.1 release is only recommended for Linux users who are 
-comfortable working with alpha software.
+`normal` is now in a semi-stable alpha state with a new default movie
+workbench at the root route and a narrower but more coherent surfaced product
+shape. Normalize, weak-encode triage, junk cleanup, repair defaults, canonical
+list coverage, and export are materially useful. Recent scan/cache work and the
+new shell pivot mean the product now feels more deliberate than exploratory,
+but it is still pre-1.0 and still best suited to Linux users comfortable with
+alpha software. Present `v0.7.0-alpha.2` is the first cut of that new default
+surface.
 
 ### Concerns
 
-- **UI/UX maturity** — functionally strong, but still uneven in consistency,
-  colour logic, and overall polish between pages. does not respect screen realestate
-  nor yet have a concise, Universal Principle of interaction perceivable across workflows
+- **UI/UX maturity** — the new default shell is much stronger than the old
+  dashboard, but resurfacing withheld lanes into it without losing coherence is
+  the next real test.
 - **Main workflow maturity** — movie lanes are credible for real use; TV does
   not exist yet, so the product is still intentionally movie only in practice.
-- **Documentation coherence** — mostly aligned with the movie-first reality. Current key
-  user docs Readme and Statement are suitabily human written.
+- **Documentation coherence** — `README`, `CHANGELOG`, and this roadmap are the
+  release truth set. Broader docs are intentionally allowed to lag for now to
+  avoid churn while the alpha.2 surface is likely still short-lived.
 - **Safety / mutation confidence** — rename, delete, and remux lanes are
   meaningfully bounded and preview-driven, but they still deserve active
   caution to retain clear boundaries in the face of TV parsing logic.
-- **Auditability / receipts** — replacement and subtitle history are useful with
-  a noted gap around junk deletion. Authorial policy is clear yet not evenly applied to doc base. 
+- **Auditability / receipts** — the old patchwork histories have been pared
+  back. A more cohesive global audit system is now a near-term product need.
 - **Performance / scan economics** — recent cache and shared-scan work improved
   the runtime reality materially. retain strength and defend against boundary regressions.
-- **Architecture health** — structural refactor of web.py has deconstructed monolithic 
-  web backend into assets packages. frontend/editor ergonomics remain less mature than the
-  backend workflows which feel suitably scoped to the tool. 
+- **Architecture health** — backend workflows and parser hardening are ahead of
+  the newly narrowed UI surface. The next step is resurfacing that backend
+  strength without growing another incoherent dashboard.
 - **Release/versioning coherence** — now coherent from `v0.7.0-alpha.1`
   forward; earlier reconstructed history remains useful context, not true
   release history.
@@ -66,22 +68,28 @@ comfortable working with alpha software.
 - **Fixed O(n²) reconcile regression** — `reconcile_replacement_queue` now
   calls `replacement_identities` once per issue family, not once per queue item.
 
-## 0.7.x — Library trim and polish
+## 0.7.x — Default workbench consolidation
 
-- Remove remaining legacy public identity references from the repo and docs.
-- Keep verbose naming removed from the product path; retain only the parser
-  hardening and concise collision logic that the old regression corpus forced.
-- Themes — remove at least two; full removal decision pending.
-- Canonical list: surface "deleted, awaiting replacement" as a distinct token
-  separate from "missing".
-- UI consistency pass — button colours, global action bar, colour logic.
-- Parser hardening carry-overs — `:` / `-` normalisation, sequel naming
-  conventions, omega-dump and rodneyyouplonker collection edge cases.
+- Promote the new compact shell to the root route and remove the old dashboard
+  from the active public product path.
+- Keep public release truth honest without rewriting the whole doc set.
+- Defend concise-only movie normalization and its parser hardening gains.
+- Finish the immediate movie-lane stabilization work that directly affects the
+  alpha.2 default surface.
+- Keep UI cleanup focused on coherence inside this new shell, not on reviving
+  the old dashboard structure.
 
-## 0.8.x — TV Shows normalization lane
+## 0.8.x — Resurfacing, TV, and unified audit
 
-- **TV Show Normalize page** — dedicated lane that scans a TV source and
-  proposes a complete restructure before apply.
+- Resurface withheld backend-backed movie lanes and support surfaces into the
+  new workbench shape after they are stable enough to return.
+- Replace the removed patchwork histories with one cohesive global audit /
+  receipt system that covers destructive and repair actions cleanly.
+- Add the **TV Show Normalize** lane as the next major product family inside
+  the same workbench grammar.
+- Keep apply safety, source-root validation, and preview discipline consistent
+  across movie and TV mutation paths.
+
 - **Series and season structure** — target shape:
   `Show Name (Year)/Season NN/Show Name - SNNENN - Episode Title.ext`; fall
   back to the smallest safe default when episode titles are unavailable.
@@ -91,19 +99,19 @@ comfortable working with alpha software.
 - **Package cleanup** — adapt movie artifact cleanup for TV extras, samples,
   empty season folders, duplicate wrappers, and season-pack folders.
 - **Apply safety** — reuse movie normalizer's preview/apply discipline: no
-  silent destructive execution, review for ambiguity, source-root validation on every
-  moved or deleted path.
+  silent destructive execution, review for ambiguity, source-root validation on
+  every moved or deleted path.
 
-## 0.9.x — Hardening and feature refinement
-
-No new lanes. Maturing what's already built:
+## 0.9.x — Post-resurfacing polish and stabilization
 
 - Histogram improvements — interactive drilldowns to reveal files in a selected
   curve segment, first as compact overview then as a detailed list.
 - Canonical list badge and inspector refinements.
-- UI consistency and colour logic pass (carry-overs from 0.7.x if not landed).
+- UI consistency and colour logic pass once the resurfaced lanes and TV shape
+  are settled.
 - Remaining parser edge cases and normalization ambiguities across both lanes.
-- Minor underdeveloped-feature polish.
+- Minor underdeveloped-feature polish after the new audit system and resurfaced
+  workflows are in place.
 
 ## 1.0 — Release readiness
 
@@ -128,4 +136,4 @@ analogue.
   `movie_profile.py`; the UI remains hidden until the workflow shape is clear.
 
 ## Disclaimer
-  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, with a matching git tag and GitHub prerelease; earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.
+  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, and the current release is `v0.7.0-alpha.2`; both have matching prerelease intent. Earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.

@@ -15,7 +15,6 @@ from normal.movie_profile import (
     load_movie_standards,
     movie_standards_revision,
 )
-from normal.movie_replacement_queue import reconcile_replacement_queue
 from normal.movie_scan import media_facts_from_dict
 
 
@@ -246,7 +245,6 @@ def build_profile_response(source: Path, report: MovieProfileReport, standards: 
     standards_payload = standards if standards is not None else load_movie_standards()
     response = report.to_dict()
     response["histogram"] = build_histogram_payload(report)
-    response["replacement_queue"] = reconcile_replacement_queue(source, response["movies"])
     response["movie_standards"] = standards_payload
     response["movie_standards_revision"] = movie_standards_revision(standards_payload)
     response["quality_profile_definitions"] = build_movie_profile_definitions(standards_payload)

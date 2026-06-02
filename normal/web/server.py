@@ -12,18 +12,12 @@ from . import state
 from .activity import ActivityTracker
 from .http import RequestContext
 from .routes_cleanup import (
+    handle_movies_delete,
+    handle_movies_delete_preview,
     handle_movies_audio_packaging_fix,
     handle_movies_junk,
     handle_movies_junk_delete,
-    handle_movies_replacement_queue_add,
-    handle_movies_replacement_queue_delete,
-    handle_movies_replacement_queue_delete_preview,
-    handle_movies_replacement_queue_dismiss,
-    handle_movies_replacement_queue_list,
     handle_movies_subtitle_readiness_fix,
-    handle_movies_subtitle_readiness_history_dismiss,
-    handle_movies_subtitle_readiness_history_list,
-    handle_movies_subtitle_readiness_history_sync,
 )
 from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
 from .routes_normalize import handle_movies_apply, handle_movies_normalize
@@ -141,7 +135,7 @@ def serve_normalize_lab_static_asset(ctx: RequestContext, route: str) -> None:
 
 
 def serve_index(ctx: RequestContext) -> None:
-    body = render_index_html(
+    body = render_normalize_lab_html(
         default_source=ctx.default_source,
         omdb_key=ctx.omdb_key,
         tmdb_key=ctx.tmdb_key,
@@ -202,16 +196,10 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/movies/apply": handle_movies_apply,
         "/api/movies/junk": handle_movies_junk,
         "/api/movies/junk/delete": handle_movies_junk_delete,
-        "/api/movies/replacement-queue/list": handle_movies_replacement_queue_list,
-        "/api/movies/replacement-queue/add": handle_movies_replacement_queue_add,
-        "/api/movies/replacement-queue/delete": handle_movies_replacement_queue_delete,
-        "/api/movies/replacement-queue/delete-preview": handle_movies_replacement_queue_delete_preview,
-        "/api/movies/replacement-queue/dismiss": handle_movies_replacement_queue_dismiss,
+        "/api/movies/delete-preview": handle_movies_delete_preview,
+        "/api/movies/delete": handle_movies_delete,
         "/api/movies/audio-packaging/fix": handle_movies_audio_packaging_fix,
         "/api/movies/subtitle-readiness/fix": handle_movies_subtitle_readiness_fix,
-        "/api/movies/subtitle-readiness/history": handle_movies_subtitle_readiness_history_list,
-        "/api/movies/subtitle-readiness/history/sync": handle_movies_subtitle_readiness_history_sync,
-        "/api/movies/subtitle-readiness/history/dismiss": handle_movies_subtitle_readiness_history_dismiss,
     }
 
 

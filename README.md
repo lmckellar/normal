@@ -8,8 +8,6 @@ Restoring order to your chaotic movie library
 
 Documentation authorship policy: [docs/writing.md](docs/writing.md).
 
-![normal movie dashboard](docs/assets/readme_dashboard.png)
-
 ## What It Does
 
 - Normalises movie files and parent folders into `Title (Year)/Title (Year)` naming convention
@@ -20,7 +18,7 @@ Documentation authorship policy: [docs/writing.md](docs/writing.md).
 - Lets you compare your collection directly against canonical movie lists (TMDB Top 100, 250, etc.) and identify what's missing
 - One Click Export your entire library as a cleanly organized spreadsheet
 
-All packaged with a clean and modern Web GUI, minimal dependencies and all core features are local only. 
+All packaged with a focused local Web workbench, minimal dependencies and all core features are local only. 
 
 The fuller stance on why these choices are adopted is in [docs/statement.md](docs/statement.md).
 
@@ -65,6 +63,12 @@ Recommended testing process is in [docs/quickstart.md](docs/quickstart.md) and [
 
 Watching the tool purify a test library for the first time is a good experience. Watching it touch your real library before you're ready is not.
 
+## Alpha.2 UI note
+
+`v0.7.0-alpha.2` promotes the newer workbench at `http://127.0.0.1:8765/` to the default UI.
+
+Some lanes and audit surfaces that were previously exposed in `alpha.1` remain present in backend or partial internal form but are intentionally not surfaced in this default alpha.2 UI while they undergo deeper revision. The main release touch points in this repo reflect current reality; broader docs may still describe older public surfaces for a while.
+
 ## Optional API Keys
 
   `normal` works without external API keys for its core local workflows: movie normalize, profile scans, junk detection, repair defaults, inspect, and exports all run against local files.
@@ -72,17 +76,17 @@ Watching the tool purify a test library for the first time is a good experience.
   Two web features related to pulling Ratings use optional third-party APIs:
 
   - `TMDB_KEY` enables `Movies / Canonical Lists`, which compares your library against TMDb-backed movie lists.
-  - `OMDB_KEY` enables IMDb ratings in replacement-queue history for quick sorting of 'most acclaimed movies I have deleted and need to replace'
+  - `OMDB_KEY` enables IMDb ratings in movie list views that still surface ratings.
 
   If you do not provide these keys:
 
   - the app still launches and the main movie workflows still work as you would expect
   - `Canonical Lists` cannot fetch TMDb coverage data so this 'non core' feature will simply not return a list
-  - replacement-history-list IMDb ratings are entwined into core workflow with a graceful fallback; if no API Key is present normal simply does not pull ratings into the render table and instead rends a '-' in the otherwise fully functioning output table.
+  - movie pages that can show IMDb ratings simply omit them when no key is present.
 
   API Keys can be obtained from the respective websites and are free with basic usage plans and can be passed either by environment variable or via `normal web --tmdb-key ... --omdb-key ...`.
 
-  `normal` thoughtfully provides an internal local caching feature that minimises progressive API calls after initial scan. This allows users to stay comfortably within free usage plan rate limits for the API service providers even if managing a very large replacement queue and avoids needlessly hammering the provider endpoints with wasteful API requests. In the event the user gets rate limited (possible on initial scan of huge library if many weak encodes get nuked, unlikely otherwise) they can simply wait 24 hours for the TMBD rate limit to refresh and perform another scan in normal - it will rebuild whatever was not initially scanned, update anything that has gone stale, while deliberately avoiding any wasteful re-queries against the API endpoint for known values from prior scans. 
+  `normal` thoughtfully provides internal caching that minimises repeated API calls after the first scan. This keeps the optional provider-backed views within free-tier limits and avoids wasteful re-queries for values that are already known.
 
   See [docs/safety.md](docs/safety.md#networking-behaviour) for the networking posture and [docs/movies.md](docs/movies.md) for where these features appear in the UI.
 

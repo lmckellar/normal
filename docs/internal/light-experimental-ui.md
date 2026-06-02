@@ -86,6 +86,9 @@ Repair defaults:
 - row source is `/api/movies/profile`
 - consequence preview stays local to the current payload rather than requiring a repair-specific preview API
 - the point is inspection and workflow-shape verification, not a second independent mutation contract
+- filter/search/select stays owned by the top strip; preview scope and file-touch actions belong in the preview header
+- audio-packaging now uses a compact `Repair action` selector plus `Run Repair` button so delete can sit in the same local action cluster without overloading the header
+- forward note: if defaults become first-class policy settings rather than per-action mutations, this header can likely collapse again around `enforce policy` semantics instead of enumerating separate repair verbs
 
 Junk delete:
 
@@ -100,11 +103,12 @@ Junk delete:
 ## CSS / JS hooks
 
 Keep the names JS toggles/emits: `#runButton.is-running`,
-`.lab-tab/.lab-mode-button.is-active`, `tr.active`, `.chip`,
+`.lab-tab`, `tr.active`, `.chip`,
 `.lab-preview-summary/.lab-preview-empty`, `.lab-tree/.lab-tree-line`
 (`.is-mutated`, `.is-selected`, `.is-deleted`, `.is-cleanup`,
 `.lab-indent-0..5`), `.sort`, workflow menu/button ids,
-`.lab-audio-popover*`, and the weak preview confirm label
+`.lab-audio-popover*`, `#previewScopeSelect`, `#repairActionSelect`,
+`#repairActionButton`, and the weak preview confirm label
 `Delete Selected Files (N)`.
 
 Shell contract hooks:

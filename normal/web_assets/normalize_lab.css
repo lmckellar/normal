@@ -27,6 +27,8 @@
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: var(--sans);
@@ -353,14 +355,6 @@ thead th {
   padding-right: var(--lab-table-select-pad-inline-end);
 }
 
-.lab-scan-table th.lab-col-anchor { width: 32%; }
-.lab-scan-table th.lab-col-path { width: 34%; }
-.lab-scan-table th.lab-col-issue { width: 22%; }
-.lab-scan-table th.lab-col-resolution { width: 11%; }
-.lab-scan-table th.lab-col-status,
-.lab-scan-table th.lab-col-signal { width: 11ch; }
-.lab-scan-table th.lab-col-audio-summary { width: 18%; }
-
 .lab-cell-text {
   display: block;
   overflow: hidden;
@@ -558,34 +552,56 @@ input[type="checkbox"] {
 
 .lab-panel-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--lab-rhythm-panel-header-gap);
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: var(--lab-rhythm-panel-body-offset);
   padding-bottom: var(--lab-rhythm-panel-header-pad);
   border-bottom: 1px solid var(--hairline);
   flex-wrap: wrap;
 }
 
-.lab-preview-modes,
+.lab-preview-group,
 .lab-preview-controls {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   align-items: center;
 }
 
-.lab-panel-title {
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+.lab-preview-group {
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.lab-preview-group label {
+  font-size: 11px;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--muted);
 }
 
 .lab-preview-controls {
-  margin-left: auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, max-content);
+  justify-content: space-between;
+  align-items: center;
+  inline-size: 100%;
+}
+
+.lab-preview-controls > * {
+  min-width: 0;
+}
+
+#previewScopeSelect {
+  min-width: 11ch;
+}
+
+#repairActionSelect {
+  min-width: 0;
+  max-width: min(100%, 18ch);
 }
 
 .lab-pane-note {
@@ -593,24 +609,8 @@ input[type="checkbox"] {
   font-size: 13px;
 }
 
-.lab-mode-button {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--muted);
-  font-size: 12px;
-  padding: 5px 11px;
-}
-
-.lab-mode-button:hover { background: var(--hover); }
-
-.lab-mode-button.is-active {
-  background: var(--accent-wash);
-  border-color: var(--accent-line);
-  color: var(--accent);
-  font-weight: 600;
-}
-
 .lab-confirm-button {
+  justify-self: end;
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
@@ -701,6 +701,19 @@ input[type="checkbox"] {
 
 .lab-preview-empty { color: var(--muted); }
 .lab-preview-empty strong { display: block; margin-bottom: 4px; color: var(--ink); }
+
+@media (max-width: 1180px) {
+  .lab-preview-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .lab-confirm-button {
+    justify-self: auto;
+    width: 100%;
+  }
+}
 
 /* Tags / chips ------------------------------------------------------------ */
 

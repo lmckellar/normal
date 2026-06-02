@@ -3,24 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>normal / parser-tester-ui</title>
+  <title>normal workbench</title>
   <link rel="stylesheet" href="/parser-tester-ui-assets/normalize_lab.css">
 </head>
 <body>
   <div class="lab-shell" data-layout-mode="2-page-lopsided">
     <header class="lab-topbar">
       <div>
-        <div class="lab-kicker">internal</div>
+        <div class="lab-kicker">alpha.2 default</div>
         <div class="lab-workflow-switch">
           <button id="workflowButton" class="lab-workflow-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-            <span id="workflowTitle">Parser Testing UI</span>
+            <span id="workflowTitle">Movie Normalize</span>
             <span class="lab-workflow-caret" aria-hidden="true">▾</span>
           </button>
           <div id="workflowMenu" class="lab-workflow-menu" role="listbox" hidden>
-            <button id="workflowNormalize" class="lab-workflow-option" type="button" data-workflow="normalize" role="option">Parser Testing UI</button>
-            <button id="workflowWeakEncodes" class="lab-workflow-option" type="button" data-workflow="weak-encodes" role="option">Weak Encodes Testing UI</button>
-            <button id="workflowRepairDefaults" class="lab-workflow-option" type="button" data-workflow="repair-defaults" role="option">Repair Defaults Testing UI</button>
-            <button id="workflowJunk" class="lab-workflow-option" type="button" data-workflow="junk" role="option">Delete Junk &amp; Spam Files</button>
+            <button id="workflowNormalize" class="lab-workflow-option" type="button" data-workflow="normalize" role="option">Movie Normalize</button>
+            <button id="workflowWeakEncodes" class="lab-workflow-option" type="button" data-workflow="weak-encodes" role="option">Weak Encodes</button>
+            <button id="workflowRepairDefaults" class="lab-workflow-option" type="button" data-workflow="repair-defaults" role="option">Repair Defaults</button>
+            <button id="workflowJunk" class="lab-workflow-option" type="button" data-workflow="junk" role="option">Delete Junk &amp; Spam</button>
           </div>
         </div>
         <p id="workflowDescription">Normalize diagnostics with row reasoning and direct confirm/apply.</p>
@@ -67,13 +67,13 @@
         <option value="audio">Audio Packaging</option>
         <option value="subtitle">Subtitle Readiness</option>
       </select>
+      <label for="previewScopeSelect">Preview Scope</label>
+      <select id="previewScopeSelect">
+        <option value="selected">Selected</option>
+        <option value="library">Full library</option>
+      </select>
       <button id="selectAllButton" type="button">Select all</button>
       <button id="deselectAllButton" type="button">Deselect all</button>
-      <div id="repairDefaultsActions" class="lab-inline-actions" hidden>
-        <button id="repairAudioDefaultButton" type="button">Set English Default</button>
-        <button id="repairAudioDropForeignButton" type="button">Set English Default + Drop Foreign</button>
-        <button id="repairSubtitleButton" type="button">Repair Subtitle Defaults</button>
-      </div>
     </section>
 
     <main class="lab-layout">
@@ -101,11 +101,11 @@
           <div class="lab-detail">
             <div class="lab-panel">
               <div class="lab-panel-header">
-                <div class="lab-panel-title">Preview</div>
                 <div id="previewControls" class="lab-preview-controls" hidden>
-                  <div class="lab-preview-modes">
-                    <button id="selectedPreviewButton" class="lab-mode-button" type="button">Selected</button>
-                    <button id="libraryPreviewButton" class="lab-mode-button" type="button">Full library</button>
+                  <div id="repairActionControls" class="lab-preview-group" hidden>
+                    <label for="repairActionSelect">Repair action</label>
+                    <select id="repairActionSelect"></select>
+                    <button id="repairActionButton" class="lab-action-button" type="button">Run Repair</button>
                   </div>
                   <button id="confirmButton" class="lab-confirm-button" type="button" disabled>Confirm (0 Operations)</button>
                 </div>

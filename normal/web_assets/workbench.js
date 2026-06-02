@@ -17,7 +17,6 @@
     selectedDashboardKey: '',
     selectedDashboardType: '',
     selectedCanonicalId: '',
-    subtitleHistory: null,
     movieAudioFixBusy: false,
     movieSubtitleFixBusy: false,
     activeRunController: null,
@@ -31,7 +30,6 @@
       normalize: null,
       junk: null,
       canonical: null,
-      replacementQueue: null,
       normalizeApply: null,
     },
   };
@@ -664,7 +662,6 @@
     if (state.page === 'dashboard' && payload?.histogram) {
       stats.push(['Movies', String(payload.histogram.movie_count || 0)]);
       stats.push(['Storage', formatBytes(payload.histogram.total_size_bytes)]);
-      stats.push(['Replacement', String((payload.replacement_queue?.items || []).filter(item => item.status === 'deleted').length)]);
     } else if (state.page === 'normalize') {
       const normalize = currentNormalizePayload();
       stats.push(['Results', String((normalize?.movie_results || []).length)]);
@@ -674,7 +671,6 @@
       const items = filteredQualityItems(payload);
       stats.push(['Candidates', String(items.length)]);
       stats.push(['Selected', String(state.selectedReplacementPaths.size)]);
-      stats.push(['Queued', String((payload?.replacement_queue?.items || []).filter(item => item.status === 'pending').length)]);
     } else if (state.page === 'fix_defaults') {
       const items = state.fixDefaultsTab === 'audio' ? filteredAudioItems(payload) : filteredSubtitleItems(payload);
       stats.push(['Visible', String(items.length)]);
@@ -802,17 +798,7 @@
     }
     const histogram = payload.histogram || {};
     const profileCounts = histogram.quality_profile_counts || {};
-    const queueDeleted = (payload.replacement_queue?.items || []).filter(item => item.status === 'deleted').length;
     const actionCards = [];
-    if (queueDeleted) {
-      actionCards.push({
-        key: 'deleted_awaiting_replacement',
-        type: 'action',
-        label: 'Deleted Awaiting Replacement',
-        count: queueDeleted,
-        note: 'Audit pressure waiting for replacement completion.',
-      });
-    }
     (payload.quality_profile_definitions || []).forEach(definition => {
       actionCards.push({
         key: definition.label,
@@ -1391,24 +1377,12 @@
   function auditRailPieces() {
     const pieces = [];
     if (state.auditEvents.length) pieces.push({ count: state.auditEvents.length, label: 'session events' });
-    const queue = pagePayload()?.replacement_queue || state.results.replacementQueue;
-    if (queue?.items?.length) {
-      const deleted = queue.items.filter(item => item.status === 'deleted').length;
-      const completed = queue.items.filter(item => item.status === 'completed').length;
-      if (deleted) pieces.push({ count: deleted, label: 'awaiting replacement' });
-      if (completed) pieces.push({ count: completed, label: 'replaced' });
-    }
-    const subtitleActive = (state.subtitleHistory?.items || []).filter(item => !item.dismissed_at).length;
-    if (subtitleActive) pieces.push({ count: subtitleActive, label: 'subtitle history' });
     const junkHistory = sessionJunkHistory().length;
     if (junkHistory) pieces.push({ count: junkHistory, label: 'junk deletions' });
     return pieces;
   }
 
   function buildAuditExpandedContent() {
-    const queue = pagePayload()?.replacement_queue || state.results.replacementQueue;
-    const queueItems = queue?.items || [];
-    const subtitleItems = (state.subtitleHistory?.items || []).filter(item => !item.dismissed_at);
     const junkItems = sessionJunkHistory();
     const sections = [];
     if (state.auditEvents.length) {
@@ -1422,48 +1396,6 @@
               <div class="wb-subtle">${escapeHtml(event.flow)} · ${escapeHtml(new Date(event.at).toLocaleString())}</div>
             </div>
           `).join('')}
-        </div>
-      `);
-    }
-    if (queueItems.length) {
-      sections.push(`
-        <div class="wb-note">
-          <div class="wb-kicker">Replacement Queue Ledger</div>
-          <div class="wb-table-wrap">
-            <table>
-              <thead><tr><th>Title</th><th>Status</th><th>Issue</th></tr></thead>
-              <tbody>
-                ${queueItems.map(item => `
-                  <tr>
-                    <td>${escapeHtml(item.title ? `${item.title}${item.year ? ` (${item.year})` : ''}` : titleFromPath(item.original_path || ''))}</td>
-                    <td><span class="wb-chip ${escapeHtml(item.status === 'completed' ? 'safe' : item.status === 'deleted' ? 'review' : 'meta')}">${escapeHtml(item.status || 'pending')}</span></td>
-                    <td>${escapeHtml(item.issue_family || 'weak_encode')}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `);
-    }
-    if (subtitleItems.length) {
-      sections.push(`
-        <div class="wb-note">
-          <div class="wb-kicker">Subtitle History</div>
-          <div class="wb-table-wrap">
-            <table>
-              <thead><tr><th>Title</th><th>Issue</th><th>Type</th></tr></thead>
-              <tbody>
-                ${subtitleItems.map(item => `
-                  <tr>
-                    <td>${escapeHtml(item.title ? `${item.title}${item.year ? ` (${item.year})` : ''}` : titleFromPath(item.path || ''))}</td>
-                    <td>${escapeHtml(humanSubtitleReadinessIssueLabel(item.issue_code || ''))}</td>
-                    <td><span class="wb-chip ${escapeHtml(item.entry_type === 'fixed' ? 'safe' : 'review')}">${escapeHtml(item.entry_type === 'fixed' ? 'fixed' : 'review only')}</span></td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
         </div>
       `);
     }
@@ -1540,8 +1472,6 @@
       });
       if (state.page === 'dashboard' || state.page === 'quality' || state.page === 'fix_defaults') {
         state.results.profile = payload;
-        state.results.replacementQueue = payload.replacement_queue || state.results.replacementQueue;
-        if (state.page === 'fix_defaults' && state.fixDefaultsTab === 'subtitle') await syncSubtitleReviewOnlyHistory(payload);
       } else if (state.page === 'normalize') {
         state.results.normalize = payload;
       } else if (state.page === 'junk') {
@@ -1609,21 +1539,18 @@
     if (!window.confirm(`Permanently delete ${items.length} file${items.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
     setStatus(`Deleting ${items.length} file${items.length === 1 ? '' : 's'}…`, 'running');
     try {
-      const add = await fetchJson('/api/movies/replacement-queue/add', {
+      const paths = items.map(item => item.path).filter(Boolean);
+      const result = await fetchJson('/api/movies/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, mode: 'file', issue_family: state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio' ? 'audio_packaging' : 'weak_encode', items }),
+        body: JSON.stringify({ source, paths }),
       });
-      const itemIds = (add.added || []).map(item => item.item_id).filter(Boolean);
-      const result = await fetchJson('/api/movies/replacement-queue/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, item_ids: itemIds }),
-      });
-      state.results.replacementQueue = result;
-      if (state.results.profile) state.results.profile.replacement_queue = result;
+      if (state.results.profile) {
+        const deleted = new Set(result.deleted || []);
+        state.results.profile.movies = (state.results.profile.movies || []).filter(item => !deleted.has(item.path || ''));
+      }
       state.selectedReplacementPaths.clear();
-      addAuditEvent('replacement_delete', `Deleted ${result.deleted.length} file${result.deleted.length === 1 ? '' : 's'}`, `${result.skipped?.length || 0} skipped; replacement queue updated.`);
+      addAuditEvent('replacement_delete', `Deleted ${result.deleted.length} file${result.deleted.length === 1 ? '' : 's'}`, `${result.skipped?.length || 0} skipped.`);
       setStatus(`Deleted ${result.deleted.length} file${result.deleted.length === 1 ? '' : 's'}.`, 'idle');
       renderWorkbench();
     } catch (error) {
@@ -1645,8 +1572,6 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source, paths, drop_foreign_audio: dropForeignAudio }),
       });
-      if (state.results.profile) state.results.profile.replacement_queue = result.replacement_queue || state.results.profile.replacement_queue;
-      state.results.replacementQueue = result.replacement_queue || state.results.replacementQueue;
       state.selectedReplacementPaths.clear();
       addAuditEvent('audio_fix', `Repaired ${result.fixed?.length || 0} audio default${(result.fixed?.length || 0) === 1 ? '' : 's'}`, dropForeignAudio ? 'English default set; tagged foreign audio removed where possible.' : 'English default set.');
       setStatus(`Fixed ${result.fixed?.length || 0} file${(result.fixed?.length || 0) === 1 ? '' : 's'}.`, 'idle');
@@ -1676,7 +1601,6 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source, paths, issue_codes: issueCodes }),
       });
-      if (result.subtitle_history) state.subtitleHistory = result.subtitle_history;
       state.selectedReplacementPaths.clear();
       addAuditEvent('subtitle_fix', `Repaired ${result.fixed?.length || 0} subtitle default${(result.fixed?.length || 0) === 1 ? '' : 's'}`, `${result.skipped?.length || 0} skipped.`);
       setStatus(`Fixed ${result.fixed?.length || 0} file${(result.fixed?.length || 0) === 1 ? '' : 's'}.`, 'idle');
@@ -1715,24 +1639,6 @@
       renderWorkbench();
     } catch (error) {
       setStatus(error.message, 'error');
-    }
-  }
-
-  async function syncSubtitleReviewOnlyHistory(payload) {
-    const source = currentSource();
-    if (!source || !payload) return;
-    const items = (payload.movies || [])
-      .filter(item => movieSubtitleReadinessIssueCode(item) && !movieSubtitleReadinessIsRepairable(item))
-      .map(item => ({ path: item.path || '', issue_code: movieSubtitleReadinessIssueCode(item) }))
-      .filter(item => item.path);
-    try {
-      state.subtitleHistory = await fetchJson('/api/movies/subtitle-readiness/history/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, items }),
-      });
-    } catch (_error) {
-      state.subtitleHistory = null;
     }
   }
 

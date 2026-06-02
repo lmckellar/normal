@@ -6,8 +6,6 @@
       fixDefaultsTab: 'audio',
       movieAudioFixBusy: false,
       movieSubtitleFixBusy: false,
-      subtitleHistory: null,
-      subtitleHistoryFilter: 'all',
       movieStandardsEditorLabel: '',
       movieStandardsSaveBusy: false,
       movieProfileInspectorLabel: '',
@@ -27,7 +25,7 @@
       selectedNormalizeResultIds: new Set(),
       movieNamingStyle: 'concise',
       results: {
-        movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null, replacementQueue: null, replacementQueueSource: '' }
+        movies: { profile: null, canonical: null, normalize: null, apply: null, junk: null }
       }
     };
 
@@ -101,14 +99,6 @@
     let _movieCanonicalListsCache = (() => {
       try {
         const cache = JSON.parse(localStorage.getItem('n_movie_canonical_lists_cache_v3') || '{}');
-        return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
-      } catch {
-        return {};
-      }
-    })();
-    let _movieReplacementQueueCache = (() => {
-      try {
-        const cache = JSON.parse(localStorage.getItem('n_movie_replacement_queue_cache') || '{}');
         return cache && typeof cache === 'object' && !Array.isArray(cache) ? cache : {};
       } catch {
         return {};
@@ -310,10 +300,6 @@
       try { localStorage.setItem('n_movie_canonical_lists_cache_v3', JSON.stringify(_movieCanonicalListsCache)); } catch {}
     }
 
-    function persistMovieReplacementQueueCache() {
-      try { localStorage.setItem('n_movie_replacement_queue_cache', JSON.stringify(_movieReplacementQueueCache)); } catch {}
-    }
-
     function dashboardCacheKey(source) {
       return source || '';
     }
@@ -331,7 +317,6 @@
       _movieDashboardCache[dashboardCacheKey(payload.source_root)] = {
         source_root: payload.source_root,
         histogram: payload.histogram,
-        replacement_queue: payload.replacement_queue || null,
         movie_standards: payload.movie_standards || null,
         movie_standards_revision: payload.movie_standards_revision || '',
         quality_profile_definitions: payload.quality_profile_definitions || [],
@@ -358,29 +343,6 @@
       persistMovieCanonicalListsCache();
     }
 
-    function cacheMovieReplacementQueue(queue) {
-      if (!queue || !queue.source_root || !Array.isArray(queue.items)) return;
-      _movieReplacementQueueCache[dashboardCacheKey(queue.source_root)] = {
-        source_root: queue.source_root,
-        issue_family: queue.issue_family || null,
-        items: queue.items,
-        cached_at: new Date().toISOString()
-      };
-      _movieReplacementQueueCache = trimDashboardCache(_movieReplacementQueueCache);
-      persistMovieReplacementQueueCache();
-    }
-
-    function cachedMovieReplacementQueue(source) {
-      const cached = _movieReplacementQueueCache[dashboardCacheKey(source)];
-      if (!cached || !Array.isArray(cached.items)) return null;
-      return {
-        source_root: cached.source_root || source,
-        issue_family: cached.issue_family || null,
-        generated_at: cached.cached_at || new Date().toISOString(),
-        items: cached.items
-      };
-    }
-
     function cachedMovieDashboard(source) {
       const cached = _movieDashboardCache[dashboardCacheKey(source)];
       if (!cached || !cached.histogram) return null;
@@ -388,7 +350,6 @@
         source_root: cached.source_root || source,
         histogram: cached.histogram,
         dashboard_snapshot_only: true,
-        replacement_queue: cached.replacement_queue || null,
         movie_standards: cached.movie_standards || null,
         movie_standards_revision: cached.movie_standards_revision || '',
         quality_profile_definitions: cached.quality_profile_definitions || [],
@@ -428,11 +389,6 @@
       const cached = cachedMovieDashboard(source);
       if (!cached) return null;
       state.results.movies.profile = cached;
-      if (cached.replacement_queue) {
-        state.results.movies.replacementQueue = cached.replacement_queue;
-        state.results.movies.replacementQueueSource = cached.source_root || '';
-        cacheMovieReplacementQueue(cached.replacement_queue);
-      }
       return cached;
     }
 
@@ -440,17 +396,6 @@
       const cached = cachedMovieCanonicalLists(source);
       if (!cached) return null;
       state.results.movies.canonical = cached;
-      return cached;
-    }
-
-    function restoreCachedMovieReplacementQueue(source) {
-      const cached = cachedMovieReplacementQueue(source);
-      if (!cached) return null;
-      state.results.movies.replacementQueue = cached;
-      state.results.movies.replacementQueueSource = cached.source_root || source;
-      if (state.results.movies.profile && state.results.movies.profile.source_root === (cached.source_root || source)) {
-        state.results.movies.profile.replacement_queue = cached;
-      }
       return cached;
     }
 
@@ -944,17 +889,7 @@
         if (['library', 'quality', 'fix_defaults', 'compatibility'].includes(page)) {
           state.results.movies.profile = payload;
           cacheMovieDashboard(payload);
-          if (payload.replacement_queue) {
-            state.results.movies.replacementQueue = payload.replacement_queue;
-            state.results.movies.replacementQueueSource = payload.source_root || '';
-            cacheMovieReplacementQueue(payload.replacement_queue);
-          }
           state.selectedReplacementPaths.clear();
-          if (page === 'fix_defaults' && state.fixDefaultsTab === 'subtitle') {
-            state.subtitleHistory = null;
-            state.subtitleHistoryFilter = 'all';
-            syncSubtitleReviewOnlyHistory(payload);
-          }
         }
         if (page === 'canonical_lists') {
           state.results.movies.canonical = payload;
@@ -1012,13 +947,10 @@
         return;
       }
       if (page === 'quality') {
-        loadMovieReplacementQueue();
         renderMovieQuality(profile);
         return;
       }
       if (page === 'fix_defaults') {
-        if (state.fixDefaultsTab === 'audio') loadMovieReplacementQueue();
-        else if (!state.subtitleHistory) syncSubtitleReviewOnlyHistory(profile);
         renderMovieFixDefaults(profile);
         return;
       }
@@ -1028,37 +960,8 @@
       }
     }
 
-    async function loadMovieReplacementQueue(force = false) {
-      const source = sourceInput.value.trim();
-      if (!source) {
-        renderReplacementQueueDetail(state.results.movies.profile);
-        return;
-      }
-      if (!force && !state.results.movies.replacementQueue) {
-        restoreCachedMovieReplacementQueue(source);
-      }
-      if (!force && state.results.movies.replacementQueue && state.results.movies.replacementQueueSource === source) {
-        renderReplacementQueueDetail(state.results.movies.profile);
-        return;
-      }
-      try {
-        const response = await fetch('/api/movies/replacement-queue/list', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Queue load failed.');
-        state.results.movies.replacementQueue = result;
-        state.results.movies.replacementQueueSource = source;
-        cacheMovieReplacementQueue(result);
-        if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
-        if (state.page === 'quality' && state.results.movies.profile) renderMovieQuality(state.results.movies.profile);
-        else if (state.page === 'fix_defaults' && state.results.movies.profile) renderMovieFixDefaults(state.results.movies.profile);
-        else renderReplacementQueueDetail(state.results.movies.profile);
-      } catch (error) {
-        detailPanel.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`;
-      }
+    async function loadMovieReplacementQueue(_force = false) {
+      renderReplacementQueueDetail(state.results.movies.profile);
     }
 
     function buildBitrateChart(dist, title) {
@@ -1418,8 +1321,6 @@
           state.qualitySort = { col: null, dir: 'asc' };
           state.subtitleSort = { col: null, dir: 'asc' };
           state.selectedReplacementPaths.clear();
-          if (state.fixDefaultsTab === 'audio') loadMovieReplacementQueue();
-          else syncSubtitleReviewOnlyHistory(payload);
           renderMovieFixDefaults(payload);
         });
       });
@@ -2212,107 +2113,38 @@
     }
 
     function renderSubtitleReadinessDetail(payload) {
-      const history = state.subtitleHistory;
-      const historyItems = history ? (history.items || []) : null;
-      const activeItems = historyItems ? historyItems.filter(i => !i.dismissed_at) : null;
-      const filter = state.subtitleHistoryFilter || 'all';
-      const filteredItems = activeItems ? activeItems.filter(i => {
-        if (filter === 'fixed') return i.entry_type === 'fixed';
-        if (filter === 'review_only') return i.entry_type === 'review_only';
-        return true;
-      }) : null;
-      const hasHistory = activeItems && activeItems.length > 0;
-      const filterButtons = hasHistory ? `
-        <div class="page-nav">
-          ${[['all', 'All'], ['fixed', 'Fixed'], ['review_only', 'Review Only']].map(([id, label]) =>
-            `<button class="filter-button subtitle-history-filter ${filter === id ? 'active' : ''}" data-history-filter="${id}">${label}</button>`
-          ).join('')}
-        </div>
-      ` : '';
-      const tableHtml = filteredItems && filteredItems.length
-        ? buildSubtitleHistoryTable(filteredItems)
-        : (hasHistory ? '<div class="empty">No items matching this filter.</div>' : null);
-      if (!historyItems) {
-        detailPanel.innerHTML = '<div class="empty">No subtitle history yet.</div>';
-      } else if (!hasHistory) {
-        detailPanel.innerHTML = '<div class="empty">No subtitle history yet.</div>';
-      } else {
-        detailPanel.innerHTML = `
-          <div style="font-weight:600;margin:10px 0 6px">Subtitle History</div>
-          ${filterButtons}
-          ${tableHtml || ''}
-        `;
-        attachSubtitleHistoryHandlers(payload);
+      if (!payload) {
+        detailPanel.innerHTML = '<div class="empty">Run Movies / Repair Defaults to inspect subtitle repair consequences.</div>';
+        return;
       }
-    }
-
-    function attachSubtitleHistoryHandlers(payload) {
-      document.querySelectorAll('.subtitle-history-dismiss').forEach(button => {
-        button.addEventListener('click', () => dismissSubtitleHistoryItem(button.dataset.itemId, payload));
-      });
-      document.querySelectorAll('.subtitle-history-filter').forEach(button => {
-        button.addEventListener('click', () => {
-          state.subtitleHistoryFilter = button.dataset.historyFilter || 'all';
-          renderSubtitleReadinessDetail(payload);
-        });
-      });
-    }
-
-    async function syncSubtitleReviewOnlyHistory(payload) {
-      const source = sourceInput.value.trim();
-      if (!source || !payload) return;
-      const reviewOnlyItems = reviewOnlySubtitleReadinessMovies(payload);
-      const items = reviewOnlyItems.map(item => ({
-        path: item.path || '',
-        issue_code: movieSubtitleReadinessIssueCode(item),
-      })).filter(i => i.path);
-      try {
-        const response = await fetch('/api/movies/subtitle-readiness/history/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, items }),
-        });
-        if (!response.ok) return;
-        const history = await response.json();
-        state.subtitleHistory = history;
-        renderSubtitleReadinessDetail(payload);
-      } catch (_) {}
-    }
-
-    async function dismissSubtitleHistoryItem(itemId, payload) {
-      const source = sourceInput.value.trim();
-      if (!source || !itemId) return;
-      try {
-        const response = await fetch('/api/movies/subtitle-readiness/history/dismiss', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, item_ids: [itemId] }),
-        });
-        if (!response.ok) return;
-        const history = await response.json();
-        state.subtitleHistory = history;
-        renderSubtitleReadinessDetail(payload);
-      } catch (_) {}
+      const visible = filteredSubtitleReadinessMovies(payload);
+      const repairable = visible.filter(item => movieSubtitleReadinessIsRepairable(item)).length;
+      const reviewOnly = visible.length - repairable;
+      detailPanel.innerHTML = `
+        <div class="finding">
+          <h3>Subtitle Readiness</h3>
+          <p>${repairable} repairable issue${repairable === 1 ? '' : 's'} from current diagnostics.</p>
+          <p>${reviewOnly} review-only issue${reviewOnly === 1 ? '' : 's'} stay visible until the next scan resolves them.</p>
+          <p class="subtle">No durable subtitle history is recorded in this flow.</p>
+        </div>
+      `;
     }
 
     function currentMovieReplacementQueue(payload) {
-      return payload?.replacement_queue || state.results.movies.replacementQueue || null;
+      void payload;
+      return null;
     }
 
     function replacementQueueItemForPath(payload, path, issueFamily = activeMovieTriageFamily()) {
-      if (!path) return null;
-      return movieQueueItemsForFamily(payload, issueFamily).find(item =>
-        item.original_path === path && ['pending', 'deleted', 'completed'].includes(item.status)
-      ) || null;
+      void payload;
+      void path;
+      void issueFamily;
+      return null;
     }
 
     function replacementQueueStatusChip(item) {
-      if (!item) return '<span class="subtle">—</span>';
-      if (item.status === 'pending') return '<span class="chip meta">queued</span>';
-      if (item.status === 'deleted') return '<span class="chip review">deleted, waiting replacement</span>';
-      if (item.status === 'dismissed') return '<span class="chip meta">deleted from queue</span>';
-      if (item.status === 'completed') return '<span class="chip safe">replaced</span>';
-      return '<span class="subtle">—</span>';
+      void item;
+      return '<span class="subtle">direct action</span>';
     }
 
     function buildPendingReplacementTable(items) {
@@ -2512,36 +2344,37 @@
     }
 
     function renderReplacementQueueDetail(payload) {
-      const queue = currentMovieReplacementQueue(payload);
-      const queueItems = isMovieTriagePage() ? movieQueueItemsForFamily(payload, activeMovieTriageFamily()) : (queue?.items || []);
-      const headingPrefix = isMovieTriagePage() ? `${activeMovieTriageFamilyLabel()} ` : '';
-      const pending = queueItems.filter(item => item.status === 'pending');
-      const allHistoryItems = queueItems.filter(item => ['deleted', 'dismissed', 'completed'].includes(item.status));
-      const filteredHistoryItems = allHistoryItems.filter(item => {
-        if (state.replacementHistoryFilter === 'all') return true;
-        if (state.replacementHistoryFilter === 'dismissed') return item.status === 'dismissed';
-        return state.replacementHistoryFilter === 'completed' ? item.status === 'completed' : item.status === 'deleted';
-      });
-      const source = sourceInput.value.trim() || queue?.source_root || '';
-      const pendingRows = pending.length ? buildPendingReplacementTable(pending) : '';
-      const hasHistory = allHistoryItems.length > 0;
-      const filterButtons = hasHistory ? `
-        <div class="page-nav">
-          ${[
-            ['deleted', 'Deleted, Awaiting Replacement'],
-            ['completed', 'Replaced'],
-            ['dismissed', 'Deleted From Queue'],
-            ['all', 'All Items']
-          ].map(([id, label]) => `<button class="filter-button replacement-history-filter ${state.replacementHistoryFilter === id ? 'active' : ''}" data-history-filter="${id}">${label}</button>`).join('')}
-        </div>
-      ` : '';
-      const historyTable = filteredHistoryItems.length ? buildReplacementHistoryTable(filteredHistoryItems) : `<div class="empty">No ${escapeHtml(replacementHistoryFilterLabel(state.replacementHistoryFilter).toLowerCase())} items in the replacement queue.</div>`;
-      detailPanel.innerHTML = `
-        ${pendingRows ? `<div style="font-weight:600;margin:10px 0 6px">${escapeHtml(headingPrefix)}Pending Delete</div>${pendingRows}` : ''}
-        ${hasHistory ? `<div style="font-weight:600;margin:10px 0 6px">${escapeHtml(headingPrefix)}Replacement History</div>${filterButtons}${historyTable}` : ''}
-        ${!pendingRows && !hasHistory ? '<div class="empty">No items in the replacement queue.</div>' : ''}
-      `;
-      attachReplacementQueueDetailHandlers();
+      if (!payload) {
+        detailPanel.innerHTML = '<div class="empty">Run the current page to inspect direct mutation consequences.</div>';
+        return;
+      }
+      if (state.page === 'quality') {
+        const candidates = strictWeakMovies(payload);
+        const selected = candidates.filter(item => state.selectedReplacementPaths.has(item.path || '')).length;
+        detailPanel.innerHTML = `
+          <div class="finding">
+            <h3>Weak Encode Delete</h3>
+            <p>${candidates.length} current strict weak candidate${candidates.length === 1 ? '' : 's'}.</p>
+            <p>${selected} selected for direct delete preview.</p>
+            <p class="subtle">No replacement backlog or durable history is stored.</p>
+          </div>
+        `;
+        return;
+      }
+      if (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio') {
+        const items = filteredAudioPackagingMovies(payload);
+        const selected = items.filter(item => state.selectedReplacementPaths.has(item.path || '')).length;
+        detailPanel.innerHTML = `
+          <div class="finding">
+            <h3>Audio Packaging</h3>
+            <p>${items.length} current audio-packaging issue${items.length === 1 ? '' : 's'}.</p>
+            <p>${selected} selected for repair or direct delete.</p>
+            <p class="subtle">Selections depend only on current diagnostics.</p>
+          </div>
+        `;
+        return;
+      }
+      detailPanel.innerHTML = '<div class="empty">No direct mutation detail for this page.</div>';
     }
 
     function buildMovieDashboard(payload) {
@@ -2585,21 +2418,9 @@
 
       const profileCounts = histogram.profile_counts || {};
       const qualityProfileCounts = histogram.quality_profile_counts || {};
-      const queueItems = (currentMovieReplacementQueue(payload)?.items || []);
-      const deletedAwaitingReplacementCount = queueItems.filter(item => item.status === 'deleted').length;
       const definitions = Array.isArray(payload.quality_profile_definitions) ? payload.quality_profile_definitions : [];
       const replacementCandidateDefinition = payload.replacement_candidate_definition || null;
-      const replacementQueueCard = deletedAwaitingReplacementCount ? [[
-        'deleted_awaiting_replacement',
-        deletedAwaitingReplacementCount,
-        {
-          group: 'Action Based',
-          name: 'Deleted, Awaiting Replacement',
-          pctLabel: 'from Replacement Queue'
-        }
-      ]] : [];
       const actionCards = [
-        ...replacementQueueCard,
         [
           'replacement_candidate',
           profileCounts.replacement_candidate || 0,
@@ -3347,7 +3168,7 @@
       if (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio') {
         return items.filter(item => item.path && movieMatchesActiveTriageFamily(item));
       }
-      return items.filter(item => item.path && movieMatchesActiveTriageFamily(item) && !replacementQueueItemForPath(payload, item.path));
+      return items.filter(item => item.path && movieMatchesActiveTriageFamily(item));
     }
 
     function selectedVisibleSubtitleRepairCount(payload, items) {
@@ -3469,68 +3290,7 @@
       });
     }
 
-    function attachReplacementQueueDetailHandlers() {
-      document.querySelectorAll('.replacement-delete').forEach(button => {
-        button.addEventListener('click', () => deleteReplacementMedia([button.dataset.itemId]));
-      });
-      document.querySelectorAll('.replacement-history-remove').forEach(button => {
-        button.addEventListener('click', () => {
-          const itemIds = (button.dataset.itemIds || '').split(',').filter(Boolean);
-          dismissReplacementQueueItems(itemIds);
-        });
-      });
-      document.querySelectorAll('.replacement-history-filter').forEach(button => {
-        button.addEventListener('click', () => {
-          state.replacementHistoryFilter = button.dataset.historyFilter || 'deleted';
-          state.replacementHistorySort = { col: null, dir: 'asc' };
-          renderReplacementQueueDetail(state.results.movies.profile);
-        });
-      });
-      document.querySelectorAll('.replacement-history-sort-th').forEach(th => {
-        th.addEventListener('click', () => {
-          const col = th.dataset.sortCol;
-          if (state.replacementHistorySort.col === col) {
-            state.replacementHistorySort.dir = state.replacementHistorySort.dir === 'asc' ? 'desc' : 'asc';
-          } else {
-            state.replacementHistorySort = { col, dir: col === 'imdb' ? 'desc' : 'asc' };
-          }
-          renderReplacementQueueDetail(state.results.movies.profile);
-        });
-      });
-    }
-
-    async function queueSelectedReplacements(mode) {
-      const source = sourceInput.value.trim();
-      const payload = state.results.movies.profile;
-      const issueFamily = activeMovieTriageFamily();
-      if (!source || !payload) return;
-      const items = (payload.movies || []).filter(item =>
-        state.selectedReplacementPaths.has(item.path || '') &&
-        movieMatchesActiveTriageFamily(item) &&
-        !replacementQueueItemForPath(payload, item.path || '', issueFamily)
-      );
-      if (!items.length) return;
-      setStatus(`Queueing ${items.length} replacement item${items.length === 1 ? '' : 's'}…`, 'running');
-      try {
-        const response = await fetch('/api/movies/replacement-queue/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, mode, issue_family: issueFamily, items })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Queue failed.');
-        state.results.movies.replacementQueue = result;
-        state.results.movies.replacementQueueSource = source;
-        cacheMovieReplacementQueue(result);
-        if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
-        state.selectedReplacementPaths.clear();
-        const skipped = result.skipped?.length || 0;
-        setStatus(`Queued ${result.added.length} item${result.added.length === 1 ? '' : 's'}${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
-        rerenderActiveMovieTriagePage(state.results.movies.profile);
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    }
+    function attachReplacementQueueDetailHandlers() {}
 
     function applyUpdatedMovieProfileItems(payload, updatedItems) {
       if (!payload || !Array.isArray(payload.movies) || !Array.isArray(updatedItems) || !updatedItems.length) return;
@@ -3651,7 +3411,6 @@
       }
       const source = sourceInput.value.trim();
       const payload = state.results.movies.profile;
-      const issueFamily = activeMovieTriageFamily();
       if (!source || !payload) return;
       const items = (payload.movies || []).filter(item =>
         state.selectedReplacementPaths.has(item.path || '') &&
@@ -3662,36 +3421,20 @@
       if (!window.confirm(message)) return;
       setStatus(`Deleting ${items.length} file${items.length === 1 ? '' : 's'}…`, 'running');
       try {
-        const existingPendingIds = items.map(item => replacementQueueItemForPath(payload, item.path || '', issueFamily))
-          .filter(item => item && item.status === 'pending')
-          .map(item => item.item_id)
-          .filter(Boolean);
-        const newItems = items.filter(item => !replacementQueueItemForPath(payload, item.path || '', issueFamily));
-        let itemIds = [...existingPendingIds];
-        if (newItems.length) {
-          const addResponse = await fetch('/api/movies/replacement-queue/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ source, mode: 'file', issue_family: issueFamily, items: newItems })
-          });
-          const addResult = await addResponse.json();
-          if (!addResponse.ok) throw new Error(addResult.error || 'Queue failed.');
-          itemIds = itemIds.concat((addResult.added || []).map(i => i.item_id).filter(Boolean));
-        }
-        if (!itemIds.length) { setStatus('Nothing to delete.', 'idle'); return; }
-        const delResponse = await fetch('/api/movies/replacement-queue/delete', {
+        const paths = items.map(item => item.path).filter(Boolean);
+        if (!paths.length) { setStatus('Nothing to delete.', 'idle'); return; }
+        const delResponse = await fetch('/api/movies/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, item_ids: itemIds })
+          body: JSON.stringify({ source, paths })
         });
         const delResult = await delResponse.json();
         if (!delResponse.ok) throw new Error(delResult.error || 'Delete failed.');
-        state.results.movies.replacementQueue = delResult;
-        state.results.movies.replacementQueueSource = source;
-        cacheMovieReplacementQueue(delResult);
         if (state.results.movies.profile) {
-          state.results.movies.profile.replacement_queue = delResult;
-          removeDeletedMovieProfileItems(state.results.movies.profile, delResult.deleted || []);
+          removeDeletedMovieProfileItems(
+            state.results.movies.profile,
+            (delResult.deleted || []).map(path => ({ path })),
+          );
           await refreshMovieDashboardHistogram(state.results.movies.profile);
         }
         state.selectedReplacementPaths.clear();
@@ -3733,11 +3476,7 @@
         });
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Audio fix failed.');
-        state.results.movies.replacementQueue = result.replacement_queue || state.results.movies.replacementQueue;
-        state.results.movies.replacementQueueSource = source;
-        if (result.replacement_queue) cacheMovieReplacementQueue(result.replacement_queue);
         if (state.results.movies.profile) {
-          state.results.movies.profile.replacement_queue = result.replacement_queue || state.results.movies.profile.replacement_queue;
           applyUpdatedMovieProfileItems(state.results.movies.profile, result.updated_items || []);
           await refreshMovieDashboardHistogram(state.results.movies.profile);
         }
@@ -3783,7 +3522,6 @@
           await refreshMovieDashboardHistogram(state.results.movies.profile);
         }
         state.selectedReplacementPaths.clear();
-        if (result.subtitle_history) state.subtitleHistory = result.subtitle_history;
         setStatus(summarizeSubtitleFixResult(result), 'idle');
       } catch (error) {
         setStatus(error.message, 'error');
@@ -3793,82 +3531,9 @@
       }
     }
 
-    async function deleteReplacementMedia(itemIds) {
-      const queue = currentMovieReplacementQueue(state.results.movies.profile);
-      const source = sourceInput.value.trim() || queue?.source_root || '';
-      if (!source) {
-        setStatus('Choose a source directory before deleting replacement media.', 'error');
-        return;
-      }
-      if (!itemIds.length) {
-        setStatus('No pending replacement media is selected for deletion.', 'error');
-        return;
-      }
-      const message = `Delete media for ${itemIds.length} replacement queue item${itemIds.length === 1 ? '' : 's'}? This cannot be undone.`;
-      if (!window.confirm(message)) return;
-      setStatus(`Deleting ${itemIds.length} replacement queue item${itemIds.length === 1 ? '' : 's'}…`, 'running');
-      try {
-        const response = await fetch('/api/movies/replacement-queue/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, item_ids: itemIds })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Delete failed.');
-        state.results.movies.replacementQueue = result;
-        state.results.movies.replacementQueueSource = source;
-        cacheMovieReplacementQueue(result);
-        if (state.results.movies.profile) {
-          state.results.movies.profile.replacement_queue = result;
-          removeDeletedMovieProfileItems(state.results.movies.profile, result.deleted || []);
-          await refreshMovieDashboardHistogram(state.results.movies.profile);
-        }
-        const skipped = result.skipped?.length || 0;
-        const sidecars = result.cleaned_sidecars?.length || 0;
-        const folders = result.removed_folders?.length || 0;
-        const cleanup = sidecars || folders ? `; cleaned ${sidecars} sidecar${sidecars === 1 ? '' : 's'}${folders ? ` and ${folders} folder${folders === 1 ? '' : 's'}` : ''}` : '';
-        setStatus(`Deleted ${result.deleted.length} item${result.deleted.length === 1 ? '' : 's'}${cleanup}${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
-        if (state.page === 'quality' || (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio')) rerenderActiveMovieTriagePage(state.results.movies.profile);
-        else renderReplacementQueueDetail(state.results.movies.profile);
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    }
+    async function deleteReplacementMedia(_itemIds) {}
 
-    async function dismissReplacementQueueItems(itemIds) {
-      const queue = currentMovieReplacementQueue(state.results.movies.profile);
-      const source = sourceInput.value.trim() || queue?.source_root || '';
-      if (!source) {
-        setStatus('Choose a source directory before removing items from the replacement queue.', 'error');
-        return;
-      }
-      if (!itemIds.length) {
-        setStatus('No deleted replacement queue items are selected for removal.', 'error');
-        return;
-      }
-      const message = `Remove ${itemIds.length} replacement queue item${itemIds.length === 1 ? '' : 's'} from history? This will not delete media.`;
-      if (!window.confirm(message)) return;
-      setStatus(`Removing ${itemIds.length} replacement queue item${itemIds.length === 1 ? '' : 's'} from history…`, 'running');
-      try {
-        const response = await fetch('/api/movies/replacement-queue/dismiss', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, item_ids: itemIds })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Queue removal failed.');
-        state.results.movies.replacementQueue = result;
-        state.results.movies.replacementQueueSource = source;
-        cacheMovieReplacementQueue(result);
-        if (state.results.movies.profile) state.results.movies.profile.replacement_queue = result;
-        const skipped = result.skipped?.length || 0;
-        setStatus(`Removed ${result.dismissed.length} item${result.dismissed.length === 1 ? '' : 's'} from the replacement queue${skipped ? `; skipped ${skipped}` : ''}.`, 'idle');
-        if (state.page === 'quality' || (state.page === 'fix_defaults' && state.fixDefaultsTab === 'audio')) rerenderActiveMovieTriagePage(state.results.movies.profile);
-        else renderReplacementQueueDetail(state.results.movies.profile);
-      } catch (error) {
-        setStatus(error.message, 'error');
-      }
-    }
+    async function dismissReplacementQueueItems(_itemIds) {}
 
     function buildMovieMetrics(payload) {
       if (!payload) return [];

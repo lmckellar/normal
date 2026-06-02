@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from http.server import ThreadingHTTPServer
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from normal.web import (
     build_handler,
@@ -53,7 +54,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("Total size: ${payload.total_size_label}", FRONTEND)
         self.assertIn("Only run one heavy scan for this source at a time.", FRONTEND)
 
-    def test_web_runtime_keys_are_available_before_initial_render(self) -> None:
+    def test_legacy_dashboard_runtime_keys_are_available_before_initial_render(self) -> None:
         html = render_index_html(Path("/library/movies"), omdb_key="omdb-test", tmdb_key="tmdb-test")
         self.assertIn('<link rel="stylesheet" href="/assets/app.css">', html)
         self.assertIn('<script src="/assets/app.js"></script>', html)
@@ -101,7 +102,18 @@ class WebTests(unittest.TestCase):
         self.assertIn("Book Style Alt Design UI", html)
         self.assertIn("/book-style-alt-design-ui-assets/workbench.js", html)
 
-    def test_normalize_lab_route_serves_internal_ui(self) -> None:
+    def test_root_route_serves_default_workbench(self) -> None:
+        with self.run_test_server() as base_url:
+            with urllib.request.urlopen(base_url) as response:
+                served = response.read().decode("utf-8")
+            with urllib.request.urlopen(f"{base_url}/index.html") as response:
+                served_index = response.read().decode("utf-8")
+        self.assertIn("normal workbench", served)
+        self.assertIn("/parser-tester-ui-assets/normalize_lab.js", served)
+        self.assertIn("Movie Normalize", served)
+        self.assertEqual(served, served_index)
+
+    def test_normalize_lab_route_serves_default_ui_alias(self) -> None:
         html = render_normalize_lab_html(Path("/library/movies"))
         self.assertIn('/parser-tester-ui-assets/normalize_lab.css', html)
         self.assertIn('/parser-tester-ui-assets/normalize_lab.js', html)
@@ -116,10 +128,10 @@ class WebTests(unittest.TestCase):
         with self.run_test_server() as base_url:
             with urllib.request.urlopen(f"{base_url}/parser-tester-ui") as response:
                 served = response.read().decode("utf-8")
-        self.assertIn("Parser Testing UI", served)
-        self.assertIn("Weak Encodes Testing UI", served)
-        self.assertIn("Repair Defaults Testing UI", served)
-        self.assertIn("Delete Junk &amp; Spam Files", served)
+        self.assertIn("Movie Normalize", served)
+        self.assertIn("Weak Encodes", served)
+        self.assertIn("Repair Defaults", served)
+        self.assertIn("Delete Junk &amp; Spam", served)
         self.assertIn("Confirm (0 Operations)", served)
 
     def test_normalize_lab_export_endpoint_is_removed(self) -> None:
@@ -232,91 +244,29 @@ class WebTests(unittest.TestCase):
         self.assertIn("id: 'junk'", FRONTEND)
         self.assertIn("endpoint: '/api/movies/junk'", FRONTEND)
         self.assertIn("'/api/movies/junk/delete'", FRONTEND)
-        self.assertIn("junk: null,", FRONTEND)
-        self.assertIn("if (page === 'junk') {\n          state.results.movies.junk = payload;", FRONTEND)
+        self.assertIn("state.results.movies.junk = payload;", FRONTEND)
         self.assertIn("renderMovieJunk(state.results.movies.junk);", FRONTEND)
         self.assertNotIn("id: 'promo'", FRONTEND)
         self.assertNotIn("endpoint: '/api/movies/promo-docs'", FRONTEND)
 
-    def test_movie_replacement_queue_is_wired_inside_weak_encodes(self) -> None:
-        self.assertIn("Replacement Queue", FRONTEND)
-        self.assertIn("Replacement Queue · Weak Encode", FRONTEND)
-        self.assertIn("Replacement Queue · Audio Packaging", FRONTEND)
-        self.assertIn("pending delete", FRONTEND)
-        self.assertIn("deleted and waiting replacement", FRONTEND)
-        self.assertIn("deleted, waiting replacement", FRONTEND)
-        self.assertIn("successfully replaced", FRONTEND)
-        self.assertIn("deleted from queue", FRONTEND)
-        self.assertIn("Replacement History", FRONTEND)
-        self.assertIn("Deleted, Awaiting Replacement", FRONTEND)
-        self.assertIn("Replaced", FRONTEND)
-        self.assertIn("Deleted From Queue", FRONTEND)
-        self.assertIn("All Items", FRONTEND)
-        self.assertIn("queue-list", FRONTEND)
-        self.assertIn("queue-list-row", FRONTEND)
-        self.assertIn("Select All", FRONTEND)
-        self.assertIn("Deselect All", FRONTEND)
-        self.assertIn("toggleAllReplacementButton", FRONTEND)
-        self.assertNotIn("selectAllReplacementButton", FRONTEND)
-        self.assertNotIn("deselectAllReplacementButton", FRONTEND)
+    def test_movie_delete_flows_are_direct_in_weak_encodes(self) -> None:
         self.assertIn("Delete Selected Files", FRONTEND)
-        self.assertNotIn("Queue selected folders", FRONTEND)
-        self.assertNotIn("queueReplacementFoldersButton", FRONTEND)
         self.assertIn("renderReplacementQueueDetail", FRONTEND)
-        self.assertIn("function buildPendingReplacementTable", FRONTEND)
-        self.assertIn("function buildReplacementHistoryTable", FRONTEND)
-        self.assertIn("function groupedReplacementHistoryItems", FRONTEND)
-        self.assertIn("replacementHistoryFilter: 'deleted'", FRONTEND)
-        self.assertIn("replacementHistorySort: { col: null, dir: 'asc' }", FRONTEND)
-        self.assertIn("original_folder_path", FRONTEND)
-        self.assertIn("['seq','#'],['title','Title'],['year','Year'],['count','Count']", FRONTEND)
-        self.assertIn("<th>Movie Title</th><th>Issue</th><th>Resolution</th><th>Video Bitrate</th><th>Action</th>", FRONTEND)
-        self.assertIn("attachReplacementQueueDetailHandlers();", FRONTEND)
-        self.assertIn("function attachReplacementQueueDetailHandlers", FRONTEND)
-        self.assertNotIn("buildReplacementQueueSection", FRONTEND)
-        self.assertIn("current directory's Replacement Queue", FRONTEND)
-        self.assertIn("'/api/movies/replacement-queue/list'", FRONTEND)
-        self.assertIn("n_movie_replacement_queue_cache", FRONTEND)
-        self.assertIn("function cacheMovieReplacementQueue(queue)", FRONTEND)
-        self.assertIn("function restoreCachedMovieReplacementQueue(source)", FRONTEND)
-        self.assertIn("restoreCachedMovieReplacementQueue(source);", FRONTEND)
-        self.assertIn("'/api/movies/replacement-queue/add'", FRONTEND)
-        self.assertIn("'/api/movies/replacement-queue/delete'", FRONTEND)
-        self.assertIn("'/api/movies/replacement-queue/dismiss'", FRONTEND)
-        self.assertIn("'/api/movies/omdb/ratings'", FRONTEND)
-        self.assertNotIn("www.omdbapi.com", FRONTEND)
-        self.assertIn("function replacementHistoryRatingCell", FRONTEND)
-        self.assertIn("IMDb limit reached. Cached ratings still show; new ratings retry later.", FRONTEND)
-        self.assertIn("return '<span class=\"subtle\">limit</span>';", FRONTEND)
         self.assertIn("function buildMovieQualityTable", FRONTEND)
         self.assertIn("function buildMovieAudioPackagingTable", FRONTEND)
         self.assertIn("function strictWeakMovies", FRONTEND)
         self.assertIn("function audioPackagingMovies", FRONTEND)
         self.assertIn("function activeMovieTriageFamily", FRONTEND)
-        self.assertIn("function replacementQueueItemForPath", FRONTEND)
-        self.assertIn("function replacementQueueStatusChip", FRONTEND)
-        self.assertIn("replacement-history-filter", FRONTEND)
-        self.assertIn("replacement-history-sort-th", FRONTEND)
-        self.assertIn("replacement-history-remove", FRONTEND)
-        self.assertIn("queue-inline-remove", FRONTEND)
-        self.assertIn("<th>Status</th>", FRONTEND)
-        self.assertIn("queued</span>", FRONTEND)
-        self.assertIn("Deleted, Waiting Replacement", FRONTEND)
-        self.assertIn("!replacementQueueItemForPath(payload, item.path)", FRONTEND)
+        self.assertIn("'/api/movies/delete'", FRONTEND)
+        self.assertNotIn("'/api/movies/replacement-queue/list'", FRONTEND)
+        self.assertNotIn("'/api/movies/replacement-queue/add'", FRONTEND)
+        self.assertNotIn("'/api/movies/replacement-queue/delete'", FRONTEND)
+        self.assertNotIn("'/api/movies/replacement-queue/dismiss'", FRONTEND)
+        self.assertNotIn("n_movie_replacement_queue_cache", FRONTEND)
         self.assertIn("button:disabled { opacity: 0.45; cursor: not-allowed; }", APP_CSS)
         self.assertIn("color: var(--ink);", APP_CSS.split("button {", 1)[1].split("}", 1)[0])
         self.assertIn("color: var(--ink);", APP_CSS.split(".page-button, .filter-button {", 1)[1].split("}", 1)[0])
         self.assertNotIn("cursor: progress", FRONTEND)
-        self.assertIn("const source = sourceInput.value.trim() || queue?.source_root || ''", FRONTEND)
-        self.assertIn("Choose a source directory before deleting replacement media.", FRONTEND)
-        self.assertIn("No pending replacement media is selected for deletion.", FRONTEND)
-        self.assertIn("Choose a source directory before removing items from the replacement queue.", FRONTEND)
-        self.assertIn("Remove from queue", FRONTEND)
-        self.assertIn("['file','profile','resolution','video_bitrate','audio_bitrate','audio_summary','file_size']", FRONTEND)
-        self.assertNotIn("Select strict weak", FRONTEND)
-        self.assertNotIn("['strict_weak', 'Strict Weak']", FRONTEND)
-        self.assertNotIn("<th>Inspect</th>", FRONTEND)
-        self.assertNotIn("inspect-movie", FRONTEND)
 
     def test_movie_audio_packaging_page_is_wired(self) -> None:
         self.assertIn("id: 'fix_defaults'", FRONTEND)
@@ -327,8 +277,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("wrong language · weak English", FRONTEND)
         self.assertIn("Wrong Default Language", FRONTEND)
         self.assertIn("Weak English Fallback", FRONTEND)
-        self.assertIn("issue_family: issueFamily", FRONTEND)
         self.assertIn("'/api/movies/audio-packaging/fix'", FRONTEND)
+        self.assertIn("'/api/movies/delete'", FRONTEND)
         self.assertIn("Set English Default", FRONTEND)
         self.assertIn("Set English Default + Drop Foreign", FRONTEND)
         self.assertIn("junk-actions audio-packaging-actions", FRONTEND)
@@ -362,8 +312,6 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("Replacement Queue · Subtitle Readiness", FRONTEND)
 
     def test_movie_dashboard_has_replacement_queue_summary_without_detail_pane(self) -> None:
-        self.assertIn("Deleted, Awaiting Replacement", FRONTEND)
-        self.assertIn("from Replacement Queue", FRONTEND)
         self.assertIn("Action Based", FRONTEND)
         self.assertIn("Quality Profile", FRONTEND)
         self.assertIn("Standard Definition", FRONTEND)
@@ -396,6 +344,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("function humanMovieProfileIssueLabel(code, summary = '')", FRONTEND)
         self.assertIn("Below Min. Video Bitrate", FRONTEND)
         self.assertIn("Main Audio Below ${threshold} Channels", FRONTEND)
+        self.assertNotIn("Deleted, Awaiting Replacement", FRONTEND)
+        self.assertNotIn("from Replacement Queue", FRONTEND)
         self.assertNotIn("Low confidence:", FRONTEND)
         self.assertIn("const qualityProfileCounts = histogram.quality_profile_counts || {};", FRONTEND)
         self.assertIn("const definitions = Array.isArray(payload.quality_profile_definitions) ? payload.quality_profile_definitions : [];", FRONTEND)
@@ -483,22 +433,24 @@ class WebTests(unittest.TestCase):
         self.assertIn("/api/movies/audio-packaging/fix", NORMALIZE_LAB_FRONTEND)
         self.assertIn("/api/movies/subtitle-readiness/fix", NORMALIZE_LAB_FRONTEND)
         self.assertIn("weak_floor: state.weakFloor", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("/api/movies/replacement-queue/delete-preview", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Parser Testing UI", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Weak Encodes Testing UI", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Repair Defaults Testing UI", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Delete Junk & Spam Files", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("/api/movies/delete-preview", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Movie Normalize", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Weak Encodes", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Repair Defaults", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Delete Junk & Spam", NORMALIZE_LAB_FRONTEND)
         self.assertIn("return workflow;", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Weak Floor of", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Repair Lane", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Audio Packaging", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Subtitle Readiness", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Set English Default", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Set English Default + Drop Foreign", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Delete Foreign Passenger Audio", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Do Both At Once", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Repair Subtitle Defaults", NORMALIZE_LAB_FRONTEND)
         self.assertIn("This page is non-destructive", NORMALIZE_LAB_FRONTEND)
         self.assertIn("wrong language · weak English", NORMALIZE_LAB_FRONTEND)
         self.assertIn("default_non_english_audio", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("selectable: Boolean(item.path) && Boolean(issueCode) && !repairDefaultsSelectionLocked()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("File Name", NORMALIZE_LAB_FRONTEND)
         self.assertIn("label: 'Confidence'", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function fileNameFromPath(path)", NORMALIZE_LAB_FRONTEND)
@@ -508,19 +460,21 @@ class WebTests(unittest.TestCase):
         self.assertIn("warning code", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Select all", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Deselect all", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Preview Scope", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Full library", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Repair action", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Run Repair", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Confirm (0 Operations)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Run Delete Junk & Spam Files", NORMALIZE_LAB_FRONTEND)
         self.assertIn("package cases", NORMALIZE_LAB_FRONTEND)
         self.assertIn("collision cases", NORMALIZE_LAB_FRONTEND)
         self.assertIn("artifact cleanup cases", NORMALIZE_LAB_FRONTEND)
         self.assertIn("subtitle-merge cases", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("state.previewMode = 'library';", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("state.previewMode = el.previewScopeSelect.value === 'library' ? 'library' : 'selected';", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function renderPreviewPane()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function renderPanelVisibility()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Below Min. Video Bitrate", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Main Audio Below ${threshold} Channels", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("lab-panel-title", NORMALIZE_LAB_FRONTEND)
         self.assertIn("LAYOUT_MODES", NORMALIZE_LAB_FRONTEND)
         self.assertIn("2-page-lopsided", NORMALIZE_LAB_FRONTEND)
         self.assertIn("3-page-book", NORMALIZE_LAB_FRONTEND)
@@ -555,8 +509,10 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("label: 'Status'", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("Replacement History", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("buildReplacementHistoryTable", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn('<div class="lab-panel-title">Preview</div>', NORMALIZE_LAB_TEMPLATE)
 
     def test_normalize_lab_css_exposes_shell_layout_and_rhythm_contracts(self) -> None:
+        self.assertIn('[hidden] { display: none !important; }', NORMALIZE_LAB_CSS)
         self.assertIn('--lab-track-scan', NORMALIZE_LAB_CSS)
         self.assertIn('--lab-track-inspection', NORMALIZE_LAB_CSS)
         self.assertIn('--lab-track-preview', NORMALIZE_LAB_CSS)
@@ -577,9 +533,62 @@ class WebTests(unittest.TestCase):
         self.assertIn('<colgroup id="tableColGroup"></colgroup>', NORMALIZE_LAB_TEMPLATE)
         self.assertIn("tableColGroup: document.getElementById('tableColGroup')", NORMALIZE_LAB_JS)
         self.assertIn('el.tableColGroup.innerHTML = headers.map(header => {', NORMALIZE_LAB_JS)
-        self.assertIn('return `<col${classAttr}>`;', NORMALIZE_LAB_JS)
+        self.assertIn("const styleAttr = header.width ? ` style=\"width:${escapeHtml(header.width)}\"` : '';", NORMALIZE_LAB_JS)
+        self.assertIn('return `<col${classAttr}${styleAttr}>`;', NORMALIZE_LAB_JS)
+        self.assertIn("width: 'var(--lab-table-select-column-width)'", NORMALIZE_LAB_JS)
+        self.assertIn("width: 'auto'", NORMALIZE_LAB_JS)
 
-    def test_replacement_queue_delete_preview_route(self) -> None:
+    def test_normalize_lab_audio_repair_buttons_are_bound_to_mux_actions(self) -> None:
+        self.assertIn("el.repairActionButton.addEventListener('click', () => {", NORMALIZE_LAB_JS)
+        self.assertIn("const request = action === 'repair_subtitle_defaults'", NORMALIZE_LAB_JS)
+        self.assertIn("fixSelectedAudioDefaults(action !== 'set_english_default');", NORMALIZE_LAB_JS)
+        self.assertIn("Running English-default remux for ${paths.length} file", NORMALIZE_LAB_JS)
+        self.assertIn("Running foreign-audio prune for ${paths.length} file", NORMALIZE_LAB_JS)
+        self.assertIn("Running English-default remux and foreign-audio prune for ${paths.length} file", NORMALIZE_LAB_JS)
+        self.assertIn("body: JSON.stringify({ source: el.sourcePath.value.trim(), paths, drop_foreign_audio: dropForeignAudio }),", NORMALIZE_LAB_JS)
+
+    def test_normalize_lab_selection_refreshes_all_selection_dependent_controls(self) -> None:
+        self.assertIn("function refreshSelectionState() {", NORMALIZE_LAB_JS)
+        refresh_section = NORMALIZE_LAB_JS.split("function refreshSelectionState() {", 1)[1].split("function attachRowHandlers()", 1)[0]
+        self.assertIn("renderSelectionButtons();", refresh_section)
+        self.assertIn("renderConfirmButton();", refresh_section)
+        self.assertIn("renderWorkflowActionControls();", refresh_section)
+        self.assertIn("renderSidePanel();", refresh_section)
+
+    def test_normalize_lab_row_checkbox_changes_use_shared_selection_refresh(self) -> None:
+        checkbox_section = NORMALIZE_LAB_JS.split("el.rowsBody.querySelectorAll('input[data-row-check]').forEach(input => {", 1)[1].split("el.rowsBody.querySelectorAll('button[data-audio-popover]')", 1)[0]
+        self.assertIn("clearDeletePreviewState();", checkbox_section)
+        self.assertIn("refreshSelectionState();", checkbox_section)
+        self.assertNotIn("clearDeletePreviewState();\n        renderSidePanel();", checkbox_section)
+
+    def test_audio_packaging_fix_route_forwards_drop_foreign_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "movies"
+            source.mkdir()
+            fixed_result = {"fixed": [], "skipped": []}
+            with patch("normal.web.routes_cleanup.fix_english_audio_defaults", return_value=fixed_result) as fix_audio:
+                with patch("normal.web.routes_cleanup.build_updated_profile_items", return_value=[]):
+                    with self.run_test_server() as base_url:
+                        body = json.dumps(
+                            {
+                                "source": str(source),
+                                "paths": [str(source / "Movie.mkv")],
+                                "drop_foreign_audio": True,
+                            }
+                        ).encode("utf-8")
+                        req = urllib.request.Request(
+                            f"{base_url}/api/movies/audio-packaging/fix",
+                            data=body,
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        with urllib.request.urlopen(req) as response:
+                            payload = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(payload["fixed"], [])
+        self.assertTrue(fix_audio.call_args.kwargs["drop_foreign_audio"])
+        self.assertNotIn("replacement_queue", payload)
+
+    def test_movies_delete_preview_route(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "movies"
             movie = source / "Bad Movie (2001)" / "Bad Movie (2001).mkv"
@@ -590,7 +599,7 @@ class WebTests(unittest.TestCase):
             with self.run_test_server() as base_url:
                 body = json.dumps({"source": str(source), "paths": [str(movie)]}).encode("utf-8")
                 req = urllib.request.Request(
-                    f"{base_url}/api/movies/replacement-queue/delete-preview",
+                    f"{base_url}/api/movies/delete-preview",
                     data=body,
                     headers={"Content-Type": "application/json"},
                     method="POST",
@@ -601,6 +610,28 @@ class WebTests(unittest.TestCase):
                 self.assertEqual(payload["cleaned_sidecars"], [str(poster.resolve())])
                 self.assertEqual(payload["removed_folders"], [str(movie.parent.resolve())])
                 self.assertTrue(movie.exists())
+
+    def test_removed_queue_and_history_routes_return_404(self) -> None:
+        with self.run_test_server() as base_url:
+            for route in (
+                "/api/movies/replacement-queue/list",
+                "/api/movies/replacement-queue/add",
+                "/api/movies/replacement-queue/delete",
+                "/api/movies/replacement-queue/delete-preview",
+                "/api/movies/replacement-queue/dismiss",
+                "/api/movies/subtitle-readiness/history",
+                "/api/movies/subtitle-readiness/history/sync",
+                "/api/movies/subtitle-readiness/history/dismiss",
+            ):
+                req = urllib.request.Request(
+                    f"{base_url}{route}",
+                    data=b"{}",
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(req)
+                self.assertEqual(ctx.exception.code, 404)
 
     def test_delete_movie_junk_files_only_deletes_current_candidates(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

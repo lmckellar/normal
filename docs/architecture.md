@@ -89,8 +89,6 @@ This file survives browser refreshes, server restarts, and localhost port change
 Under `~/.local/share/normal/`:
 
 - `probe-cache.json` stores per-file probe results keyed by resolved path, mtime, and size.
-- `movie-replacement-queue.json` stores weak-encode and audio-packaging queue history.
-- `subtitle-fix-history.json` stores subtitle repair history and review-only subtitle items.
 - `library-roots.json` stores the last active movie root and a short recent-roots list.
 
 ### User-local caches
@@ -106,7 +104,6 @@ The web UI also keeps convenience caches in `localStorage`, including:
 - selected library roots and recent libraries
 - cached dashboard payloads
 - cached canonical-list payloads
-- cached replacement-queue payloads
 - theme selection
 
 These browser caches are convenience snapshots only. They are not authoritative and do not replace repo-local or user-local state.

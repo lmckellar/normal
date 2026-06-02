@@ -151,11 +151,11 @@ The same lane is also available in the focused internal shell at `/parser-tester
 
 ### Audio Packaging
 
-Some MKVs are muxed with the wrong main audio track: for example, Italian marked as default and a weaker English track left as the fallback. The `Audio Packaging` tab uses the same shared movie profile scan and replacement-queue substrate as weak-encode triage, but with different issue rules:
+Some MKVs are muxed with the wrong main audio track: for example, Italian marked as default and a weaker English track left as the fallback. The `Audio Packaging` tab uses the same shared movie profile scan as weak-encode triage, but with different issue rules:
 
 - detect non-English default audio when English is present
 - flag the stronger case where the English fallback is materially weaker than the default track
-- show the main audio summary plus default-vs-English stream summaries so the queue is explainable before deletion
+- show the main audio summary plus default-vs-English stream summaries so direct repair or direct deletion is explainable before action
 
 For MKVs, the page can do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers stay review-only.
 
@@ -171,11 +171,11 @@ The `Subtitle Readiness` tab is the sibling repair lane built on the same profil
 - default to forced English when a forced English subtitle exists
 - default to English subtitles when the default audio track is non-English
 
-This workflow is non-destructive: it does not delete media files or subtitle files, and it does not use the replacement queue. For supported MKVs it can do a lossless in-place remux that only updates embedded subtitle default flags. If the needed English or forced-English subtitle does not exist, the item stays review-only.
+This workflow is non-destructive: it does not delete media files or subtitle files. For supported MKVs it can do a lossless in-place remux that only updates embedded subtitle default flags. If the needed English or forced-English subtitle does not exist, the item stays review-only.
 
 Current scope is embedded subtitle streams already inside the container. External `.srt` / `.ass` sidecars are not modified.
 
-Subtitle review-only and fixed items are also tracked in subtitle history. That is useful today, but it is not yet a finished broad audit system for every destructive or repair action in the product.
+Subtitle fixes now return immediate results only. Review-only items remain visible from current diagnostics and disappear after a fresh scan when the underlying issue is gone. No durable subtitle history is recorded in this flow.
 
 ![Repair Defaults](assets/repair_defaults.png)
 

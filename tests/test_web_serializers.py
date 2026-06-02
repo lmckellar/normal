@@ -114,24 +114,22 @@ class WebSerializersTests(unittest.TestCase):
         standards = {"video": {"1080p": {"minimum_kbps": 2500}}}
 
         with patch("normal.web.serializers.build_histogram_payload", return_value={"movie_count": 3}) as histogram:
-            with patch("normal.web.serializers.reconcile_replacement_queue", return_value={"items": []}) as queue:
-                with patch("normal.web.serializers.movie_standards_revision", return_value="rev-1") as revision:
-                    with patch("normal.web.serializers.build_movie_profile_definitions", return_value=[{"label": "library_grade"}]) as definitions:
-                        with patch(
-                            "normal.web.serializers.build_replacement_candidate_definition",
-                            return_value={"label": "replacement_candidate"},
-                        ) as replacement_definition:
-                            payload = build_profile_response(Path("/library"), report, standards=standards)
+            with patch("normal.web.serializers.movie_standards_revision", return_value="rev-1") as revision:
+                with patch("normal.web.serializers.build_movie_profile_definitions", return_value=[{"label": "library_grade"}]) as definitions:
+                    with patch(
+                        "normal.web.serializers.build_replacement_candidate_definition",
+                        return_value={"label": "replacement_candidate"},
+                    ) as replacement_definition:
+                        payload = build_profile_response(Path("/library"), report, standards=standards)
 
         histogram.assert_called_once_with(report)
-        queue.assert_called_once_with(Path("/library"), [])
         revision.assert_called_once_with(standards)
         definitions.assert_called_once_with(standards)
         replacement_definition.assert_called_once_with(standards)
         self.assertEqual(payload["movie_standards"], standards)
         self.assertEqual(payload["histogram"], {"movie_count": 3})
-        self.assertEqual(payload["replacement_queue"], {"items": []})
         self.assertEqual(payload["movie_standards_revision"], "rev-1")
+        self.assertNotIn("replacement_queue", payload)
 
     def test_build_updated_profile_items_skips_items_without_fact_dict(self) -> None:
         source = Path("/library")

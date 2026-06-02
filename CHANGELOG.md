@@ -6,15 +6,20 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.2] — 2026-06-02
+
 ### Changed
 
+- `/` and `/index.html` now open the new compact movie workbench directly. The former parser testing shell is the default alpha.2 UI, while the old dashboard is no longer the active public entry surface.
+- The promoted alpha.2 workbench no longer frames itself as an internal tester. Normalize, Weak Encodes, Repair Defaults, and Junk now read as the main movie workflows inside one compact shell.
+- Alpha.2 publicly narrows the surfaced product while the interface consolidates. Some lanes and audit surfaces that existed in alpha.1 remain present in backend or partial internal form but are intentionally not exposed in the default UI yet.
 - Movie quality profiling now has an explicit `Compact Grade` stance between the weak catch-all bucket and `Library Grade`, giving the dashboard and Weak Encodes testing UI a saner middle band for benign compact encodes.
 - The former bottom stance is now framed as a true fallback bucket rather than a strict threshold profile. In the dashboard editor it only exposes card label and summary, removing the previous illusion that its numeric controls were authoritative while it still functioned as the unconditional catch-all.
 - Quality profiles now support an `Allow original mono before year` control. When enabled for a stance, pre-cutoff mono titles can satisfy that stance without being penalized for missing stereo/surround channels, and the audio bitrate floor is relaxed to a mono-aware threshold for those exempt titles.
 - Movie profile probing now keeps all `main audio` facts aligned to the same chosen playback-relevant stream instead of mixing first-stream codec/channel metadata with default-stream bitrate/summary data. This removes a misleading weak-encode edge case where multi-audio MKVs could look internally contradictory in scans and tables.
 - `/parser-tester-ui?workflow=weak-encodes` now lets the audio bitrate cell open a small anchored track inspector showing every audio stream's language, bitrate, channel layout, and default flag without disturbing table shape.
-- `/parser-tester-ui` now exposes a fourth internal workflow, `Repair Defaults Testing UI`, so audio-packaging and subtitle-default repair behavior can be inspected in the same focused shell as normalize, weak-encode, and junk triage.
-- Weak-encode triage now has a clearer ownership boundary: files with a good in-container English track but wrong default-language packaging no longer count as strict weak delete candidates, and the internal weak-floor selector defaults to the weakest safe posture (`Standard Definition`) rather than inheriting a harsher library-grade floor.
+- The promoted workbench exposes a fourth workflow, `Repair Defaults`, so audio-packaging and subtitle-default repair behavior can be inspected in the same focused shell as normalize, weak-encode, and junk triage.
+- Weak-encode triage now has a clearer ownership boundary: files with a good in-container English track but wrong default-language packaging no longer count as strict weak delete candidates, and the weak-floor selector defaults to the weakest safe posture (`Standard Definition`) rather than inheriting a harsher library-grade floor.
 - Resolution bucketing now uses display-class semantics when stream aspect metadata supports it. Cropped widescreen HD encodes like `1920x796` remain `1080p`, anamorphic HD encodes like `1440x1080` can classify as `1080p`, and malformed or missing aspect metadata still falls back to the old raster-based bucket.
 - Web frontend extracted out of `normal/web.py` into package-managed assets under `normal/web_assets/`. The stdlib `http.server` backend remains in place, now serves `/assets/app.css` and `/assets/app.js`, and injects only a small runtime bootstrap into the HTML shell instead of carrying the full UI inline.
 - Web packaging and tests updated to match the split frontend layout. `pyproject.toml` now includes the packaged web assets, and web-layer tests now assert against asset content and static-asset serving instead of a single embedded HTML constant.
@@ -29,7 +34,7 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 - Web normalize surfaces now treat concise naming as the active product path. The main UI, workbench, and `/parser-tester-ui` no longer build or switch dual style payloads on every request, though verbose parsing support remains in the planner and test corpus for legacy artifact cleanup and regression coverage.
 - `/parser-tester-ui` now exposes linked change reasons and warning messages in the detail pane, keeps staged and full-library downstream preview modes, and can confirm selected normalize changes directly through the same `/api/movies/apply` path as the main UI.
 - `/parser-tester-ui` confirm selection now also carries safe wrapper `folder_delete` cleanup when every actionable row under a split package folder is selected, closing the gap where successful movie moves could still leave behind an empty collection wrapper.
-- The old parser-tester selected-row export endpoint was removed. The internal testing surface now validates parser output by previewing and confirming the real normalize mutation contract instead of exporting rows to a side artifact.
+- The old parser-tester selected-row export endpoint was removed. The promoted workbench now validates parser output by previewing and confirming the real normalize mutation contract instead of exporting rows to a side artifact.
 
 ---
 

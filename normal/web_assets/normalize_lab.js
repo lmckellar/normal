@@ -1,9 +1,9 @@
 (function () {
   const WORKFLOW_LABELS = {
-    normalize: 'Parser Testing UI',
-    'weak-encodes': 'Weak Encodes Testing UI',
-    'repair-defaults': 'Repair Defaults Testing UI',
-    junk: 'Delete Junk & Spam Files',
+    normalize: 'Movie Normalize',
+    'weak-encodes': 'Weak Encodes',
+    'repair-defaults': 'Repair Defaults',
+    junk: 'Delete Junk & Spam',
   };
 
   const WORKFLOW_DESCRIPTIONS = {
@@ -20,55 +20,55 @@
   };
 
   const NORMALIZE_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential' },
-    { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential' },
-    { key: 'projected_path', label: 'Projected Path', columnClass: 'lab-col-path', cellClass: 'lab-cell-path lab-cell-mono', priority: 'desktop' },
-    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential' },
-    { key: 'reason_bucket', label: 'Reason', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'medium' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
+    { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
+    { key: 'projected_path', label: 'Projected Path', columnClass: 'lab-col-path', cellClass: 'lab-cell-path lab-cell-mono', priority: 'desktop', width: '36%' },
+    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '11ch' },
+    { key: 'reason_bucket', label: 'Reason', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'medium', width: '11ch' },
   ];
 
   const WEAK_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential' },
-    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium' },
-    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential' },
-    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop' },
-    { key: 'channels', label: 'Ch', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium' },
-    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop' },
-    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '22%' },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '11%' },
+    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '11ch' },
+    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop', width: '11ch' },
+    { key: 'channels', label: 'Ch', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '7ch' },
+    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '18%' },
+    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
   ];
 
   const JUNK_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential' },
-    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium' },
-    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential' },
-    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop' },
-    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium' },
-    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop' },
-    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '22%' },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '11%' },
+    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '11ch' },
+    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop', width: '11ch' },
+    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium', width: '11ch' },
+    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '18%' },
+    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
   ];
 
   const REPAIR_AUDIO_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential' },
-    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential' },
-    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium' },
-    { key: 'repair_target', label: 'Best English', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium' },
-    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '24%' },
+    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '14%' },
+    { key: 'repair_target', label: 'Best English', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '14%' },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium', width: '11ch' },
+    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
   ];
 
   const REPAIR_SUBTITLE_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential' },
-    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential' },
-    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium' },
-    { key: 'repair_target', label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium' },
-    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '24%' },
+    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '14%' },
+    { key: 'repair_target', label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '14%' },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium', width: '11ch' },
+    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
   ];
 
   const state = {
@@ -91,6 +91,7 @@
     weakPreviewKey: '',
     weakPreviewLoading: false,
     repairDefaultsTab: 'audio',
+    repairAction: 'set_english_default',
     repairActionNotice: '',
     audioFixBusy: false,
     subtitleFixBusy: false,
@@ -125,16 +126,14 @@
     repairDefaultsTabSelect: document.getElementById('repairDefaultsTabSelect'),
     selectAllButton: document.getElementById('selectAllButton'),
     deselectAllButton: document.getElementById('deselectAllButton'),
-    repairDefaultsActions: document.getElementById('repairDefaultsActions'),
-    repairAudioDefaultButton: document.getElementById('repairAudioDefaultButton'),
-    repairAudioDropForeignButton: document.getElementById('repairAudioDropForeignButton'),
-    repairSubtitleButton: document.getElementById('repairSubtitleButton'),
     tableColGroup: document.getElementById('tableColGroup'),
     tableHeaderRow: document.getElementById('tableHeaderRow'),
     rowsBody: document.getElementById('rowsBody'),
     previewControls: document.getElementById('previewControls'),
-    selectedPreviewButton: document.getElementById('selectedPreviewButton'),
-    libraryPreviewButton: document.getElementById('libraryPreviewButton'),
+    previewScopeSelect: document.getElementById('previewScopeSelect'),
+    repairActionControls: document.getElementById('repairActionControls'),
+    repairActionSelect: document.getElementById('repairActionSelect'),
+    repairActionButton: document.getElementById('repairActionButton'),
     confirmButton: document.getElementById('confirmButton'),
     previewPane: document.getElementById('previewPane'),
     audioTrackPopover: document.getElementById('audioTrackPopover'),
@@ -182,12 +181,19 @@
     return isWeakMode() || isJunkMode() || (isRepairDefaultsMode() && state.repairDefaultsTab === 'audio');
   }
 
-  function currentWeakQueue() {
-    return state.weakPayload?.replacement_queue || null;
+  function defaultRepairAction() {
+    return state.repairDefaultsTab === 'subtitle' ? 'repair_subtitle_defaults' : 'set_english_default';
   }
 
-  function currentRepairQueue() {
-    return state.repairPayload?.replacement_queue || null;
+  function repairActionOptions() {
+    if (state.repairDefaultsTab === 'subtitle') {
+      return [{ value: 'repair_subtitle_defaults', label: 'Repair Subtitle Defaults' }];
+    }
+    return [
+      { value: 'set_english_default', label: 'Set English Default' },
+      { value: 'drop_foreign_passenger_audio', label: 'Delete Foreign Passenger Audio' },
+      { value: 'set_english_default_drop_foreign', label: 'Do Both At Once' },
+    ];
   }
 
   const QUALITY_STANCE_RANKS = {
@@ -363,16 +369,6 @@
   function movieMeetsWeakFloor(item) {
     const qualityLabel = item?.profile?.quality_label || '';
     return qualityStanceRank(qualityLabel) <= qualityStanceRank(state.weakFloor);
-  }
-
-  function replacementQueueItemForPath(path, family = 'weak_encode') {
-    if (!path) return null;
-    const queue = family === 'audio_packaging' ? currentRepairQueue() : currentWeakQueue();
-    return (queue?.items || []).find(item =>
-      item.original_path === path
-      && item.issue_family === family
-      && ['pending', 'deleted', 'completed'].includes(item.status)
-    ) || null;
   }
 
   function movieAudioPackagingIssueCode(item) {
@@ -567,14 +563,10 @@
     el.weakFloorSelect.hidden = !weak;
     el.repairDefaultsTabLabel.hidden = !repairDefaults;
     el.repairDefaultsTabSelect.hidden = !repairDefaults;
-    el.repairDefaultsActions.hidden = !repairDefaults;
-    el.repairAudioDefaultButton.hidden = !repairDefaults || state.repairDefaultsTab !== 'audio';
-    el.repairAudioDropForeignButton.hidden = !repairDefaults || state.repairDefaultsTab !== 'audio';
-    el.repairSubtitleButton.hidden = !repairDefaults || state.repairDefaultsTab !== 'subtitle';
     el.repairDefaultsTabSelect.value = state.repairDefaultsTab;
     renderWorkflowStatusFilter();
     renderWeakFloorControl();
-    renderRepairActions();
+    renderWorkflowActionControls();
   }
 
   function renderWorkflowStatusFilter() {
@@ -622,20 +614,32 @@
     }
   }
 
-  function renderRepairActions() {
+  function renderWorkflowActionControls() {
+    const repairMode = isRepairDefaultsMode();
+    el.repairActionControls.hidden = !repairMode;
+    if (!repairMode) {
+      el.repairActionSelect.innerHTML = '';
+      el.repairActionButton.disabled = true;
+      return;
+    }
     const selectedCount = selectedRepairPaths().length;
     const audio = state.repairDefaultsTab === 'audio';
     const locked = repairDefaultsSelectionLocked();
-    [el.repairAudioDefaultButton, el.repairAudioDropForeignButton, el.repairSubtitleButton].forEach(button => {
-      button.classList.add('lab-action-button');
-      button.classList.remove('is-primary', 'is-caution');
-    });
-    el.repairAudioDefaultButton.classList.add('is-primary');
-    el.repairAudioDropForeignButton.classList.add('is-caution');
-    el.repairSubtitleButton.classList.add('is-primary');
-    el.repairAudioDefaultButton.disabled = !audio || !selectedCount || locked;
-    el.repairAudioDropForeignButton.disabled = !audio || !selectedCount || locked;
-    el.repairSubtitleButton.disabled = audio || !selectedCount || locked;
+    const options = repairActionOptions();
+    if (!options.some(option => option.value === state.repairAction)) {
+      state.repairAction = defaultRepairAction();
+    }
+    el.repairActionSelect.innerHTML = options.map(option => (
+      `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`
+    )).join('');
+    el.repairActionSelect.value = state.repairAction;
+    el.repairActionButton.classList.add('lab-action-button');
+    el.repairActionButton.classList.remove('is-primary', 'is-caution');
+    const busy = audio ? state.audioFixBusy : state.subtitleFixBusy;
+    el.repairActionButton.classList.add(audio && state.repairAction !== 'set_english_default' ? 'is-caution' : 'is-primary');
+    el.repairActionButton.textContent = busy ? (audio ? 'Running Repair Remux' : 'Running Subtitle Remux') : 'Run Repair';
+    el.repairActionSelect.disabled = locked || busy;
+    el.repairActionButton.disabled = !selectedCount || locked || busy;
   }
 
   function renderWeakFloorControl() {
@@ -660,7 +664,8 @@
     const headers = currentHeaders();
     el.tableColGroup.innerHTML = headers.map(header => {
       const classAttr = header.columnClass ? ` class="${header.columnClass}"` : '';
-      return `<col${classAttr}>`;
+      const styleAttr = header.width ? ` style="width:${escapeHtml(header.width)}"` : '';
+      return `<col${classAttr}${styleAttr}>`;
     }).join('');
     el.tableHeaderRow.innerHTML = headers.map(header => {
       const classAttr = header.columnClass ? ` class="${header.columnClass}"` : '';
@@ -727,13 +732,11 @@
   }
 
   function weakRowForItem(item) {
-    const queueItem = replacementQueueItemForPath(item.path || '');
     return {
       row_id: item.path || '',
       path: item.path || '',
-      queue_item: queueItem,
       item,
-      selectable: isStrictWeakMovie(item) && !queueItem,
+      selectable: isStrictWeakMovie(item),
       current_path: item.path || '',
       issue: movieProfileInlineSummary(item) || humanProfileLabel(item?.profile?.label || ''),
       resolution: item?.facts?.resolution_bucket || '',
@@ -742,28 +745,24 @@
       channels: item?.facts?.audio_channels || 0,
       audio_summary: item?.facts?.audio_summary || '',
       file_size: item?.facts?.file_size_bytes || 0,
-      workflow_status: queueItem?.status === 'pending'
-        ? 'queued'
-        : (isWeakReviewMovie(item) ? 'review' : 'delete-candidates'),
+      workflow_status: isWeakReviewMovie(item) ? 'review' : 'delete-candidates',
     };
   }
 
   function repairAudioRowForItem(item) {
-    const queueItem = replacementQueueItemForPath(item.path || '', 'audio_packaging');
     const issueCode = movieAudioPackagingIssueCode(item);
     return {
       row_id: item.path || '',
       path: item.path || '',
       item,
-      queue_item: queueItem,
-      selectable: Boolean(item.path) && !queueItem && !repairDefaultsSelectionLocked(),
+      selectable: Boolean(item.path) && Boolean(issueCode) && !repairDefaultsSelectionLocked(),
       current_path: item.path || '',
       issue: issueCode === 'default_non_english_audio_with_weak_english' ? 'wrong language · weak English' : 'wrong default language',
       current_default: describeAudioStream(movieDefaultAudioStream(item)),
       repair_target: describeAudioStream(movieBestEnglishAudioStream(item)),
       resolution: item?.facts?.resolution_bucket || '',
       file_size: item?.facts?.file_size_bytes || 0,
-      workflow_status: queueItem?.status === 'pending' ? 'queued' : (issueCode === 'default_non_english_audio_with_weak_english' ? 'weak_english' : 'wrong_default'),
+      workflow_status: issueCode === 'default_non_english_audio_with_weak_english' ? 'weak_english' : 'wrong_default',
     };
   }
 
@@ -1066,9 +1065,9 @@
     renderShellLayout();
     el.previewPane.hidden = false;
     el.previewControls.hidden = false;
-    el.selectedPreviewButton.classList.toggle('is-active', state.previewMode === 'selected');
-    el.libraryPreviewButton.classList.toggle('is-active', state.previewMode === 'library');
+    el.previewScopeSelect.value = state.previewMode;
     renderConfirmButton();
+    renderWorkflowActionControls();
   }
 
   function renderRows() {
@@ -1079,7 +1078,7 @@
       const colspan = String(currentHeaders().length);
       el.rowsBody.innerHTML = `<tr><td colspan="${colspan}">No rows for the active filters.</td></tr>`;
       renderConfirmButton();
-      renderRepairActions();
+      renderWorkflowActionControls();
       return;
     }
     el.rowsBody.innerHTML = isWeakMode()
@@ -1093,7 +1092,7 @@
     renderJunkFilenameCells();
     renderAudioPopover();
     renderConfirmButton();
-    renderRepairActions();
+    renderWorkflowActionControls();
   }
 
   function renderNormalizeRow(row) {
@@ -1258,6 +1257,13 @@
     state.junkDeleteSkipped = [];
   }
 
+  function refreshSelectionState() {
+    renderSelectionButtons();
+    renderConfirmButton();
+    renderWorkflowActionControls();
+    renderSidePanel();
+  }
+
   function attachRowHandlers() {
     el.rowsBody.querySelectorAll('tr[data-row-id]').forEach(rowEl => {
       rowEl.addEventListener('click', event => {
@@ -1277,7 +1283,7 @@
         else state.selected.delete(id);
         state.activeRowId = id;
         clearDeletePreviewState();
-        renderSidePanel();
+        refreshSelectionState();
       });
     });
     el.rowsBody.querySelectorAll('button[data-audio-popover]').forEach(button => {
@@ -1517,7 +1523,7 @@
     if (state.weakPreview && state.weakPreviewKey === key) return state.weakPreview;
     state.weakPreviewLoading = true;
     renderPreviewPane();
-    const response = await fetch('/api/movies/replacement-queue/delete-preview', {
+    const response = await fetch('/api/movies/delete-preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source, paths }),
@@ -1798,23 +1804,15 @@
     renderConfirmButton();
     try {
       const source = el.sourcePath.value.trim();
-      const addResponse = await fetch('/api/movies/replacement-queue/add', {
+      const paths = items.map(item => item.path).filter(Boolean);
+      const delResponse = await fetch('/api/movies/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, items, mode: 'file', issue_family: 'audio_packaging' }),
-      });
-      const addPayload = await addResponse.json();
-      if (!addResponse.ok) throw new Error(addPayload.error || 'queue add failed');
-      const item_ids = (addPayload.added || []).map(item => item.item_id).filter(Boolean);
-      const delResponse = await fetch('/api/movies/replacement-queue/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, item_ids }),
+        body: JSON.stringify({ source, paths }),
       });
       const delPayload = await delResponse.json();
       if (!delResponse.ok) throw new Error(delPayload.error || 'delete failed');
-      state.repairPayload = removeWeakDeletedItems(state.repairPayload, (delPayload.deleted || []).map(item => item.path));
-      if (state.repairPayload) state.repairPayload.replacement_queue = delPayload;
+      state.repairPayload = removeWeakDeletedItems(state.repairPayload, delPayload.deleted || []);
       state.selected = new Set();
       state.activeRowId = '';
       state.previewMode = 'selected';
@@ -1832,7 +1830,12 @@
     const paths = selectedRepairPaths();
     if (!paths.length) return;
     state.audioFixBusy = true;
-    state.repairActionNotice = '';
+    const action = state.repairAction;
+    state.repairActionNotice = action === 'drop_foreign_passenger_audio'
+      ? `Running foreign-audio prune for ${paths.length} file${paths.length === 1 ? '' : 's'}.`
+      : (dropForeignAudio
+        ? `Running English-default remux and foreign-audio prune for ${paths.length} file${paths.length === 1 ? '' : 's'}.`
+        : `Running English-default remux for ${paths.length} file${paths.length === 1 ? '' : 's'}.`);
     renderRows();
     renderSidePanel();
     try {
@@ -1844,13 +1847,19 @@
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'audio packaging fix failed');
       state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true });
-      if (state.repairPayload) state.repairPayload.replacement_queue = payload.replacement_queue || state.repairPayload.replacement_queue;
       state.selected = new Set();
       state.activeRowId = '';
       state.previewMode = 'selected';
-      state.repairActionNotice = `${payload.fixed?.length || 0} audio default${(payload.fixed?.length || 0) === 1 ? '' : 's'} repaired.`;
+      state.repairActionNotice = action === 'drop_foreign_passenger_audio'
+        ? `${payload.fixed?.length || 0} foreign-audio prune${(payload.fixed?.length || 0) === 1 ? '' : 's'} completed.`
+        : `${payload.fixed?.length || 0} audio default${(payload.fixed?.length || 0) === 1 ? '' : 's'} repaired.`;
       renderRows();
       renderSidePanel();
+    } catch (error) {
+      state.repairActionNotice = error.message;
+      renderRows();
+      renderSidePanel();
+      throw error;
     } finally {
       state.audioFixBusy = false;
       renderRows();
@@ -1864,7 +1873,7 @@
     if (!paths.length) return;
     const issueCodes = Object.fromEntries(rows.map(row => [row.path, row.workflow_status]));
     state.subtitleFixBusy = true;
-    state.repairActionNotice = '';
+    state.repairActionNotice = `Running subtitle-default remux for ${paths.length} file${paths.length === 1 ? '' : 's'}.`;
     renderRows();
     renderSidePanel();
     try {
@@ -1882,6 +1891,11 @@
       state.repairActionNotice = `${payload.fixed?.length || 0} subtitle default${(payload.fixed?.length || 0) === 1 ? '' : 's'} repaired.`;
       renderRows();
       renderSidePanel();
+    } catch (error) {
+      state.repairActionNotice = error.message;
+      renderRows();
+      renderSidePanel();
+      throw error;
     } finally {
       state.subtitleFixBusy = false;
       renderRows();
@@ -1897,23 +1911,15 @@
       renderConfirmButton();
       try {
         const source = el.sourcePath.value.trim();
-        const addResponse = await fetch('/api/movies/replacement-queue/add', {
+        const paths = items.map(item => item.path).filter(Boolean);
+        const delResponse = await fetch('/api/movies/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, items, mode: 'file', issue_family: 'weak_encode' }),
-        });
-        const addPayload = await addResponse.json();
-        if (!addResponse.ok) throw new Error(addPayload.error || 'queue add failed');
-        const item_ids = (addPayload.added || []).map(item => item.item_id).filter(Boolean);
-        const delResponse = await fetch('/api/movies/replacement-queue/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, item_ids }),
+          body: JSON.stringify({ source, paths }),
         });
         const delPayload = await delResponse.json();
         if (!delResponse.ok) throw new Error(delPayload.error || 'delete failed');
-        state.weakPayload = removeWeakDeletedItems(state.weakPayload, (delPayload.deleted || []).map(item => item.path));
-        if (state.weakPayload) state.weakPayload.replacement_queue = delPayload;
+        state.weakPayload = removeWeakDeletedItems(state.weakPayload, delPayload.deleted || []);
         state.selected = new Set();
         clearDeletePreviewState();
         state.activeRowId = '';
@@ -2000,6 +2006,8 @@
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
+    state.repairDefaultsTab = 'audio';
+    state.repairAction = defaultRepairAction();
     state.repairActionNotice = '';
     state.sort = usesSimpleSelectionShell() ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' };
     clearDeletePreviewState();
@@ -2096,6 +2104,7 @@
 
   el.repairDefaultsTabSelect.addEventListener('change', () => {
     state.repairDefaultsTab = el.repairDefaultsTabSelect.value === 'subtitle' ? 'subtitle' : 'audio';
+    state.repairAction = defaultRepairAction();
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
@@ -2114,7 +2123,7 @@
     state.previewMode = 'selected';
     clearDeletePreviewState();
     renderRows();
-    renderSidePanel();
+    refreshSelectionState();
     if (isWeakMode() && selectedWeakPaths().length) {
       try {
         await ensureWeakPreview();
@@ -2130,42 +2139,26 @@
     rows.forEach(row => state.selected.delete(usesSimpleSelectionShell() ? row.row_id : row.result_id));
     clearDeletePreviewState();
     renderRows();
+    refreshSelectionState();
+  });
+
+  el.repairActionSelect.addEventListener('change', () => {
+    state.repairAction = el.repairActionSelect.value || defaultRepairAction();
     renderSidePanel();
   });
 
-  el.repairAudioDefaultButton.addEventListener('click', () => {
-    fixSelectedAudioDefaults(false).catch(error => {
+  el.repairActionButton.addEventListener('click', () => {
+    const action = el.repairActionSelect.value || defaultRepairAction();
+    const request = action === 'repair_subtitle_defaults'
+      ? fixSelectedSubtitleDefaults()
+      : fixSelectedAudioDefaults(action !== 'set_english_default');
+    request.catch(error => {
       el.previewPane.textContent = error.message;
     });
   });
 
-  el.repairAudioDropForeignButton.addEventListener('click', () => {
-    fixSelectedAudioDefaults(true).catch(error => {
-      el.previewPane.textContent = error.message;
-    });
-  });
-
-  el.repairSubtitleButton.addEventListener('click', () => {
-    fixSelectedSubtitleDefaults().catch(error => {
-      el.previewPane.textContent = error.message;
-    });
-  });
-
-  el.selectedPreviewButton.addEventListener('click', async () => {
-    state.previewMode = 'selected';
-    renderSidePanel();
-    if (isWeakMode() && selectedWeakPaths().length) {
-      try {
-        await ensureWeakPreview();
-        renderPreviewPane();
-      } catch (error) {
-        el.previewPane.textContent = error.message;
-      }
-    }
-  });
-
-  el.libraryPreviewButton.addEventListener('click', async () => {
-    state.previewMode = 'library';
+  el.previewScopeSelect.addEventListener('change', async () => {
+    state.previewMode = el.previewScopeSelect.value === 'library' ? 'library' : 'selected';
     renderSidePanel();
     if (isWeakMode() && selectedWeakPaths().length) {
       try {
