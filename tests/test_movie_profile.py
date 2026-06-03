@@ -8,7 +8,9 @@ from unittest.mock import patch
 
 from normal.movie_profile import (
     DEFAULT_MOVIE_STANDARDS,
+    build_delete_mode_definition,
     build_movie_profile_definitions,
+    build_policy_definitions,
     build_replacement_candidate_definition,
     build_histogram_payload,
     build_histogram_payload_from_items,
@@ -23,9 +25,12 @@ from normal.movie_profile import (
     load_movie_standards,
     MovieStandardsConflictError,
     movie_standards_revision,
+    operator_preferences_revision,
     normalize_weak_encode_floor,
+    OPERATOR_PREFERENCES_PATH,
     path_matches_normalized_shape,
     scan_movie_profiles,
+    update_policy_definition,
     update_movie_profile_definition,
     is_replacement_candidate_quality,
 )
@@ -521,6 +526,53 @@ class MovieProfileTests(unittest.TestCase):
                         {"display_name": "Library Grade", "video_1080p_kbps": "8000"},
                         expected_revision=stale_revision,
                     )
+
+    def test_policy_definitions_extend_quality_controls_with_library_and_operator_sections(self) -> None:
+        definitions = build_policy_definitions()
+
+        labels = [definition["label"] for definition in definitions]
+        self.assertIn("library_defaults", labels)
+        self.assertIn("delete_mode", labels)
+        delete_mode = next(definition for definition in definitions if definition["label"] == "delete_mode")
+        self.assertEqual(delete_mode["scope"], "operator_preferences")
+        self.assertEqual(delete_mode["fields"][0]["value"], "recycle_all")
+
+    def test_update_policy_definition_persists_operator_preferences_with_revision_check(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            policy_path = Path(tmpdir) / "movie_standards.json"
+            preferences_path = Path(tmpdir) / "operator-preferences.json"
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", policy_path):
+                with patch("normal.movie_profile.OPERATOR_PREFERENCES_PATH", preferences_path):
+                    stale_revision = operator_preferences_revision()
+                    preferences_path.write_text(json.dumps({"delete_mode": "hard_delete_all"}) + "\n", encoding="utf-8")
+                    with self.assertRaises(MovieStandardsConflictError):
+                        update_policy_definition(
+                            "delete_mode",
+                            {"delete_mode": "recycle_all"},
+                            expected_preferences_revision=stale_revision,
+                        )
+                    policy, preferences = update_policy_definition(
+                        "delete_mode",
+                        {"delete_mode": "hybrid_media_to_bin_junk_hard_delete"},
+                        expected_preferences_revision=operator_preferences_revision(),
+                    )
+                    saved = preferences_path.read_text(encoding="utf-8")
+
+        self.assertEqual(preferences["delete_mode"], "hybrid_media_to_bin_junk_hard_delete")
+        self.assertEqual(policy["junk_rules"]["delete_confidence_floor"], "high")
+        self.assertIn('"delete_mode": "hybrid_media_to_bin_junk_hard_delete"', saved)
+
+    def test_legacy_standards_file_loads_with_policy_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "movie_standards.json"
+            path.write_text(json.dumps({"replacement_candidate_rules": {"quality_profile_floor": "compact_grade"}}), encoding="utf-8")
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", path):
+                policy = load_movie_standards()
+
+        self.assertEqual(policy["replacement_candidate_rules"]["quality_profile_floor"], "compact_grade")
+        self.assertEqual(policy["primary_language"], "english")
+        self.assertEqual(policy["subtitle_preferences"]["mode"], "conservative")
+        self.assertEqual(policy["junk_rules"]["delete_confidence_floor"], "high")
 
     def test_detect_plex_diagnostics_flags_dts_and_anime_visibility_risks(self) -> None:
         findings = detect_plex_diagnostics(

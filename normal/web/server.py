@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from functools import lru_cache
+import hashlib
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
@@ -29,25 +29,20 @@ from .routes_profile import (
     handle_movies_profile,
     handle_movies_register,
     handle_movies_standards_update,
+    handle_policy_read,
+    handle_policy_update,
 )
 from .state import RequestConflictError
 
 
 WEB_ASSET_ROOT = "web_assets"
 WEB_ASSET_TEMPLATE = "index.html"
-WORKBENCH_ASSET_TEMPLATE = "workbench.html"
 NORMALIZE_LAB_ASSET_TEMPLATE = "normalize_lab.html"
-BOOK_STYLE_ALT_DESIGN_UI_ROUTE = "/book-style-alt-design-ui"
-BOOK_STYLE_ALT_DESIGN_UI_ASSET_ROUTE = "/book-style-alt-design-ui-assets"
 PARSER_TESTER_UI_ROUTE = "/parser-tester-ui"
 PARSER_TESTER_UI_ASSET_ROUTE = "/parser-tester-ui-assets"
 WEB_STATIC_ASSETS = {
     "/assets/app.css": ("app.css", "text/css; charset=utf-8"),
     "/assets/app.js": ("app.js", "application/javascript; charset=utf-8"),
-}
-WORKBENCH_STATIC_ASSETS = {
-    f"{BOOK_STYLE_ALT_DESIGN_UI_ASSET_ROUTE}/workbench.css": ("workbench.css", "text/css; charset=utf-8"),
-    f"{BOOK_STYLE_ALT_DESIGN_UI_ASSET_ROUTE}/workbench.js": ("workbench.js", "application/javascript; charset=utf-8"),
 }
 NORMALIZE_LAB_STATIC_ASSETS = {
     f"{PARSER_TESTER_UI_ASSET_ROUTE}/normalize_lab.css": ("normalize_lab.css", "text/css; charset=utf-8"),
@@ -56,14 +51,17 @@ NORMALIZE_LAB_STATIC_ASSETS = {
 WEB_BOOTSTRAP_SENTINEL = "__NORMAL_BOOTSTRAP__"
 
 
-@lru_cache(maxsize=None)
 def read_web_asset_text(name: str) -> str:
     return resources.files("normal").joinpath(WEB_ASSET_ROOT, name).read_text(encoding="utf-8")
 
 
-@lru_cache(maxsize=None)
 def read_web_asset_bytes(name: str) -> bytes:
     return read_web_asset_text(name).encode("utf-8")
+
+
+def versioned_asset_route(route: str, asset_name: str) -> str:
+    digest = hashlib.sha256(read_web_asset_bytes(asset_name)).hexdigest()[:12]
+    return f"{route}?v={digest}"
 
 
 def render_web_bootstrap(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
@@ -83,19 +81,20 @@ def render_asset_html(
     tmdb_key: str | None = None,
 ) -> str:
     template = read_web_asset_text(template_name)
-    return template.replace(
+    html = template.replace(
         WEB_BOOTSTRAP_SENTINEL,
         render_web_bootstrap(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key),
         1,
     )
+    for route, (asset_name, _) in WEB_STATIC_ASSETS.items():
+        html = html.replace(route, versioned_asset_route(route, asset_name))
+    for route, (asset_name, _) in NORMALIZE_LAB_STATIC_ASSETS.items():
+        html = html.replace(route, versioned_asset_route(route, asset_name))
+    return html
 
 
 def render_index_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
     return render_asset_html(WEB_ASSET_TEMPLATE, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
-
-
-def render_workbench_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
-    return render_asset_html(WORKBENCH_ASSET_TEMPLATE, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
 
 
 def render_normalize_lab_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
@@ -119,19 +118,13 @@ def serve_web_ui(
 def serve_static_asset(ctx: RequestContext, route: str) -> None:
     asset_name, content_type = WEB_STATIC_ASSETS[route]
     body = read_web_asset_bytes(asset_name)
-    ctx.respond_bytes(body, content_type=content_type)
-
-
-def serve_workbench_static_asset(ctx: RequestContext, route: str) -> None:
-    asset_name, content_type = WORKBENCH_STATIC_ASSETS[route]
-    body = read_web_asset_bytes(asset_name)
-    ctx.respond_bytes(body, content_type=content_type)
+    ctx.respond_bytes(body, content_type=content_type, headers={"Cache-Control": "no-store"})
 
 
 def serve_normalize_lab_static_asset(ctx: RequestContext, route: str) -> None:
     asset_name, content_type = NORMALIZE_LAB_STATIC_ASSETS[route]
     body = read_web_asset_bytes(asset_name)
-    ctx.respond_bytes(body, content_type=content_type)
+    ctx.respond_bytes(body, content_type=content_type, headers={"Cache-Control": "no-store"})
 
 
 def serve_index(ctx: RequestContext) -> None:
@@ -140,16 +133,7 @@ def serve_index(ctx: RequestContext) -> None:
         omdb_key=ctx.omdb_key,
         tmdb_key=ctx.tmdb_key,
     ).encode("utf-8")
-    ctx.respond_bytes(body, content_type="text/html; charset=utf-8")
-
-
-def serve_workbench(ctx: RequestContext) -> None:
-    body = render_workbench_html(
-        default_source=ctx.default_source,
-        omdb_key=ctx.omdb_key,
-        tmdb_key=ctx.tmdb_key,
-    ).encode("utf-8")
-    ctx.respond_bytes(body, content_type="text/html; charset=utf-8")
+    ctx.respond_bytes(body, content_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"})
 
 
 def serve_normalize_lab(ctx: RequestContext) -> None:
@@ -158,7 +142,7 @@ def serve_normalize_lab(ctx: RequestContext) -> None:
         omdb_key=ctx.omdb_key,
         tmdb_key=ctx.tmdb_key,
     ).encode("utf-8")
-    ctx.respond_bytes(body, content_type="text/html; charset=utf-8")
+    ctx.respond_bytes(body, content_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"})
 
 
 def build_get_routes() -> dict[str, Callable[[RequestContext], None]]:
@@ -167,15 +151,11 @@ def build_get_routes() -> dict[str, Callable[[RequestContext], None]]:
         "/api/library-roots": handle_library_roots_get,
         "/": serve_index,
         "/index.html": serve_index,
-        BOOK_STYLE_ALT_DESIGN_UI_ROUTE: serve_workbench,
-        f"{BOOK_STYLE_ALT_DESIGN_UI_ROUTE}.html": serve_workbench,
         PARSER_TESTER_UI_ROUTE: serve_normalize_lab,
         f"{PARSER_TESTER_UI_ROUTE}.html": serve_normalize_lab,
     }
     for route in WEB_STATIC_ASSETS:
         routes[route] = lambda ctx, route=route: serve_static_asset(ctx, route)
-    for route in WORKBENCH_STATIC_ASSETS:
-        routes[route] = lambda ctx, route=route: serve_workbench_static_asset(ctx, route)
     for route in NORMALIZE_LAB_STATIC_ASSETS:
         routes[route] = lambda ctx, route=route: serve_normalize_lab_static_asset(ctx, route)
     return routes
@@ -187,6 +167,8 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/movies/profile": handle_movies_profile,
         "/api/movies/dashboard/histogram": handle_movies_dashboard_histogram,
         "/api/movies/standards/update": handle_movies_standards_update,
+        "/api/policy/read": handle_policy_read,
+        "/api/policy/update": handle_policy_update,
         "/api/movies/canonical-lists": handle_movies_canonical_lists,
         "/api/movies/omdb/ratings": handle_movies_omdb_ratings,
         "/api/source/scan-warning": handle_source_scan_warning,

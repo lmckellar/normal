@@ -6,6 +6,24 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.3] — 2026-06-04
+
+### Changed
+
+- The compact movie workbench now exposes a left-side `Policy` rail as the sole write owner for library policy and operator delete posture. Weak-floor and related policy edits are no longer separate ad hoc controls.
+- Policy persistence is now split cleanly: repo-local library policy continues to live in `movie_standards.json`, while user-local operator preferences are stored separately under `~/.local/share/normal/operator-preferences.json`.
+- `Repair Defaults` in the compact shell is now one unified repair lane rather than a tab switcher. Audio-default and subtitle-default issues can be staged through one shared table and combined repair actions.
+- Delete-capable web routes now honor a shared delete posture resolver. Media, junk, safe sidecars, and empty folders can be recycled or hard-deleted according to the configured operator preference, including the two hybrid modes.
+- The compact shell preview surface now yields to policy editing mode. Opening policy expands the left rail into the main work area, suppresses preview/action controls, and uses the right pane for reduced inspection instead.
+- The deprecated alternate workbench route and its static assets were removed. The compact root-shell and parser-tester shell are now the only active web UI surfaces in this slice.
+- Normalize cleanup now treats obvious no-video junk residue folders as safe delete candidates when they only contain disposable metadata or promo-document residue.
+- Web asset serving now appends hash-based cache-buster query strings and returns `Cache-Control: no-store` headers for the HTML and packaged asset routes to reduce stale local UI loads during active iteration.
+
+### Fixed
+
+- Repair-lane actions no longer split ownership awkwardly between audio and subtitle sub-tabs. Shared rows now classify by issue family and refresh correctly after mixed repair actions.
+- Destructive cleanup helpers no longer bypass the configured delete posture when removing safe sidecars or emptied folders after file deletion.
+
 ## [0.7.0-alpha.2] — 2026-06-02
 
 ### Changed

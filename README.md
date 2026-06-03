@@ -63,11 +63,13 @@ Recommended testing process is in [docs/quickstart.md](docs/quickstart.md) and [
 
 Watching the tool purify a test library for the first time is a good experience. Watching it touch your real library before you're ready is not.
 
-## Alpha.2 UI note
+## Alpha UI note
 
-`v0.7.0-alpha.2` promotes the newer workbench at `http://127.0.0.1:8765/` to the default UI.
+`v0.7.0-alpha.2` promoted the newer workbench at `http://127.0.0.1:8765/` to the default UI.
 
-Some lanes and audit surfaces that were previously exposed in `alpha.1` remain present in backend or partial internal form but are intentionally not surfaced in this default alpha.2 UI while they undergo deeper revision. The main release touch points in this repo reflect current reality; broader docs may still describe older public surfaces for a while.
+`v0.7.0-alpha.3` stabilizes that same compact shell around a left-side Policy rail, unified repair-lane ownership, and shared delete-posture handling.
+
+Some lanes and audit surfaces that were previously exposed in `alpha.1` remain present in backend or partial internal form but are intentionally not surfaced in the default UI while they undergo deeper revision. The main release touch points in this repo reflect current reality; broader docs may still describe older public surfaces for a while.
 
 ## Optional API Keys
 

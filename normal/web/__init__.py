@@ -12,7 +12,7 @@ from .scan_guard import (
     resolve_source_path,
 )
 from .serializers import build_movie_normalize_results
-from .server import build_handler, read_web_asset_text, render_index_html, render_normalize_lab_html, render_workbench_html, serve_web_ui
+from .server import build_handler, read_web_asset_text, render_index_html, render_normalize_lab_html, serve_web_ui
 from .state import HEAVY_SCAN_REGISTRY, RequestConflictError
 
 ACTIVITY_TRACKER = state.ACTIVITY_TRACKER
@@ -36,7 +36,6 @@ __all__ = [
     "read_web_asset_text",
     "render_index_html",
     "render_normalize_lab_html",
-    "render_workbench_html",
     "resolve_source_path",
     "scan_guard",
     "serve_web_ui",

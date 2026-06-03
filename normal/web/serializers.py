@@ -8,9 +8,16 @@ from normal.models import ProposedChange, WarningItem
 from normal.movie_plan import parse_movie_name_with_sidecar_fallback
 from normal.movie_profile import (
     MovieProfileReport,
+    build_delete_mode_definition,
     build_histogram_payload,
     build_movie_profile_definitions,
+    build_policy_definitions,
     build_movie_profile_item,
+    build_library_defaults_definition,
+    library_policy_revision,
+    load_library_policy,
+    load_operator_preferences,
+    operator_preferences_revision,
     build_replacement_candidate_definition,
     load_movie_standards,
     movie_standards_revision,
@@ -242,9 +249,17 @@ def dedupe_warning_details(values: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def build_profile_response(source: Path, report: MovieProfileReport, standards: dict[str, Any] | None = None) -> dict[str, Any]:
-    standards_payload = standards if standards is not None else load_movie_standards()
+    standards_payload = standards if standards is not None else load_library_policy()
+    operator_preferences = load_operator_preferences()
     response = report.to_dict()
     response["histogram"] = build_histogram_payload(report)
+    response["policy"] = standards_payload
+    response["policy_revision"] = library_policy_revision(standards_payload)
+    response["operator_preferences"] = operator_preferences
+    response["operator_preferences_revision"] = operator_preferences_revision(operator_preferences)
+    response["policy_definitions"] = build_policy_definitions(standards_payload, operator_preferences)
+    response["library_defaults_definition"] = build_library_defaults_definition(standards_payload)
+    response["delete_mode_definition"] = build_delete_mode_definition(operator_preferences)
     response["movie_standards"] = standards_payload
     response["movie_standards_revision"] = movie_standards_revision(standards_payload)
     response["quality_profile_definitions"] = build_movie_profile_definitions(standards_payload)

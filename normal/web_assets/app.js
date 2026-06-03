@@ -2032,8 +2032,8 @@
         ${issueSummary}
         <div class="junk-actions audio-packaging-actions">
           <button class="secondary sel-toggle" id="toggleAllReplacementButton" ${(selectableCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
-          <button class="warn sel-toggle" id="fixSelectedAudioButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Set English Default</button>
-          <button class="caution sel-toggle" id="fixSelectedAudioAndDropForeignButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Set English Default + Drop Foreign</button>
+          <button class="warn sel-toggle" id="fixSelectedAudioButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Make Best English Audio Default</button>
+          <button class="caution sel-toggle" id="fixSelectedAudioAndDropForeignButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Make Best English Audio Default + Remove Foreign Audio</button>
           <span class="triage-action-spacer"></span>
           <button class="danger sel-toggle" id="deleteSelectedFilesButton" ${(selectedCount && !state.movieAudioFixBusy) ? '' : 'disabled'}>Delete Selected Files</button>
           <span class="triage-action-note">${lockNote}</span>
@@ -2079,7 +2079,7 @@
       return `
         <div class="junk-actions audio-packaging-actions">
           <button class="secondary sel-toggle" id="toggleSubtitleRepairButton" ${(selectableCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>${toggleLabel}</button>
-          <button class="primary" id="fixSelectedSubtitleButton" ${(selectedCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>Repair Subtitle Defaults</button>
+          <button class="primary" id="fixSelectedSubtitleButton" ${(selectedCount && !state.movieSubtitleFixBusy) ? '' : 'disabled'}>Normalize Subtitle Defaults</button>
           <span class="subtle">This page is non-destructive.</span>
           <span class="triage-action-note">${lockNote}</span>
         </div>

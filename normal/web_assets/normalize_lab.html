@@ -10,7 +10,7 @@
   <div class="lab-shell" data-layout-mode="2-page-lopsided">
     <header class="lab-topbar">
       <div>
-        <div class="lab-kicker">alpha.2 default</div>
+        <div class="lab-kicker">alpha.3 default</div>
         <div class="lab-workflow-switch">
           <button id="workflowButton" class="lab-workflow-button" type="button" aria-haspopup="listbox" aria-expanded="false">
             <span id="workflowTitle">Movie Normalize</span>
@@ -32,7 +32,7 @@
       </div>
     </header>
 
-    <section class="lab-filters">
+    <section id="filterBar" class="lab-filters">
       <input id="searchInput" type="search" placeholder="Search current or projected path">
       <select id="bucketFilter">
         <option value="all">all</option>
@@ -56,17 +56,6 @@
         <option value="review">review</option>
         <option value="queued">queued</option>
       </select>
-      <label id="weakFloorLabel" for="weakFloorSelect" hidden>Weak Floor of</label>
-      <select id="weakFloorSelect" hidden>
-        <option value="standard_definition">Standard Definition</option>
-        <option value="compact_grade">Compact Grade</option>
-        <option value="library_grade">Library Grade</option>
-      </select>
-      <label id="repairDefaultsTabLabel" for="repairDefaultsTabSelect" hidden>Repair Lane</label>
-      <select id="repairDefaultsTabSelect" hidden>
-        <option value="audio">Audio Packaging</option>
-        <option value="subtitle">Subtitle Readiness</option>
-      </select>
       <label for="previewScopeSelect">Preview Scope</label>
       <select id="previewScopeSelect">
         <option value="selected">Selected</option>
@@ -77,9 +66,15 @@
     </section>
 
     <main class="lab-layout">
+      <aside class="lab-sliver">
+        <div class="lab-sliver-head">
+          <button id="policyToggle" class="lab-sliver-toggle" type="button" aria-label="Open Policy" title="Open Policy"></button>
+        </div>
+        <div id="policyRail" class="lab-sliver-body"></div>
+      </aside>
       <section class="lab-page lab-page-scan" data-page-role="scan" data-collapse-mode="reflow" data-panel-state="expanded">
         <div class="lab-page-frame">
-          <section class="lab-table-panel lab-rhythm-surface" data-rhythm-surface="rows">
+          <section id="scanTablePanel" class="lab-table-panel lab-rhythm-surface" data-rhythm-surface="rows">
             <table class="lab-scan-table">
               <colgroup id="tableColGroup"></colgroup>
               <thead>
@@ -94,6 +89,7 @@
               <tbody id="rowsBody"></tbody>
             </table>
           </section>
+          <section id="policyEditorPanel" class="lab-panel lab-policy-panel" hidden></section>
         </div>
       </section>
       <aside class="lab-page lab-page-preview" data-page-role="preview" data-collapse-mode="anchored-slot" data-panel-state="expanded">
@@ -101,9 +97,13 @@
           <div class="lab-detail">
             <div class="lab-panel">
               <div class="lab-panel-header">
+                <div class="lab-panel-copy">
+                  <div id="previewPanelKicker" class="lab-panel-kicker">Downstream Preview</div>
+                  <div id="previewPanelHeading" class="lab-panel-heading">Projected Output</div>
+                </div>
                 <div id="previewControls" class="lab-preview-controls" hidden>
                   <div id="repairActionControls" class="lab-preview-group" hidden>
-                    <label for="repairActionSelect">Repair action</label>
+                    <label for="repairActionSelect">Action</label>
                     <select id="repairActionSelect"></select>
                     <button id="repairActionButton" class="lab-action-button" type="button">Run Repair</button>
                   </div>
@@ -111,6 +111,7 @@
                 </div>
               </div>
               <div id="previewPane" class="lab-pane lab-preview-pane lab-rhythm-surface" data-rhythm-surface="rows"></div>
+              <div id="inspectionPane" class="lab-pane lab-preview-pane lab-rhythm-surface" data-rhythm-surface="rows" hidden></div>
             </div>
           </div>
         </div>

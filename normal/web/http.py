@@ -39,11 +39,14 @@ class RequestContext:
         content_type: str,
         status: HTTPStatus = HTTPStatus.OK,
         content_disposition: str | None = None,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.handler.send_response(status)
         self.handler.send_header("Content-Type", content_type)
         if content_disposition is not None:
             self.handler.send_header("Content-Disposition", content_disposition)
+        for key, value in (headers or {}).items():
+            self.handler.send_header(key, value)
         self.handler.send_header("Content-Length", str(len(body)))
         self.handler.end_headers()
         self.handler.wfile.write(body)

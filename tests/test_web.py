@@ -17,18 +17,14 @@ from normal.web import (
     read_web_asset_text,
     render_index_html,
     render_normalize_lab_html,
-    render_workbench_html,
 )
+from normal.web.routes_cleanup import delete_mode_for_kind
 
 
 APP_TEMPLATE = read_web_asset_text("index.html")
 APP_CSS = read_web_asset_text("app.css")
 APP_JS = read_web_asset_text("app.js")
 FRONTEND = "\n".join((APP_TEMPLATE, APP_CSS, APP_JS))
-WORKBENCH_TEMPLATE = read_web_asset_text("workbench.html")
-WORKBENCH_CSS = read_web_asset_text("workbench.css")
-WORKBENCH_JS = read_web_asset_text("workbench.js")
-WORKBENCH_FRONTEND = "\n".join((WORKBENCH_TEMPLATE, WORKBENCH_CSS, WORKBENCH_JS))
 NORMALIZE_LAB_TEMPLATE = read_web_asset_text("normalize_lab.html")
 NORMALIZE_LAB_CSS = read_web_asset_text("normalize_lab.css")
 NORMALIZE_LAB_JS = read_web_asset_text("normalize_lab.js")
@@ -56,9 +52,9 @@ class WebTests(unittest.TestCase):
 
     def test_legacy_dashboard_runtime_keys_are_available_before_initial_render(self) -> None:
         html = render_index_html(Path("/library/movies"), omdb_key="omdb-test", tmdb_key="tmdb-test")
-        self.assertIn('<link rel="stylesheet" href="/assets/app.css">', html)
-        self.assertIn('<script src="/assets/app.js"></script>', html)
-        self.assertLess(html.index("window.OMDB_AVAILABLE"), html.index('<script src="/assets/app.js"></script>'))
+        self.assertIn('<link rel="stylesheet" href="/assets/app.css?v=', html)
+        self.assertIn('<script src="/assets/app.js?v=', html)
+        self.assertLess(html.index("window.OMDB_AVAILABLE"), html.index('<script src="/assets/app.js?v='))
         self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
         self.assertIn("window.OMDB_AVAILABLE = true;", html)
         self.assertNotIn("omdb-test", html)
@@ -68,39 +64,20 @@ class WebTests(unittest.TestCase):
         with self.run_test_server() as base_url:
             with urllib.request.urlopen(f"{base_url}/assets/app.css") as response:
                 self.assertEqual(response.headers.get_content_type(), "text/css")
+                self.assertEqual(response.headers.get("Cache-Control"), "no-store")
                 self.assertIn(".activity-bar", response.read().decode("utf-8"))
             with urllib.request.urlopen(f"{base_url}/assets/app.js") as response:
                 self.assertEqual(response.headers.get_content_type(), "application/javascript")
+                self.assertEqual(response.headers.get("Cache-Control"), "no-store")
                 self.assertIn("function refreshActivityState", response.read().decode("utf-8"))
-            with urllib.request.urlopen(f"{base_url}/book-style-alt-design-ui-assets/workbench.css") as response:
-                self.assertEqual(response.headers.get_content_type(), "text/css")
-                self.assertIn(".wb-frame", response.read().decode("utf-8"))
-            with urllib.request.urlopen(f"{base_url}/book-style-alt-design-ui-assets/workbench.js") as response:
-                self.assertEqual(response.headers.get_content_type(), "application/javascript")
-                self.assertIn("Preview Selected Changes", response.read().decode("utf-8"))
             with urllib.request.urlopen(f"{base_url}/parser-tester-ui-assets/normalize_lab.css") as response:
                 self.assertEqual(response.headers.get_content_type(), "text/css")
+                self.assertEqual(response.headers.get("Cache-Control"), "no-store")
                 self.assertIn(".lab-layout", response.read().decode("utf-8"))
             with urllib.request.urlopen(f"{base_url}/parser-tester-ui-assets/normalize_lab.js") as response:
                 self.assertEqual(response.headers.get_content_type(), "application/javascript")
+                self.assertEqual(response.headers.get("Cache-Control"), "no-store")
                 self.assertIn("/api/movies/apply", response.read().decode("utf-8"))
-
-    def test_workbench_runtime_keys_are_available_before_initial_render(self) -> None:
-        html = render_workbench_html(Path("/library/movies"), omdb_key="omdb-test", tmdb_key="tmdb-test")
-        self.assertIn('<link rel="stylesheet" href="/book-style-alt-design-ui-assets/workbench.css">', html)
-        self.assertIn('<script src="/book-style-alt-design-ui-assets/workbench.js"></script>', html)
-        self.assertLess(html.index("window.OMDB_AVAILABLE"), html.index('<script src="/book-style-alt-design-ui-assets/workbench.js"></script>'))
-        self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
-        self.assertIn("window.OMDB_AVAILABLE = true;", html)
-        self.assertNotIn("omdb-test", html)
-        self.assertIn('window.TMDB_KEY = "tmdb-test";', html)
-
-    def test_workbench_route_serves_parallel_ui(self) -> None:
-        with self.run_test_server() as base_url:
-            with urllib.request.urlopen(f"{base_url}/book-style-alt-design-ui") as response:
-                html = response.read().decode("utf-8")
-        self.assertIn("Book Style Alt Design UI", html)
-        self.assertIn("/book-style-alt-design-ui-assets/workbench.js", html)
 
     def test_root_route_serves_default_workbench(self) -> None:
         with self.run_test_server() as base_url:
@@ -109,17 +86,20 @@ class WebTests(unittest.TestCase):
             with urllib.request.urlopen(f"{base_url}/index.html") as response:
                 served_index = response.read().decode("utf-8")
         self.assertIn("normal workbench", served)
-        self.assertIn("/parser-tester-ui-assets/normalize_lab.js", served)
+        self.assertIn("/parser-tester-ui-assets/normalize_lab.js?v=", served)
         self.assertIn("Movie Normalize", served)
         self.assertEqual(served, served_index)
 
     def test_normalize_lab_route_serves_default_ui_alias(self) -> None:
         html = render_normalize_lab_html(Path("/library/movies"))
-        self.assertIn('/parser-tester-ui-assets/normalize_lab.css', html)
-        self.assertIn('/parser-tester-ui-assets/normalize_lab.js', html)
+        self.assertIn('/parser-tester-ui-assets/normalize_lab.css?v=', html)
+        self.assertIn('/parser-tester-ui-assets/normalize_lab.js?v=', html)
         self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
-        self.assertIn('Weak Floor of', html)
-        self.assertIn('id="weakFloorSelect"', html)
+        self.assertIn('id="policyToggle"', html)
+        self.assertIn('id="policyRail"', html)
+        self.assertIn('id="policyEditorPanel"', html)
+        self.assertIn('id="inspectionPane"', html)
+        self.assertNotIn('Repair Lane', html)
         self.assertIn('data-layout-mode="2-page-lopsided"', html)
         self.assertIn('data-page-role="scan"', html)
         self.assertIn('data-page-role="preview"', html)
@@ -133,6 +113,18 @@ class WebTests(unittest.TestCase):
         self.assertIn("Repair Defaults", served)
         self.assertIn("Delete Junk &amp; Spam", served)
         self.assertIn("Confirm (0 Operations)", served)
+
+    def test_deprecated_alt_ui_route_and_assets_are_removed(self) -> None:
+        with self.run_test_server() as base_url:
+            for path in (
+                "/book-style-alt-design-ui",
+                "/book-style-alt-design-ui.html",
+                "/book-style-alt-design-ui-assets/workbench.css",
+                "/book-style-alt-design-ui-assets/workbench.js",
+            ):
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(f"{base_url}{path}")
+                self.assertEqual(ctx.exception.code, 404)
 
     def test_normalize_lab_export_endpoint_is_removed(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -150,30 +142,19 @@ class WebTests(unittest.TestCase):
                     urllib.request.urlopen(req)
         self.assertEqual(ctx.exception.code, 404)
 
-    def test_workbench_frontend_is_wired_for_fixed_spread(self) -> None:
-        self.assertIn("Primary Surface", WORKBENCH_FRONTEND)
-        self.assertIn("Secondary Surface", WORKBENCH_FRONTEND)
-        self.assertIn("Downstream Ledger", WORKBENCH_FRONTEND)
-        self.assertIn("Preview Selected Changes", WORKBENCH_FRONTEND)
-        self.assertIn("Diff View", WORKBENCH_FRONTEND)
-        self.assertIn("Full Preview", WORKBENCH_FRONTEND)
-        self.assertIn("Reveal File Tree", WORKBENCH_FRONTEND)
-        self.assertIn("Collapse File Tree", WORKBENCH_FRONTEND)
-        self.assertIn("state.auditExpanded = !state.auditExpanded;", WORKBENCH_FRONTEND)
-        self.assertIn("buildAuditExpandedContent()", WORKBENCH_FRONTEND)
-        self.assertIn("/api/movies/apply", WORKBENCH_FRONTEND)
-        self.assertIn("/api/movies/junk/delete", WORKBENCH_FRONTEND)
-        self.assertIn("/api/movies/audio-packaging/fix", WORKBENCH_FRONTEND)
-        self.assertIn("/api/movies/subtitle-readiness/fix", WORKBENCH_FRONTEND)
-        self.assertIn("window.confirm(`Permanently delete ${items.length} file", WORKBENCH_FRONTEND)
-        self.assertIn("wb-frame", WORKBENCH_CSS)
-        self.assertIn("grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1fr) 82px;", WORKBENCH_CSS)
-
     def test_handler_returns_404_for_unknown_static_asset(self) -> None:
         with self.run_test_server() as base_url:
             with self.assertRaises(urllib.error.HTTPError) as ctx:
                 urllib.request.urlopen(f"{base_url}/assets/missing.css")
         self.assertEqual(ctx.exception.code, 404)
+
+    def test_delete_mode_for_kind_supports_all_four_modes(self) -> None:
+        self.assertEqual(delete_mode_for_kind("media", {"delete_mode": "recycle_all"}), "recycle")
+        self.assertEqual(delete_mode_for_kind("junk", {"delete_mode": "hard_delete_all"}), "hard_delete")
+        self.assertEqual(delete_mode_for_kind("media", {"delete_mode": "hybrid_media_to_bin_junk_hard_delete"}), "recycle")
+        self.assertEqual(delete_mode_for_kind("junk", {"delete_mode": "hybrid_media_to_bin_junk_hard_delete"}), "hard_delete")
+        self.assertEqual(delete_mode_for_kind("media", {"delete_mode": "hybrid_junk_to_bin_media_hard_delete"}), "hard_delete")
+        self.assertEqual(delete_mode_for_kind("junk", {"delete_mode": "hybrid_junk_to_bin_media_hard_delete"}), "recycle")
 
     def test_library_switcher_remembers_music_and_movie_roots(self) -> None:
         self.assertIn("Library Switcher", FRONTEND)
@@ -279,8 +260,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("Weak English Fallback", FRONTEND)
         self.assertIn("'/api/movies/audio-packaging/fix'", FRONTEND)
         self.assertIn("'/api/movies/delete'", FRONTEND)
-        self.assertIn("Set English Default", FRONTEND)
-        self.assertIn("Set English Default + Drop Foreign", FRONTEND)
+        self.assertIn("Make Best English Audio Default", FRONTEND)
+        self.assertIn("Make Best English Audio Default + Remove Foreign Audio", FRONTEND)
         self.assertIn("junk-actions audio-packaging-actions", FRONTEND)
         self.assertIn("triage-action-spacer", FRONTEND)
         self.assertIn("Selection locked while ffmpeg remux is running.", FRONTEND)
@@ -302,7 +283,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("function movieSubtitleFixSelectionLocked()", FRONTEND)
         self.assertIn("function movieSubtitleReadinessIssueCode(item)", FRONTEND)
         self.assertIn("function movieSubtitleReadinessIsRepairable(item)", FRONTEND)
-        self.assertIn("Repair Subtitle Defaults", FRONTEND)
+        self.assertIn("Normalize Subtitle Defaults", FRONTEND)
         self.assertIn("'/api/movies/subtitle-readiness/fix'", FRONTEND)
         self.assertIn("This page is non-destructive", FRONTEND)
         self.assertIn("Selection locked while ffmpeg remux is running.", FRONTEND)
@@ -439,18 +420,31 @@ class WebTests(unittest.TestCase):
         self.assertIn("Repair Defaults", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Delete Junk & Spam", NORMALIZE_LAB_FRONTEND)
         self.assertIn("return workflow;", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Weak Floor of", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Repair Lane", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Audio Packaging", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Subtitle Readiness", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Set English Default", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Delete Foreign Passenger Audio", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Do Both At Once", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Repair Subtitle Defaults", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("/api/policy/read", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("/api/policy/update", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("id=\"policyToggle\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("id=\"policyRail\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("id=\"policyEditorPanel\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("id=\"inspectionPane\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("state.policyEditing = false", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function renderPolicyRail()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function renderPolicyEditor()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function renderInspectionPane()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function togglePolicyEditor()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Preview and action controls are suppressed while policy editing is active.", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("applyPolicyPayload(payload);", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("repo-local <span class=\"lab-cell-mono\">movie_standards.json</span>", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Make Best English Audio Default", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Normalize Subtitle Defaults", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Make Best English Audio Default + Normalize Subtitle Defaults", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Make Best English Audio Default + Remove Foreign Audio", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Make Best English Audio Default + Remove Foreign Audio + Normalize Subtitle Defaults", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("Repair Lane", NORMALIZE_LAB_FRONTEND)
         self.assertIn("This page is non-destructive", NORMALIZE_LAB_FRONTEND)
         self.assertIn("wrong language · weak English", NORMALIZE_LAB_FRONTEND)
         self.assertIn("default_non_english_audio", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("selectable: Boolean(item.path) && Boolean(issueCode) && !repairDefaultsSelectionLocked()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("issueFamilyLabel(issueFamilies)", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("selectable: Boolean(item.path) && issueFamilies.length > 0 && !repairDefaultsSelectionLocked()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("File Name", NORMALIZE_LAB_FRONTEND)
         self.assertIn("label: 'Confidence'", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function fileNameFromPath(path)", NORMALIZE_LAB_FRONTEND)
@@ -462,7 +456,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("Deselect all", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Preview Scope", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Full library", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Repair action", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Action", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Run Repair", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Confirm (0 Operations)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Run Delete Junk & Spam Files", NORMALIZE_LAB_FRONTEND)
@@ -480,6 +474,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("3-page-book", NORMALIZE_LAB_FRONTEND)
         self.assertIn("4-page-ledger", NORMALIZE_LAB_FRONTEND)
         self.assertIn("data-layout-mode", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("data-policy-mode", NORMALIZE_LAB_FRONTEND)
         self.assertIn("data-page-role", NORMALIZE_LAB_FRONTEND)
         self.assertIn("data-collapse-mode", NORMALIZE_LAB_FRONTEND)
         self.assertIn("data-panel-state", NORMALIZE_LAB_FRONTEND)
@@ -498,8 +493,9 @@ class WebTests(unittest.TestCase):
         self.assertIn("Delete Selected Files (", NORMALIZE_LAB_FRONTEND)
         self.assertIn("selected junk file", NORMALIZE_LAB_FRONTEND)
         self.assertIn("currently filtered junk candidate", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("selected subtitle issue", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("selected audio-packaging title", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("summaryNoun: 'subtitle issue'", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("summaryNoun: 'audio-packaging title'", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("summaryNoun: 'repair title'", NORMALIZE_LAB_FRONTEND)
         self.assertIn("No remaining normalize changes.", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("detailPane", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("renderDetailPane", NORMALIZE_LAB_FRONTEND)
@@ -509,10 +505,11 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("label: 'Status'", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("Replacement History", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("buildReplacementHistoryTable", NORMALIZE_LAB_FRONTEND)
-        self.assertNotIn('<div class="lab-panel-title">Preview</div>', NORMALIZE_LAB_TEMPLATE)
+        self.assertNotIn('id="weakFloorSelect"', NORMALIZE_LAB_TEMPLATE)
 
     def test_normalize_lab_css_exposes_shell_layout_and_rhythm_contracts(self) -> None:
         self.assertIn('[hidden] { display: none !important; }', NORMALIZE_LAB_CSS)
+        self.assertIn('--lab-track-rail', NORMALIZE_LAB_CSS)
         self.assertIn('--lab-track-scan', NORMALIZE_LAB_CSS)
         self.assertIn('--lab-track-inspection', NORMALIZE_LAB_CSS)
         self.assertIn('--lab-track-preview', NORMALIZE_LAB_CSS)
@@ -525,6 +522,10 @@ class WebTests(unittest.TestCase):
         self.assertIn('.lab-shell[data-layout-mode="2-page-lopsided"]', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-shell[data-layout-mode="3-page-book"] .lab-layout', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-shell[data-layout-mode="4-page-ledger"] .lab-layout', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-shell[data-policy-mode="editing"] .lab-layout', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-sliver', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-policy-panel', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-inspection-pane', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-page[data-panel-state="collapsed"][data-collapse-mode="anchored-slot"]', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-page[data-panel-state="collapsed"][data-collapse-mode="reflow"]', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-rhythm-surface[data-rhythm-surface="rows"]', NORMALIZE_LAB_CSS)
@@ -540,12 +541,15 @@ class WebTests(unittest.TestCase):
 
     def test_normalize_lab_audio_repair_buttons_are_bound_to_mux_actions(self) -> None:
         self.assertIn("el.repairActionButton.addEventListener('click', () => {", NORMALIZE_LAB_JS)
-        self.assertIn("const request = action === 'repair_subtitle_defaults'", NORMALIZE_LAB_JS)
-        self.assertIn("fixSelectedAudioDefaults(action !== 'set_english_default');", NORMALIZE_LAB_JS)
+        self.assertIn("const request = runSelectedRepairAction(action);", NORMALIZE_LAB_JS)
+        self.assertIn("set_english_default_repair_subtitle_defaults", NORMALIZE_LAB_JS)
+        self.assertIn("set_english_default_drop_foreign_repair_subtitle_defaults", NORMALIZE_LAB_JS)
+        self.assertNotIn("repairDefaultsTab", NORMALIZE_LAB_JS)
         self.assertIn("Running English-default remux for ${paths.length} file", NORMALIZE_LAB_JS)
-        self.assertIn("Running foreign-audio prune for ${paths.length} file", NORMALIZE_LAB_JS)
         self.assertIn("Running English-default remux and foreign-audio prune for ${paths.length} file", NORMALIZE_LAB_JS)
+        self.assertIn("Running subtitle-default remux for ${paths.length} file", NORMALIZE_LAB_JS)
         self.assertIn("body: JSON.stringify({ source: el.sourcePath.value.trim(), paths, drop_foreign_audio: dropForeignAudio }),", NORMALIZE_LAB_JS)
+        self.assertIn("if (actionTouchesSubtitle(action)) {", NORMALIZE_LAB_JS)
 
     def test_normalize_lab_selection_refreshes_all_selection_dependent_controls(self) -> None:
         self.assertIn("function refreshSelectionState() {", NORMALIZE_LAB_JS)

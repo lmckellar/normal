@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,7 @@ from normal.movie_junk import (
 )
 from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
 from normal.movie_scan import VIDEO_EXTENSIONS
+from normal.movie_profile import load_operator_preferences, normalize_delete_mode
 
 from .activity import tracked_probe
 from .http import RequestContext
@@ -38,11 +41,49 @@ SAFE_MOVIE_SIDECAR_EXTENSIONS = {
     ".webp",
     ".xml",
 }
+RECYCLE_COMMANDS = (
+    ("gio", "trash"),
+    ("trash-put",),
+)
+
+
+def delete_mode_for_kind(kind: str, preferences: dict[str, Any] | None = None) -> str:
+    mode = normalize_delete_mode((preferences or load_operator_preferences()).get("delete_mode"))
+    if mode == "hard_delete_all":
+        return "hard_delete"
+    if mode == "recycle_all":
+        return "recycle"
+    if mode == "hybrid_media_to_bin_junk_hard_delete":
+        return "hard_delete" if kind == "junk" else "recycle"
+    if mode == "hybrid_junk_to_bin_media_hard_delete":
+        return "recycle" if kind == "junk" else "hard_delete"
+    return "recycle"
+
+
+def move_path_to_recycle_bin(path: Path) -> None:
+    for command in RECYCLE_COMMANDS:
+        if shutil.which(command[0]) is None:
+            continue
+        subprocess.run([*command, str(path)], check=True, capture_output=True, text=True)
+        return
+    raise RuntimeError("Recycle mode is configured, but no supported trash command is available.")
+
+
+def execute_delete_path(path: Path, kind: str, preferences: dict[str, Any] | None = None) -> str:
+    action = delete_mode_for_kind(kind, preferences)
+    if action == "recycle":
+        move_path_to_recycle_bin(path)
+    elif path.is_dir():
+        path.rmdir()
+    else:
+        path.unlink()
+    return action
 
 
 def delete_movie_junk_files(
     source: Path,
     raw_paths: list[Any],
+    preferences: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source_root = source.resolve()
     deleted = []
@@ -64,7 +105,7 @@ def delete_movie_junk_files(
         if not reasons:
             skipped.append({"path": str(resolved), "reason": "not_current_junk_candidate"})
             continue
-        resolved.unlink()
+        execute_delete_path(resolved, "junk", preferences)
         deleted.append(str(resolved))
 
     return {"deleted": deleted, "skipped": skipped}
@@ -87,7 +128,7 @@ def handle_movies_junk_delete(ctx: RequestContext, payload: dict[str, Any]) -> N
     if not isinstance(paths, list):
         raise ValueError("paths must be a list")
     with ctx.handler.activity_tracker.track(source, "Movie junk delete"):
-        result = delete_movie_junk_files(source, paths)
+        result = delete_movie_junk_files(source, paths, load_operator_preferences())
     ctx.respond_json(result)
 
 
@@ -125,13 +166,20 @@ def preview_safe_movie_sidecar_cleanup(
     return result
 
 
-def cleanup_safe_movie_sidecars(source: Path, folder: Path) -> dict[str, Any]:
+def cleanup_safe_movie_sidecars(
+    source: Path,
+    folder: Path,
+    preferences: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     result = preview_safe_movie_sidecar_cleanup(source, folder)
     if not result["folder"]:
         return result
     for sidecar in result["sidecars"]:
-        Path(sidecar).unlink(missing_ok=True)
-    folder.rmdir()
+        sidecar_path = Path(sidecar)
+        if sidecar_path.exists():
+            execute_delete_path(sidecar_path, "media", preferences)
+    if folder.exists():
+        execute_delete_path(folder, "media", preferences)
     return result
 
 
@@ -172,7 +220,11 @@ def preview_movie_delete(source_root: Path, paths: list[Any]) -> dict[str, Any]:
     }
 
 
-def delete_movie_files(source_root: Path, paths: list[Any]) -> dict[str, Any]:
+def delete_movie_files(
+    source_root: Path,
+    paths: list[Any],
+    preferences: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     source = source_root.resolve()
     deleted: list[str] = []
     cleaned_sidecars: list[str] = []
@@ -195,9 +247,9 @@ def delete_movie_files(source_root: Path, paths: list[Any]) -> dict[str, Any]:
         if not resolved.is_file():
             skipped.append({"path": str(resolved), "reason": "not_file"})
             continue
-        resolved.unlink()
+        execute_delete_path(resolved, "media", preferences)
         deleted.append(str(resolved))
-        cleanup = cleanup_safe_movie_sidecars(source, resolved.parent)
+        cleanup = cleanup_safe_movie_sidecars(source, resolved.parent, preferences)
         cleaned_sidecars.extend(cleanup["sidecars"])
         if cleanup["folder"]:
             removed_folders.append(cleanup["folder"])
@@ -224,7 +276,7 @@ def handle_movies_delete(ctx: RequestContext, payload: dict[str, Any]) -> None:
     if not isinstance(paths, list):
         raise ValueError("paths must be a list")
     with ctx.handler.activity_tracker.track(source, "Movie delete"):
-        result = delete_movie_files(source, paths)
+        result = delete_movie_files(source, paths, load_operator_preferences())
     if result["deleted"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
     ctx.respond_json(result)

@@ -7,10 +7,10 @@
   };
 
   const WORKFLOW_DESCRIPTIONS = {
-    normalize: 'Normalize diagnostics with row reasoning and direct confirm/apply.',
-    'weak-encodes': 'Weak encode triage with delete preview and explicit destructive confirm.',
-    'repair-defaults': 'Repair audio and subtitle defaults with the same compact scan and preview shell.',
-    junk: 'Destructive junk triage with explicit confirm and local delete preview.',
+    normalize: 'Review naming fixes and apply clean movie title/path changes.',
+    'weak-encodes': 'Find low-quality encodes that are better deleted or replaced.',
+    'repair-defaults': 'Fix audio and subtitle defaults to save space and improve playback behaviour.',
+    junk: 'Surface obvious junk files and remove them safely.',
   };
 
   const LAYOUT_MODES = {
@@ -51,22 +51,13 @@
     { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
   ];
 
-  const REPAIR_AUDIO_HEADERS = [
+  const REPAIR_HEADERS = [
     { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
     { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
+    { key: 'issue_family', label: 'Issue Family', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '12%' },
     { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '24%' },
-    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '14%' },
-    { key: 'repair_target', label: 'Best English', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '14%' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium', width: '11ch' },
-    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
-  ];
-
-  const REPAIR_SUBTITLE_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
-    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '24%' },
-    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '14%' },
-    { key: 'repair_target', label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '14%' },
+    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '16%' },
+    { key: 'repair_target', label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '16%' },
     { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium', width: '11ch' },
     { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
   ];
@@ -78,6 +69,7 @@
     weakPayload: null,
     repairPayload: null,
     junkPayload: null,
+    policyPayload: null,
     rows: [],
     filteredRows: [],
     selected: new Set(),
@@ -90,7 +82,10 @@
     weakPreview: null,
     weakPreviewKey: '',
     weakPreviewLoading: false,
-    repairDefaultsTab: 'audio',
+    policyEditing: false,
+    policyBusy: false,
+    policySectionLabel: '',
+    policyDrafts: {},
     repairAction: 'set_english_default',
     repairActionNotice: '',
     audioFixBusy: false,
@@ -114,28 +109,32 @@
     workflowJunk: document.getElementById('workflowJunk'),
     sourcePath: document.getElementById('sourcePath'),
     runButton: document.getElementById('runButton'),
+    filterBar: document.getElementById('filterBar'),
     searchInput: document.getElementById('searchInput'),
     bucketFilter: document.getElementById('bucketFilter'),
     caseFilter: document.getElementById('caseFilter'),
     reasonFilter: document.getElementById('reasonFilter'),
     warningFilter: document.getElementById('warningFilter'),
     workflowStatusFilter: document.getElementById('workflowStatusFilter'),
-    weakFloorLabel: document.getElementById('weakFloorLabel'),
-    weakFloorSelect: document.getElementById('weakFloorSelect'),
-    repairDefaultsTabLabel: document.getElementById('repairDefaultsTabLabel'),
-    repairDefaultsTabSelect: document.getElementById('repairDefaultsTabSelect'),
     selectAllButton: document.getElementById('selectAllButton'),
     deselectAllButton: document.getElementById('deselectAllButton'),
     tableColGroup: document.getElementById('tableColGroup'),
     tableHeaderRow: document.getElementById('tableHeaderRow'),
     rowsBody: document.getElementById('rowsBody'),
+    scanTablePanel: document.getElementById('scanTablePanel'),
+    policyEditorPanel: document.getElementById('policyEditorPanel'),
+    policyToggle: document.getElementById('policyToggle'),
+    policyRail: document.getElementById('policyRail'),
     previewControls: document.getElementById('previewControls'),
     previewScopeSelect: document.getElementById('previewScopeSelect'),
     repairActionControls: document.getElementById('repairActionControls'),
     repairActionSelect: document.getElementById('repairActionSelect'),
     repairActionButton: document.getElementById('repairActionButton'),
     confirmButton: document.getElementById('confirmButton'),
+    previewPanelKicker: document.getElementById('previewPanelKicker'),
+    previewPanelHeading: document.getElementById('previewPanelHeading'),
     previewPane: document.getElementById('previewPane'),
+    inspectionPane: document.getElementById('inspectionPane'),
     audioTrackPopover: document.getElementById('audioTrackPopover'),
   };
 
@@ -161,6 +160,26 @@
     return state.normalizePayload;
   }
 
+  function activeProfilePayload() {
+    if (state.workflow === 'weak-encodes') return state.weakPayload;
+    if (state.workflow === 'repair-defaults') return state.repairPayload;
+    return null;
+  }
+
+  function currentPolicyPayload() {
+    return state.policyPayload || activeProfilePayload() || null;
+  }
+
+  function currentPolicyDefinitions() {
+    const payload = currentPolicyPayload();
+    return Array.isArray(payload?.policy_definitions) ? payload.policy_definitions : [];
+  }
+
+  function currentReplacementDefinition() {
+    const payload = currentPolicyPayload();
+    return payload?.replacement_candidate_definition || state.weakPayload?.replacement_candidate_definition || null;
+  }
+
   function isWeakMode() {
     return state.workflow === 'weak-encodes';
   }
@@ -177,23 +196,124 @@
     return isWeakMode() || isRepairDefaultsMode() || isJunkMode();
   }
 
+  const REPAIR_ACTION_ORDER = [
+    'set_english_default',
+    'repair_subtitle_defaults',
+    'set_english_default_repair_subtitle_defaults',
+    'set_english_default_drop_foreign',
+    'set_english_default_drop_foreign_repair_subtitle_defaults',
+  ];
+
+  const REPAIR_ACTION_CONFIGS = {
+    set_english_default: {
+      label: 'Make Best English Audio Default',
+      families: ['audio'],
+      dropForeignAudio: false,
+      runsSubtitle: false,
+      destructiveDelete: true,
+      buttonClass: 'is-primary',
+      buttonText: 'Run Repair',
+      busyText: 'Running Audio Remux',
+      emptyText: 'Select audio-packaging issues to preview default-track repair.',
+      summaryNoun: 'audio-packaging title',
+      statusOptions: [
+        ['all', 'all'],
+        ['weak_english', 'weak English'],
+        ['wrong_default', 'wrong default'],
+        ['queued', 'queued'],
+      ],
+    },
+    repair_subtitle_defaults: {
+      label: 'Normalize Subtitle Defaults',
+      families: ['subtitle'],
+      dropForeignAudio: false,
+      runsSubtitle: true,
+      destructiveDelete: false,
+      buttonClass: 'is-primary',
+      buttonText: 'Run Repair',
+      busyText: 'Running Subtitle Remux',
+      emptyText: 'Select subtitle-default issues to preview non-destructive repair consequences.',
+      summaryNoun: 'subtitle issue',
+      statusOptions: [
+        ['all', 'all'],
+        ['forced_english', 'forced English'],
+        ['non_english_audio', 'non-English audio'],
+        ['clear_default', 'clear default'],
+      ],
+    },
+    set_english_default_repair_subtitle_defaults: {
+      label: 'Make Best English Audio Default + Normalize Subtitle Defaults',
+      families: ['audio', 'subtitle'],
+      dropForeignAudio: false,
+      runsSubtitle: true,
+      destructiveDelete: true,
+      buttonClass: 'is-caution',
+      buttonText: 'Run Combined Repair',
+      busyText: 'Running Combined Remux',
+      emptyText: 'Select repair issues to preview combined audio and subtitle repair consequences.',
+      summaryNoun: 'repair title',
+      statusOptions: [
+        ['all', 'all'],
+        ['both', 'audio + subtitle'],
+        ['audio_only', 'audio only'],
+        ['subtitle_only', 'subtitle only'],
+      ],
+    },
+    set_english_default_drop_foreign: {
+      label: 'Make Best English Audio Default + Remove Foreign Audio',
+      families: ['audio'],
+      dropForeignAudio: true,
+      runsSubtitle: false,
+      destructiveDelete: true,
+      buttonClass: 'is-caution',
+      buttonText: 'Run Combined Repair',
+      busyText: 'Running Audio Prune Remux',
+      emptyText: 'Select audio-packaging issues to preview default-track repair and internal audio-stream deletion.',
+      summaryNoun: 'audio-packaging title',
+      statusOptions: [
+        ['all', 'all'],
+        ['weak_english', 'weak English'],
+        ['wrong_default', 'wrong default'],
+        ['queued', 'queued'],
+      ],
+    },
+    set_english_default_drop_foreign_repair_subtitle_defaults: {
+      label: 'Make Best English Audio Default + Remove Foreign Audio + Normalize Subtitle Defaults',
+      families: ['audio', 'subtitle'],
+      dropForeignAudio: true,
+      runsSubtitle: true,
+      destructiveDelete: true,
+      buttonClass: 'is-caution',
+      buttonText: 'Run Combined Repair',
+      busyText: 'Running Full Remux',
+      emptyText: 'Select repair issues to preview combined audio prune and subtitle repair consequences.',
+      summaryNoun: 'repair title',
+      statusOptions: [
+        ['all', 'all'],
+        ['both', 'audio + subtitle'],
+        ['audio_only', 'audio only'],
+        ['subtitle_only', 'subtitle only'],
+      ],
+    },
+  };
+
+  function repairActionConfig(action = state.repairAction) {
+    return REPAIR_ACTION_CONFIGS[action] || REPAIR_ACTION_CONFIGS.set_english_default;
+  }
+
   function usesDeletePreviewShell() {
-    return isWeakMode() || isJunkMode() || (isRepairDefaultsMode() && state.repairDefaultsTab === 'audio');
+    return isWeakMode() || isJunkMode() || (isRepairDefaultsMode() && repairActionConfig().families.includes('audio'));
   }
 
   function defaultRepairAction() {
-    return state.repairDefaultsTab === 'subtitle' ? 'repair_subtitle_defaults' : 'set_english_default';
+    return 'set_english_default';
   }
 
   function repairActionOptions() {
-    if (state.repairDefaultsTab === 'subtitle') {
-      return [{ value: 'repair_subtitle_defaults', label: 'Repair Subtitle Defaults' }];
-    }
-    return [
-      { value: 'set_english_default', label: 'Set English Default' },
-      { value: 'drop_foreign_passenger_audio', label: 'Delete Foreign Passenger Audio' },
-      { value: 'set_english_default_drop_foreign', label: 'Do Both At Once' },
-    ];
+    return REPAIR_ACTION_ORDER.map(value => ({
+      value,
+      label: repairActionConfig(value).label,
+    }));
   }
 
   const QUALITY_STANCE_RANKS = {
@@ -222,7 +342,7 @@
   };
 
   function weakFloorDefinitionOptions() {
-    const options = state.weakPayload?.replacement_candidate_definition?.fields?.[0]?.options;
+    const options = currentReplacementDefinition()?.fields?.[0]?.options;
     const fallback = [
       { value: 'standard_definition', label: 'Standard Definition' },
       { value: 'compact_grade', label: 'Compact Grade' },
@@ -233,6 +353,13 @@
       .filter(option => option?.value === 'standard_definition' || option?.value === 'compact_grade' || option?.value === 'library_grade')
       .map(option => ({ value: option.value, label: option.label || humanProfileLabel(option.value) }));
     return filtered.length ? filtered : fallback;
+  }
+
+  function syncWeakFloorState() {
+    const options = weakFloorDefinitionOptions();
+    if (!options.some(option => option.value === state.weakFloor)) {
+      state.weakFloor = options[0]?.value || 'standard_definition';
+    }
   }
 
   function escapeHtml(value) {
@@ -298,10 +425,38 @@
     if (label === 'library_grade') return 'Library Grade';
     if (label === 'collector_grade') return 'Collector Grade';
     if (label === 'reference') return 'Reference';
+    if (label === 'library_defaults') return 'Library Defaults';
+    if (label === 'delete_mode') return 'Delete Posture';
     if (label === 'meets_minimum') return 'Meets Minimum';
     if (label === 'needs_review') return 'Needs Review';
     if (label === 'replacement_candidate') return 'Replacement Candidate';
     return String(label || '').split('_').filter(Boolean).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  }
+
+  async function postJson(url, body) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.error || `${url} failed`);
+    return payload;
+  }
+
+  function applyPolicyPayload(payload) {
+    if (!payload) return;
+    state.policyPayload = payload;
+    if (payload?.replacement_candidate_definition?.fields?.[0]?.value) {
+      state.weakFloor = payload.replacement_candidate_definition.fields[0].value;
+    }
+    syncWeakFloorState();
+    if (state.weakPayload) {
+      state.weakPayload = { ...state.weakPayload, ...payload };
+    }
+    if (state.repairPayload) {
+      state.repairPayload = { ...state.repairPayload, ...payload };
+    }
   }
 
   function qualityStanceRank(label) {
@@ -516,8 +671,42 @@
   }
 
   function repairDefaultsSelectionLocked() {
-    return (state.repairDefaultsTab === 'audio' && state.audioFixBusy)
-      || (state.repairDefaultsTab === 'subtitle' && state.subtitleFixBusy);
+    return state.audioFixBusy || state.subtitleFixBusy;
+  }
+
+  function actionTouchesFamily(action, family) {
+    return repairActionConfig(action).families.includes(family);
+  }
+
+  function actionTouchesAudio(action = state.repairAction) {
+    return actionTouchesFamily(action, 'audio');
+  }
+
+  function actionTouchesSubtitle(action = state.repairAction) {
+    return actionTouchesFamily(action, 'subtitle');
+  }
+
+  function actionSupportsDelete(action = state.repairAction) {
+    return repairActionConfig(action).destructiveDelete;
+  }
+
+  function rowTouchesFamily(row, family) {
+    return Array.isArray(row?.issue_families) && row.issue_families.includes(family);
+  }
+
+  function repairRowMatchesAction(row, action = state.repairAction) {
+    return repairActionConfig(action).families.some(family => rowTouchesFamily(row, family));
+  }
+
+  function issueFamilyLabel(families) {
+    if (!Array.isArray(families) || !families.length) return '';
+    if (families.length === 2) return 'Audio + Subtitle';
+    return families[0] === 'audio' ? 'Audio' : 'Subtitle';
+  }
+
+  function repairItemMatchesAction(item, action = state.repairAction) {
+    return (actionTouchesAudio(action) && !!movieAudioPackagingIssueCode(item))
+      || (actionTouchesSubtitle(action) && movieSubtitleReadinessIsRepairable(item));
   }
 
   function renderWorkflowHeader() {
@@ -531,6 +720,7 @@
 
   function renderShellLayout() {
     if (el.shell) el.shell.dataset.layoutMode = state.layoutMode;
+    if (el.shell) el.shell.dataset.policyMode = state.policyEditing ? 'editing' : 'default';
     el.pages.forEach(page => {
       const role = page.dataset.pageRole || '';
       const hidden = false;
@@ -554,16 +744,12 @@
     const weak = isWeakMode();
     const repairDefaults = isRepairDefaultsMode();
     const junk = isJunkMode();
+    if (el.filterBar) el.filterBar.hidden = false;
     el.bucketFilter.hidden = weak || repairDefaults || junk;
     el.caseFilter.hidden = weak || repairDefaults || junk;
     el.reasonFilter.hidden = weak || repairDefaults || junk;
     el.warningFilter.hidden = weak || repairDefaults || junk;
     el.workflowStatusFilter.hidden = !(weak || repairDefaults || junk);
-    el.weakFloorLabel.hidden = !weak;
-    el.weakFloorSelect.hidden = !weak;
-    el.repairDefaultsTabLabel.hidden = !repairDefaults;
-    el.repairDefaultsTabSelect.hidden = !repairDefaults;
-    el.repairDefaultsTabSelect.value = state.repairDefaultsTab;
     renderWorkflowStatusFilter();
     renderWeakFloorControl();
     renderWorkflowActionControls();
@@ -594,22 +780,9 @@
       return;
     }
     if (isRepairDefaultsMode()) {
-      el.workflowStatusFilter.innerHTML = state.repairDefaultsTab === 'audio'
-        ? `
-          <option value="all">all</option>
-          <option value="weak_english">weak English</option>
-          <option value="wrong_default">wrong default</option>
-          <option value="queued">queued</option>
-        `
-        : `
-          <option value="all">all</option>
-          <option value="forced_english">forced English</option>
-          <option value="non_english_audio">non-English audio</option>
-          <option value="clear_default">clear default</option>
-        `;
-      const valid = state.repairDefaultsTab === 'audio'
-        ? ['all', 'weak_english', 'wrong_default', 'queued']
-        : ['all', 'forced_english', 'non_english_audio', 'clear_default'];
+      const options = repairActionConfig().statusOptions || [['all', 'all']];
+      el.workflowStatusFilter.innerHTML = options.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('');
+      const valid = options.map(([value]) => value);
       if (!valid.includes(el.workflowStatusFilter.value)) el.workflowStatusFilter.value = 'all';
     }
   }
@@ -623,8 +796,9 @@
       return;
     }
     const selectedCount = selectedRepairPaths().length;
-    const audio = state.repairDefaultsTab === 'audio';
     const locked = repairDefaultsSelectionLocked();
+    const config = repairActionConfig();
+    const busy = locked;
     const options = repairActionOptions();
     if (!options.some(option => option.value === state.repairAction)) {
       state.repairAction = defaultRepairAction();
@@ -635,27 +809,302 @@
     el.repairActionSelect.value = state.repairAction;
     el.repairActionButton.classList.add('lab-action-button');
     el.repairActionButton.classList.remove('is-primary', 'is-caution');
-    const busy = audio ? state.audioFixBusy : state.subtitleFixBusy;
-    el.repairActionButton.classList.add(audio && state.repairAction !== 'set_english_default' ? 'is-caution' : 'is-primary');
-    el.repairActionButton.textContent = busy ? (audio ? 'Running Repair Remux' : 'Running Subtitle Remux') : 'Run Repair';
+    el.repairActionButton.classList.add(config.buttonClass);
+    el.repairActionButton.textContent = locked ? config.busyText : config.buttonText;
     el.repairActionSelect.disabled = locked || busy;
     el.repairActionButton.disabled = !selectedCount || locked || busy;
   }
 
   function renderWeakFloorControl() {
+    syncWeakFloorState();
+  }
+
+  function currentWeakFloorLabel() {
     const options = weakFloorDefinitionOptions();
-    el.weakFloorSelect.innerHTML = options.map(option => (
-      `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`
-    )).join('');
-    if (!options.some(option => option.value === state.weakFloor)) {
-      state.weakFloor = options[0]?.value || 'standard_definition';
+    return options.find(option => option.value === state.weakFloor)?.label || humanProfileLabel(state.weakFloor);
+  }
+
+  function policyDefinitionDraft(label) {
+    return state.policyDrafts[label] || null;
+  }
+
+  function policyDefinitionFields(definition) {
+    return (definition.fields || []).map(field => {
+      const draft = policyDefinitionDraft(definition.label);
+      const hasDraft = !!draft && Object.prototype.hasOwnProperty.call(draft, field.key);
+      const value = hasDraft ? draft[field.key] : field.value;
+      if (field.type === 'select') {
+        return `
+          <div class="lab-policy-field">
+            <label for="policy-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+            <select id="policy-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-policy-field="${escapeHtml(field.key)}">
+              ${(field.options || []).map(option => `<option value="${escapeHtml(option.value)}" ${String(option.value) === String(value) ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+            </select>
+          </div>
+        `;
+      }
+      return `
+        <div class="lab-policy-field">
+          <label for="policy-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}">${escapeHtml(field.label)}</label>
+          <input id="policy-field-${escapeHtml(definition.label)}-${escapeHtml(field.key)}" data-policy-field="${escapeHtml(field.key)}" type="text" value="${escapeHtml(value)}">
+        </div>
+      `;
+    }).join('');
+  }
+
+  function renderPolicyRail() {
+    const payload = currentPolicyPayload();
+    const deleteModeValue = payload?.delete_mode_definition?.fields?.[0]?.value || payload?.operator_preferences?.delete_mode || 'recycle_all';
+    const policyLinks = [
+      ['replacement_candidate', 'Weak Floor'],
+      ['library_defaults', 'Library Defaults'],
+      ['delete_mode', 'Delete Posture'],
+    ];
+    const toggleLabel = 'Open Policy';
+    const toggleIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>';
+    el.policyToggle.setAttribute('aria-label', toggleLabel);
+    el.policyToggle.setAttribute('title', toggleLabel);
+    el.policyToggle.innerHTML = toggleIcon;
+    if (!state.policyEditing) {
+      el.policyRail.innerHTML = '';
+      return;
     }
-    el.weakFloorSelect.value = state.weakFloor;
+    el.policyRail.innerHTML = `
+      <div class="lab-sliver-note">Single write owner for library policy and operator delete posture.</div>
+      <div class="lab-sliver-chip">
+        <strong>Weak Floor</strong>
+        <span>${escapeHtml(currentWeakFloorLabel())}</span>
+      </div>
+      <div class="lab-sliver-chip">
+        <strong>Delete Posture</strong>
+        <span>${escapeHtml(humanProfileLabel(deleteModeValue))}</span>
+      </div>
+      <div class="lab-sliver-chip">
+        <strong>Workflow</strong>
+        <span>${escapeHtml(WORKFLOW_LABELS[state.workflow])}</span>
+      </div>
+      <div class="lab-sliver-links">
+        ${policyLinks.map(([label, text]) => `<button class="lab-sliver-link" type="button" data-policy-open="${escapeHtml(label)}">${escapeHtml(text)}</button>`).join('')}
+      </div>
+    `;
+    el.policyRail.querySelectorAll('[data-policy-open]').forEach(button => {
+      button.addEventListener('click', () => {
+        openPolicySection(button.dataset.policyOpen || 'library_defaults');
+      });
+    });
+  }
+
+  function renderPolicyEditor() {
+    const definitions = currentPolicyDefinitions();
+    if (!state.policyEditing) {
+      el.policyEditorPanel.innerHTML = '';
+      return;
+    }
+    if (!definitions.length) {
+      el.policyEditorPanel.innerHTML = `
+        <div class="lab-policy-header">
+          <div class="lab-policy-heading">
+            <div class="lab-kicker">Policy Editor</div>
+            <h2>Policy loading required</h2>
+            <p>Open policy with a source selected to load the current library policy contract.</p>
+          </div>
+          <button id="policyCloseButton" class="lab-sliver-toggle lab-icon-toggle" type="button" aria-label="Close Policy" title="Close Policy">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          </button>
+        </div>
+      `;
+      const closeButton = document.getElementById('policyCloseButton');
+      if (closeButton) closeButton.addEventListener('click', () => togglePolicyEditor().catch(handlePolicyToggleError));
+      return;
+    }
+    const sections = definitions.map(definition => {
+      const isOpen = state.policySectionLabel === definition.label || (!state.policySectionLabel && definition.label === 'library_defaults');
+      return `
+        <section class="lab-policy-card ${isOpen ? 'is-open' : ''}">
+          <div class="lab-policy-meta">
+            <span class="lab-kicker">${escapeHtml(definition.group || 'Policy')}</span>
+            <span class="lab-policy-scope">${escapeHtml(definition.scope === 'operator_preferences' ? 'User-local' : 'Repo-local')}</span>
+          </div>
+          <h3>${escapeHtml(definition.display_name || humanProfileLabel(definition.label))}</h3>
+          <p>${escapeHtml(definition.summary || '')}</p>
+          <p>${escapeHtml(definition.rule_summary || '')}</p>
+          <div class="lab-policy-actions">
+            <button type="button" data-policy-section="${escapeHtml(definition.label)}">${isOpen ? 'Collapse' : 'Edit'}</button>
+          </div>
+          ${isOpen ? `
+            <div class="lab-policy-fields" data-policy-editor="${escapeHtml(definition.label)}">${policyDefinitionFields(definition)}</div>
+            <div class="lab-policy-actions">
+              <button id="policySaveButton" class="lab-action-button is-primary" type="button" data-policy-save="${escapeHtml(definition.label)}" ${state.policyBusy ? 'disabled' : ''}>Save</button>
+              <button type="button" data-policy-reset="${escapeHtml(definition.label)}" ${state.policyBusy ? 'disabled' : ''}>Reset</button>
+            </div>
+          ` : ''}
+        </section>
+      `;
+    }).join('');
+    el.policyEditorPanel.innerHTML = `
+      <div class="lab-policy-header">
+        <div class="lab-policy-heading">
+          <div class="lab-kicker">Policy Editor</div>
+          <h2>Library policy in situ</h2>
+          <p>Repo-local policy owns weak floor, subtitle behavior, and junk-floor defaults. User-local preference owns delete posture.</p>
+        </div>
+        <button id="policyCloseButton" class="lab-sliver-toggle lab-icon-toggle" type="button" aria-label="Close Policy" title="Close Policy">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+        </button>
+      </div>
+      <div class="lab-policy-chips">
+        <span class="chip">repo-local <span class="lab-cell-mono">movie_standards.json</span></span>
+        <span class="chip">user-local delete posture</span>
+      </div>
+      <div class="lab-policy-sections">${sections}</div>
+    `;
+    const closeButton = document.getElementById('policyCloseButton');
+    if (closeButton) closeButton.addEventListener('click', () => togglePolicyEditor().catch(handlePolicyToggleError));
+    el.policyEditorPanel.querySelectorAll('[data-policy-section]').forEach(button => {
+      button.addEventListener('click', () => {
+        const label = button.dataset.policySection || '';
+        state.policySectionLabel = state.policySectionLabel === label ? '' : label;
+        renderPolicyEditor();
+      });
+    });
+    el.policyEditorPanel.querySelectorAll('[data-policy-reset]').forEach(button => {
+      button.addEventListener('click', () => {
+        delete state.policyDrafts[button.dataset.policyReset || ''];
+        renderPolicyEditor();
+      });
+    });
+    el.policyEditorPanel.querySelectorAll('[data-policy-save]').forEach(button => {
+      button.addEventListener('click', () => savePolicyDefinition(button.dataset.policySave || ''));
+    });
+    el.policyEditorPanel.querySelectorAll('[data-policy-editor]').forEach(editor => {
+      editor.querySelectorAll('[data-policy-field]').forEach(input => {
+        input.addEventListener('change', () => {
+          const label = editor.dataset.policyEditor || '';
+          state.policyDrafts[label] = policyEditorValues(label);
+        });
+      });
+    });
+  }
+
+  function policyEditorValues(label) {
+    const editor = document.querySelector(`[data-policy-editor="${label}"]`);
+    if (!editor) return {};
+    const values = {};
+    editor.querySelectorAll('[data-policy-field]').forEach(input => {
+      const key = input.dataset.policyField;
+      if (key) values[key] = input.value;
+    });
+    return values;
+  }
+
+  async function savePolicyDefinition(label) {
+    const payload = currentPolicyPayload();
+    if (!label || !payload || state.policyBusy) return;
+    state.policyBusy = true;
+    state.policyDrafts[label] = policyEditorValues(label);
+    renderPolicyEditor();
+    try {
+      const result = await postJson('/api/policy/update', {
+        label,
+        values: state.policyDrafts[label],
+        policy_revision: payload.policy_revision || '',
+        operator_preferences_revision: payload.operator_preferences_revision || '',
+      });
+      applyPolicyPayload(result);
+      delete state.policyDrafts[label];
+      if (el.sourcePath.value.trim()) {
+        if (isWeakMode()) await runWeakEncodes();
+        else if (isRepairDefaultsMode()) await runRepairDefaults();
+        else if (isJunkMode() && label === 'library_defaults') await runJunk();
+      }
+    } catch (error) {
+      el.inspectionPane.textContent = error.message;
+    } finally {
+      state.policyBusy = false;
+      renderPolicyRail();
+      renderPolicyEditor();
+      renderSidePanel();
+    }
+  }
+
+  async function ensurePolicyPayload() {
+    if (currentPolicyDefinitions().length) return currentPolicyPayload();
+    const payload = await postJson('/api/policy/read', {});
+    applyPolicyPayload(payload);
+    return payload;
+  }
+
+  async function openPolicySection(label) {
+    await ensurePolicyPayload();
+    state.policySectionLabel = label || 'library_defaults';
+    state.policyEditing = true;
+    renderFilterVisibility();
+    renderRows();
+    renderSidePanel();
+  }
+
+  async function togglePolicyEditor() {
+    if (state.policyEditing) {
+      state.policyEditing = false;
+      renderFilterVisibility();
+      renderRows();
+      renderSidePanel();
+      return;
+    }
+    await openPolicySection(state.policySectionLabel || 'library_defaults');
+  }
+
+  function handlePolicyToggleError(error) {
+    el.inspectionPane.textContent = error.message;
+  }
+
+  function inspectionSummaryForRow(row) {
+    if (isWeakMode()) return `${row.issue} · ${row.resolution || '—'}`;
+    if (isRepairDefaultsMode()) return `${row.issue_family || 'Issue'} · ${row.issue}`;
+    if (isJunkMode()) return `${row.issue} · ${row.confidence || 'review'}`;
+    return `${row.projected_path || row.current_value} · ${row.confidence || 'review'}`;
+  }
+
+  function renderInspectionPane() {
+    if (!state.policyEditing) {
+      el.inspectionPane.innerHTML = '';
+      return;
+    }
+    const rows = state.filteredRows.slice(0, 10);
+    if (!rows.length) {
+      el.inspectionPane.innerHTML = '<div class="lab-preview-empty"><strong>No inspection rows.</strong><div>Run the current workflow or relax the active filters.</div></div>';
+      return;
+    }
+    const key = usesSimpleSelectionShell() ? 'row_id' : 'result_id';
+    el.inspectionPane.innerHTML = `
+      <div class="lab-inspection-pane">
+        <div class="lab-inspection-summary"><strong>${rows.length}</strong> visible inspection row${rows.length === 1 ? '' : 's'} shown in reduced-reading mode while policy editing is active.</div>
+        <div class="lab-inspection-table">
+          <table class="lab-scan-table">
+            <thead>
+              <tr>
+                <th>File Name</th>
+                <th>Inspection Reading</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(row => `
+                <tr class="${state.activeRowId === row[key] ? 'active' : ''}">
+                  <td class="lab-cell-anchor lab-cell-mono" title="${escapeHtml(fileNameFromPath(row.current_path || row.current_value || ''))}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path || row.current_value || ''))}</span></td>
+                  <td class="lab-cell-supporting" title="${escapeHtml(inspectionSummaryForRow(row))}"><span class="lab-cell-text">${escapeHtml(inspectionSummaryForRow(row))}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="lab-inspection-note">Preview and action controls are suppressed while policy editing is active.</div>
+      </div>
+    `;
   }
 
   function currentHeaders() {
     if (isWeakMode()) return WEAK_HEADERS;
-    if (isRepairDefaultsMode()) return state.repairDefaultsTab === 'audio' ? REPAIR_AUDIO_HEADERS : REPAIR_SUBTITLE_HEADERS;
+    if (isRepairDefaultsMode()) return REPAIR_HEADERS;
     if (isJunkMode()) return JUNK_HEADERS;
     return NORMALIZE_HEADERS;
   }
@@ -729,6 +1178,52 @@
 
   function repairSubtitleItems() {
     return (state.repairPayload?.movies || []).filter(item => movieSubtitleReadinessIsRepairable(item));
+  }
+
+  function repairIssueSummary(item) {
+    const parts = [];
+    const audioIssue = movieAudioPackagingIssueCode(item);
+    const subtitleIssue = movieSubtitleReadinessIssueCode(item);
+    if (audioIssue) parts.push(audioIssue === 'default_non_english_audio_with_weak_english' ? 'wrong language · weak English' : 'wrong default language');
+    if (subtitleIssue && movieSubtitleReadinessIsRepairable(item)) parts.push(humanSubtitleReadinessIssueLabel(subtitleIssue));
+    return parts.join(' | ');
+  }
+
+  function repairCurrentDefaultSummary(item) {
+    const parts = [];
+    if (movieAudioPackagingIssueCode(item)) parts.push(`audio: ${describeAudioStream(movieDefaultAudioStream(item))}`);
+    if (movieSubtitleReadinessIsRepairable(item)) parts.push(`subtitle: ${describeSubtitleStream(movieDefaultSubtitleStream(item))}`);
+    return parts.join(' | ') || '—';
+  }
+
+  function repairTargetSummary(item) {
+    const parts = [];
+    if (movieAudioPackagingIssueCode(item)) parts.push(`audio: ${describeAudioStream(movieBestEnglishAudioStream(item))}`);
+    if (movieSubtitleReadinessIsRepairable(item)) parts.push(`subtitle: ${describeSubtitleStream(movieSubtitleReadinessRepairTarget(item)) || 'clear defaults'}`);
+    return parts.join(' | ') || '—';
+  }
+
+  function repairRowForItem(item) {
+    const issueFamilies = [];
+    if (movieAudioPackagingIssueCode(item)) issueFamilies.push('audio');
+    if (movieSubtitleReadinessIsRepairable(item)) issueFamilies.push('subtitle');
+    return {
+      row_id: item.path || '',
+      path: item.path || '',
+      item,
+      selectable: Boolean(item.path) && issueFamilies.length > 0 && !repairDefaultsSelectionLocked(),
+      issue_families: issueFamilies,
+      current_path: item.path || '',
+      issue_family: issueFamilyLabel(issueFamilies),
+      issue: repairIssueSummary(item),
+      current_default: repairCurrentDefaultSummary(item),
+      repair_target: repairTargetSummary(item),
+      resolution: item?.facts?.resolution_bucket || '',
+      file_size: item?.facts?.file_size_bytes || 0,
+      audio_issue_code: movieAudioPackagingIssueCode(item),
+      subtitle_issue_code: movieSubtitleReadinessIssueCode(item),
+      workflow_status: issueFamilies.length === 2 ? 'both' : (issueFamilies[0] === 'audio' ? (movieAudioPackagingIssueCode(item) === 'default_non_english_audio_with_weak_english' ? 'weak_english' : 'wrong_default') : movieSubtitleReadinessIssueCode(item)),
+    };
   }
 
   function weakRowForItem(item) {
@@ -812,9 +1307,9 @@
   function activeRows() {
     if (isWeakMode()) return weakWorkflowItems().map(weakRowForItem);
     if (isRepairDefaultsMode()) {
-      return state.repairDefaultsTab === 'audio'
-        ? repairAudioItems().map(repairAudioRowForItem)
-        : repairSubtitleItems().map(repairSubtitleRowForItem);
+      return (state.repairPayload?.movies || [])
+        .filter(item => repairItemMatchesAction(item))
+        .map(repairRowForItem);
     }
     if (isJunkMode()) return (state.junkPayload?.junk || []).map(junkRowForItem);
     return normalizeRows();
@@ -838,17 +1333,19 @@
     } else if (isRepairDefaultsMode()) {
       const status = el.workflowStatusFilter.value;
       rows = rows.filter(row => {
-        if (state.repairDefaultsTab === 'audio') {
-          if (status === 'weak_english' && row.workflow_status !== 'weak_english') return false;
-          if (status === 'wrong_default' && row.workflow_status !== 'wrong_default') return false;
-          if (status === 'queued' && row.workflow_status !== 'queued') return false;
-        } else {
-          if (status === 'forced_english' && !['english_forced_not_default', 'wrong_default_forced_subtitle'].includes(row.workflow_status)) return false;
-          if (status === 'non_english_audio' && row.workflow_status !== 'wrong_default_subtitle_language') return false;
-          if (status === 'clear_default' && !['unnecessary_default_subtitle', 'multiple_default_subtitles'].includes(row.workflow_status)) return false;
-        }
+        if (status === 'weak_english' && row.workflow_status !== 'weak_english') return false;
+        if (status === 'wrong_default' && row.workflow_status !== 'wrong_default') return false;
+        if (status === 'queued' && row.workflow_status !== 'queued') return false;
+        if (status === 'forced_english' && !['english_forced_not_default', 'wrong_default_forced_subtitle'].includes(row.subtitle_issue_code)) return false;
+        if (status === 'non_english_audio' && row.subtitle_issue_code !== 'wrong_default_subtitle_language') return false;
+        if (status === 'clear_default' && !['unnecessary_default_subtitle', 'multiple_default_subtitles'].includes(row.subtitle_issue_code)) return false;
+        if (status === 'both' && row.workflow_status !== 'both') return false;
+        if (status === 'audio_only' && row.workflow_status === 'both') return false;
+        if (status === 'audio_only' && !rowTouchesFamily(row, 'audio')) return false;
+        if (status === 'subtitle_only' && row.workflow_status === 'both') return false;
+        if (status === 'subtitle_only' && !rowTouchesFamily(row, 'subtitle')) return false;
         if (query) {
-          const haystack = `${row.current_path} ${row.issue} ${row.current_default} ${row.repair_target}`.toLowerCase();
+          const haystack = `${row.current_path} ${row.issue_family} ${row.issue} ${row.current_default} ${row.repair_target}`.toLowerCase();
           if (!haystack.includes(query)) return false;
         }
         return true;
@@ -930,6 +1427,18 @@
 
   function selectedRepairItems() {
     return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable).map(row => row.item);
+  }
+
+  function selectedRepairRows() {
+    return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable);
+  }
+
+  function selectedRepairAudioPaths() {
+    return selectedRepairRows().filter(row => rowTouchesFamily(row, 'audio')).map(row => row.path);
+  }
+
+  function selectedRepairSubtitleRows() {
+    return selectedRepairRows().filter(row => rowTouchesFamily(row, 'subtitle'));
   }
 
   function selectedJunkPaths() {
@@ -1023,6 +1532,7 @@
   }
 
   function renderConfirmButton() {
+    el.confirmButton.hidden = false;
     if (isWeakMode()) {
       const count = selectedWeakPaths().length;
       el.confirmButton.disabled = count === 0 || state.applyInFlight;
@@ -1031,8 +1541,9 @@
       return;
     }
     if (isRepairDefaultsMode()) {
-      if (state.repairDefaultsTab === 'audio') {
-        const count = selectedRepairPaths().length;
+      el.confirmButton.hidden = !actionSupportsDelete();
+      if (actionSupportsDelete()) {
+        const count = selectedRepairAudioPaths().length;
         el.confirmButton.disabled = count === 0 || state.applyInFlight || repairDefaultsSelectionLocked();
         el.confirmButton.classList.add('is-danger');
         el.confirmButton.textContent = state.applyInFlight ? `Deleting Selected Files (${count})` : `Delete Selected Files (${count})`;
@@ -1040,9 +1551,7 @@
       }
       el.confirmButton.disabled = true;
       el.confirmButton.classList.remove('is-danger');
-      el.confirmButton.textContent = repairDefaultsSelectionLocked()
-        ? 'Repair Running'
-        : 'This page is non-destructive';
+      el.confirmButton.textContent = 'This page is non-destructive';
       return;
     }
     if (isJunkMode()) {
@@ -1063,8 +1572,13 @@
   function renderPanelVisibility() {
     if (!usesDeletePreviewShell()) closeAudioPopover();
     renderShellLayout();
+    el.scanTablePanel.hidden = state.policyEditing;
+    el.policyEditorPanel.hidden = !state.policyEditing;
     el.previewPane.hidden = false;
+    el.inspectionPane.hidden = true;
     el.previewControls.hidden = false;
+    el.previewPanelKicker.textContent = 'Downstream Preview';
+    el.previewPanelHeading.textContent = 'Projected Output';
     el.previewScopeSelect.value = state.previewMode;
     renderConfirmButton();
     renderWorkflowActionControls();
@@ -1156,9 +1670,9 @@
   }
 
   function repairStatusClass(row) {
-    if (state.repairDefaultsTab === 'audio') {
-      return row.workflow_status === 'queued' ? 'is-unchanged' : (row.workflow_status === 'weak_english' ? 'is-review' : 'is-actionable');
-    }
+    if (row.workflow_status === 'queued') return 'is-unchanged';
+    if (row.workflow_status === 'weak_english') return 'is-review';
+    if (row.workflow_status === 'both') return 'is-safe';
     return 'is-actionable';
   }
 
@@ -1169,6 +1683,7 @@
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked} ${disabled}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
+        <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.issue_family || '—')}"><span class="lab-cell-text">${escapeHtml(row.issue_family || '—')}</span></td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
         <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.current_default || '—')}"><span class="lab-cell-text">${escapeHtml(row.current_default || '—')}</span></td>
         <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.repair_target || '—')}"><span class="lab-cell-text">${escapeHtml(row.repair_target || '—')}</span></td>
@@ -1610,18 +2125,53 @@
     `;
   }
 
-  function buildRepairPreviewList(rows, formatBody) {
+  function repairPreviewTreeForRow(row) {
+    const tree = {};
+    const relPath = relativeToSource(row.current_path || row.path || '');
+    addPathToTree(tree, relPath, { selected: true });
+    const containerNode = relPath.split('/').filter(Boolean).reduce((node, part, index, parts) => {
+      if (index === parts.length - 1) {
+        node[part] = node[part] || {};
+        return node[part];
+      }
+      node[part] = node[part] || {};
+      return node[part];
+    }, tree);
+    if (rowTouchesFamily(row, 'audio')) {
+      const defaultAudio = movieDefaultAudioStream(row.item);
+      const targetAudio = movieBestEnglishAudioStream(row.item);
+      if (defaultAudio) addPathToTree(containerNode, `streams/audio-${defaultAudio.index || 0}-${displayAudioLanguage(defaultAudio.language)}${repairActionConfig().dropForeignAudio ? ' [default -> passenger]' : ' [default -> cleared]'}`, { mutated: true });
+      if (targetAudio) addPathToTree(containerNode, `streams/audio-${targetAudio.index || 0}-${displayAudioLanguage(targetAudio.language)} [English default target]`, { mutated: true });
+      if (repairActionConfig().dropForeignAudio) {
+        (row.item?.facts?.audio_streams || [])
+          .filter(stream => canonicalAudioLanguageValue(stream.language) && canonicalAudioLanguageValue(stream.language) !== 'english')
+          .forEach(stream => addPathToTree(containerNode, `streams/audio-${stream.index || 0}-${displayAudioLanguage(stream.language)} [removed]`, { deleted: true }));
+      }
+    }
+    if (rowTouchesFamily(row, 'subtitle')) {
+      const defaultSubtitle = movieDefaultSubtitleStream(row.item);
+      const targetSubtitle = movieSubtitleReadinessRepairTarget(row.item);
+      if (defaultSubtitle) addPathToTree(containerNode, `streams/subtitle-${defaultSubtitle.index || 0}-${displayAudioLanguage(defaultSubtitle.language)} [default -> cleared]`, { mutated: true });
+      if (targetSubtitle) addPathToTree(containerNode, `streams/subtitle-${targetSubtitle.index || 0}-${displayAudioLanguage(targetSubtitle.language)}${targetSubtitle.is_forced ? ' forced' : ''} [default target]`, { mutated: true });
+    }
+    return renderPreviewTreeMarkup(tree);
+  }
+
+  function canonicalAudioLanguageValue(language) {
+    const value = String(language || '').trim().toLowerCase();
+    if (['eng', 'en', 'english'].includes(value)) return 'english';
+    if (!value) return '';
+    return value;
+  }
+
+  function buildRepairPreviewPane(rows) {
     if (!rows.length) return '<div class="lab-preview-empty"><strong>No visible items.</strong></div>';
-    return `
-      <div class="lab-preview-list">
-        ${rows.map(row => `
-          <div class="lab-preview-item">
-            <div class="lab-preview-item-title">${escapeHtml(fileNameFromPath(row.current_path || row.path || ''))}</div>
-            <div class="lab-preview-item-body">${escapeHtml(formatBody(row))}</div>
-          </div>
-        `).join('')}
+    return rows.map(row => `
+      <div class="lab-preview-item">
+        <div class="lab-preview-item-title">${escapeHtml(fileNameFromPath(row.current_path || row.path || ''))}</div>
+        <div class="lab-preview-item-body">${repairPreviewTreeForRow(row)}</div>
       </div>
-    `;
+    `).join('');
   }
 
   function renderRepairPreviewPane() {
@@ -1636,25 +2186,21 @@
       el.previewPane.innerHTML = `
         <div class="lab-preview-empty">
           <strong>No rows selected.</strong>
-          <div>${state.repairDefaultsTab === 'audio'
-            ? 'Select audio-packaging issues to preview remux and delete consequences.'
-            : 'Select subtitle-default issues to preview non-destructive repair consequences.'}</div>
+          <div>${escapeHtml(repairActionConfig().emptyText)}</div>
         </div>
       `;
       return;
     }
-    const summary = state.repairDefaultsTab === 'audio'
-      ? `${previewRows.length} ${state.previewMode === 'library' ? 'visible audio-packaging title' : 'selected audio-packaging title'}${previewRows.length === 1 ? '' : 's'} ready for repair or delete.`
-      : `${previewRows.length} ${state.previewMode === 'library' ? 'visible subtitle issue' : 'selected subtitle issue'}${previewRows.length === 1 ? '' : 's'} staged for non-destructive repair.`;
-    const body = state.repairDefaultsTab === 'audio'
-      ? buildRepairPreviewList(previewRows, row => `${row.current_default} -> ${row.repair_target}${row.workflow_status === 'queued' ? ' · queued for replacement' : ''}`)
-      : buildRepairPreviewList(previewRows, row => `${row.current_default} -> ${row.repair_target}`);
+    const config = repairActionConfig();
+    const summary = `${previewRows.length} ${state.previewMode === 'library' ? `visible ${config.summaryNoun}` : `selected ${config.summaryNoun}`}${previewRows.length === 1 ? '' : 's'} staged for ${config.label.toLowerCase()}.`;
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
         <strong>${summary}</strong>
         ${state.repairActionNotice ? `<span class="chip">${escapeHtml(state.repairActionNotice)}</span>` : ''}
       </div>
-      ${body}
+      <div class="lab-preview-list">
+        ${buildRepairPreviewPane(previewRows)}
+      </div>
     `;
   }
 
@@ -1677,17 +2223,17 @@
 
   function renderSidePanel() {
     renderPanelVisibility();
+    renderPolicyRail();
+    renderPolicyEditor();
+    if (state.policyEditing) {
+      renderInspectionPane();
+      return;
+    }
     renderPreviewPane();
   }
 
   async function runNormalize() {
-    const response = await fetch('/api/movies/normalize', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: el.sourcePath.value }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'normalize failed');
+    const payload = await postJson('/api/movies/normalize', { source: el.sourcePath.value });
     state.normalizePayload = payload;
     state.selected = new Set();
     state.activeRowId = '';
@@ -1698,33 +2244,21 @@
   }
 
   async function runWeakEncodes() {
-    const response = await fetch('/api/movies/profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: el.sourcePath.value, weak_floor: state.weakFloor }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'weak encodes failed');
+    const payload = await postJson('/api/movies/profile', { source: el.sourcePath.value, weak_floor: state.weakFloor });
     state.weakPayload = payload;
-    state.weakFloor = payload?.replacement_candidate_definition?.fields?.[0]?.value || state.weakFloor;
+    applyPolicyPayload(payload);
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
     clearDeletePreviewState();
-    renderWeakFloorControl();
     renderRows();
     renderSidePanel();
   }
 
   async function runRepairDefaults() {
-    const response = await fetch('/api/movies/profile', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: el.sourcePath.value }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'repair defaults failed');
+    const payload = await postJson('/api/movies/profile', { source: el.sourcePath.value });
     state.repairPayload = payload;
+    applyPolicyPayload(payload);
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
@@ -1735,13 +2269,7 @@
   }
 
   async function runJunk() {
-    const response = await fetch('/api/movies/junk', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: el.sourcePath.value }),
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'junk scan failed');
+    const payload = await postJson('/api/movies/junk', { source: el.sourcePath.value });
     state.junkPayload = payload;
     state.selected = new Set();
     state.activeRowId = '';
@@ -1787,24 +2315,23 @@
     if (!payload) return payload;
     const byPath = new Map((updatedItems || []).map(item => [item.path || '', item]));
     const dropResolved = !!options.dropResolved;
+    const action = options.action || state.repairAction;
     return {
       ...payload,
       movies: (payload.movies || []).map(item => byPath.get(item.path || '') || item).filter(item => {
         if (!dropResolved || !byPath.has(item.path || '')) return true;
-        if (state.repairDefaultsTab === 'audio') return !!movieAudioPackagingIssueCode(item);
-        return movieSubtitleReadinessIsRepairable(item);
+        return repairItemMatchesAction(item, action);
       }),
     };
   }
 
   async function deleteSelectedRepairAudio() {
-    const items = selectedRepairItems();
-    if (!items.length) return;
+    const paths = selectedRepairAudioPaths();
+    if (!paths.length) return;
     state.applyInFlight = true;
     renderConfirmButton();
     try {
       const source = el.sourcePath.value.trim();
-      const paths = items.map(item => item.path).filter(Boolean);
       const delResponse = await fetch('/api/movies/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1826,16 +2353,13 @@
     }
   }
 
-  async function fixSelectedAudioDefaults(dropForeignAudio) {
-    const paths = selectedRepairPaths();
+  async function runAudioRepair(paths, action) {
     if (!paths.length) return;
     state.audioFixBusy = true;
-    const action = state.repairAction;
-    state.repairActionNotice = action === 'drop_foreign_passenger_audio'
-      ? `Running foreign-audio prune for ${paths.length} file${paths.length === 1 ? '' : 's'}.`
-      : (dropForeignAudio
-        ? `Running English-default remux and foreign-audio prune for ${paths.length} file${paths.length === 1 ? '' : 's'}.`
-        : `Running English-default remux for ${paths.length} file${paths.length === 1 ? '' : 's'}.`);
+    const dropForeignAudio = repairActionConfig(action).dropForeignAudio;
+    state.repairActionNotice = dropForeignAudio
+      ? `Running English-default remux and foreign-audio prune for ${paths.length} file${paths.length === 1 ? '' : 's'}.`
+      : `Running English-default remux for ${paths.length} file${paths.length === 1 ? '' : 's'}.`;
     renderRows();
     renderSidePanel();
     try {
@@ -1846,15 +2370,13 @@
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'audio packaging fix failed');
-      state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true });
-      state.selected = new Set();
-      state.activeRowId = '';
-      state.previewMode = 'selected';
-      state.repairActionNotice = action === 'drop_foreign_passenger_audio'
-        ? `${payload.fixed?.length || 0} foreign-audio prune${(payload.fixed?.length || 0) === 1 ? '' : 's'} completed.`
+      state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true, action });
+      state.repairActionNotice = dropForeignAudio
+        ? `${payload.fixed?.length || 0} audio prune remux${(payload.fixed?.length || 0) === 1 ? '' : 's'} completed.`
         : `${payload.fixed?.length || 0} audio default${(payload.fixed?.length || 0) === 1 ? '' : 's'} repaired.`;
       renderRows();
       renderSidePanel();
+      return payload;
     } catch (error) {
       state.repairActionNotice = error.message;
       renderRows();
@@ -1867,11 +2389,10 @@
     }
   }
 
-  async function fixSelectedSubtitleDefaults() {
-    const rows = state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable);
+  async function runSubtitleRepair(rows, action) {
     const paths = rows.map(row => row.path);
     if (!paths.length) return;
-    const issueCodes = Object.fromEntries(rows.map(row => [row.path, row.workflow_status]));
+    const issueCodes = Object.fromEntries(rows.map(row => [row.path, row.subtitle_issue_code]));
     state.subtitleFixBusy = true;
     state.repairActionNotice = `Running subtitle-default remux for ${paths.length} file${paths.length === 1 ? '' : 's'}.`;
     renderRows();
@@ -1884,13 +2405,11 @@
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'subtitle readiness fix failed');
-      state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true });
-      state.selected = new Set();
-      state.activeRowId = '';
-      state.previewMode = 'selected';
+      state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true, action });
       state.repairActionNotice = `${payload.fixed?.length || 0} subtitle default${(payload.fixed?.length || 0) === 1 ? '' : 's'} repaired.`;
       renderRows();
       renderSidePanel();
+      return payload;
     } catch (error) {
       state.repairActionNotice = error.message;
       renderRows();
@@ -1901,6 +2420,32 @@
       renderRows();
       renderSidePanel();
     }
+  }
+
+  function selectedSubtitleRowsFromPayload(selectedPaths) {
+    const chosen = new Set(selectedPaths);
+    return (state.repairPayload?.movies || [])
+      .filter(item => chosen.has(item.path || '') && movieSubtitleReadinessIsRepairable(item))
+      .map(repairRowForItem)
+      .filter(row => rowTouchesFamily(row, 'subtitle'));
+  }
+
+  async function runSelectedRepairAction(action) {
+    const selectedPaths = selectedRepairPaths();
+    if (!selectedPaths.length) return;
+    if (actionTouchesAudio(action)) {
+      const audioPaths = selectedRepairRows().filter(row => rowTouchesFamily(row, 'audio')).map(row => row.path);
+      if (audioPaths.length) await runAudioRepair(audioPaths, action);
+    }
+    if (actionTouchesSubtitle(action)) {
+      const subtitleRows = selectedSubtitleRowsFromPayload(selectedPaths);
+      if (subtitleRows.length) await runSubtitleRepair(subtitleRows, action);
+    }
+    state.selected = new Set();
+    state.activeRowId = '';
+    state.previewMode = 'selected';
+    renderRows();
+    renderSidePanel();
   }
 
   async function confirmSelected() {
@@ -1933,7 +2478,6 @@
       return;
     }
     if (isRepairDefaultsMode()) {
-      if (state.repairDefaultsTab === 'subtitle') return;
       await deleteSelectedRepairAudio();
       return;
     }
@@ -2003,10 +2547,10 @@
   function setWorkflow(workflow) {
     state.workflow = ['weak-encodes', 'repair-defaults', 'junk'].includes(workflow) ? workflow : 'normalize';
     state.layoutMode = LAYOUT_MODES.default;
+    state.policyEditing = false;
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
-    state.repairDefaultsTab = 'audio';
     state.repairAction = defaultRepairAction();
     state.repairActionNotice = '';
     state.sort = usesSimpleSelectionShell() ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' };
@@ -2085,37 +2629,6 @@
     }
   });
 
-  el.weakFloorSelect.addEventListener('change', async () => {
-    state.weakFloor = el.weakFloorSelect.value || 'standard_definition';
-    state.selected = new Set();
-    state.activeRowId = '';
-    clearDeletePreviewState();
-    if (isWeakMode() && state.weakPayload) {
-      try {
-        await runWeakEncodes();
-      } catch (error) {
-        el.previewPane.textContent = error.message;
-      }
-      return;
-    }
-    renderRows();
-    renderSidePanel();
-  });
-
-  el.repairDefaultsTabSelect.addEventListener('change', () => {
-    state.repairDefaultsTab = el.repairDefaultsTabSelect.value === 'subtitle' ? 'subtitle' : 'audio';
-    state.repairAction = defaultRepairAction();
-    state.selected = new Set();
-    state.activeRowId = '';
-    state.previewMode = 'selected';
-    state.repairActionNotice = '';
-    clearDeletePreviewState();
-    renderFilterVisibility();
-    renderTableHeader();
-    renderRows();
-    renderSidePanel();
-  });
-
   el.selectAllButton.addEventListener('click', async () => {
     const rows = usesSimpleSelectionShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
     rows.forEach(row => state.selected.add(usesSimpleSelectionShell() ? row.row_id : row.result_id));
@@ -2144,14 +2657,20 @@
 
   el.repairActionSelect.addEventListener('change', () => {
     state.repairAction = el.repairActionSelect.value || defaultRepairAction();
+    state.selected = new Set();
+    state.activeRowId = '';
+    state.previewMode = 'selected';
+    state.repairActionNotice = '';
+    clearDeletePreviewState();
+    renderFilterVisibility();
+    renderTableHeader();
+    renderRows();
     renderSidePanel();
   });
 
   el.repairActionButton.addEventListener('click', () => {
     const action = el.repairActionSelect.value || defaultRepairAction();
-    const request = action === 'repair_subtitle_defaults'
-      ? fixSelectedSubtitleDefaults()
-      : fixSelectedAudioDefaults(action !== 'set_english_default');
+    const request = runSelectedRepairAction(action);
     request.catch(error => {
       el.previewPane.textContent = error.message;
     });
@@ -2178,6 +2697,10 @@
   renderPanelVisibility();
   renderSidePanel();
   syncWorkflowUrl();
+
+  el.policyToggle.addEventListener('click', () => {
+    togglePolicyEditor().catch(handlePolicyToggleError);
+  });
 
   el.runButton.addEventListener('click', () => {
     runActiveWorkflow().catch(error => {

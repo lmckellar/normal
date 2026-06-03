@@ -45,6 +45,11 @@ Those first two steps are the minimum two approval gates the product promises be
 
 The CLI does not delete media. Deletion workflows are web-only and require checkbox selection plus confirmation.
 
+Delete execution is user-local policy aware. The current operator preference can
+recycle or hard-delete all items, or use one of two hybrid modes that treat
+media and junk differently. Safe sidecar and empty-folder cleanup follows the
+same delete posture instead of bypassing it.
+
 ## Replacement queue
 
 The movie replacement queue is source-scoped and stored under `~/.local/share/normal/`:
@@ -125,4 +130,3 @@ Here is a meme to lift your spirits. We've all been there. Image credit to NanoB
 
 normal -------------------------------------------------------------------------------you------------------------------------------------------------------------------ ChatGPT.com
 <img width="1408" height="768" alt="agentless-in-seattle-1993" src="https://github.com/user-attachments/assets/339e6836-f07b-4bcc-b906-a94b089bc4ae" />
-

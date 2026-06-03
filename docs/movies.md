@@ -98,7 +98,14 @@ Quality profile cards:
 | `Collector Grade` | Solid compact encodes that hold up better on difficult material |
 | `Reference` | Mild to no visual compression with lossless-audio posture |
 
-The standards definition lives in repo-local `movie_standards.json`. Dashboard View quality-profile cards own the inline **Edit definition** controls. Replacement Candidate uses a simpler inline **Edit** control: choose the quality-profile cutoff, then save. The bottom `Standard Definition` card is intentionally treated differently from the stricter tiers because it remains the fallback bucket below `Compact Grade`; only its label and summary are editable.
+The standards definition now sits inside the broader repo-local library policy
+stored in `movie_standards.json`. In the compact shell, policy writes are
+owned by the left-side `Policy` rail rather than scattered inline controls.
+Quality profiles, Replacement Candidate, library defaults, and junk-floor
+behavior now share that one editor. The bottom `Standard Definition` card is
+still intentionally treated differently from the stricter tiers because it
+remains the fallback bucket below `Compact Grade`; only its label and summary
+are editable.
 
 Current video-floor presets are intentionally trimmed to plausible movie-library ranges rather than ultra-weak encodes. The 1080p dropdown starts at `4,500 kbps — compact encode` and steps through `5,500 library grade`, `7,500 strong library`, `10,000 collector grade`, `12,500 strong collector`, and `15,000 reference grade` before the higher near-lossless/remux tiers. The 4K dropdown starts at `10,000 kbps — compact encode`, then `15,000 library grade`, `20,000 strong library`, `25,000 reference grade`, followed by the existing `30,000`, `40,000`, and `50,000` upper tiers.
 
@@ -106,9 +113,10 @@ Dashboard movie profile scans stream progress without pre-counting the whole tre
 
 Persistence posture:
 
-- `movie_standards.json` is the source of truth across server restarts and localhost port changes
+- `movie_standards.json` is the repo-local source of truth for library policy across server restarts and localhost port changes
+- `~/.local/share/normal/operator-preferences.json` stores user-local operator defaults such as delete posture
 - browser cache is only a per-origin dashboard snapshot; `127.0.0.1:8765` and `127.0.0.1:8766` do not share localStorage
-- standards saves now use a revision check, so an older tab or stale cached dashboard is rejected instead of silently overwriting a newer standards file
+- policy and operator-preference saves now use revision checks, so an older tab or stale cached view is rejected instead of silently overwriting newer state
 - writes are done with an atomic temp-file replace so interrupted writes do not leave a partial JSON file behind
 
 The audio channel minimum has a companion **Exempt pre-surround era films** setting. Set it to a release-year cutoff (Pre-1970 through Pre-1990) and films released before that year bypass the channel floor check — useful when Library Grade or higher requires 5.1 but classic titles with mono or stereo-only audio have no higher-channel release to replace them with.
@@ -123,11 +131,12 @@ showing each audio stream's language, bitrate, channel layout, and which stream
 is marked default. This is primarily there to expose multi-audio packaging
 mistakes without bloating the table.
 
-That internal weak-encode shell also exposes a compact `Weak Floor of` control.
-Its default is intentionally conservative: `Standard Definition`, not
-`Library Grade`. The point of the delete workflow is to identify the weakest
-safe replacement candidates first, not to drag stronger library-grade titles
-into an aggressive destructive lane by default.
+That compact shell now routes weak-floor editing through the shared `Policy`
+rail instead of a dedicated inline control. The default remains intentionally
+conservative: `Standard Definition`, not `Library Grade`. The point of the
+delete workflow is to identify the weakest safe replacement candidates first,
+not to drag stronger library-grade titles into an aggressive destructive lane
+by default.
 
 Weak-encode ownership is also narrower than general review ownership. If a file
 already contains a good English audio track and the real defect is wrong
@@ -145,9 +154,12 @@ This is one of the few optional outbound API paths; see [Safety](safety.md#netwo
 
 ## Repair defaults
 
-`Repair Defaults` is one page with two sub-tabs: `Audio Packaging` and `Subtitle Readiness`.
+`Repair Defaults` is one page that now stages audio-packaging and
+subtitle-readiness issues together inside one compact shell.
 
-The same lane is also available in the focused internal shell at `/parser-tester-ui?workflow=repair-defaults`, which is useful when you want to inspect repair consequences without the rest of the main dashboard chrome.
+The same lane is also available in the focused internal shell at
+`/parser-tester-ui?workflow=repair-defaults`, which is useful when you want to
+inspect repair consequences without the rest of the main dashboard chrome.
 
 ### Audio Packaging
 
@@ -161,7 +173,7 @@ For MKVs, the page can do an in-place lossless repair that flips the default aud
 
 While a remux is running, the page locks checkbox selection and disables conflicting bulk actions. The destructive **Delete Selected Files** button is separated to the far right of the action row so it is visually distinct from the two repair actions.
 
-Current safety note: **Make English Default** has been exercised against real files. **Make English Default + Delete Foreign Audio** is implemented but currently untested on real libraries and should still be treated cautiously.
+Current safety note: **Make Best English Audio Default** has been exercised against real files. **Make Best English Audio Default + Remove Foreign Audio** is implemented but currently untested on real libraries and should still be treated cautiously.
 
 ### Subtitle Readiness
 

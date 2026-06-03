@@ -12,8 +12,9 @@ shape. Normalize, weak-encode triage, junk cleanup, repair defaults, canonical
 list coverage, and export are materially useful. Recent scan/cache work and the
 new shell pivot mean the product now feels more deliberate than exploratory,
 but it is still pre-1.0 and still best suited to Linux users comfortable with
-alpha software. Present `v0.7.0-alpha.2` is the first cut of that new default
-surface.
+alpha software. Present `v0.7.0-alpha.3` is the current tagged cut of that new
+default surface and focuses on stabilizing policy ownership inside the same
+shell rather than widening the release surface again.
 
 ### Concerns
 
@@ -24,7 +25,7 @@ surface.
   not exist yet, so the product is still intentionally movie only in practice.
 - **Documentation coherence** — `README`, `CHANGELOG`, and this roadmap are the
   release truth set. Broader docs are intentionally allowed to lag for now to
-  avoid churn while the alpha.2 surface is likely still short-lived.
+  avoid churn while the current compact-shell surface is likely still short-lived.
 - **Safety / mutation confidence** — rename, delete, and remux lanes are
   meaningfully bounded and preview-driven, but they still deserve active
   caution to retain clear boundaries in the face of TV parsing logic.
@@ -75,9 +76,17 @@ surface.
 - Keep public release truth honest without rewriting the whole doc set.
 - Defend concise-only movie normalization and its parser hardening gains.
 - Finish the immediate movie-lane stabilization work that directly affects the
-  alpha.2 default surface.
+  alpha.3 default surface.
 - Keep UI cleanup focused on coherence inside this new shell, not on reviving
   the old dashboard structure.
+- Land the left Policy rail as the sole write owner for library policy and
+  operator delete posture.
+- Keep repo-local library policy and user-local operator preferences separate so
+  release-facing defaults and user-machine behavior do not blur together.
+- Stabilize the unified Repair Defaults lane and the shell reflow that suppresses
+  downstream preview while policy editing is active.
+- Remove deprecated alternate UI routes rather than carrying multiple active
+  shells through the same prerelease band.
 
 ## 0.8.x — Resurfacing, TV, and unified audit
 
@@ -136,4 +145,4 @@ analogue.
   `movie_profile.py`; the UI remains hidden until the workflow shape is clear.
 
 ## Disclaimer
-  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, and the current release is `v0.7.0-alpha.2`; both have matching prerelease intent. Earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.
+  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, and the current release is `v0.7.0-alpha.3`; both have matching prerelease intent. Earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.

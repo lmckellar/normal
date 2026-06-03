@@ -157,7 +157,7 @@ class MoviePlanTests(unittest.TestCase):
             self.assertEqual(file_change.confidence, "safe")
             self.assertNotIn("movie_name_existing_target_collision", {warning.code for warning in plan.warnings})
 
-    def test_build_movie_plan_renames_no_video_movie_artifact_folder(self) -> None:
+    def test_build_movie_plan_deletes_no_video_movie_artifact_folder_with_only_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
             artifact = source / "A Few Good Men (1992) [1080p BluRay AC3 x264 ETRG]"
@@ -169,8 +169,8 @@ class MoviePlanTests(unittest.TestCase):
             self.assertIn("no_video_files", {warning.code for warning in plan.warnings})
             self.assertEqual(len(plan.proposed_changes), 1)
             change = plan.proposed_changes[0]
-            self.assertEqual(change.change_type, "folder_rename")
-            self.assertEqual(change.proposed_value, "A Few Good Men (1992)")
+            self.assertEqual(change.change_type, "folder_delete")
+            self.assertEqual(change.proposed_value, "")
             self.assertEqual(change.confidence, "safe")
 
     def test_build_movie_plan_deletes_metadata_only_collection_artifact_folder(self) -> None:
@@ -191,6 +191,45 @@ class MoviePlanTests(unittest.TestCase):
             change = plan.proposed_changes[0]
             self.assertEqual(change.change_type, "folder_delete")
             self.assertEqual(change.confidence, "safe")
+
+    def test_build_movie_plan_deletes_empty_no_video_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            empty = source / "Lonely Empty Folder"
+            (empty / "nested").mkdir(parents=True)
+
+            plan = build_movie_plan(source)
+
+            delete = next(change for change in plan.proposed_changes if change.change_type == "folder_delete")
+            self.assertEqual(delete.current_value, "Lonely Empty Folder")
+            self.assertEqual(delete.confidence, "safe")
+            self.assertIn("junk_cleanup", delete.reason_codes)
+
+    def test_build_movie_plan_deletes_no_video_folder_with_promo_document_spam(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            residue = source / "Movie Spam Folder"
+            (residue / "nested").mkdir(parents=True)
+            (residue / "poster.jpg").write_text("art", encoding="utf-8")
+            (residue / "RARBG.txt").write_text("Downloaded from RARBG", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            delete = next(change for change in plan.proposed_changes if change.change_type == "folder_delete")
+            self.assertEqual(delete.current_value, "Movie Spam Folder")
+            self.assertEqual(delete.confidence, "safe")
+            self.assertIn("junk_cleanup", delete.reason_codes)
+
+    def test_build_movie_plan_keeps_no_video_folder_with_neutral_text_note(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            residue = source / "Movie Notes Folder"
+            residue.mkdir()
+            (residue / "notes.txt").write_text("Keep this restoration note.", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            self.assertEqual(plan.proposed_changes, [])
 
     def test_build_movie_plan_moves_loose_movie_with_sidecar_nfo_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -246,6 +285,24 @@ class MoviePlanTests(unittest.TestCase):
             artifact.mkdir()
             (concise / "A Few Good Men (1992).mkv").write_text("video", encoding="utf-8")
             (artifact / "A.Few.Good.Men.1992.1080p.BluRay.AC3.x264-ETRG.nfo").write_text("metadata", encoding="utf-8")
+            (artifact / "poster.jpg").write_text("artwork", encoding="utf-8")
+
+            plan = build_movie_plan(source)
+
+            change = next(change for change in plan.proposed_changes if change.change_type == "folder_delete")
+            self.assertEqual(change.current_value, "A Few Good Men (1992) [1080p BluRay AC3 x264 ETRG]")
+            self.assertEqual(change.proposed_value, "")
+            self.assertEqual(change.confidence, "safe")
+
+    def test_build_movie_plan_deletes_promo_doc_residue_when_winner_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            concise = source / "A Few Good Men (1992)"
+            artifact = source / "A Few Good Men (1992) [1080p BluRay AC3 x264 ETRG]"
+            concise.mkdir()
+            artifact.mkdir()
+            (concise / "A Few Good Men (1992).mkv").write_text("video", encoding="utf-8")
+            (artifact / "RARBG.txt").write_text("Downloaded from RARBG", encoding="utf-8")
             (artifact / "poster.jpg").write_text("artwork", encoding="utf-8")
 
             plan = build_movie_plan(source)

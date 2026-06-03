@@ -10,17 +10,23 @@ from normal.movie_canonical_lists import build_canonical_lists_report
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_omdb import lookup_omdb_ratings
 from normal.movie_profile import (
+    build_delete_mode_definition,
     build_histogram_payload_from_items,
     build_movie_profile_definitions,
+    build_policy_definitions,
     build_replacement_candidate_definition,
     deep_merge_dicts,
+    library_policy_revision,
     load_movie_standards,
+    load_operator_preferences,
     movie_standards_revision,
     MovieStandardsConflictError,
     normalize_weak_encode_floor,
+    operator_preferences_revision,
     replacement_candidate_quality_floor,
     reclassify_report_with_standards,
     scan_movie_profiles,
+    update_policy_definition,
     update_movie_profile_definition,
 )
 from normal.movie_scan import MovieScanProgress, scan_movie_library
@@ -96,15 +102,71 @@ def handle_movies_standards_update(ctx: RequestContext, payload: dict[str, Any])
     values = payload.get("values") if isinstance(payload.get("values"), dict) else {}
     revision = str(payload.get("revision") or "").strip() or None
     try:
-        standards = update_movie_profile_definition(label, values, expected_revision=revision)
+        standards, preferences = update_policy_definition(
+            label,
+            values,
+            expected_policy_revision=revision,
+            expected_preferences_revision=str(payload.get("operator_preferences_revision") or "").strip() or None,
+        )
     except MovieStandardsConflictError as exc:
         raise RequestConflictError(str(exc)) from exc
     ctx.respond_json(
         {
+            "policy": standards,
+            "policy_revision": library_policy_revision(standards),
+            "operator_preferences": preferences,
+            "operator_preferences_revision": operator_preferences_revision(preferences),
+            "policy_definitions": build_policy_definitions(standards, preferences),
             "movie_standards": standards,
             "movie_standards_revision": movie_standards_revision(standards),
             "quality_profile_definitions": build_movie_profile_definitions(standards),
             "replacement_candidate_definition": build_replacement_candidate_definition(standards),
+            "delete_mode_definition": build_delete_mode_definition(preferences),
+        }
+    )
+
+
+def handle_policy_read(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    standards = load_movie_standards()
+    preferences = load_operator_preferences()
+    ctx.respond_json(
+        {
+            "policy": standards,
+            "policy_revision": library_policy_revision(standards),
+            "operator_preferences": preferences,
+            "operator_preferences_revision": operator_preferences_revision(preferences),
+            "policy_definitions": build_policy_definitions(standards, preferences),
+            "quality_profile_definitions": build_movie_profile_definitions(standards),
+            "replacement_candidate_definition": build_replacement_candidate_definition(standards),
+            "delete_mode_definition": build_delete_mode_definition(preferences),
+        }
+    )
+
+
+def handle_policy_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    label = str(payload.get("label") or "").strip()
+    values = payload.get("values") if isinstance(payload.get("values"), dict) else {}
+    policy_revision = str(payload.get("policy_revision") or "").strip() or None
+    preferences_revision = str(payload.get("operator_preferences_revision") or "").strip() or None
+    try:
+        standards, preferences = update_policy_definition(
+            label,
+            values,
+            expected_policy_revision=policy_revision,
+            expected_preferences_revision=preferences_revision,
+        )
+    except MovieStandardsConflictError as exc:
+        raise RequestConflictError(str(exc)) from exc
+    ctx.respond_json(
+        {
+            "policy": standards,
+            "policy_revision": library_policy_revision(standards),
+            "operator_preferences": preferences,
+            "operator_preferences_revision": operator_preferences_revision(preferences),
+            "policy_definitions": build_policy_definitions(standards, preferences),
+            "quality_profile_definitions": build_movie_profile_definitions(standards),
+            "replacement_candidate_definition": build_replacement_candidate_definition(standards),
+            "delete_mode_definition": build_delete_mode_definition(preferences),
         }
     )
 

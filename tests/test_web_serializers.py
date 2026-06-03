@@ -114,18 +114,40 @@ class WebSerializersTests(unittest.TestCase):
         standards = {"video": {"1080p": {"minimum_kbps": 2500}}}
 
         with patch("normal.web.serializers.build_histogram_payload", return_value={"movie_count": 3}) as histogram:
-            with patch("normal.web.serializers.movie_standards_revision", return_value="rev-1") as revision:
-                with patch("normal.web.serializers.build_movie_profile_definitions", return_value=[{"label": "library_grade"}]) as definitions:
-                    with patch(
-                        "normal.web.serializers.build_replacement_candidate_definition",
-                        return_value={"label": "replacement_candidate"},
-                    ) as replacement_definition:
-                        payload = build_profile_response(Path("/library"), report, standards=standards)
+            with patch("normal.web.serializers.load_operator_preferences", return_value={"delete_mode": "recycle_all"}):
+                with patch("normal.web.serializers.library_policy_revision", return_value="policy-rev-1") as policy_revision:
+                    with patch("normal.web.serializers.operator_preferences_revision", return_value="prefs-rev-1") as preferences_revision:
+                        with patch("normal.web.serializers.build_policy_definitions", return_value=[{"label": "library_defaults"}]) as policy_definitions:
+                            with patch("normal.web.serializers.movie_standards_revision", return_value="rev-1") as revision:
+                                with patch("normal.web.serializers.build_movie_profile_definitions", return_value=[{"label": "library_grade"}]) as definitions:
+                                    with patch(
+                                        "normal.web.serializers.build_replacement_candidate_definition",
+                                        return_value={"label": "replacement_candidate"},
+                                    ) as replacement_definition:
+                                        with patch(
+                                            "normal.web.serializers.build_library_defaults_definition",
+                                            return_value={"label": "library_defaults"},
+                                        ) as library_defaults:
+                                            with patch(
+                                                "normal.web.serializers.build_delete_mode_definition",
+                                                return_value={"label": "delete_mode"},
+                                            ) as delete_mode_definition:
+                                                payload = build_profile_response(Path("/library"), report, standards=standards)
 
         histogram.assert_called_once_with(report)
+        policy_revision.assert_called_once_with(standards)
+        preferences_revision.assert_called_once_with({"delete_mode": "recycle_all"})
+        policy_definitions.assert_called_once_with(standards, {"delete_mode": "recycle_all"})
         revision.assert_called_once_with(standards)
         definitions.assert_called_once_with(standards)
         replacement_definition.assert_called_once_with(standards)
+        library_defaults.assert_called_once_with(standards)
+        delete_mode_definition.assert_called_once_with({"delete_mode": "recycle_all"})
+        self.assertEqual(payload["policy"], standards)
+        self.assertEqual(payload["policy_revision"], "policy-rev-1")
+        self.assertEqual(payload["operator_preferences"], {"delete_mode": "recycle_all"})
+        self.assertEqual(payload["operator_preferences_revision"], "prefs-rev-1")
+        self.assertEqual(payload["policy_definitions"], [{"label": "library_defaults"}])
         self.assertEqual(payload["movie_standards"], standards)
         self.assertEqual(payload["histogram"], {"movie_count": 3})
         self.assertEqual(payload["movie_standards_revision"], "rev-1")

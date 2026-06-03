@@ -195,8 +195,19 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
 }
 
 MOVIE_STANDARDS_PATH = Path(__file__).resolve().parent.parent / "movie_standards.json"
+OPERATOR_PREFERENCES_PATH = Path.home() / ".local" / "share" / "normal" / "operator-preferences.json"
 ENGLISH_AUDIO_LANGUAGES = {"eng", "en", "english"}
 ENGLISH_SUBTITLE_LANGUAGES = {"eng", "en", "english"}
+DELETE_MODES = (
+    "recycle_all",
+    "hard_delete_all",
+    "hybrid_media_to_bin_junk_hard_delete",
+    "hybrid_junk_to_bin_media_hard_delete",
+)
+JUNK_DELETE_CONFIDENCE_FLOORS = ("high", "review")
+DEFAULT_OPERATOR_PREFERENCES = {
+    "delete_mode": "recycle_all",
+}
 
 
 class MovieStandardsConflictError(RuntimeError):
@@ -341,7 +352,7 @@ def build_movie_profile_item(
 
 
 def load_movie_standards() -> dict[str, Any]:
-    standards = json.loads(json.dumps(DEFAULT_MOVIE_STANDARDS))
+    standards = json.loads(json.dumps(default_library_policy()))
     if not MOVIE_STANDARDS_PATH.exists():
         return standards
     try:
@@ -354,13 +365,13 @@ def load_movie_standards() -> dict[str, Any]:
 
 
 def movie_standards_revision(standards: dict[str, Any] | None = None) -> str:
-    normalized = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards or load_movie_standards())
+    normalized = deep_merge_dicts(default_library_policy(), standards or load_movie_standards())
     encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
 def save_movie_standards(standards: dict[str, Any]) -> dict[str, Any]:
-    normalized = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards)
+    normalized = deep_merge_dicts(default_library_policy(), standards)
     payload = json.dumps(normalized, indent=2) + "\n"
     MOVIE_STANDARDS_PATH.parent.mkdir(parents=True, exist_ok=True)
     temp_path: Path | None = None
@@ -378,6 +389,73 @@ def save_movie_standards(standards: dict[str, Any]) -> dict[str, Any]:
             os.fsync(handle.fileno())
             temp_path = Path(handle.name)
         temp_path.replace(MOVIE_STANDARDS_PATH)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
+    return normalized
+
+
+def default_library_policy() -> dict[str, Any]:
+    return deep_merge_dicts(
+        DEFAULT_MOVIE_STANDARDS,
+        {
+            "primary_language": "english",
+            "subtitle_preferences": {"mode": "conservative"},
+            "junk_rules": {"delete_confidence_floor": "high"},
+        },
+    )
+
+
+def load_library_policy() -> dict[str, Any]:
+    return load_movie_standards()
+
+
+def library_policy_revision(policy: dict[str, Any] | None = None) -> str:
+    return movie_standards_revision(policy)
+
+
+def save_library_policy(policy: dict[str, Any]) -> dict[str, Any]:
+    return save_movie_standards(policy)
+
+
+def load_operator_preferences() -> dict[str, Any]:
+    preferences = json.loads(json.dumps(DEFAULT_OPERATOR_PREFERENCES))
+    if not OPERATOR_PREFERENCES_PATH.exists():
+        return preferences
+    try:
+        payload = json.loads(OPERATOR_PREFERENCES_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return preferences
+    if not isinstance(payload, dict):
+        return preferences
+    return deep_merge_dicts(preferences, payload)
+
+
+def operator_preferences_revision(preferences: dict[str, Any] | None = None) -> str:
+    normalized = deep_merge_dicts(DEFAULT_OPERATOR_PREFERENCES, preferences or load_operator_preferences())
+    encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def save_operator_preferences(preferences: dict[str, Any]) -> dict[str, Any]:
+    normalized = deep_merge_dicts(DEFAULT_OPERATOR_PREFERENCES, preferences)
+    payload = json.dumps(normalized, indent=2) + "\n"
+    OPERATOR_PREFERENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=OPERATOR_PREFERENCES_PATH.parent,
+            prefix=f"{OPERATOR_PREFERENCES_PATH.stem}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+            temp_path = Path(handle.name)
+        temp_path.replace(OPERATOR_PREFERENCES_PATH)
     finally:
         if temp_path is not None and temp_path.exists():
             temp_path.unlink()
@@ -536,6 +614,7 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
             {
                 "label": label,
                 "display_name": str(stance.get("display_name") or human_quality_stance_label(label)),
+                "scope": "library_policy",
                 "group": "Quality Profile",
                 "summary": str(stance.get("summary") or ""),
                 "rule_summary": build_quality_stance_rule_summary(label, stance, active),
@@ -557,6 +636,7 @@ def build_replacement_candidate_definition(standards: dict[str, Any] | None = No
     return {
         "label": "replacement_candidate",
         "display_name": "Replacement Candidate",
+        "scope": "library_policy",
         "group": "Action Based",
         "summary": "Quality profile at or below the configured cutoff and eligible for delete/replace triage.",
         "rule_summary": f"Current cutoff: {display} and lower.",
@@ -578,16 +658,94 @@ def build_replacement_candidate_definition(standards: dict[str, Any] | None = No
     }
 
 
+def build_library_defaults_definition(standards: dict[str, Any] | None = None) -> dict[str, Any]:
+    active = standards or load_library_policy()
+    junk_rules = active.get("junk_rules") or {}
+    subtitle_preferences = active.get("subtitle_preferences") or {}
+    return {
+        "label": "library_defaults",
+        "display_name": "Library Defaults",
+        "scope": "library_policy",
+        "group": "Library Policy",
+        "summary": "Repository-owned language, subtitle, and junk-floor defaults.",
+        "rule_summary": "Primary language, subtitle policy, and junk deletion floor apply library-wide.",
+        "fields": [
+            {
+                "key": "primary_language",
+                "label": "Primary language",
+                "type": "text",
+                "value": str(active.get("primary_language") or "english"),
+            },
+            {
+                "key": "subtitle_mode",
+                "label": "Subtitle preference mode",
+                "type": "select",
+                "value": normalize_subtitle_mode(subtitle_preferences.get("mode")),
+                "options": [
+                    {"value": "conservative", "label": "Conservative"},
+                ],
+            },
+            {
+                "key": "junk_delete_confidence_floor",
+                "label": "Junk delete floor",
+                "type": "select",
+                "value": normalize_junk_delete_confidence_floor(junk_rules.get("delete_confidence_floor")),
+                "options": [
+                    {"value": "high", "label": "High confidence only"},
+                    {"value": "review", "label": "Review and high confidence"},
+                ],
+            },
+        ],
+    }
+
+
+def build_delete_mode_definition(preferences: dict[str, Any] | None = None) -> dict[str, Any]:
+    active = preferences or load_operator_preferences()
+    return {
+        "label": "delete_mode",
+        "display_name": "Delete Posture",
+        "scope": "operator_preferences",
+        "group": "Operator Preference",
+        "summary": "User-local delete handling for media, junk, sidecars, and empty folders.",
+        "rule_summary": "Applies across delete-capable routes. Hybrid modes keep media and junk on different postures.",
+        "fields": [
+            {
+                "key": "delete_mode",
+                "label": "Delete mode",
+                "type": "select",
+                "value": normalize_delete_mode(active.get("delete_mode")),
+                "options": [
+                    {"value": "recycle_all", "label": "Recycle all"},
+                    {"value": "hard_delete_all", "label": "Hard delete all"},
+                    {"value": "hybrid_media_to_bin_junk_hard_delete", "label": "Recycle media, hard delete junk"},
+                    {"value": "hybrid_junk_to_bin_media_hard_delete", "label": "Recycle junk, hard delete media"},
+                ],
+            }
+        ],
+    }
+
+
+def build_policy_definitions(
+    standards: dict[str, Any] | None = None,
+    preferences: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    definitions = build_movie_profile_definitions(standards)
+    definitions.append(build_replacement_candidate_definition(standards))
+    definitions.append(build_library_defaults_definition(standards))
+    definitions.append(build_delete_mode_definition(preferences))
+    return definitions
+
+
 def update_movie_profile_definition(
     label: str,
     values: dict[str, Any],
     expected_revision: str | None = None,
     standards: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    current = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, standards or load_movie_standards())
+    current = deep_merge_dicts(default_library_policy(), standards or load_movie_standards())
     if expected_revision and expected_revision != movie_standards_revision(current):
         raise MovieStandardsConflictError("Movie standards changed since this dashboard view loaded. Refresh and retry.")
-    active = deep_merge_dicts(DEFAULT_MOVIE_STANDARDS, current)
+    active = deep_merge_dicts(default_library_policy(), current)
     if label == "replacement_candidate":
         active.setdefault("replacement_candidate_rules", {})["quality_profile_floor"] = normalize_quality_stance_label(
             values.get("quality_profile_floor"),
@@ -631,6 +789,41 @@ def update_movie_profile_definition(
         stance["require_lossless_audio"] = bool(values.get("require_lossless_audio", False))
         return save_movie_standards(active)
     raise ValueError(f"Unsupported movie profile definition: {label}")
+
+
+def update_policy_definition(
+    label: str,
+    values: dict[str, Any],
+    expected_policy_revision: str | None = None,
+    expected_preferences_revision: str | None = None,
+    library_policy: dict[str, Any] | None = None,
+    operator_preferences: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    active_policy = deep_merge_dicts(default_library_policy(), library_policy or load_library_policy())
+    active_preferences = deep_merge_dicts(DEFAULT_OPERATOR_PREFERENCES, operator_preferences or load_operator_preferences())
+    if label == "delete_mode":
+        if expected_preferences_revision and expected_preferences_revision != operator_preferences_revision(active_preferences):
+            raise MovieStandardsConflictError("Operator preferences changed since this view loaded. Refresh and retry.")
+        active_preferences["delete_mode"] = normalize_delete_mode(values.get("delete_mode"))
+        return active_policy, save_operator_preferences(active_preferences)
+    if label == "library_defaults":
+        if expected_policy_revision and expected_policy_revision != library_policy_revision(active_policy):
+            raise MovieStandardsConflictError("Library policy changed since this view loaded. Refresh and retry.")
+        active_policy["primary_language"] = normalize_primary_language(values.get("primary_language"))
+        active_policy.setdefault("subtitle_preferences", {})["mode"] = normalize_subtitle_mode(values.get("subtitle_mode"))
+        active_policy.setdefault("junk_rules", {})["delete_confidence_floor"] = normalize_junk_delete_confidence_floor(
+            values.get("junk_delete_confidence_floor")
+        )
+        return save_library_policy(active_policy), active_preferences
+    return (
+        update_movie_profile_definition(
+            label,
+            values,
+            expected_revision=expected_policy_revision,
+            standards=active_policy,
+        ),
+        active_preferences,
+    )
 
 
 def deep_merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -705,6 +898,21 @@ def normalize_weak_encode_floor(value: Any, standards: dict[str, Any] | None = N
         fallback = "standard_definition"
     label = normalize_quality_stance_label(value, fallback)
     return label if label in SAFE_WEAK_ENCODE_FLOORS else fallback
+
+
+def normalize_delete_mode(value: Any, default: str = "recycle_all") -> str:
+    mode = str(value or "").strip()
+    return mode if mode in DELETE_MODES else default
+
+
+def normalize_primary_language(value: Any) -> str:
+    language = str(value or "").strip().casefold()
+    return language or "english"
+
+
+def normalize_junk_delete_confidence_floor(value: Any) -> str:
+    floor = str(value or "").strip().casefold()
+    return floor if floor in JUNK_DELETE_CONFIDENCE_FLOORS else "high"
 
 
 def normalize_subtitle_mode(value: Any) -> str:

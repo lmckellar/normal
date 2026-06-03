@@ -80,7 +80,9 @@ These do not drive mutation decisions. They are support surfaces around the loca
 
 ### Repo-local state
 
-- `movie_standards.json` in the repo root is the source of truth for quality-profile definitions and the replacement-candidate cutoff.
+- `movie_standards.json` in the repo root is the source of truth for library
+  policy: quality-profile definitions, replacement-candidate cutoff, primary
+  language, subtitle defaults, and junk-floor defaults.
 
 This file survives browser refreshes, server restarts, and localhost port changes because it is not browser state.
 
@@ -88,6 +90,8 @@ This file survives browser refreshes, server restarts, and localhost port change
 
 Under `~/.local/share/normal/`:
 
+- `operator-preferences.json` stores user-local operator preferences such as
+  delete posture.
 - `probe-cache.json` stores per-file probe results keyed by resolved path, mtime, and size.
 - `library-roots.json` stores the last active movie root and a short recent-roots list.
 
@@ -106,7 +110,8 @@ The web UI also keeps convenience caches in `localStorage`, including:
 - cached canonical-list payloads
 - theme selection
 
-These browser caches are convenience snapshots only. They are not authoritative and do not replace repo-local or user-local state.
+These browser caches are convenience snapshots only. They are not authoritative
+and do not replace repo-local or user-local state.
 
 ## Cache invalidation and freshness
 

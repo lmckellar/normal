@@ -8,6 +8,7 @@ from typing import Callable
 import xml.etree.ElementTree as ET
 
 from normal.models import ChangePlan, ProposedChange, WarningItem, build_empty_plan
+from normal.movie_junk import detect_movie_junk_document_reasons
 from normal.movie_naming import (
     canonicalize_token_sequence as shared_canonicalize_token_sequence,
     cleanup_compact_title_text as shared_cleanup_compact_title_text,
@@ -1297,6 +1298,20 @@ def plan_movie_artifact_folder_cleanup(source_root: Path, movie_files: list[Path
             continue
         if folder_path.name in movie_file_roots:
             continue
+        if is_safe_delete_no_video_junk_folder(folder_path):
+            changes.append(
+                ProposedChange(
+                    item_id=f"{folder_path.relative_to(source_root)}#junk-folder-delete",
+                    change_type="folder_delete",
+                    current_value=str(folder_path.relative_to(source_root)),
+                    proposed_value="",
+                    confidence="safe",
+                    reason="No-video junk folder contained only empty subfolders or obvious disposable residue and was deleted.",
+                    path=str(folder_path),
+                    reason_codes=["junk_cleanup"],
+                )
+            )
+            continue
         if is_safe_delete_artifact_collection_folder(folder_path):
             changes.append(
                 ProposedChange(
@@ -1338,12 +1353,12 @@ def plan_movie_artifact_folder_cleanup(source_root: Path, movie_files: list[Path
     return changes
 
 
-def folder_contains_only_safe_delete_artifacts(folder_path: Path) -> bool:
+def folder_contains_only_safe_delete_residue(folder_path: Path) -> bool:
     try:
         files = [path for path in folder_path.rglob("*") if path.is_file()]
     except OSError:
         return False
-    return all(is_safe_delete_artifact_file(path) for path in files)
+    return all(is_safe_delete_residue_file(path) for path in files)
 
 
 def plan_existing_target_artifact_residue(source_root: Path, folder_path: Path, target_path: Path) -> list[ProposedChange] | None:
@@ -1377,7 +1392,7 @@ def plan_existing_target_artifact_residue(source_root: Path, folder_path: Path, 
                 warning_codes=["existing_target_artifact_residue"],
             )
         ]
-    if all(is_safe_delete_artifact_file(path) for path in files):
+    if all(is_safe_delete_residue_file(path) for path in files):
         return [
             ProposedChange(
                 item_id=f"{folder_path.relative_to(source_root)}#artifact-folder-delete",
@@ -1392,7 +1407,7 @@ def plan_existing_target_artifact_residue(source_root: Path, folder_path: Path, 
         ]
 
     subtitle_files = [path for path in files if is_subtitle_file(path)]
-    substantive_files = [path for path in files if not is_safe_delete_artifact_file(path) and not is_subtitle_file(path)]
+    substantive_files = [path for path in files if not is_safe_delete_residue_file(path) and not is_subtitle_file(path)]
     if substantive_files:
         return [
             ProposedChange(
@@ -1489,13 +1504,11 @@ def is_safe_delete_artifact_collection_folder(folder_path: Path) -> bool:
     name = folder_path.name.casefold()
     if not is_package_artifact_folder_name(name):
         return False
-    try:
-        files = [path for path in folder_path.rglob("*") if path.is_file()]
-    except OSError:
-        return False
-    if not files:
-        return True
-    return all(is_safe_delete_artifact_file(path) for path in files)
+    return folder_contains_only_safe_delete_residue(folder_path)
+
+
+def is_safe_delete_no_video_junk_folder(folder_path: Path) -> bool:
+    return folder_contains_only_safe_delete_residue(folder_path)
 
 
 def is_package_artifact_folder_name(name: str) -> bool:
@@ -1525,7 +1538,7 @@ def is_safe_delete_after_multi_movie_split(folder_path: Path, moved_files: set[P
     for path in files:
         if path.resolve() in moved_resolved:
             continue
-        if not is_safe_delete_artifact_file(path):
+        if not is_safe_delete_residue_file(path):
             return False
     return True
 
@@ -1538,6 +1551,14 @@ def is_safe_delete_artifact_file(path: Path) -> bool:
         return True
     suffix = path.suffix.casefold()
     return suffix in SAFE_DELETE_ARTIFACT_EXTENSIONS or suffix in SAFE_DELETE_POSTER_EXTENSIONS
+
+
+def is_safe_delete_promo_document_file(path: Path) -> bool:
+    return bool(detect_movie_junk_document_reasons(path))
+
+
+def is_safe_delete_residue_file(path: Path) -> bool:
+    return is_safe_delete_artifact_file(path) or is_safe_delete_promo_document_file(path)
 
 
 def is_subtitle_file(path: Path) -> bool:
