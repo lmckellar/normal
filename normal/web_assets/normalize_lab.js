@@ -56,11 +56,12 @@
   const REPAIR_HEADERS = [
     { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
     { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
-    { key: 'issue_family', label: 'Issue Family', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '12%' },
+    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
+    { key: 'default_subtitle', label: 'Default Subtitle', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '13ch' },
     { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '24%' },
     { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '16%' },
     { key: 'repair_target', label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '16%' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium', width: '11ch' },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '12ch' },
     { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
   ];
 
@@ -524,6 +525,13 @@
     return Array.isArray(row?.item?.facts?.audio_streams) ? row.item.facts.audio_streams : [];
   }
 
+  function actualResolutionLabel(item) {
+    const width = Number(item?.facts?.width || 0);
+    const height = Number(item?.facts?.height || 0);
+    if (width > 0 && height > 0) return `${width} x ${height}`;
+    return item?.facts?.resolution_bucket || '—';
+  }
+
   function canonicalListsForPayload(payload = state.canonicalPayload) {
     return Array.isArray(payload?.list_summaries) ? payload.list_summaries : [];
   }
@@ -848,6 +856,17 @@
     return [language ? language.charAt(0).toUpperCase() + language.slice(1) : 'Unknown', stream?.is_forced ? 'forced' : null, stream?.title || null]
       .filter(Boolean)
       .join(' · ');
+  }
+
+  function repairDefaultSubtitleLabel(item) {
+    const subtitleStreams = item?.facts?.subtitle_streams || [];
+    const defaultCount = Number(item?.facts?.default_subtitle_streams || 0);
+    if (!subtitleStreams.length || defaultCount <= 0) return 'None';
+    if (defaultCount > 1) return 'Multiple';
+    const stream = movieDefaultSubtitleStream(item);
+    if (!stream) return 'None';
+    const language = displayAudioLanguage(stream.language);
+    return stream.is_forced ? `${language} Forced` : language;
   }
 
   function repairDefaultsSelectionLocked() {
@@ -1950,11 +1969,12 @@
       selectable: Boolean(item.path) && issueFamilies.length > 0 && !repairDefaultsSelectionLocked(),
       issue_families: issueFamilies,
       current_path: item.path || '',
-      issue_family: issueFamilyLabel(issueFamilies),
       issue: repairIssueSummary(item),
       current_default: repairCurrentDefaultSummary(item),
       repair_target: repairTargetSummary(item),
-      resolution: item?.facts?.resolution_bucket || '',
+      default_subtitle: repairDefaultSubtitleLabel(item),
+      resolution: actualResolutionLabel(item),
+      audio_bitrate: item?.facts?.audio_bitrate_kbps || 0,
       file_size: item?.facts?.file_size_bytes || 0,
       audio_issue_code: movieAudioPackagingIssueCode(item),
       subtitle_issue_code: movieSubtitleReadinessIssueCode(item),
@@ -1991,7 +2011,8 @@
       issue: issueCode === 'default_non_english_audio_with_weak_english' ? 'wrong language · weak English' : 'wrong default language',
       current_default: describeAudioStream(movieDefaultAudioStream(item)),
       repair_target: describeAudioStream(movieBestEnglishAudioStream(item)),
-      resolution: item?.facts?.resolution_bucket || '',
+      resolution: actualResolutionLabel(item),
+      audio_bitrate: item?.facts?.audio_bitrate_kbps || 0,
       file_size: item?.facts?.file_size_bytes || 0,
       workflow_status: issueCode === 'default_non_english_audio_with_weak_english' ? 'weak_english' : 'wrong_default',
     };
@@ -2007,7 +2028,8 @@
       issue: humanSubtitleReadinessIssueLabel(movieSubtitleReadinessIssueCode(item)),
       current_default: describeSubtitleStream(movieDefaultSubtitleStream(item)),
       repair_target: describeSubtitleStream(movieSubtitleReadinessRepairTarget(item)) || 'clear defaults',
-      resolution: item?.facts?.resolution_bucket || '',
+      resolution: actualResolutionLabel(item),
+      audio_bitrate: item?.facts?.audio_bitrate_kbps || 0,
       file_size: item?.facts?.file_size_bytes || 0,
       workflow_status: movieSubtitleReadinessIssueCode(item),
     };
@@ -2497,15 +2519,20 @@
   function renderRepairRow(row) {
     const checked = state.selected.has(row.row_id) ? 'checked' : '';
     const disabled = repairDefaultsSelectionLocked() ? 'disabled' : '';
+    const hasAudioTracks = audioTracksForRow(row).length > 0;
+    const audioBitrateMarkup = hasAudioTracks
+      ? `<button class="lab-audio-popover-trigger" type="button" data-audio-popover="${escapeHtml(row.row_id)}" aria-expanded="${state.audioPopoverRowId === row.row_id ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
+      : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked} ${disabled}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
-        <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.issue_family || '—')}"><span class="lab-cell-text">${escapeHtml(row.issue_family || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(formatBitrate(row.audio_bitrate))}">${audioBitrateMarkup}</td>
+        <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.default_subtitle || 'None')}"><span class="lab-cell-text">${escapeHtml(row.default_subtitle || 'None')}</span></td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
         <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.current_default || '—')}"><span class="lab-cell-text">${escapeHtml(row.current_default || '—')}</span></td>
         <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.repair_target || '—')}"><span class="lab-cell-text">${escapeHtml(row.repair_target || '—')}</span></td>
-        <td class="lab-cell-signal" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-pill ${repairStatusClass(row)}">${escapeHtml(row.resolution || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-text">${escapeHtml(row.resolution || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(formatFileSize(row.file_size))}"><span class="lab-cell-text">${escapeHtml(formatFileSize(row.file_size))}</span></td>
       </tr>
     `;
@@ -2732,7 +2759,7 @@
     });
     (node._files || []).sort((a, b) => a.name.localeCompare(b.name)).forEach(file => {
       lines.push({
-        label: file.name,
+        label: file.folder ? `${file.name}/` : file.name,
         depth,
         mutated: Boolean(file.mutated),
         selected: Boolean(file.selected),
@@ -2770,6 +2797,9 @@
   function addPathToTree(tree, path, flags) {
     const parts = String(path || '').split('/').filter(Boolean);
     if (!parts.length) return;
+    const markAncestorsSelected = flags.markAncestorsSelected !== false;
+    const propagateDeleteState = !!flags.propagateDeleteState;
+    const propagateCleanupState = !!flags.propagateCleanupState;
     let node = tree;
     parts.forEach((part, index) => {
       const isFile = index === parts.length - 1;
@@ -2779,9 +2809,9 @@
         return;
       }
       node[part] = node[part] || {};
-      if (flags.deleted) node[part]._deleted = true;
-      if (flags.cleanup) node[part]._cleanup = true;
-      if (flags.selected) node[part]._selected = true;
+      if (flags.deleted && propagateDeleteState) node[part]._deleted = true;
+      if (flags.cleanup && propagateCleanupState) node[part]._cleanup = true;
+      if (flags.selected && markAncestorsSelected) node[part]._selected = true;
       node = node[part];
     });
   }
@@ -2847,9 +2877,9 @@
 
   function weakSelectedPreviewTree(preview) {
     const tree = {};
-    (preview.deleted || []).forEach(path => addPathToTree(tree, relativeToSource(path), { deleted: true, selected: true }));
-    (preview.cleaned_sidecars || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true }));
-    (preview.removed_folders || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true }));
+    (preview.deleted || []).forEach(path => addPathToTree(tree, relativeToSource(path), { deleted: true, selected: true, markAncestorsSelected: false }));
+    (preview.cleaned_sidecars || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true, markAncestorsSelected: false }));
+    (preview.removed_folders || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true, folder: true, markAncestorsSelected: false }));
     return renderPreviewTreeMarkup(tree);
   }
 
@@ -2862,9 +2892,9 @@
       if (!relPath || deleted.has(relPath)) return;
       addPathToTree(tree, relPath, {});
     });
-    (preview.deleted || []).forEach(path => addPathToTree(tree, relativeToSource(path), { deleted: true, selected: true }));
-    (preview.cleaned_sidecars || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true }));
-    (preview.removed_folders || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true }));
+    (preview.deleted || []).forEach(path => addPathToTree(tree, relativeToSource(path), { deleted: true, selected: true, markAncestorsSelected: false }));
+    (preview.cleaned_sidecars || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true, markAncestorsSelected: false }));
+    (preview.removed_folders || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true, folder: true, markAncestorsSelected: false }));
     return renderPreviewTreeMarkup(tree);
   }
 
@@ -2931,13 +2961,13 @@
 
   function junkSelectedPreviewTree(rows) {
     const tree = {};
-    rows.forEach(row => addPathToTree(tree, row.item?.relative_path || row.current_path || '', { deleted: true, selected: true }));
+    rows.forEach(row => addPathToTree(tree, row.item?.relative_path || row.current_path || '', { deleted: true, selected: true, markAncestorsSelected: false }));
     return renderPreviewTreeMarkup(tree);
   }
 
   function junkLibraryPreviewTree(rows) {
     const tree = {};
-    rows.forEach(row => addPathToTree(tree, row.item?.relative_path || row.current_path || '', { deleted: true }));
+    rows.forEach(row => addPathToTree(tree, row.item?.relative_path || row.current_path || '', { deleted: true, markAncestorsSelected: false }));
     return renderPreviewTreeMarkup(tree);
   }
 

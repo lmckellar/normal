@@ -130,13 +130,14 @@ def handle_movies_junk(ctx: RequestContext, payload: dict[str, Any]) -> None:
                 source,
                 probe_media=tracked_probe(source, "ffprobe movie junk", cache=PROBE_CACHE),
             )
+    document_junk_count = sum(1 for item in report.junk if Path(item.path).suffix.lower() in {".txt", ".html", ".htm"})
     record_scan_event(
         source,
         workflow="junk",
         label="Movie junk scan",
         metadata={
-            "video_junk_count": len(report.items),
-            "document_junk_count": len(report.promo_documents),
+            "video_junk_count": len(report.junk) - document_junk_count,
+            "document_junk_count": document_junk_count,
         },
     )
     ctx.respond_json(report.to_dict())

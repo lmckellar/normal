@@ -182,6 +182,29 @@ class WebTests(unittest.TestCase):
         self.assertIn("state.junkPayload = payload;", FRONTEND)
         self.assertIn("clearDeletePreviewState();", FRONTEND)
         self.assertIn("Run Delete Junk & Spam Files", FRONTEND)
+        self.assertIn("markAncestorsSelected: false", FRONTEND)
+        self.assertIn("folder: true", FRONTEND)
+        self.assertIn(".lab-tree-line.is-cleanup {\n  color: #8d5d1d;\n  font-weight: 600;", FRONTEND)
+
+    def test_movie_junk_endpoint_returns_detected_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "library"
+            movie_dir = source / "Movie"
+            movie_dir.mkdir(parents=True)
+            (movie_dir / "Movie-sample.mkv").write_bytes(b"x")
+            body = json.dumps({"source": str(source)}).encode("utf-8")
+            with self.run_test_server() as base_url:
+                req = urllib.request.Request(
+                    f"{base_url}/api/movies/junk",
+                    data=body,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(payload["source_root"], str(source.resolve()))
+        self.assertEqual(len(payload["junk"]), 1)
+        self.assertEqual(payload["junk"][0]["relative_path"], "Movie/Movie-sample.mkv")
 
     def test_movie_delete_flows_are_direct_in_weak_encodes(self) -> None:
         self.assertIn("Delete Selected Files (", FRONTEND)
@@ -203,6 +226,10 @@ class WebTests(unittest.TestCase):
         self.assertIn("drop_foreign_audio: dropForeignAudio", FRONTEND)
         self.assertIn("selectedRepairAudioPaths()", FRONTEND)
         self.assertIn("Running English-default remux", FRONTEND)
+        self.assertIn("function actualResolutionLabel(item)", FRONTEND)
+        self.assertIn("label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' }", FRONTEND)
+        self.assertIn("label: 'Default Subtitle', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '13ch' }", FRONTEND)
+        self.assertIn("function repairDefaultSubtitleLabel(item)", FRONTEND)
 
     def test_movie_subtitle_readiness_page_is_wired(self) -> None:
         self.assertIn("'repair-defaults': 'Repair Defaults'", FRONTEND)
@@ -389,7 +416,9 @@ class WebTests(unittest.TestCase):
         self.assertIn("This page is non-destructive", NORMALIZE_LAB_FRONTEND)
         self.assertIn("wrong language · weak English", NORMALIZE_LAB_FRONTEND)
         self.assertIn("default_non_english_audio", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("issueFamilyLabel(issueFamilies)", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function actualResolutionLabel(item)", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("return `${width} x ${height}`;", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("data-audio-popover=\"${escapeHtml(row.row_id)}\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("selectable: Boolean(item.path) && issueFamilies.length > 0 && !repairDefaultsSelectionLocked()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("File Name", NORMALIZE_LAB_FRONTEND)
         self.assertIn("label: 'Confidence'", NORMALIZE_LAB_FRONTEND)

@@ -1228,6 +1228,7 @@ input[type="checkbox"] {
 
 .lab-tree-line.is-cleanup {
   color: #8d5d1d;
+  font-weight: 600;
 }
 
 .lab-indent-0 { padding-left: var(--lab-local-row-inline-pad, var(--lab-rhythm-row-inline-pad)); }
