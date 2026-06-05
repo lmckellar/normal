@@ -229,6 +229,12 @@ class WebTests(unittest.TestCase):
         self.assertIn("function actualResolutionLabel(item)", FRONTEND)
         self.assertIn("label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' }", FRONTEND)
         self.assertIn("label: 'Default Subtitle', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '13ch' }", FRONTEND)
+        self.assertIn("label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '13%' }", FRONTEND)
+        self.assertIn("label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '15%' }", FRONTEND)
+        self.assertIn("label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '17%' }", FRONTEND)
+        self.assertIn("label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '16ch' }", FRONTEND)
+        self.assertNotIn("audio: ${describeAudioStream(movieDefaultAudioStream(item))}", FRONTEND)
+        self.assertNotIn("audio: ${describeAudioStream(movieBestEnglishAudioStream(item))}", FRONTEND)
         self.assertIn("function repairDefaultSubtitleLabel(item)", FRONTEND)
 
     def test_movie_subtitle_readiness_page_is_wired(self) -> None:
@@ -406,6 +412,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("Preview and action controls are suppressed while policy editing is active.", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Preview and action controls are suppressed while dashboard view is open.", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Preview and action controls are suppressed while the audit ledger is open.", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("if (!state.runInFlight && state.workflow === 'normalize' && auditSurfaceOpen()) {", NORMALIZE_LAB_FRONTEND)
         self.assertIn("applyPolicyPayload(payload);", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Make Best English Audio Default", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Normalize Subtitle Defaults", NORMALIZE_LAB_FRONTEND)
@@ -425,8 +432,6 @@ class WebTests(unittest.TestCase):
         self.assertIn("function fileNameFromPath(path)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function middleTruncateJunkFileName(value, maxWidth, font)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("new ResizeObserver", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("reason code", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("warning code", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Select all", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Deselect all", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Preview Scope", NORMALIZE_LAB_FRONTEND)
@@ -435,10 +440,12 @@ class WebTests(unittest.TestCase):
         self.assertIn("Run Repair", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Confirm (0 Operations)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Run Delete Junk & Spam Files", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("package cases", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("collision cases", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("artifact cleanup cases", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("subtitle-merge cases", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("reason code", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("warning code", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("package cases", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("collision cases", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("artifact cleanup cases", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("subtitle-merge cases", NORMALIZE_LAB_FRONTEND)
         self.assertIn("state.previewMode = el.previewScopeSelect.value === 'library' ? 'library' : 'selected';", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function renderPreviewPane()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function renderPanelVisibility()", NORMALIZE_LAB_FRONTEND)
@@ -534,6 +541,11 @@ class WebTests(unittest.TestCase):
         self.assertIn("Running subtitle-default remux for ${paths.length} file", NORMALIZE_LAB_JS)
         self.assertIn("body: JSON.stringify({ source: el.sourcePath.value.trim(), paths, drop_foreign_audio: dropForeignAudio }),", NORMALIZE_LAB_JS)
         self.assertIn("if (actionTouchesSubtitle(action)) {", NORMALIZE_LAB_JS)
+        self.assertIn("const applicableRows = selectedRepairRowsForAction(action);", NORMALIZE_LAB_JS)
+
+    def test_repair_preview_calls_out_family_noops_for_combined_actions(self) -> None:
+        self.assertIn("streams/audio [no audio-default change for this file]", NORMALIZE_LAB_JS)
+        self.assertIn("streams/subtitles [no subtitle-default change for this file]", NORMALIZE_LAB_JS)
 
     def test_normalize_lab_selection_refreshes_all_selection_dependent_controls(self) -> None:
         self.assertIn("function refreshSelectionState() {", NORMALIZE_LAB_JS)
@@ -548,6 +560,24 @@ class WebTests(unittest.TestCase):
         self.assertIn("clearDeletePreviewState();", checkbox_section)
         self.assertIn("refreshSelectionState();", checkbox_section)
         self.assertNotIn("clearDeletePreviewState();\n        renderSidePanel();", checkbox_section)
+
+    def test_repair_defaults_rows_are_not_filtered_by_selected_action(self) -> None:
+        active_rows_section = NORMALIZE_LAB_JS.split("function activeRows() {", 1)[1].split("function canonicalRows()", 1)[0]
+        self.assertIn(".filter(item => !!movieAudioPackagingIssueCode(item) || movieSubtitleReadinessIsRepairable(item))", active_rows_section)
+        self.assertNotIn(".filter(item => repairItemMatchesAction(item))", active_rows_section)
+
+    def test_repair_action_change_preserves_selection_and_active_row(self) -> None:
+        change_section = NORMALIZE_LAB_JS.split("el.repairActionSelect.addEventListener('change', () => {", 1)[1].split("el.repairActionButton.addEventListener('click', () => {", 1)[0]
+        self.assertNotIn("state.selected = new Set();", change_section)
+        self.assertNotIn("state.activeRowId = '';", change_section)
+        self.assertIn("state.previewMode = 'selected';", change_section)
+
+    def test_repair_defaults_exposes_partial_applicability_ui(self) -> None:
+        self.assertIn("function selectedRepairApplicability(action = state.repairAction) {", NORMALIZE_LAB_JS)
+        self.assertIn("function repairActionOptionLabel(action, selectedCount, applicableCount) {", NORMALIZE_LAB_JS)
+        self.assertIn("No applicable rows.", NORMALIZE_LAB_JS)
+        self.assertIn("selected, ${selection.applicableRows.length} applicable, ${selection.skippedRows.length} skipped", NORMALIZE_LAB_JS)
+        self.assertIn("selection.selectedRows.length && !option.applicableCount ? 'disabled' : ''", NORMALIZE_LAB_JS)
 
     def test_audio_packaging_fix_route_forwards_drop_foreign_flag(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

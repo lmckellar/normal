@@ -58,10 +58,10 @@
     { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
     { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
     { key: 'default_subtitle', label: 'Default Subtitle', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '13ch' },
-    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '24%' },
-    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '16%' },
-    { key: 'repair_target', label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '16%' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '12ch' },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '13%' },
+    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '15%' },
+    { key: 'repair_target', label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '17%' },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '16ch' },
     { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
   ];
 
@@ -141,9 +141,6 @@
     filterBar: document.getElementById('filterBar'),
     searchInput: document.getElementById('searchInput'),
     bucketFilter: document.getElementById('bucketFilter'),
-    caseFilter: document.getElementById('caseFilter'),
-    reasonFilter: document.getElementById('reasonFilter'),
-    warningFilter: document.getElementById('warningFilter'),
     workflowStatusFilter: document.getElementById('workflowStatusFilter'),
     canonicalListFilter: document.getElementById('canonicalListFilter'),
     previewScopeLabel: document.getElementById('previewScopeLabel'),
@@ -408,6 +405,19 @@
     },
   };
 
+  const REPAIR_STATUS_FILTER_OPTIONS = [
+    ['all', 'all'],
+    ['both', 'audio + subtitle'],
+    ['audio_only', 'audio only'],
+    ['subtitle_only', 'subtitle only'],
+    ['weak_english', 'weak English'],
+    ['wrong_default', 'wrong default'],
+    ['forced_english', 'forced English'],
+    ['non_english_audio', 'non-English audio'],
+    ['clear_default', 'clear default'],
+    ['queued', 'queued'],
+  ];
+
   function repairActionConfig(action = state.repairAction) {
     return REPAIR_ACTION_CONFIGS[action] || REPAIR_ACTION_CONFIGS.set_english_default;
   }
@@ -425,6 +435,14 @@
       value,
       label: repairActionConfig(value).label,
     }));
+  }
+
+  function repairActionOptionLabel(action, selectedCount, applicableCount) {
+    const label = repairActionConfig(action).label;
+    if (!selectedCount) return label;
+    if (!applicableCount) return `${label} (unavailable)`;
+    if (applicableCount === selectedCount) return label;
+    return `${label} (${applicableCount}/${selectedCount})`;
   }
 
   const QUALITY_STANCE_RANKS = {
@@ -990,9 +1008,6 @@
     const junk = isJunkMode();
     if (el.filterBar) el.filterBar.hidden = false;
     el.bucketFilter.hidden = weak || repairDefaults || canonical || junk;
-    el.caseFilter.hidden = weak || repairDefaults || canonical || junk;
-    el.reasonFilter.hidden = weak || repairDefaults || canonical || junk;
-    el.warningFilter.hidden = weak || repairDefaults || canonical || junk;
     el.workflowStatusFilter.hidden = !(weak || repairDefaults || junk);
     el.canonicalListFilter.hidden = !canonical;
     el.previewScopeLabel.hidden = canonical;
@@ -1046,7 +1061,7 @@
       return;
     }
     if (isRepairDefaultsMode()) {
-      const options = repairActionConfig().statusOptions || [['all', 'all']];
+      const options = REPAIR_STATUS_FILTER_OPTIONS;
       el.workflowStatusFilter.innerHTML = options.map(([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`).join('');
       const valid = options.map(([value]) => value);
       if (!valid.includes(el.workflowStatusFilter.value)) el.workflowStatusFilter.value = 'all';
@@ -1061,16 +1076,20 @@
       el.repairActionButton.disabled = true;
       return;
     }
-    const selectedCount = selectedRepairPaths().length;
+    const selection = selectedRepairApplicability();
+    const selectedCount = selection.selectedRows.length;
     const locked = repairDefaultsSelectionLocked();
     const config = repairActionConfig();
     const busy = locked;
-    const options = repairActionOptions();
+    const options = repairActionOptions().map(option => ({
+      ...option,
+      applicableCount: selection.selectedRows.length ? selectedRepairRowsForAction(option.value).length : state.filteredRows.filter(row => repairRowMatchesAction(row, option.value)).length,
+    }));
     if (!options.some(option => option.value === state.repairAction)) {
       state.repairAction = defaultRepairAction();
     }
     el.repairActionSelect.innerHTML = options.map(option => (
-      `<option value="${escapeHtml(option.value)}">${escapeHtml(option.label)}</option>`
+      `<option value="${escapeHtml(option.value)}" ${selection.selectedRows.length && !option.applicableCount ? 'disabled' : ''}>${escapeHtml(repairActionOptionLabel(option.value, selectedCount, option.applicableCount))}</option>`
     )).join('');
     el.repairActionSelect.value = state.repairAction;
     el.repairActionButton.classList.add('lab-action-button');
@@ -1078,7 +1097,7 @@
     el.repairActionButton.classList.add(config.buttonClass);
     el.repairActionButton.textContent = locked ? config.busyText : config.buttonText;
     el.repairActionSelect.disabled = locked || busy;
-    el.repairActionButton.disabled = !selectedCount || locked || busy;
+    el.repairActionButton.disabled = !selection.applicableRows.length || locked || busy;
   }
 
   function renderWeakFloorControl() {
@@ -1946,14 +1965,14 @@
 
   function repairCurrentDefaultSummary(item) {
     const parts = [];
-    if (movieAudioPackagingIssueCode(item)) parts.push(`audio: ${describeAudioStream(movieDefaultAudioStream(item))}`);
+    if (movieAudioPackagingIssueCode(item)) parts.push(describeAudioStream(movieDefaultAudioStream(item)));
     if (movieSubtitleReadinessIsRepairable(item)) parts.push(`subtitle: ${describeSubtitleStream(movieDefaultSubtitleStream(item))}`);
     return parts.join(' | ') || '—';
   }
 
   function repairTargetSummary(item) {
     const parts = [];
-    if (movieAudioPackagingIssueCode(item)) parts.push(`audio: ${describeAudioStream(movieBestEnglishAudioStream(item))}`);
+    if (movieAudioPackagingIssueCode(item)) parts.push(describeAudioStream(movieBestEnglishAudioStream(item)));
     if (movieSubtitleReadinessIsRepairable(item)) parts.push(`subtitle: ${describeSubtitleStream(movieSubtitleReadinessRepairTarget(item)) || 'clear defaults'}`);
     return parts.join(' | ') || '—';
   }
@@ -2066,7 +2085,7 @@
     if (isWeakMode()) return weakWorkflowItems().map(weakRowForItem);
     if (isRepairDefaultsMode()) {
       return (state.repairPayload?.movies || [])
-        .filter(item => repairItemMatchesAction(item))
+        .filter(item => !!movieAudioPackagingIssueCode(item) || movieSubtitleReadinessIsRepairable(item))
         .map(repairRowForItem);
     }
     if (isCanonicalMode()) return canonicalRows();
@@ -2153,9 +2172,6 @@
       });
     } else {
       const bucket = el.bucketFilter.value;
-      const caseFilter = el.caseFilter.value;
-      const reasonFilter = el.reasonFilter.value;
-      const warningFilter = el.warningFilter.value;
       rows = rows.filter(row => {
         if (bucket === 'actionable' && !row.actionable) return false;
         if (bucket === 'unchanged' && row.confidence !== 'unchanged') return false;
@@ -2164,12 +2180,6 @@
           const haystack = `${row.current_value} ${row.projected_path}`.toLowerCase();
           if (!haystack.includes(query)) return false;
         }
-        if (reasonFilter && !(row.reason_codes || []).includes(reasonFilter)) return false;
-        if (warningFilter && !(row.warning_codes || []).includes(warningFilter)) return false;
-        if (caseFilter === 'package' && row.reason_bucket !== 'package') return false;
-        if (caseFilter === 'collision' && row.reason_bucket !== 'collision') return false;
-        if (caseFilter === 'artifact' && row.reason_bucket !== 'artifact') return false;
-        if (caseFilter === 'subtitle' && row.reason_bucket !== 'subtitle') return false;
         return true;
       });
     }
@@ -2203,16 +2213,6 @@
     const bv = String(b[key] || '').toLowerCase();
     return av.localeCompare(bv) * mult;
   }
-
-  function renderFilters() {
-    if (isWeakMode() || isRepairDefaultsMode() || isCanonicalMode() || isJunkMode()) return;
-    const rows = normalizeRows();
-    const reasonCodes = [...new Set(rows.flatMap(row => row.reason_codes || []))].sort();
-    const warningCodes = [...new Set(rows.flatMap(row => row.warning_codes || []))].sort();
-    el.reasonFilter.innerHTML = `<option value="">reason code</option>${reasonCodes.map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join('')}`;
-    el.warningFilter.innerHTML = `<option value="">warning code</option>${warningCodes.map(code => `<option value="${escapeHtml(code)}">${escapeHtml(code)}</option>`).join('')}`;
-  }
-
   function selectedWeakPaths() {
     return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable).map(row => row.path);
   }
@@ -2233,12 +2233,30 @@
     return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable);
   }
 
+  function repairRowsForAction(rows, action = state.repairAction) {
+    return rows.filter(row => repairRowMatchesAction(row, action));
+  }
+
+  function selectedRepairRowsForAction(action = state.repairAction) {
+    return repairRowsForAction(selectedRepairRows(), action);
+  }
+
+  function selectedRepairApplicability(action = state.repairAction) {
+    const rows = selectedRepairRows();
+    const applicableRows = repairRowsForAction(rows, action);
+    return {
+      selectedRows: rows,
+      applicableRows,
+      skippedRows: rows.filter(row => !repairRowMatchesAction(row, action)),
+    };
+  }
+
   function selectedRepairAudioPaths() {
-    return selectedRepairRows().filter(row => rowTouchesFamily(row, 'audio')).map(row => row.path);
+    return selectedRepairRowsForAction().filter(row => rowTouchesFamily(row, 'audio')).map(row => row.path);
   }
 
   function selectedRepairSubtitleRows() {
-    return selectedRepairRows().filter(row => rowTouchesFamily(row, 'subtitle'));
+    return selectedRepairRowsForAction().filter(row => rowTouchesFamily(row, 'subtitle'));
   }
 
   function selectedJunkPaths() {
@@ -2403,6 +2421,7 @@
 
   function renderRows() {
     applyFilters();
+    synchronizeSelectionWithRows();
     renderSelectionButtons();
     if (!state.filteredRows.length) {
       closeAudioPopover();
@@ -2615,6 +2634,13 @@
     state.weakPreview = null;
     state.weakPreviewKey = '';
     state.junkDeleteSkipped = [];
+  }
+
+  function synchronizeSelectionWithRows() {
+    const key = usesSimpleSelectionShell() ? 'row_id' : 'result_id';
+    const available = new Set(state.rows.map(row => row[key]).filter(Boolean));
+    state.selected = new Set([...state.selected].filter(id => available.has(id)));
+    if (state.activeRowId && !available.has(state.activeRowId)) state.activeRowId = '';
   }
 
   function refreshSelectionState() {
@@ -3001,7 +3027,7 @@
     `;
   }
 
-  function repairPreviewTreeForRow(row) {
+  function repairPreviewTreeForRow(row, action = state.repairAction) {
     const tree = {};
     const relPath = relativeToSource(row.current_path || row.path || '');
     addPathToTree(tree, relPath, { selected: true });
@@ -3013,22 +3039,30 @@
       node[part] = node[part] || {};
       return node[part];
     }, tree);
-    if (rowTouchesFamily(row, 'audio')) {
+    const audioTouched = rowTouchesFamily(row, 'audio');
+    const subtitleTouched = rowTouchesFamily(row, 'subtitle');
+    if (actionTouchesAudio(action) && rowTouchesFamily(row, 'audio')) {
       const defaultAudio = movieDefaultAudioStream(row.item);
       const targetAudio = movieBestEnglishAudioStream(row.item);
-      if (defaultAudio) addPathToTree(containerNode, `streams/audio-${defaultAudio.index || 0}-${displayAudioLanguage(defaultAudio.language)}${repairActionConfig().dropForeignAudio ? ' [default -> passenger]' : ' [default -> cleared]'}`, { mutated: true });
+      if (defaultAudio) addPathToTree(containerNode, `streams/audio-${defaultAudio.index || 0}-${displayAudioLanguage(defaultAudio.language)}${repairActionConfig(action).dropForeignAudio ? ' [default -> passenger]' : ' [default -> cleared]'}`, { mutated: true });
       if (targetAudio) addPathToTree(containerNode, `streams/audio-${targetAudio.index || 0}-${displayAudioLanguage(targetAudio.language)} [English default target]`, { mutated: true });
-      if (repairActionConfig().dropForeignAudio) {
+      if (repairActionConfig(action).dropForeignAudio) {
         (row.item?.facts?.audio_streams || [])
           .filter(stream => canonicalAudioLanguageValue(stream.language) && canonicalAudioLanguageValue(stream.language) !== 'english')
           .forEach(stream => addPathToTree(containerNode, `streams/audio-${stream.index || 0}-${displayAudioLanguage(stream.language)} [removed]`, { deleted: true }));
       }
     }
-    if (rowTouchesFamily(row, 'subtitle')) {
+    if (actionTouchesAudio(action) && !audioTouched) {
+      addPathToTree(containerNode, 'streams/audio [no audio-default change for this file]', {});
+    }
+    if (actionTouchesSubtitle(action) && rowTouchesFamily(row, 'subtitle')) {
       const defaultSubtitle = movieDefaultSubtitleStream(row.item);
       const targetSubtitle = movieSubtitleReadinessRepairTarget(row.item);
       if (defaultSubtitle) addPathToTree(containerNode, `streams/subtitle-${defaultSubtitle.index || 0}-${displayAudioLanguage(defaultSubtitle.language)} [default -> cleared]`, { mutated: true });
       if (targetSubtitle) addPathToTree(containerNode, `streams/subtitle-${targetSubtitle.index || 0}-${displayAudioLanguage(targetSubtitle.language)}${targetSubtitle.is_forced ? ' forced' : ''} [default target]`, { mutated: true });
+    }
+    if (actionTouchesSubtitle(action) && !subtitleTouched) {
+      addPathToTree(containerNode, 'streams/subtitles [no subtitle-default change for this file]', {});
     }
     return renderPreviewTreeMarkup(tree);
   }
@@ -3040,12 +3074,12 @@
     return value;
   }
 
-  function buildRepairPreviewPane(rows) {
+  function buildRepairPreviewPane(rows, action = state.repairAction) {
     if (!rows.length) return '<div class="lab-preview-empty"><strong>No visible items.</strong></div>';
     return rows.map(row => `
       <div class="lab-preview-item">
         <div class="lab-preview-item-title">${escapeHtml(fileNameFromPath(row.current_path || row.path || ''))}</div>
-        <div class="lab-preview-item-body">${repairPreviewTreeForRow(row)}</div>
+        <div class="lab-preview-item-body">${repairPreviewTreeForRow(row, action)}</div>
       </div>
     `).join('');
   }
@@ -3055,10 +3089,12 @@
       el.previewPane.textContent = 'Run Repair Defaults to inspect repair consequences.';
       return;
     }
+    const selection = selectedRepairApplicability();
+    const visibleRows = repairRowsForAction(state.filteredRows);
     const previewRows = state.previewMode === 'library'
-      ? state.filteredRows
-      : state.filteredRows.filter(row => state.selected.has(row.row_id));
-    if (!previewRows.length) {
+      ? visibleRows
+      : selection.applicableRows;
+    if (state.previewMode === 'selected' && !selection.selectedRows.length) {
       el.previewPane.innerHTML = `
         <div class="lab-preview-empty">
           <strong>No rows selected.</strong>
@@ -3067,15 +3103,31 @@
       `;
       return;
     }
+    if (!previewRows.length) {
+      const detail = state.previewMode === 'library'
+        ? 'No visible rows support the current action.'
+        : 'The current selection does not support this action.';
+      el.previewPane.innerHTML = `
+        <div class="lab-preview-empty">
+          <strong>No applicable rows.</strong>
+          <div>${escapeHtml(detail)}</div>
+        </div>
+      `;
+      return;
+    }
     const config = repairActionConfig();
     const summary = `${previewRows.length} ${state.previewMode === 'library' ? `visible ${config.summaryNoun}` : `selected ${config.summaryNoun}`}${previewRows.length === 1 ? '' : 's'} staged for ${config.label.toLowerCase()}.`;
+    const mixedSelectionLabel = state.previewMode === 'selected' && selection.skippedRows.length
+      ? `${selection.selectedRows.length} selected, ${selection.applicableRows.length} applicable, ${selection.skippedRows.length} skipped`
+      : '';
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
         <strong>${summary}</strong>
+        ${mixedSelectionLabel ? `<span class="chip">${escapeHtml(mixedSelectionLabel)}</span>` : ''}
         ${state.repairActionNotice ? `<span class="chip">${escapeHtml(state.repairActionNotice)}</span>` : ''}
       </div>
       <div class="lab-preview-list">
-        ${buildRepairPreviewPane(previewRows)}
+        ${buildRepairPreviewPane(previewRows, state.repairAction)}
       </div>
     `;
   }
@@ -3177,7 +3229,6 @@
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
-    renderFilters();
     renderRows();
     renderSidePanel();
   }
@@ -3322,12 +3373,11 @@
     if (!payload) return payload;
     const byPath = new Map((updatedItems || []).map(item => [item.path || '', item]));
     const dropResolved = !!options.dropResolved;
-    const action = options.action || state.repairAction;
     return {
       ...payload,
       movies: (payload.movies || []).map(item => byPath.get(item.path || '') || item).filter(item => {
         if (!dropResolved || !byPath.has(item.path || '')) return true;
-        return repairItemMatchesAction(item, action);
+        return !!movieAudioPackagingIssueCode(item) || movieSubtitleReadinessIsRepairable(item);
       }),
     };
   }
@@ -3438,18 +3488,17 @@
   }
 
   async function runSelectedRepairAction(action) {
-    const selectedPaths = selectedRepairPaths();
+    const applicableRows = selectedRepairRowsForAction(action);
+    const selectedPaths = applicableRows.map(row => row.path);
     if (!selectedPaths.length) return;
     if (actionTouchesAudio(action)) {
-      const audioPaths = selectedRepairRows().filter(row => rowTouchesFamily(row, 'audio')).map(row => row.path);
+      const audioPaths = applicableRows.filter(row => rowTouchesFamily(row, 'audio')).map(row => row.path);
       if (audioPaths.length) await runAudioRepair(audioPaths, action);
     }
     if (actionTouchesSubtitle(action)) {
       const subtitleRows = selectedSubtitleRowsFromPayload(selectedPaths);
       if (subtitleRows.length) await runSubtitleRepair(subtitleRows, action);
     }
-    state.selected = new Set();
-    state.activeRowId = '';
     state.previewMode = 'selected';
     renderRows();
     renderSidePanel();
@@ -3532,7 +3581,6 @@
       state.selected = new Set();
       state.activeRowId = '';
       state.previewMode = 'selected';
-      renderFilters();
       renderRows();
       if (!state.normalizePayload) {
         el.previewPane.innerHTML = `
@@ -3570,7 +3618,6 @@
     renderFilterVisibility();
     renderRunButton();
     renderTableHeader();
-    renderFilters();
     renderRows();
     renderSidePanel();
   }
@@ -3618,7 +3665,7 @@
     if (state.audioPopoverRowId) renderAudioPopover();
   }, true);
 
-  [el.searchInput, el.bucketFilter, el.caseFilter, el.reasonFilter, el.warningFilter, el.workflowStatusFilter, el.canonicalListFilter].forEach(control => {
+  [el.searchInput, el.bucketFilter, el.workflowStatusFilter, el.canonicalListFilter].forEach(control => {
     control.addEventListener('change', async () => {
       if (control === el.canonicalListFilter) {
         state.canonicalSelectedListId = el.canonicalListFilter.value || 'top_100';
@@ -3670,8 +3717,6 @@
 
   el.repairActionSelect.addEventListener('change', () => {
     state.repairAction = el.repairActionSelect.value || defaultRepairAction();
-    state.selected = new Set();
-    state.activeRowId = '';
     state.previewMode = 'selected';
     state.repairActionNotice = '';
     clearDeletePreviewState();
@@ -3740,6 +3785,12 @@
   });
 
   el.runButton.addEventListener('click', () => {
+    if (!state.runInFlight && state.workflow === 'normalize' && auditSurfaceOpen()) {
+      state.surfaceMode = 'default';
+      renderFilterVisibility();
+      renderRows();
+      renderSidePanel();
+    }
     runActiveWorkflow().catch(error => {
       el.previewPane.textContent = error.message;
     });
