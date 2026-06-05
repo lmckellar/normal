@@ -187,6 +187,10 @@ CANONICAL_TITLE_PUNCTUATION_OVERRIDES = {
     "tron legacy": "TRON: Legacy",
     "wall e": "WALL-E",
 }
+CANONICAL_TITLE_ALIAS_EQUIVALENTS = {
+    "se7en": ("seven",),
+    "seven": ("se7en",),
+}
 
 
 def normalize_display_title(value: str) -> str:
@@ -570,6 +574,7 @@ def title_alias_keys(title: str) -> list[str]:
     full_key = title_match_key(title)
     if full_key:
         aliases.append(full_key)
+        aliases.extend(CANONICAL_TITLE_ALIAS_EQUIVALENTS.get(full_key, ()))
     if ":" in title:
         subtitle = title.split(":", 1)[1].strip()
         subtitle_key = title_match_key(subtitle)

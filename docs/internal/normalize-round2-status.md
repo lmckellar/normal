@@ -99,7 +99,7 @@ The existing normalize endpoint shape remains compatible.
 
 A separate internal read-only UI now exists at:
 
-`/parser-tester-ui`
+the main workbench
 
 Its purpose is diagnostic inspection, not product workflow.
 
@@ -169,7 +169,7 @@ Start by reopening:
 - `normal/movie_plan.py`
 - `normal/web_assets/normalize_lab.js`
 
-Then use `/parser-tester-ui` against the local movie corpus and confirm
+Then use the main workbench against the local movie corpus and confirm
 selected cases only after the projected output shape looks coherent.
 
 ## Likely Next Work
@@ -211,11 +211,11 @@ This follow-on slice tightened three connected gaps that still showed up in
 real normalize review output:
 
 - parser/planner collision handling
-- normalize row visibility in `/parser-tester-ui`
+- normalize row visibility in the main workbench
 - review boundary coverage for existing-target cases
 
 Later on 2026-05-30, one additional live-library hardening issue was confirmed
-through `/parser-tester-ui` itself:
+through the main workbench itself:
 
 - composed downstream file collisions could still slip through as `safe` when a
   `file_rename` plus `folder_rename` landed on the same final movie file as a
@@ -244,10 +244,10 @@ was a genuine planner defect, not a preview artifact.
   concise differentiated target instead of protecting the stale package shell
 - normalize row payloads now include serialized linked changes plus warning
   messages, not just flattened code lists
-- `/parser-tester-ui` preview is now an inline staged tree view rather than a
+- workbench preview is now an inline staged tree view rather than a
   second verbose debug card stack, which makes downstream shape inspection
   materially useful against the real library
-- `/parser-tester-ui` now also carries an invisible shell contract for future
+- the workbench now also carries an invisible shell contract for future
   expansion: named layout modes, semantic page roles, shared row-rhythm tokens,
   and explicit collapse-role hooks, while the live default still renders as the
   same 2-page spread

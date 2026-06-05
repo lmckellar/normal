@@ -83,13 +83,13 @@ As such it defines and enforces a logical preference of:
 
 `normal` asserts that a library of 5,000 shit films is much weaker than a library of 1,000 excellent, canonically significant films.
 
-As such, it allows the user to directly compare their collection to a curated bucket of TMDB canonical list material for an orientation. It also plans to include a quick-and-dirty regional estimate matrix based off research data that presents a UI element comparing a user library to a known platform.
+As such, it allows the user to directly compare their collection to a curated bucket of IMDb-derived canonical list material for an orientation. It also plans to include a quick-and-dirty regional estimate matrix based off research data that presents a UI element comparing a user library to a known platform.
 
 For example, this may highlight that Australian Netflix users are generously treated to approximately 7-8 of the IMDb Top 100 (as of May 2026 research performed via GPT5.4-thinking Web). Without meaning to boast, normal says I'm cruising at 59/100 of the All Time list on my end. 
 
 A user library with a large mass of high quality encodes in this gravitational centre will naturally destroy the major streaming slop fests in this regard, and `normal` intends to point the way to this.
 
-This feature is intended to be a lightweight research table pulled from an external server which is periodically updated, but not a hard and fast guarantee of actual provider library shape, as these platforms change often and are technically expensive to parse.
+This feature is intended to be a lightweight research table derived from local IMDb datasets with optional provider-backed variation, but not a hard and fast guarantee of actual provider library shape, as these platforms change often and are technically expensive to parse.
 
 ## Confidence, Compression, and Edge Cases
 
@@ -136,11 +136,11 @@ Please note: watching the tool absolutely purify your test library will be a thr
 
 ## Audit Logging
 
-`normal` seeks to keep an audit log of actions, although this functionality came late in development and is subsequently half-baked.
+`normal` now keeps a persisted audit ledger of scans, apply actions, deletes, repairs, exports and policy updates.
 
-It may best be described as currently quite useful, but not a clean and coherent management of state and storage, with a known and notable gap around audit log permanence of "Junk Deleted Items".
+It is materially more coherent than the earlier patchwork histories, and junk deletion is now included rather than living as a session-only gap.
 
-The newfound aggression in junk deletion has not yet been paired with a deeper accountability to destructive action logging. This will be addressed soon.
+It is still an alpha system. The next step is breadth, polish and stable semantics as more workflows are surfaced through the same ledger.
 
 ## Principles On AI Authorship, Trust & Related Musings
 
@@ -161,4 +161,3 @@ In a world of flat, generic AI content, any user will rightly interrogate any ob
 **The value of the human voice is to be stated as a matter of principle and given relevantly articulated priority.** User facing communication or documentation lanes of the highest important must absorb it to the highest degree. Technical and system decisions, where relevant, must at least be conceptually described in adequate detail in a way that is plainly human. There can be no better Turing test than a joke about about a secret orgy at the Whitehouse being cancelled because "a lot of people were talking about it". Did the agent write that? You don't need to query that; the answer is made obvious. 
 
 I am delving into the inane here, but in a potential Dead Internet Theory future documents of this may become like collectable curio. Rare, fascinating, clearly and objectively human meditations on matters of machine learning and how it intersects with the current zeitgeist. After the Great Sloppening such items may become increasing rare. In that future, recursive slop hallways seemed to lead in every direction. A generic bot narrative could be visually traced across platforms, evoking a sea of generic responses that always seem to rhyme with each other in tone, cadene and conclusion. Future humans many collect fragments of documents just like this, study and scherish them; like a stone tablet with ancient inscriptions of a wooden musical instrument from a lost culture. 
-

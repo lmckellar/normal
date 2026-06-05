@@ -23,6 +23,7 @@ from normal.movie_profile import (
     looks_like_absolute_numbering,
     evaluate_movie_standards,
     load_movie_standards,
+    library_policy_revision,
     MovieStandardsConflictError,
     movie_standards_revision,
     operator_preferences_revision,
@@ -75,7 +76,7 @@ class MovieProfileTests(unittest.TestCase):
             path_matches_normalized_shape(Path("/movies/K 19 The Widowmaker (2002)/K 19 The Widowmaker (2002).mkv"))
         )
 
-    def test_reference_profile_requires_concise_folder_hygiene(self) -> None:
+    def test_reference_profile_ignores_folder_hygiene_for_quality_classification(self) -> None:
         facts = MediaFacts(
             width=1920,
             height=1080,
@@ -95,10 +96,9 @@ class MovieProfileTests(unittest.TestCase):
             standards=DEFAULT_MOVIE_STANDARDS,
         )
 
-        self.assertNotEqual(item.profile.quality_label, "reference")
-        self.assertEqual(item.profile.label, "needs_review")
-        folder_hygiene = next(result for result in item.profile.domain_results if result["domain"] == "folder_hygiene")
-        self.assertEqual(folder_hygiene["code"], "path_not_normalized")
+        self.assertEqual(item.profile.quality_label, "reference")
+        self.assertEqual(item.profile.label, "reference")
+        self.assertEqual([result["domain"] for result in item.profile.domain_results], ["video_minimum", "audio_minimum"])
 
     def test_classify_profile_label_uses_kind_floor_for_compressed_tiers(self) -> None:
         compressed_1080p = classify_profile_label(
@@ -144,7 +144,7 @@ class MovieProfileTests(unittest.TestCase):
         self.assertIn("image_subtitle_transcode_risk", codes)
         self.assertIn("multiple_default_streams", codes)
 
-    def test_evaluate_movie_standards_flags_missing_forced_default_inline(self) -> None:
+    def test_evaluate_movie_standards_only_reports_core_video_and_audio_domains(self) -> None:
         results = evaluate_movie_standards(
             Path("Movie (2001)/Movie (2001).mkv"),
             MediaFacts(
@@ -165,9 +165,7 @@ class MovieProfileTests(unittest.TestCase):
             {},
         )
 
-        subtitle = next(result for result in results if result["domain"] == "subtitle_setup")
-        self.assertEqual(subtitle["status"], "review_low_confidence")
-        self.assertEqual(subtitle["code"], "english_forced_not_default")
+        self.assertEqual([result["domain"] for result in results], ["video_minimum", "audio_minimum"])
 
     def test_choose_best_english_subtitle_stream_prefers_current_default(self) -> None:
         streams = [
@@ -235,7 +233,7 @@ class MovieProfileTests(unittest.TestCase):
         )
 
         self.assertFalse(item.profile.weak_candidate)
-        self.assertEqual(item.profile.label, "needs_review")
+        self.assertEqual(item.profile.label, "meets_minimum")
         self.assertIn("default_non_english_audio", [finding.code for finding in item.profile.diagnostics])
 
     def test_build_movie_profile_definitions_exposes_dashboard_owned_controls(self) -> None:
@@ -307,11 +305,23 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(definition["fields"][0]["value"], "library_grade")
         self.assertIn("Library Grade and lower", definition["rule_summary"])
 
-    def test_update_movie_profile_definition_persists_reference_controls(self) -> None:
+    def test_update_movie_profile_definition_strips_removed_quality_stance_keys(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "movie_standards.json"
             path.write_text(
-                json.dumps({"quality_stances": {"reference": {"audio_codecs": ["legacy"]}}}),
+                json.dumps(
+                    {
+                        "quality_stances": {
+                            "reference": {
+                                "audio_codecs": ["legacy"],
+                                "require_audio_language_hygiene": True,
+                                "require_subtitle_setup": True,
+                                "require_folder_hygiene": True,
+                                "require_lossless_audio": True,
+                            }
+                        }
+                    }
+                ),
                 encoding="utf-8",
             )
             with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", path):
@@ -325,10 +335,6 @@ class MovieProfileTests(unittest.TestCase):
                         "audio_channels": "6",
                         "audio_bitrate_kbps": "512",
                         "audio_codecs": "opus",
-                        "require_audio_language_hygiene": True,
-                        "require_subtitle_setup": True,
-                        "require_folder_hygiene": True,
-                        "require_lossless_audio": True,
                     },
                 )
 
@@ -336,8 +342,12 @@ class MovieProfileTests(unittest.TestCase):
             self.assertEqual(reference["video_custom"]["1080p"], 18000)
             self.assertEqual(reference["video_custom"]["2160p"], 26000)
             self.assertEqual(reference["audio_codecs"], ["legacy"])
-            self.assertTrue(reference["require_lossless_audio"])
-            self.assertIn('"video_custom"', path.read_text(encoding="utf-8"))
+            self.assertNotIn("require_lossless_audio", reference)
+            self.assertNotIn("require_folder_hygiene", reference)
+            saved = path.read_text(encoding="utf-8")
+            self.assertIn('"video_custom"', saved)
+            self.assertNotIn("require_lossless_audio", saved)
+            self.assertNotIn("require_folder_hygiene", saved)
 
     def test_quality_stance_matching_ignores_profile_audio_codec_allowlists(self) -> None:
         standards = {
@@ -365,10 +375,6 @@ class MovieProfileTests(unittest.TestCase):
                 },
             }
         }
-        domain_results = [
-            {"domain": "audio_language_hygiene", "status": "pass"},
-            {"domain": "subtitle_setup", "status": "pass"},
-        ]
 
         label = classify_quality_stance(
             Path("Movie (2001)/Movie (2001).mkv"),
@@ -380,7 +386,7 @@ class MovieProfileTests(unittest.TestCase):
                 audio_channels=6,
                 audio_bitrate_kbps=640,
             ),
-            domain_results,
+            [],
             standards,
         )
 
@@ -442,7 +448,7 @@ class MovieProfileTests(unittest.TestCase):
 
         self.assertEqual(label, "standard_definition")
 
-    def test_require_lossless_audio_still_gates_reference_profile(self) -> None:
+    def test_legacy_quality_stance_levers_no_longer_gate_reference_profile(self) -> None:
         standards = {
             "quality_stances": {
                 "reference": {
@@ -450,15 +456,15 @@ class MovieProfileTests(unittest.TestCase):
                     "audio_channels": 6,
                     "audio_bitrate_kbps": 640,
                     "audio_codecs": ["opus"],
-                    "require_audio_language_hygiene": False,
-                    "require_subtitle_setup": False,
-                    "require_folder_hygiene": False,
+                    "require_audio_language_hygiene": True,
+                    "require_subtitle_setup": True,
+                    "require_folder_hygiene": True,
                     "require_lossless_audio": True,
                 }
             }
         }
 
-        weak_label = classify_quality_stance(
+        reference_label = classify_quality_stance(
             Path("Movie (2001)/Movie (2001).mkv"),
             MediaFacts(
                 width=1920,
@@ -471,21 +477,7 @@ class MovieProfileTests(unittest.TestCase):
             [],
             standards,
         )
-        reference_label = classify_quality_stance(
-            Path("Movie (2001)/Movie (2001).mkv"),
-            MediaFacts(
-                width=1920,
-                height=1080,
-                video_bitrate_kbps=18000,
-                audio_codec="truehd",
-                audio_channels=6,
-                audio_bitrate_kbps=640,
-            ),
-            [],
-            standards,
-        )
 
-        self.assertNotEqual(weak_label, "reference")
         self.assertEqual(reference_label, "reference")
 
     def test_update_movie_profile_definition_persists_replacement_cutoff(self) -> None:
@@ -528,14 +520,50 @@ class MovieProfileTests(unittest.TestCase):
                     )
 
     def test_policy_definitions_extend_quality_controls_with_library_and_operator_sections(self) -> None:
-        definitions = build_policy_definitions()
+        definitions = build_policy_definitions(
+            standards={},
+            preferences={"default_source": "", "delete_mode": "recycle_all"},
+        )
 
         labels = [definition["label"] for definition in definitions]
+        self.assertNotIn("replacement_candidate", labels)
+        self.assertIn("default_source", labels)
         self.assertIn("library_defaults", labels)
         self.assertIn("delete_mode", labels)
+        default_source = next(definition for definition in definitions if definition["label"] == "default_source")
+        self.assertEqual(default_source["scope"], "operator_preferences")
+        self.assertEqual(default_source["fields"][0]["value"], "")
+        library_defaults = next(definition for definition in definitions if definition["label"] == "library_defaults")
+        self.assertEqual(library_defaults["fields"][0]["key"], "canonical_list_provider")
+        self.assertEqual(library_defaults["fields"][0]["value"], "imdb")
+        self.assertEqual(library_defaults["fields"][1]["key"], "quality_profile_floor")
         delete_mode = next(definition for definition in definitions if definition["label"] == "delete_mode")
         self.assertEqual(delete_mode["scope"], "operator_preferences")
         self.assertEqual(delete_mode["fields"][0]["value"], "recycle_all")
+
+    def test_update_policy_definition_persists_library_defaults_and_weak_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            policy_path = Path(tmpdir) / "movie_standards.json"
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", policy_path):
+                policy, preferences = update_policy_definition(
+                    "library_defaults",
+                    {
+                        "canonical_list_provider": "imdb",
+                        "quality_profile_floor": "compact_grade",
+                        "primary_language": "english",
+                        "subtitle_mode": "conservative",
+                        "junk_delete_confidence_floor": "review",
+                    },
+                    expected_policy_revision=library_policy_revision(load_movie_standards()),
+                )
+                saved = policy_path.read_text(encoding="utf-8")
+
+        self.assertEqual(policy["canonical_list_provider"], "imdb")
+        self.assertEqual(policy["replacement_candidate_rules"]["quality_profile_floor"], "compact_grade")
+        self.assertEqual(policy["junk_rules"]["delete_confidence_floor"], "review")
+        self.assertEqual(preferences["delete_mode"], "recycle_all")
+        self.assertIn('"replacement_candidate_rules"', saved)
+        self.assertIn('"canonical_list_provider": "imdb"', saved)
 
     def test_update_policy_definition_persists_operator_preferences_with_revision_check(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -562,17 +590,51 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(policy["junk_rules"]["delete_confidence_floor"], "high")
         self.assertIn('"delete_mode": "hybrid_media_to_bin_junk_hard_delete"', saved)
 
+    def test_update_policy_definition_persists_default_source_operator_preference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preferences_path = Path(tmpdir) / "operator-preferences.json"
+            with patch("normal.movie_profile.OPERATOR_PREFERENCES_PATH", preferences_path):
+                policy, preferences = update_policy_definition(
+                    "default_source",
+                    {"default_source": "~/Movies"},
+                    expected_preferences_revision=operator_preferences_revision(),
+                )
+                saved = preferences_path.read_text(encoding="utf-8")
+
+        self.assertEqual(preferences["default_source"], "~/Movies")
+        self.assertEqual(policy["canonical_list_provider"], "imdb")
+        self.assertIn('"default_source": "~/Movies"', saved)
+
     def test_legacy_standards_file_loads_with_policy_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "movie_standards.json"
-            path.write_text(json.dumps({"replacement_candidate_rules": {"quality_profile_floor": "compact_grade"}}), encoding="utf-8")
+            path.write_text(
+                json.dumps(
+                    {
+                        "replacement_candidate_rules": {"quality_profile_floor": "compact_grade"},
+                        "quality_stances": {"reference": {"require_lossless_audio": True}},
+                    }
+                ),
+                encoding="utf-8",
+            )
             with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", path):
                 policy = load_movie_standards()
 
         self.assertEqual(policy["replacement_candidate_rules"]["quality_profile_floor"], "compact_grade")
+        self.assertEqual(policy["canonical_list_provider"], "imdb")
         self.assertEqual(policy["primary_language"], "english")
         self.assertEqual(policy["subtitle_preferences"]["mode"], "conservative")
         self.assertEqual(policy["junk_rules"]["delete_confidence_floor"], "high")
+        self.assertNotIn("require_lossless_audio", policy["quality_stances"]["reference"])
+
+    def test_unknown_canonical_list_provider_normalizes_to_imdb(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "movie_standards.json"
+            path.write_text(json.dumps({"canonical_list_provider": "bogus"}) + "\n", encoding="utf-8")
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", path):
+                policy = load_movie_standards()
+
+        self.assertEqual(policy["canonical_list_provider"], "imdb")
 
     def test_detect_plex_diagnostics_flags_dts_and_anime_visibility_risks(self) -> None:
         findings = detect_plex_diagnostics(
@@ -731,7 +793,10 @@ class MovieProfileTests(unittest.TestCase):
                         "video_bitrate_kbps": 7000,
                         "audio_bitrate_kbps": 640,
                         "file_size_bytes": 1_000,
+                        "width": 1920,
+                        "height": 800,
                         "resolution_bucket": "1080p",
+                        "audio_channels": 6,
                     },
                     "profile": {
                         "label": "meets_minimum",
@@ -745,7 +810,11 @@ class MovieProfileTests(unittest.TestCase):
                         "video_bitrate_kbps": 30000,
                         "audio_bitrate_kbps": 4000,
                         "file_size_bytes": 2_000,
+                        "width": 3840,
+                        "height": 2160,
                         "resolution_bucket": "2160p",
+                        "audio_channels": 8,
+                        "audio_immersive_extension": "atmos",
                     },
                     "profile": {
                         "label": "reference",
@@ -761,6 +830,10 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(payload["total_size_bytes"], 3_000)
         self.assertEqual(payload["video_bitrate_kbps"]["mean"], 18500.0)
         self.assertEqual(payload["profile_counts"]["reference"], 1)
+        self.assertEqual(payload["resolution_breakdown_counts"]["full_hd_scope"], 1)
+        self.assertEqual(payload["resolution_breakdown_counts"]["uhd_flat"], 1)
+        self.assertEqual(payload["surround_sound_breakdown_counts"]["five_one_surround"], 1)
+        self.assertEqual(payload["surround_sound_breakdown_counts"]["seven_one_atmos"], 1)
         self.assertEqual(payload["risk_counts"]["playback_risk"], 1)
 
     def test_scan_movie_profiles_can_cancel_between_files(self) -> None:

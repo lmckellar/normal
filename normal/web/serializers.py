@@ -7,6 +7,7 @@ from typing import Any
 from normal.models import ProposedChange, WarningItem
 from normal.movie_plan import parse_movie_name_with_sidecar_fallback
 from normal.movie_profile import (
+    build_default_source_definition,
     MovieProfileReport,
     build_delete_mode_definition,
     build_histogram_payload,
@@ -258,6 +259,7 @@ def build_profile_response(source: Path, report: MovieProfileReport, standards: 
     response["operator_preferences"] = operator_preferences
     response["operator_preferences_revision"] = operator_preferences_revision(operator_preferences)
     response["policy_definitions"] = build_policy_definitions(standards_payload, operator_preferences)
+    response["default_source_definition"] = build_default_source_definition(operator_preferences)
     response["library_defaults_definition"] = build_library_defaults_definition(standards_payload)
     response["delete_mode_definition"] = build_delete_mode_definition(operator_preferences)
     response["movie_standards"] = standards_payload

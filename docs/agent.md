@@ -21,8 +21,10 @@ normal/
 ├── movie_omdb.py                # Server-side OMDb rating lookups and cache
 ├── movie_replacement_queue.py   # Replacement queue: persistent state for movie triage families
 ├── movie_subtitle_fix.py        # Subtitle repair: lossless MKV remux for subtitle default flags
-├── movie_subtitle_history.py    # Subtitle fix audit log: persistent history for fixed and review-only items
-├── movie_canonical_lists.py     # Canonical list coverage: TMDb list fetching and library matching
+├── audit.py                     # Unified audit ledger, follow-up derivation, and legacy-state migration
+├── movie_subtitle_history.py    # Legacy subtitle fix history: still read/migrated, no longer the main audit surface
+├── movie_canonical_lists.py     # Canonical list coverage: IMDb-dataset / TMDb providers, cache, matching
+├── library_improvement.py       # Audit-backed improvement metrics surfaced in the workbench
 ├── movie_identity.py            # Movie title/year parsing shared across scan and plan
 ├── probe_cache.py               # Persistent ffprobe result cache (keyed by path + mtime)
 ├── quality_review.py            # Quality review helpers
@@ -44,7 +46,7 @@ docs/                            # User and agent documentation
 - **Probe caching**: `probe_cache.py` — persistent per-file ffprobe cache; shared by profile, junk, export, and inspect
 - **Web layer**: `web/` + `web_assets/` — stdlib `http.server`, package-managed frontend assets, no external framework
 - **Shared data contract**: `models.py` — `ProposedChange` is the core type crossing module boundaries
-- **Persistent state**: `movie_replacement_queue.py` writes to `~/.local/share/normal/movie-replacement-queue.json`; `movie_subtitle_history.py` writes to `~/.local/share/normal/subtitle-fix-history.json`
+- **Persistent state**: `audit.py` writes the unified ledger to `~/.local/share/normal/audit-ledger.jsonl`; legacy replacement and subtitle history files still exist for migration/back-compat
 
 ## Current backend posture
 
@@ -89,14 +91,15 @@ A clean launch must:
 
 Current local env posture:
 
-- `OMDB_KEY` and `TMDB_KEY` are exported from `.venv/bin/activate`. Sourcing the venv is sufficient to load them.
+- `OMDB_KEY`, `TMDB_KEY`, and any local `IMDB_DATASET_DIR` export should be loaded before launch if the requested workflow depends on those surfaces.
 - If the web UI is started by an agent, do not launch it via a bare venv interpreter path if that bypasses env loading.
 
 Minimum preflight before reporting success:
 
 - `python3` resolves inside the repo venv
 - required binaries for the requested workflow are present (`ffprobe` for movie workflows)
-- `TMDB_KEY` is loaded if the requested workflow includes Movies / Canonical Lists
+- `IMDB_DATASET_DIR` points at the required dataset files if the requested workflow includes default IMDb-backed Canonical Lists
+- `TMDB_KEY` is loaded only if Canonical Lists is explicitly configured to use TMDb
 - localhost responds on the chosen port
 
 ## Data models
@@ -154,7 +157,7 @@ Per-file classification against repo-local movie standards. The scan now carries
 
 Notable heuristic families: `dts_no_compat_track`, `anime_subtitle_attachment_risk`, `multi_audio_anime_mux_risk`, `high_complexity_hevc_tv_risk`, `episodic_naming_parse_risk`, `anime_absolute_numbering_risk`, `attachment_heavy_visibility_risk`, `default_non_english_audio`, `default_non_english_audio_with_weak_english`.
 
-The dashboard payload also carries `movie_standards`, `movie_standards_revision`, `quality_profile_definitions`, and `replacement_candidate_definition`. The movie dashboard uses that payload to split **Action Based** cards from **Quality Profile** cards, summarize each rule shape, and expose inline definition controls on the quality-profile cards and Replacement Candidate card. Do not reintroduce per-profile allowed audio codec controls; audio codec arrays may exist in older standards files, but profile matching now relies on channel/bitrate floors, vintage channel exemptions, hygiene toggles, and `require_lossless_audio`.
+The dashboard payload also carries `movie_standards`, `movie_standards_revision`, `quality_profile_definitions`, and `replacement_candidate_definition`. The movie dashboard uses that payload to split **Action Based** cards from **Quality Profile** cards, summarize each rule shape, and expose inline definition controls on the quality-profile cards and Replacement Candidate card. Do not reintroduce per-profile allowed audio codec controls or the removed packaging/lossless toggles; audio codec arrays and older toggle keys may exist in legacy standards files, but profile matching now relies on channel/bitrate floors and vintage channel exemptions.
 
 Current built-in video-floor select ladders are deliberately constrained. `video_1080p_kbps` options are `4500`, `5500`, `7500`, `10000`, `12500`, `15000`, `20000`, `25000` with labels from `compact encode` up through `remux tier`. `video_2160p_kbps` options are `10000`, `15000`, `20000`, `25000`, `30000`, `40000`, `50000`. If product language changes again, update the server-side option contract in `normal/movie_profile.py` and the assertions in `tests/test_movie_profile.py` together.
 
@@ -167,30 +170,33 @@ Both cutoffs are persisted in `movie_standards.json` per stance and exposed as s
 
 Each profile card (both Action Based and Quality Profile) has a **View** button that swaps `mainContent` inline to a Quality Profile Inspector: a sortable table of titles in that tier with columns: Title, Year, Resolution, Codec, Ch, Raw Audio, Norm. Audio, Video Bitrate, File Size. Resolution is derived from `facts.resolution_bucket` and sorted by rank (SD < 720p < 1080p < 2160p). Treat that bucket as a display class, not raw raster only: cropped `1920x796` stays `1080p`, and anamorphic `1440x1080` can also be `1080p` when ffprobe exposes usable aspect metadata. Title and year are parsed from the filename stem via `^(.+?)\s*\((\d{4})\)` — `MovieProfileItem` carries no separate title/year fields. The inspector is state-driven (`state.movieProfileInspectorLabel`, `state.movieProfileInspectorType`, `state.movieProfileInspectorSort`) and cleared on any `setPage` call. A "← Back to Dashboard" button restores the card view. The View button is suppressed when count is 0. If the payload has no `movies` (cached/snapshot-only), the inspector shows an empty-state prompt instead of a table.
 
-**Norm. Audio** is a front-end-only perceptually normalized bitrate expressed as an AC3-equivalent figure. Multipliers by `audio_format_family`: AAC 1.30×, EAC3 1.12×, DTS (lossy) 0.95×, AC3 1.00× (baseline). Lossless families (TrueHD, DTS-HD, FLAC, PCM) display "Lossless" with no numeric value. The multiplier tapers linearly toward 1.0 between 75 kbps/channel and 110 kbps/channel (AC3-eq space), scaling with channel count — 450–660 kbps for 5.1, 600–880 kbps for 7.1. Above the upper threshold the cell shows `≥N kbps eq.` rather than a precise figure, since codec differences become perceptually negligible. The column sorts on the normalized value; Raw Audio sorts on the original `audio_bitrate_kbps`. All math lives in `normalizeAudioBitrate()` and `fmtNormAudioBitrate()` in `normal/web_assets/app.js` — no scan-side changes. Do not bake these multipliers into the scan infrastructure.
+**Norm. Audio** is a front-end-only perceptually normalized bitrate expressed as an AC3-equivalent figure. Multipliers by `audio_format_family`: AAC 1.30×, EAC3 1.12×, DTS (lossy) 0.95×, AC3 1.00× (baseline). Lossless families (TrueHD, DTS-HD, FLAC, PCM) display "Lossless" with no numeric value. The multiplier tapers linearly toward 1.0 between 75 kbps/channel and 110 kbps/channel (AC3-eq space), scaling with channel count — 450–660 kbps for 5.1, 600–880 kbps for 7.1. Above the upper threshold the cell shows `≥N kbps eq.` rather than a precise figure, since codec differences become perceptually negligible. The column sorts on the normalized value; Raw Audio sorts on the original `audio_bitrate_kbps`. All math lives in `normalizeAudioBitrate()` and `fmtNormAudioBitrate()` in `normal/web_assets/normalize_lab.js` — no scan-side changes. Do not bake these multipliers into the scan infrastructure.
 
 Dashboard movie profile scans stream file discovery and do not pre-count the whole tree. If you touch scan observability, preserve forward guidance that is true for streamed scans: processed file count, elapsed time, current probe target when available, and ETA/percent only when the backend has a real bounded total.
 
 Movie bitrate histograms are derived aggregates, not durable state. Full dashboard scans build them from the `movie-profile` report. Partial web mutations that already have the current `movies` payload rebuild only the histogram aggregate through the lightweight dashboard histogram route, then refresh the browser dashboard cache.
 
-### Replacement queue (JSON)
+### Audit ledger (JSONL)
 
-Path: `~/.local/share/normal/movie-replacement-queue.json`
+Path: `~/.local/share/normal/audit-ledger.jsonl`
 
-Keyed by source directory. Each item also carries `issue_family`, `issue_code`, and `issue_label`.
+This is now the main durable history seam. Events are append-only and source-scoped, with derived follow-up state built from event order rather than a separate mutable store.
 
-- `weak_encode` items complete when a future scan finds the same title/year and it is no longer a strict weak encode.
-- `audio_packaging` items complete when a future scan finds the same title/year and it no longer matches the queued audio-packaging issue family.
+The ledger currently records:
 
-### Subtitle fix history (JSON)
+- system start
+- scans
+- normalize apply actions and reversal metadata
+- media deletes, junk deletes, sidecar/folder cleanup
+- repair actions
+- exports
+- policy updates
+- follow-up creation, dismissal, and resolution
 
-Path: `~/.local/share/normal/subtitle-fix-history.json`
+Legacy files still matter only for migration/back-compat:
 
-Keyed by source directory. Each item carries `item_id` (SHA256[:16] of `source_root + path + entry_type`), `source_root`, `path`, `title`, `year`, `issue_code`, `entry_type` (`fixed` or `review_only`), `recorded_at`, `updated_at`, and `dismissed_at` (null until dismissed).
-
-- `review_only` items are upserted from the profile scan result each time the subtitle-readiness page loads; they represent files with subtitle issues that cannot be auto-repaired.
-- `fixed` items are written when the subtitle repair action completes successfully.
-- Dismissal sets `dismissed_at`; items are never deleted.
+- `~/.local/share/normal/movie-replacement-queue.json`
+- `~/.local/share/normal/subtitle-fix-history.json`
 
 ## Web API routes
 
@@ -205,28 +211,27 @@ Routes are registered from the `normal/web/` package. Key families:
 | `/api/movies/profile` | POST | Shared movie profile payload for dashboard, weak encode triage, audio packaging triage, and subtitle-readiness triage |
 | `/api/movies/dashboard/histogram` | POST | Rebuild movie dashboard histogram aggregates from the current in-memory `movies` payload after partial web mutations |
 | `/api/movies/standards/update` | POST | Persist repo-local movie-standards edits from dashboard quality-profile cards; rejects stale saves when the standards revision no longer matches |
-| `/api/movies/canonical-lists` | POST | Canonical title coverage payload from TMDb plus local cache |
+| `/api/audit/read` | POST | Read source-scoped audit events plus currently active follow-ups |
+| `/api/audit/follow-up/update` | POST | Resolve or dismiss an active follow-up |
+| `/api/movies/canonical-lists` | POST | Canonical title coverage payload from the active provider plus local cache |
+| `/api/movies/canonical-status` | POST | Current canonical-provider readiness payload |
+| `/api/movies/canonical-refresh` | POST | Trigger non-blocking provider refresh/bootstrap work |
 | `/api/movies/omdb/ratings` | POST | Batch IMDb rating lookup for replacement history using OMDb, local title cleanup, and cache |
 | `/api/movies/register` | POST | Inline movie catalogue export as XLSX download |
 | `/api/movies/inspect` | POST | One-file movie diagnostic payload |
 | `/api/movies/normalize` | POST | Build movie normalize plan |
 | `/api/movies/junk` | POST | Combined junk scan: marker-based videos + sidecar spam docs |
 | `/api/movies/junk/delete` | POST | Delete selected junk files |
-| `/api/movies/replacement-queue/list` | POST | Queue state for current source, optionally filtered by issue family |
-| `/api/movies/replacement-queue/add` | POST | Add movie triage items to the queue |
-| `/api/movies/replacement-queue/delete` | POST | Delete queued movie triage items and mark them deleted |
-| `/api/movies/replacement-queue/dismiss` | POST | Mark deleted movie queue items as dismissed without touching media |
+| `/api/movies/delete-preview` | POST | Preview media deletes plus safe sidecar/folder cleanup |
+| `/api/movies/delete` | POST | Delete selected media files under source-root validation |
 | `/api/movies/audio-packaging/fix` | POST | Lossless MKV remux to fix English-default audio packaging when possible |
 | `/api/movies/subtitle-readiness/fix` | POST | Lossless MKV remux to repair embedded subtitle default flags without deleting files |
-| `/api/movies/subtitle-readiness/history` | POST | Load subtitle fix history for current source |
-| `/api/movies/subtitle-readiness/history/sync` | POST | Upsert review-only items into subtitle history (called after profile scan) |
-| `/api/movies/subtitle-readiness/history/dismiss` | POST | Mark subtitle history items as dismissed |
 
 For normalize specifically, the route contract now matters beyond a flat change list:
 
 - movie rows can carry linked serialized changes
 - movie rows can carry warning messages, not just warning codes
-- this richer row payload is what powers `/parser-tester-ui` review inspection
+- this richer row payload is what powers workbench review inspection
 
 ## Test boundaries
 
@@ -257,7 +262,7 @@ Hard rules — do not relax without explicit user instruction:
 5. Web UI delete routes validate each path against the current source root before unlinking; outside-root paths are rejected.
 6. Junk deletion revalidates each candidate as junk immediately before deletion.
 7. Movie junk is size-first: marker-backed videos can be high-confidence below 2 GB, 2-4 GB cases require stacked signals before promotion, and marker-only videos at or above 4 GB are ignored.
-8. No remote metadata fetching — all data comes from local files only.
+8. Core movie scan, normalize, delete, and repair flows remain local-first. Optional remote/networked support surfaces are limited to TMDb and OMDb, while the default canonical-list path uses local IMDb datasets.
 9. Heavy recursive web scans are single-flight per source; same-source overlaps are rejected.
 10. Heavy movie-side recursive discovery is intentionally streamed rather than fully enumerated up front, because that change was central to reducing the earlier CPU spike and improving cancellation behavior.
 
@@ -268,8 +273,8 @@ Performance improvements do not weaken the source-choice rule. Accidentally scan
 These are deliberate choices, not gaps:
 
 - **Hardcoded preferences remain the pre-1.0 default.** Quality thresholds and replacement priority weights are mostly in code or repo-local config. Movie normalization now stays concise-only; parser token extraction remains an internal implementation detail for collision and review logic.
-- **Movie triage uses a shared scan across all repair workflows.** `Delete Weak Encodes` and `Repair Defaults` (Audio Packaging + Subtitle Readiness sub-tabs) are all backed by the same `movie-profile` report and replacement queue substrate. Keep workflow and UI code shared where possible, but keep issue-family rules separate.
-- **`/parser-tester-ui` now has four workflows.** Normalize, Weak Encodes, Repair Defaults, and Junk share one internal shell. Keep new tester-only workflow logic inside that shell unless there is a clear product reason to split routes.
+- **Movie triage uses a shared scan across all repair workflows.** `Delete Weak Encodes` and `Repair Defaults` are backed by the same `movie-profile` report and replacement-follow-up substrate. Keep workflow and UI code shared where possible, but keep issue-family rules separate.
+- **The main workbench owns the movie shell.** Normalize, Weak Encodes, Repair Defaults, Junk, Canonical Lists, Dashboard, Policy, and Audit all live inside one route. Keep workflow logic inside that shell unless there is a clear product reason to split routes.
 - **Movie profile results are server-side cached.** `MOVIE_PROFILE_CACHE` in `normal/web/state.py` stores the `MovieProfileReport` object keyed by resolved source path. Dashboard, Delete Weak Encodes, and Repair Defaults (both Audio Packaging and Subtitle Readiness tabs) all hit this cache on repeated navigation. The cache is explicitly invalidated after `handle_movies_apply`, `handle_movies_audio_packaging_fix` (when files were fixed), and `handle_movies_subtitle_readiness_fix` (when files were fixed). Response serialisation (`asdict`, histogram, queue reconciliation) happens outside the `ACTIVITY_TRACKER` context so the activity indicator correctly terminates when the last file is probed.
 - **Probe-cache schema changes are expensive once.** If `MediaFacts` gains new ffprobe-backed fields, remember that `ProbeCache` may need a version bump. That causes one cold-cache rebuild, but avoids silently preserving stale derived classifications such as old resolution buckets.
 - **Quality profile definition saves do not trigger a rescan.** `POST /api/movies/standards/update` writes `movie_standards.json` and returns the updated definitions. The UI patches `state.results.movies.profile` in-memory and re-renders immediately; profile counts and classifications remain as of the last scan and update on the next user-initiated scan. Do not reintroduce a post-save rescan or reclassification call — even cache-based reclassification is expensive at library scale (~5,500 `build_movie_profile_item` calls).
@@ -285,7 +290,7 @@ These are deliberate choices, not gaps:
 - **Movie bitrate charts use mean, not median.** Keep the chart marker aligned with the dashboard average and avoid adding median labels/tooltips back into the crowded SVG.
 - **Do not trust stale dashboard state for writes.** The web save path now carries `movie_standards_revision` and rejects a save if another edit changed the file after that dashboard view loaded.
 - **Movie standards are dashboard-owned.** The card for each movie standards class now owns its label, count, summary, and inline definition editor. Edit the rule definition there; do not add a separate parallel settings surface unless the dashboard ownership model clearly breaks down.
-- **Replacement queue keeps audit history.** Items move forward through states and are never silently removed. Auto-completion (`completed`) happens on future scans when a replacement appears. Manual dismissal (`dismissed`) is explicit queue state, not media deletion.
+- **Replacement follow-ups now derive from audit events.** Weak-encode and audio-packaging deletes create active replacement follow-ups in the ledger; resolve/dismiss actions are separate audit events, not silent queue mutation.
 - **IMDb ratings are server-side.** Replacement-history ratings go through `/api/movies/omdb/ratings`; do not reintroduce browser-side OMDb key exposure or direct `www.omdbapi.com` calls.
 - **Probe cancellation is resolved.** Extended use has not reproduced any condition where a stray `ffprobe` escapes the cancellation safeguards or evades the activity indicator. The activity detector (`find_external_activity`) reliably picks up any lingering process via `ps`. Consider this closed.
 - **Latent CPU accumulation after long sessions (open, browser-side).** After several hours of active use — running scans, remux operations, repeated UI interactions — CPU does not settle back to the normal idle range (1–5%) and instead hovers at 5–20% across cores until the normal tab or Firefox itself is closed, at which point it drops immediately. The server process alone does not reproduce this; it appears to be browser-side state accumulation (JS heap, event listeners, DOM churn from repeated re-renders) growing over a long session. Observed on an i5-2600KF; the load is not onerous but is reproducible after sustained work. No fix has been identified yet — do not prematurely attribute it to the Python server or ffprobe.
@@ -296,5 +301,5 @@ These are deliberate choices, not gaps:
 - **`--in-place` is always explicit.** Never infer in-place mutation from context; the flag must be present.
 - **Canonical list matching is alias-based.** `_find_inventory_match` in `movie_canonical_lists.py` tries: (1) exact normalized key via `canonical_identity_key`; then (2) shared title aliases from `title_alias_keys`, which cover punctuation-light equivalence, TMDb colon subtitle fallback, and word-boundary suffix aliases. Ambiguous alias matches are skipped.
 - **Shared movie naming is now a first-class seam.** `movie_naming.py` owns display-title normalization, punctuation reconstruction for the narrow settled families (`K-19` including compact `K19`, ordinals, `Mr.`/`Dr.`/`L.A.`), provider lookup title candidates, token cleanup, and edge-only tracker/domain credit stripping. Reuse that module instead of reimplementing title cleanup in parser, matching, or provider code.
-- **Configured canonical lists (in order):** `top_100` (Top 100, top_rated, 75%), `top_250` (Top 250, top_rated, 65%), `animation` (Top 50 Animation, genre 16, 60%), `sci_fi` (Sci-Fi, genre 878, 60%), `fantasy` (Fantasy, genre 14, 60%), `action` (Action, genre 28, 60%), `thriller_mystery` (Thriller / Mystery, genres 53+9648, 60%), `documentary` (Top 50 Documentary, genre 99, 60%), `comedy` (Comedy, genre 35, 60%). Badge threshold is the unlock percentage. Do not reinstate `top_1000` or `suspense_horror` — both were removed as poor fits for this library.
+- **Configured canonical lists (in order):** `top_100` (Top 100, top_rated, 75%), `top_250` (Top 250, top_rated, 65%), `top_500` (Top 500, top_rated, 55%), `animation` (Top 50 Animation, genre 16, 60%), `sci_fi` (Sci-Fi, genre 878, 60%), `fantasy` (Fantasy, genre 14, 60%), `action` (Action, genre 28, 60%), `thriller_mystery` (Thriller / Mystery, genres 53+9648, 60%), `documentary` (Top 50 Documentary, genre 99, 60%), `comedy` (Comedy, genre 35, 60%). IMDb-backed ranking is consensus-weighted locally: all-time lists use a `100000` vote floor, genre lists prefer `50000` and fall back to `25000` only when needed to fill the list. Badge threshold is the unlock percentage. Do not reinstate `top_1000` or `suspense_horror` — both were removed as poor fits for this library.
 - **Canonical list inspector View button is always shown**, including for 0/x lists. Clicking View on a 0/x list shows all N titles in the list as "Missing" — this is intentional so the user can see what to acquire. The profile inspector suppresses View at count 0; the canonical list inspector does not. If `all_entries` is absent (stale cache from before this field was added), the inspector shows a "Re-run to load N titles" prompt with a back button instead of a table. Browser localStorage cache key is `n_movie_canonical_lists_cache_v3`; old v2 caches (without `all_entries`) are discarded on first page load.

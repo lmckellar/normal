@@ -65,30 +65,32 @@ Watching the tool purify a test library for the first time is a good experience.
 
 ## Alpha UI note
 
-`v0.7.0-alpha.2` promoted the newer workbench at `http://127.0.0.1:8765/` to the default UI.
+`v0.7.0-alpha.4` uses one compact workbench at `http://127.0.0.1:8765/`.
 
-`v0.7.0-alpha.3` stabilizes that same compact shell around a left-side Policy rail, unified repair-lane ownership, and shared delete-posture handling.
-
-Some lanes and audit surfaces that were previously exposed in `alpha.1` remain present in backend or partial internal form but are intentionally not surfaced in the default UI while they undergo deeper revision. The main release touch points in this repo reflect current reality; broader docs may still describe older public surfaces for a while.
+Workflow deep links still use the main route with a query string, for example `/?workflow=normalize` or `/?workflow=repair-defaults`.
 
 ## Optional API Keys
 
   `normal` works without external API keys for its core local workflows: movie normalize, profile scans, junk detection, repair defaults, inspect, and exports all run against local files.
 
-  Two web features related to pulling Ratings use optional third-party APIs:
+  `Movies / Canonical Lists` is now IMDb-first and does not require an API key, but it does require local IMDb dataset files. The IMDb-backed rankings are consensus-weighted locally so broadly validated films outrank niche high-average outliers:
 
-  - `TMDB_KEY` enables `Movies / Canonical Lists`, which compares your library against TMDb-backed movie lists.
+  - `IMDB_DATASET_DIR` should point at a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
+
+  One web feature still uses an optional third-party API:
+
   - `OMDB_KEY` enables IMDb ratings in movie list views that still surface ratings.
+  - `TMDB_KEY` remains optional if you explicitly switch Canonical Lists back to the TMDb provider.
 
-  If you do not provide these keys:
+  If you do not provide these settings:
 
   - the app still launches and the main movie workflows still work as you would expect
-  - `Canonical Lists` cannot fetch TMDb coverage data so this 'non core' feature will simply not return a list
+  - `Canonical Lists` cannot run in IMDb mode unless `IMDB_DATASET_DIR` points at the required local files
   - movie pages that can show IMDb ratings simply omit them when no key is present.
 
-  API Keys can be obtained from the respective websites and are free with basic usage plans and can be passed either by environment variable or via `normal web --tmdb-key ... --omdb-key ...`.
+  `OMDB_KEY` can be passed either by environment variable or via `normal web --omdb-key ...`. `TMDB_KEY` can still be passed via environment variable or `normal web --tmdb-key ...` when using the TMDb provider.
 
-  `normal` thoughtfully provides internal caching that minimises repeated API calls after the first scan. This keeps the optional provider-backed views within free-tier limits and avoids wasteful re-queries for values that are already known.
+  `normal` thoughtfully provides internal caching for both canonical-list providers and OMDb lookups to avoid wasteful repeated work.
 
   See [docs/safety.md](docs/safety.md#networking-behaviour) for the networking posture and [docs/movies.md](docs/movies.md) for where these features appear in the UI.
 

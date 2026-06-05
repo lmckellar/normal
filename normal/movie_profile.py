@@ -13,7 +13,6 @@ import time
 from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
-from normal.movie_junk import detect_movie_junk_document_reasons
 from normal.movie_plan import concise_movie_base, parse_movie_name, path_has_normalized_movie_shape
 from normal.movie_scan import (
     MovieScanProgress,
@@ -22,7 +21,14 @@ from normal.movie_scan import (
     movie_id_for,
     probe_media_facts,
 )
-from normal.quality_review import AudioStreamFacts, MediaFacts, SubtitleStreamFacts, classify_resolution
+from normal.quality_review import (
+    AudioStreamFacts,
+    MediaFacts,
+    SubtitleStreamFacts,
+    classify_resolution,
+    effective_display_dimensions,
+    parse_aspect_ratio,
+)
 
 
 ANCHOR_KBPS = {"1080p": 18000, "2160p": 45000}
@@ -99,6 +105,7 @@ QUALITY_STANCE_ORDER = [
     "collector_grade",
     "reference",
 ]
+CANONICAL_LIST_PROVIDERS = ("tmdb", "imdb")
 
 DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
     "video": {
@@ -128,10 +135,6 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
             "video_floor": "minimum",
             "audio_floor": "minimum",
             "audio_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
-            "require_audio_language_hygiene": False,
-            "require_subtitle_setup": False,
-            "require_folder_hygiene": False,
-            "require_lossless_audio": False,
         },
         "compact_grade": {
             "display_name": "Compact Grade",
@@ -143,10 +146,6 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
             "audio_channels_mono_cutoff": 1970,
             "audio_bitrate_kbps": 320,
             "audio_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
-            "require_audio_language_hygiene": False,
-            "require_subtitle_setup": False,
-            "require_folder_hygiene": False,
-            "require_lossless_audio": False,
         },
         "library_grade": {
             "display_name": "Library Grade",
@@ -158,10 +157,6 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
             "audio_channels_mono_cutoff": 1970,
             "audio_bitrate_kbps": 192,
             "audio_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
-            "require_audio_language_hygiene": True,
-            "require_subtitle_setup": False,
-            "require_folder_hygiene": False,
-            "require_lossless_audio": False,
         },
         "collector_grade": {
             "display_name": "Collector Grade",
@@ -172,24 +167,16 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
             "audio_channels": 6,
             "audio_bitrate_kbps": 384,
             "audio_codecs": ["ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
-            "require_audio_language_hygiene": True,
-            "require_subtitle_setup": True,
-            "require_folder_hygiene": False,
-            "require_lossless_audio": False,
         },
         "reference": {
             "display_name": "Reference",
-            "summary": "Mild to no compression to visual quality with lossless audio.",
+            "summary": "Mild to no compression to visual quality.",
             "video_floor": "custom",
             "video_custom": {"1080p": 16000, "2160p": 24000},
             "audio_floor": "custom",
             "audio_channels": 6,
             "audio_bitrate_kbps": 384,
             "audio_codecs": ["truehd", "dtshd", "flac", "pcm"],
-            "require_audio_language_hygiene": True,
-            "require_subtitle_setup": True,
-            "require_folder_hygiene": True,
-            "require_lossless_audio": True,
         },
     },
 }
@@ -207,7 +194,14 @@ DELETE_MODES = (
 JUNK_DELETE_CONFIDENCE_FLOORS = ("high", "review")
 DEFAULT_OPERATOR_PREFERENCES = {
     "delete_mode": "recycle_all",
+    "default_source": "",
 }
+REMOVED_QUALITY_STANCE_KEYS = (
+    "require_audio_language_hygiene",
+    "require_subtitle_setup",
+    "require_folder_hygiene",
+    "require_lossless_audio",
+)
 
 
 class MovieStandardsConflictError(RuntimeError):
@@ -361,17 +355,17 @@ def load_movie_standards() -> dict[str, Any]:
         return standards
     if not isinstance(payload, dict):
         return standards
-    return deep_merge_dicts(standards, payload)
+    return strip_removed_quality_stance_keys(deep_merge_dicts(standards, payload))
 
 
 def movie_standards_revision(standards: dict[str, Any] | None = None) -> str:
-    normalized = deep_merge_dicts(default_library_policy(), standards or load_movie_standards())
+    normalized = strip_removed_quality_stance_keys(deep_merge_dicts(default_library_policy(), standards or load_movie_standards()))
     encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
 def save_movie_standards(standards: dict[str, Any]) -> dict[str, Any]:
-    normalized = deep_merge_dicts(default_library_policy(), standards)
+    normalized = strip_removed_quality_stance_keys(deep_merge_dicts(default_library_policy(), standards))
     payload = json.dumps(normalized, indent=2) + "\n"
     MOVIE_STANDARDS_PATH.parent.mkdir(parents=True, exist_ok=True)
     temp_path: Path | None = None
@@ -399,6 +393,7 @@ def default_library_policy() -> dict[str, Any]:
     return deep_merge_dicts(
         DEFAULT_MOVIE_STANDARDS,
         {
+            "canonical_list_provider": "imdb",
             "primary_language": "english",
             "subtitle_preferences": {"mode": "conservative"},
             "junk_rules": {"delete_confidence_floor": "high"},
@@ -463,7 +458,7 @@ def save_operator_preferences(preferences: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    active = standards or load_movie_standards()
+    active = strip_removed_quality_stance_keys(standards or load_movie_standards())
     stances = active.get("quality_stances") or {}
     definitions: list[dict[str, Any]] = []
     for label in QUALITY_STANCE_ORDER:
@@ -584,30 +579,6 @@ def build_movie_profile_definitions(standards: dict[str, Any] | None = None) -> 
                             {"value": 1536, "label": "1536 kbps"},
                         ],
                     },
-                    {
-                        "key": "require_audio_language_hygiene",
-                        "label": "Require sensible default audio language",
-                        "type": "toggle",
-                        "value": bool(stance.get("require_audio_language_hygiene", False)),
-                    },
-                    {
-                        "key": "require_subtitle_setup",
-                        "label": "Require subtitle default hygiene",
-                        "type": "toggle",
-                        "value": bool(stance.get("require_subtitle_setup", False)),
-                    },
-                    {
-                        "key": "require_folder_hygiene",
-                        "label": "Require normalized folder hygiene",
-                        "type": "toggle",
-                        "value": bool(stance.get("require_folder_hygiene", False)),
-                    },
-                    {
-                        "key": "require_lossless_audio",
-                        "label": "Require lossless audio",
-                        "type": "toggle",
-                        "value": bool(stance.get("require_lossless_audio", False)),
-                    },
                 ]
             )
         definitions.append(
@@ -662,14 +633,39 @@ def build_library_defaults_definition(standards: dict[str, Any] | None = None) -
     active = standards or load_library_policy()
     junk_rules = active.get("junk_rules") or {}
     subtitle_preferences = active.get("subtitle_preferences") or {}
+    stances = active.get("quality_stances") or {}
+    weak_floor = replacement_candidate_quality_floor(active)
     return {
         "label": "library_defaults",
         "display_name": "Library Defaults",
         "scope": "library_policy",
         "group": "Library Policy",
-        "summary": "Repository-owned language, subtitle, and junk-floor defaults.",
-        "rule_summary": "Primary language, subtitle policy, and junk deletion floor apply library-wide.",
+        "summary": "Repository-owned canonical source, language, subtitle, and junk-floor defaults.",
+        "rule_summary": "Canonical list provider, primary language, subtitle policy, and junk deletion floor apply library-wide.",
         "fields": [
+            {
+                "key": "canonical_list_provider",
+                "label": "Canonical list provider",
+                "type": "select",
+                "value": normalize_canonical_list_provider(active.get("canonical_list_provider")),
+                "options": [
+                    {"value": "imdb", "label": "IMDb"},
+                    {"value": "tmdb", "label": "TMDb"},
+                ],
+            },
+            {
+                "key": "quality_profile_floor",
+                "label": "Weak encode floor",
+                "type": "select",
+                "value": weak_floor,
+                "options": [
+                    {
+                        "value": label,
+                        "label": str((stances.get(label) or {}).get("display_name") or human_quality_stance_label(label)),
+                    }
+                    for label in QUALITY_STANCE_ORDER
+                ],
+            },
             {
                 "key": "primary_language",
                 "label": "Primary language",
@@ -725,12 +721,32 @@ def build_delete_mode_definition(preferences: dict[str, Any] | None = None) -> d
     }
 
 
+def build_default_source_definition(preferences: dict[str, Any] | None = None) -> dict[str, Any]:
+    active = preferences or load_operator_preferences()
+    return {
+        "label": "default_source",
+        "display_name": "Default Library Directory",
+        "scope": "operator_preferences",
+        "group": "Operator Preference",
+        "summary": "User-local startup source for cold-load navigation.",
+        "rule_summary": "Used to prefill the source field and open Audit Ledger on cold start without scanning.",
+        "fields": [
+            {
+                "key": "default_source",
+                "label": "Preferred default library directory",
+                "type": "text",
+                "value": str(active.get("default_source") or ""),
+            }
+        ],
+    }
+
+
 def build_policy_definitions(
     standards: dict[str, Any] | None = None,
     preferences: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     definitions = build_movie_profile_definitions(standards)
-    definitions.append(build_replacement_candidate_definition(standards))
+    definitions.append(build_default_source_definition(preferences))
     definitions.append(build_library_defaults_definition(standards))
     definitions.append(build_delete_mode_definition(preferences))
     return definitions
@@ -742,7 +758,7 @@ def update_movie_profile_definition(
     expected_revision: str | None = None,
     standards: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    current = deep_merge_dicts(default_library_policy(), standards or load_movie_standards())
+    current = strip_removed_quality_stance_keys(deep_merge_dicts(default_library_policy(), standards or load_movie_standards()))
     if expected_revision and expected_revision != movie_standards_revision(current):
         raise MovieStandardsConflictError("Movie standards changed since this dashboard view loaded. Refresh and retry.")
     active = deep_merge_dicts(default_library_policy(), current)
@@ -783,10 +799,6 @@ def update_movie_profile_definition(
             values.get("audio_bitrate_kbps"),
             int(resolve_stance_audio_bitrate(label, stance, active)),
         )
-        stance["require_audio_language_hygiene"] = bool(values.get("require_audio_language_hygiene", False))
-        stance["require_subtitle_setup"] = bool(values.get("require_subtitle_setup", False))
-        stance["require_folder_hygiene"] = bool(values.get("require_folder_hygiene", False))
-        stance["require_lossless_audio"] = bool(values.get("require_lossless_audio", False))
         return save_movie_standards(active)
     raise ValueError(f"Unsupported movie profile definition: {label}")
 
@@ -801,6 +813,11 @@ def update_policy_definition(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     active_policy = deep_merge_dicts(default_library_policy(), library_policy or load_library_policy())
     active_preferences = deep_merge_dicts(DEFAULT_OPERATOR_PREFERENCES, operator_preferences or load_operator_preferences())
+    if label == "default_source":
+        if expected_preferences_revision and expected_preferences_revision != operator_preferences_revision(active_preferences):
+            raise MovieStandardsConflictError("Operator preferences changed since this view loaded. Refresh and retry.")
+        active_preferences["default_source"] = str(values.get("default_source") or "").strip()
+        return active_policy, save_operator_preferences(active_preferences)
     if label == "delete_mode":
         if expected_preferences_revision and expected_preferences_revision != operator_preferences_revision(active_preferences):
             raise MovieStandardsConflictError("Operator preferences changed since this view loaded. Refresh and retry.")
@@ -809,6 +826,11 @@ def update_policy_definition(
     if label == "library_defaults":
         if expected_policy_revision and expected_policy_revision != library_policy_revision(active_policy):
             raise MovieStandardsConflictError("Library policy changed since this view loaded. Refresh and retry.")
+        active_policy["canonical_list_provider"] = normalize_canonical_list_provider(values.get("canonical_list_provider"))
+        active_policy.setdefault("replacement_candidate_rules", {})["quality_profile_floor"] = normalize_quality_stance_label(
+            values.get("quality_profile_floor"),
+            replacement_candidate_quality_floor(active_policy),
+        )
         active_policy["primary_language"] = normalize_primary_language(values.get("primary_language"))
         active_policy.setdefault("subtitle_preferences", {})["mode"] = normalize_subtitle_mode(values.get("subtitle_mode"))
         active_policy.setdefault("junk_rules", {})["delete_confidence_floor"] = normalize_junk_delete_confidence_floor(
@@ -835,6 +857,20 @@ def deep_merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str
         else:
             merged[key] = value
     return merged
+
+
+def strip_removed_quality_stance_keys(policy: dict[str, Any]) -> dict[str, Any]:
+    normalized = json.loads(json.dumps(policy))
+    normalized["canonical_list_provider"] = normalize_canonical_list_provider(normalized.get("canonical_list_provider"))
+    stances = normalized.get("quality_stances")
+    if not isinstance(stances, dict):
+        return normalized
+    for stance in stances.values():
+        if not isinstance(stance, dict):
+            continue
+        for key in REMOVED_QUALITY_STANCE_KEYS:
+            stance.pop(key, None)
+    return normalized
 
 
 def normalize_positive_int(value: Any, default: int) -> int:
@@ -900,6 +936,12 @@ def normalize_weak_encode_floor(value: Any, standards: dict[str, Any] | None = N
     return label if label in SAFE_WEAK_ENCODE_FLOORS else fallback
 
 
+def normalize_canonical_list_provider(value: Any, default: str = "imdb") -> str:
+    provider = str(value or "").strip().casefold()
+    fallback = default if default in CANONICAL_LIST_PROVIDERS else "imdb"
+    return provider if provider in CANONICAL_LIST_PROVIDERS else fallback
+
+
 def normalize_delete_mode(value: Any, default: str = "recycle_all") -> str:
     mode = str(value or "").strip()
     return mode if mode in DELETE_MODES else default
@@ -945,8 +987,6 @@ def build_quality_stance_rule_summary(label: str, stance: dict[str, Any], standa
     mono_cutoff = int(stance.get("audio_channels_mono_cutoff") or 0)
     if mono_cutoff:
         parts.append(f"original mono allowed before {mono_cutoff}")
-    if stance.get("require_lossless_audio"):
-        parts.append("lossless audio required")
     return "; ".join(parts) + "."
 
 
@@ -958,9 +998,9 @@ def build_quality_stance_inherits_summary(label: str, stance: dict[str, Any]) ->
     if label == "library_grade":
         return "Inherited default: casual-viewing baseline with relaxed subtitle and folder hygiene."
     if label == "collector_grade":
-        return "Inherited default: stronger encode floor with subtitle hygiene enabled."
+        return "Inherited default: stronger encode floor for sturdier compact encodes."
     if label == "reference":
-        return "Inherited default: reference-grade video floor with lossless audio and tidy packaging."
+        return "Inherited default: reference-grade video floor with a high audio floor."
     return str(stance.get("inherits_summary") or "")
 
 
@@ -1059,9 +1099,6 @@ def evaluate_movie_standards(path: Path, facts: MediaFacts, standards: dict[str,
     return [
         evaluate_video_domain(facts, standards),
         evaluate_audio_domain(facts, standards),
-        evaluate_audio_language_hygiene_domain(facts),
-        evaluate_subtitle_setup_domain(facts, standards),
-        evaluate_folder_hygiene_domain(path, facts, standards),
     ]
 
 
@@ -1124,67 +1161,6 @@ def evaluate_audio_domain(facts: MediaFacts, standards: dict[str, Any]) -> dict[
     if reference_codecs and codec in reference_codecs and channels >= minimum_channels and bitrate >= minimum_bitrate:
         return standard_result("audio_minimum", "pass", "audio_reference", "Main audio meets the configured reference standard.", "high")
     return standard_result("audio_minimum", "pass", "audio_meets_minimum", "Main audio meets the configured minimum standard.", "high")
-
-
-def evaluate_audio_language_hygiene_domain(facts: MediaFacts) -> dict[str, Any]:
-    default_stream = choose_default_audio_stream(facts.audio_streams)
-    if default_stream is None:
-        return standard_result("audio_language_hygiene", "review_low_confidence", "audio_default_unknown", "No clear default audio stream was visible.", "low")
-    default_language = canonical_audio_language(default_stream.language)
-    if default_language in {None, "english"}:
-        return standard_result("audio_language_hygiene", "pass", "audio_default_ok", "Default audio language looks sensible.", "high")
-    english_streams = [stream for stream in facts.audio_streams if canonical_audio_language(stream.language) == "english"]
-    if not english_streams:
-        return standard_result("audio_language_hygiene", "review_low_confidence", "audio_default_non_english_no_english_alt", "Default audio is non-English and no English alternate was clearly tagged.", "low")
-    return standard_result("audio_language_hygiene", "review_low_confidence", "audio_default_non_english", "Default audio is non-English while an English track is present.", "low")
-
-
-def evaluate_subtitle_setup_domain(facts: MediaFacts, standards: dict[str, Any]) -> dict[str, Any]:
-    mode = str((standards.get("subtitle_setup") or {}).get("mode") or "conservative")
-    if mode != "conservative":
-        return standard_result("subtitle_setup", "review_low_confidence", "subtitle_policy_unknown", "Subtitle policy is unsupported by the current standards engine.", "low")
-    if facts.default_subtitle_streams > 1:
-        return standard_result("subtitle_setup", "fail", "multiple_default_subtitles", "Multiple subtitle streams are marked default.", "high")
-
-    default_audio = choose_default_audio_stream(facts.audio_streams)
-    default_audio_language = canonical_audio_language(default_audio.language) if default_audio else None
-    english_forced = [stream for stream in facts.subtitle_streams if is_english_subtitle(stream) and stream.is_forced]
-    default_subtitle = choose_default_subtitle_stream(facts.subtitle_streams) if facts.default_subtitle_streams else None
-
-    if english_forced:
-        if default_subtitle is None:
-            return standard_result("subtitle_setup", "review_low_confidence", "english_forced_not_default", "English forced subtitles exist but no default subtitle is set.", "low")
-        if not (is_english_subtitle(default_subtitle) and default_subtitle.is_forced):
-            return standard_result("subtitle_setup", "review_low_confidence", "wrong_default_forced_subtitle", "English forced subtitles exist but the default subtitle is not the forced English track.", "low")
-        return standard_result("subtitle_setup", "pass", "english_forced_defaulted", "English forced subtitles are present and defaulted.", "high")
-
-    if default_audio_language not in {None, "english"}:
-        if default_subtitle is None:
-            return standard_result("subtitle_setup", "review_low_confidence", "missing_default_english_subtitle", "Default audio is non-English and no default subtitle was visible.", "low")
-        if not is_english_subtitle(default_subtitle):
-            return standard_result("subtitle_setup", "review_low_confidence", "wrong_default_subtitle_language", "Default audio is non-English but the default subtitle is not English.", "low")
-        return standard_result("subtitle_setup", "pass", "english_subtitle_defaulted", "English subtitles are defaulted for non-English main audio.", "high")
-
-    if default_subtitle is not None:
-        return standard_result("subtitle_setup", "review_low_confidence", "unnecessary_default_subtitle", "Default subtitles are set even though default audio is English.", "low")
-    return standard_result("subtitle_setup", "pass", "subtitle_defaults_ok", "Subtitle defaults look tidy.", "high")
-
-
-def evaluate_folder_hygiene_domain(path: Path, facts: MediaFacts, standards: dict[str, Any]) -> dict[str, Any]:
-    config = standards.get("folder_hygiene") or {}
-    if config.get("require_normalized_naming", True) and not path_matches_normalized_shape(path):
-        return standard_result("folder_hygiene", "review_low_confidence", "path_not_normalized", "Path does not match the normalized movie naming shape.", "low")
-    junk_extensions = {str(value).casefold() for value in config.get("junk_sidecar_extensions") or []}
-    try:
-        siblings = list(path.parent.iterdir())
-    except OSError:
-        siblings = []
-    for sibling in siblings:
-        if sibling == path or not sibling.is_file():
-            continue
-        if sibling.suffix.casefold() in junk_extensions and detect_movie_junk_document_reasons(sibling):
-            return standard_result("folder_hygiene", "review_low_confidence", "promo_sidecar_present", "Folder contains a likely promo or spam sidecar file.", "low")
-    return standard_result("folder_hygiene", "pass", "folder_hygiene_ok", "Folder looks tidy enough for the current standard.", "high")
 
 
 def path_matches_normalized_shape(path: Path) -> bool:
@@ -1260,21 +1236,8 @@ def movie_matches_quality_stance(
         required_bitrate = max(1, (required_bitrate + 1) // 2)
     if required_bitrate and bitrate < required_bitrate:
         return False
-    if stance.get("require_lossless_audio") and codec not in {"truehd", "dtshd", "flac", "pcm", "pcm_s16le", "pcm_s24le"}:
-        return False
-
-    if stance.get("require_audio_language_hygiene") and not domain_passed(domain_results, "audio_language_hygiene"):
-        return False
-    if stance.get("require_subtitle_setup") and not domain_passed(domain_results, "subtitle_setup"):
-        return False
-    if stance.get("require_folder_hygiene") and not domain_passed(domain_results, "folder_hygiene"):
-        return False
 
     return True
-
-
-def domain_passed(domain_results: list[dict[str, Any]], domain: str) -> bool:
-    return any(result["domain"] == domain and result["status"] == "pass" for result in domain_results)
 
 
 def classify_standard_label(
@@ -1715,6 +1678,8 @@ def build_histogram_payload_from_items(source_root: str, generated_at: str, movi
     profile_counts: dict[str, int] = {}
     quality_profile_counts: dict[str, int] = {}
     resolution_counts: dict[str, int] = {}
+    resolution_breakdown_counts: dict[str, int] = {}
+    surround_sound_breakdown_counts: dict[str, int] = {}
     risk_counts: dict[str, int] = {}
     for item in movies:
         profile_label = item_profile_value(item, "label") or "unknown"
@@ -1723,6 +1688,19 @@ def build_histogram_payload_from_items(source_root: str, generated_at: str, movi
         quality_profile_counts[quality_label] = quality_profile_counts.get(quality_label, 0) + 1
         resolution = item_fact_value(item, "resolution_bucket") or "unknown"
         resolution_counts[resolution] = resolution_counts.get(resolution, 0) + 1
+        resolution_breakdown = classify_resolution_breakdown(
+            item_fact_value(item, "width"),
+            item_fact_value(item, "height"),
+            item_fact_value(item, "sample_aspect_ratio"),
+            item_fact_value(item, "display_aspect_ratio"),
+            item_fact_value(item, "resolution_bucket"),
+        )
+        resolution_breakdown_counts[resolution_breakdown] = resolution_breakdown_counts.get(resolution_breakdown, 0) + 1
+        surround_sound_breakdown = classify_surround_sound_breakdown(
+            item_fact_value(item, "audio_channels"),
+            item_fact_value(item, "audio_immersive_extension"),
+        )
+        surround_sound_breakdown_counts[surround_sound_breakdown] = surround_sound_breakdown_counts.get(surround_sound_breakdown, 0) + 1
         risk_values = item_profile_value(item, "risk_counts") or {}
         if isinstance(risk_values, dict):
             for category, count in risk_values.items():
@@ -1742,6 +1720,8 @@ def build_histogram_payload_from_items(source_root: str, generated_at: str, movi
         "profile_counts": profile_counts,
         "quality_profile_counts": quality_profile_counts,
         "resolution_counts": resolution_counts,
+        "resolution_breakdown_counts": resolution_breakdown_counts,
+        "surround_sound_breakdown_counts": surround_sound_breakdown_counts,
         "risk_counts": risk_counts,
         "anchor_reference": {"1080p_uhd_kbps": ANCHOR_KBPS["1080p"]},
     }
@@ -1765,6 +1745,83 @@ def item_profile_value(item: Any, key: str) -> Any:
     if isinstance(profile, dict):
         return profile.get(key)
     return getattr(profile, key, None)
+
+
+def display_aspect_ratio_value(
+    width: int | None,
+    height: int | None,
+    sample_aspect_ratio: str | None = None,
+    display_aspect_ratio: str | None = None,
+) -> float | None:
+    parsed = parse_aspect_ratio(display_aspect_ratio)
+    if parsed is not None:
+        numerator, denominator = parsed
+        return numerator / denominator
+    dimensions = effective_display_dimensions(width, height, sample_aspect_ratio)
+    if dimensions is None:
+        return None
+    display_width, display_height = dimensions
+    if not display_width or not display_height:
+        return None
+    return display_width / display_height
+
+
+def has_non_square_pixels(sample_aspect_ratio: str | None) -> bool:
+    parsed = parse_aspect_ratio(sample_aspect_ratio)
+    if parsed is None:
+        return False
+    numerator, denominator = parsed
+    return numerator != denominator
+
+
+def classify_resolution_breakdown(
+    width: int | None,
+    height: int | None,
+    sample_aspect_ratio: str | None = None,
+    display_aspect_ratio: str | None = None,
+    resolution_bucket: str | None = None,
+) -> str:
+    resolution = resolution_bucket or classify_resolution(width, height, sample_aspect_ratio, display_aspect_ratio)
+    aspect_ratio = display_aspect_ratio_value(width, height, sample_aspect_ratio, display_aspect_ratio)
+    anamorphic = has_non_square_pixels(sample_aspect_ratio)
+
+    if resolution == "2160p":
+        return "uhd_scope" if aspect_ratio and aspect_ratio >= 2.0 else "uhd_flat"
+    if resolution == "1080p":
+        return "full_hd_scope" if aspect_ratio and aspect_ratio >= 2.0 else "full_hd_flat"
+    if resolution == "720p":
+        return "hd_ready_scope" if aspect_ratio and aspect_ratio >= 2.0 else "hd_ready_flat"
+    if resolution == "sd":
+        if anamorphic and aspect_ratio and aspect_ratio >= 1.7:
+            return "anamorphic_sd"
+        if aspect_ratio and aspect_ratio >= 1.7:
+            return "letterbox_sd"
+        return "academy_sd"
+    return "unknown"
+
+
+def classify_surround_sound_breakdown(channels: int | None, immersive_extension: str | None = None) -> str:
+    if channels is None or channels <= 0:
+        return "unknown"
+    if channels == 1:
+        return "mono_archive"
+    if channels == 2:
+        return "stereo_ltrt"
+    if channels == 3:
+        return "three_channel_stage"
+    if channels == 4:
+        return "quad_matrix"
+    if channels == 5:
+        return "five_channel_surround"
+    if channels == 6:
+        return "five_one_surround"
+    if channels == 7:
+        return "six_one_surround"
+    if immersive_extension == "atmos":
+        return "seven_one_atmos"
+    if immersive_extension == "dtsx":
+        return "seven_one_dtsx"
+    return "seven_one_surround"
 
 
 def summarize_distribution(values: list[int], bin_width: int = 2000) -> dict[str, Any]:

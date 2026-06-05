@@ -10,6 +10,7 @@ from typing import Callable
 
 from . import state
 from .activity import ActivityTracker
+from .routes_audit import handle_audit_follow_up_update, handle_audit_read, record_system_event
 from .http import RequestContext
 from .routes_cleanup import (
     handle_movies_delete,
@@ -23,6 +24,8 @@ from .routes_core import handle_activity, handle_library_roots_get, handle_libra
 from .routes_normalize import handle_movies_apply, handle_movies_normalize
 from .routes_profile import (
     handle_movies_canonical_lists,
+    handle_movies_canonical_refresh,
+    handle_movies_canonical_status,
     handle_movies_dashboard_histogram,
     handle_movies_inspect,
     handle_movies_omdb_ratings,
@@ -36,17 +39,9 @@ from .state import RequestConflictError
 
 
 WEB_ASSET_ROOT = "web_assets"
-WEB_ASSET_TEMPLATE = "index.html"
-NORMALIZE_LAB_ASSET_TEMPLATE = "normalize_lab.html"
-PARSER_TESTER_UI_ROUTE = "/parser-tester-ui"
-PARSER_TESTER_UI_ASSET_ROUTE = "/parser-tester-ui-assets"
 WEB_STATIC_ASSETS = {
-    "/assets/app.css": ("app.css", "text/css; charset=utf-8"),
-    "/assets/app.js": ("app.js", "application/javascript; charset=utf-8"),
-}
-NORMALIZE_LAB_STATIC_ASSETS = {
-    f"{PARSER_TESTER_UI_ASSET_ROUTE}/normalize_lab.css": ("normalize_lab.css", "text/css; charset=utf-8"),
-    f"{PARSER_TESTER_UI_ASSET_ROUTE}/normalize_lab.js": ("normalize_lab.js", "application/javascript; charset=utf-8"),
+    "/assets/workbench.css": ("normalize_lab.css", "text/css; charset=utf-8"),
+    "/assets/workbench.js": ("normalize_lab.js", "application/javascript; charset=utf-8"),
 }
 WEB_BOOTSTRAP_SENTINEL = "__NORMAL_BOOTSTRAP__"
 
@@ -74,13 +69,8 @@ def render_web_bootstrap(default_source: Path | None = None, omdb_key: str | Non
     )
 
 
-def render_asset_html(
-    template_name: str,
-    default_source: Path | None = None,
-    omdb_key: str | None = None,
-    tmdb_key: str | None = None,
-) -> str:
-    template = read_web_asset_text(template_name)
+def render_workbench_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
+    template = read_web_asset_text("normalize_lab.html")
     html = template.replace(
         WEB_BOOTSTRAP_SENTINEL,
         render_web_bootstrap(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key),
@@ -88,17 +78,7 @@ def render_asset_html(
     )
     for route, (asset_name, _) in WEB_STATIC_ASSETS.items():
         html = html.replace(route, versioned_asset_route(route, asset_name))
-    for route, (asset_name, _) in NORMALIZE_LAB_STATIC_ASSETS.items():
-        html = html.replace(route, versioned_asset_route(route, asset_name))
     return html
-
-
-def render_index_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
-    return render_asset_html(WEB_ASSET_TEMPLATE, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
-
-
-def render_normalize_lab_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
-    return render_asset_html(NORMALIZE_LAB_ASSET_TEMPLATE, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
 
 
 def serve_web_ui(
@@ -112,6 +92,17 @@ def serve_web_ui(
     server = ThreadingHTTPServer((host, port), handler)
     source_hint = f" default source {default_source}" if default_source else ""
     print(f"normal web UI listening on http://{host}:{port}/{source_hint}")
+    record_system_event(
+        action="start",
+        summary="Started normal web UI.",
+        metadata={
+            "host": host,
+            "port": port,
+            "default_source": str(default_source.resolve()) if default_source else "",
+            "omdb_enabled": bool(omdb_key),
+            "tmdb_enabled": bool(tmdb_key),
+        },
+    )
     server.serve_forever()
 
 
@@ -121,23 +112,8 @@ def serve_static_asset(ctx: RequestContext, route: str) -> None:
     ctx.respond_bytes(body, content_type=content_type, headers={"Cache-Control": "no-store"})
 
 
-def serve_normalize_lab_static_asset(ctx: RequestContext, route: str) -> None:
-    asset_name, content_type = NORMALIZE_LAB_STATIC_ASSETS[route]
-    body = read_web_asset_bytes(asset_name)
-    ctx.respond_bytes(body, content_type=content_type, headers={"Cache-Control": "no-store"})
-
-
-def serve_index(ctx: RequestContext) -> None:
-    body = render_normalize_lab_html(
-        default_source=ctx.default_source,
-        omdb_key=ctx.omdb_key,
-        tmdb_key=ctx.tmdb_key,
-    ).encode("utf-8")
-    ctx.respond_bytes(body, content_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"})
-
-
-def serve_normalize_lab(ctx: RequestContext) -> None:
-    body = render_normalize_lab_html(
+def serve_workbench(ctx: RequestContext) -> None:
+    body = render_workbench_html(
         default_source=ctx.default_source,
         omdb_key=ctx.omdb_key,
         tmdb_key=ctx.tmdb_key,
@@ -149,27 +125,27 @@ def build_get_routes() -> dict[str, Callable[[RequestContext], None]]:
     routes: dict[str, Callable[[RequestContext], None]] = {
         "/api/activity": handle_activity,
         "/api/library-roots": handle_library_roots_get,
-        "/": serve_index,
-        "/index.html": serve_index,
-        PARSER_TESTER_UI_ROUTE: serve_normalize_lab,
-        f"{PARSER_TESTER_UI_ROUTE}.html": serve_normalize_lab,
+        "/": serve_workbench,
+        "/index.html": serve_workbench,
     }
     for route in WEB_STATIC_ASSETS:
         routes[route] = lambda ctx, route=route: serve_static_asset(ctx, route)
-    for route in NORMALIZE_LAB_STATIC_ASSETS:
-        routes[route] = lambda ctx, route=route: serve_normalize_lab_static_asset(ctx, route)
     return routes
 
 
 def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
     return {
         "/api/library-roots": handle_library_roots_post,
+        "/api/audit/read": handle_audit_read,
+        "/api/audit/follow-up/update": handle_audit_follow_up_update,
         "/api/movies/profile": handle_movies_profile,
         "/api/movies/dashboard/histogram": handle_movies_dashboard_histogram,
         "/api/movies/standards/update": handle_movies_standards_update,
         "/api/policy/read": handle_policy_read,
         "/api/policy/update": handle_policy_update,
         "/api/movies/canonical-lists": handle_movies_canonical_lists,
+        "/api/movies/canonical-status": handle_movies_canonical_status,
+        "/api/movies/canonical-refresh": handle_movies_canonical_refresh,
         "/api/movies/omdb/ratings": handle_movies_omdb_ratings,
         "/api/source/scan-warning": handle_source_scan_warning,
         "/api/movies/register": handle_movies_register,

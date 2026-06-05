@@ -60,6 +60,7 @@ body {
   --lab-rhythm-panel-header-pad: 12px;
   --lab-rhythm-panel-body-offset: 10px;
   --lab-panel-stub-inline: 56px;
+  --lab-primary-surface-min-height: 220px;
   width: 100%;
   padding: var(--shell-pad-block) var(--shell-pad-inline);
   display: grid;
@@ -280,16 +281,13 @@ button:disabled {
   grid-template-columns: var(--lab-track-rail) var(--lab-track-scan) var(--lab-track-preview) var(--lab-track-audit);
 }
 
-.lab-shell[data-policy-mode="editing"] {
-  --lab-track-rail: var(--lab-track-rail-expanded);
-}
-
 .lab-shell[data-policy-mode="editing"] .lab-layout {
-  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  grid-template-columns: var(--lab-track-rail-collapsed) var(--lab-track-scan) var(--lab-track-preview);
 }
 
 .lab-shell[data-policy-mode="editing"] .lab-sliver {
-  display: none;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .lab-page {
@@ -300,21 +298,31 @@ button:disabled {
   min-width: 0;
 }
 
+.lab-sliver-slot {
+  min-width: 0;
+  min-height: var(--lab-primary-surface-min-height);
+}
+
 .lab-sliver {
   position: sticky;
   top: var(--shell-pad-block);
   display: grid;
+  grid-template-rows: auto 1fr;
   gap: 10px;
-  padding: 12px 10px;
+  padding: 10px 4px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 241, 234, 0.94));
-  min-height: 100%;
+  min-height: var(--lab-primary-surface-min-height);
+  height: 100%;
+  overflow: hidden;
 }
 
-.lab-sliver-head {
+.lab-sliver-stack {
   display: grid;
-  gap: 8px;
+  gap: 0;
+  justify-items: center;
+  align-content: start;
 }
 
 .lab-sliver-title {
@@ -327,8 +335,16 @@ button:disabled {
   display: grid;
   place-items: center;
   width: 100%;
-  padding-inline: 8px;
+  min-height: 34px;
+  padding: 0;
   font-size: 12px;
+  justify-self: stretch;
+  align-self: start;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .lab-icon-toggle {
@@ -350,19 +366,33 @@ button:disabled {
   stroke-width: 1.6;
 }
 
+.lab-sliver-toggle:hover:not(:disabled) {
+  background: rgba(28, 29, 31, 0.04);
+  color: var(--ink);
+}
+
+.lab-sliver-toggle[data-active="true"] {
+  background: linear-gradient(180deg, rgba(58, 90, 140, 0.15), rgba(58, 90, 140, 0.08));
+  box-shadow: inset 0 0 0 1px rgba(58, 90, 140, 0.16);
+  color: var(--accent);
+}
+
+.lab-sliver-toggle[data-active="true"]:hover:not(:disabled) {
+  background: linear-gradient(180deg, rgba(58, 90, 140, 0.18), rgba(58, 90, 140, 0.1));
+}
+
 .lab-sliver-body {
   display: grid;
   gap: 10px;
   align-content: start;
+  min-height: 0;
 }
 
-.lab-shell[data-policy-mode="default"] .lab-sliver {
-  padding: 10px 4px;
-}
-
-.lab-shell[data-policy-mode="default"] .lab-sliver-head {
-  justify-items: center;
-  gap: 12px;
+.lab-sliver-separator {
+  width: calc(100% - 8px);
+  height: 1px;
+  background: rgba(28, 29, 31, 0.08);
+  margin: 6px 0;
 }
 
 .lab-shell[data-policy-mode="default"] .lab-sliver-title {
@@ -373,13 +403,22 @@ button:disabled {
 }
 
 .lab-shell[data-policy-mode="default"] .lab-sliver-toggle {
-  width: 24px;
-  height: 24px;
-  padding: 0;
+  justify-self: center;
 }
 
 .lab-shell[data-policy-mode="default"] .lab-sliver-body {
   display: none;
+}
+
+.lab-shell[data-policy-mode="default"] .lab-sliver {
+  grid-template-rows: auto;
+  min-height: 0;
+  height: auto;
+}
+
+.lab-shell[data-policy-mode="default"] .lab-sliver-slot {
+  min-height: 0;
+  height: auto;
 }
 
 .lab-sliver-note {
@@ -449,7 +488,10 @@ button:disabled {
   min-block-size: 100%;
 }
 
-.lab-table-panel { overflow: hidden; }
+.lab-table-panel {
+  overflow: hidden;
+  min-height: var(--lab-primary-surface-min-height);
+}
 
 /* Table ------------------------------------------------------------------- */
 
@@ -885,6 +927,16 @@ input[type="checkbox"] {
   gap: 12px;
 }
 
+.lab-dashboard-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.lab-audit-panel {
+  display: grid;
+  gap: 12px;
+}
+
 .lab-policy-header {
   display: flex;
   justify-content: space-between;
@@ -921,6 +973,60 @@ input[type="checkbox"] {
   gap: 12px;
 }
 
+.lab-dashboard-metrics,
+.lab-dashboard-breakdowns {
+  display: grid;
+  gap: 12px;
+}
+
+.lab-dashboard-metrics {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.lab-dashboard-breakdowns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.lab-dashboard-metric-value {
+  margin: 0 0 4px;
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.lab-dashboard-metric-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.lab-dashboard-list {
+  display: grid;
+  gap: 8px;
+}
+
+.lab-dashboard-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.lab-dashboard-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.lab-dashboard-row-label {
+  color: var(--ink);
+}
+
+.lab-dashboard-row-value {
+  color: var(--muted);
+  text-align: right;
+  white-space: nowrap;
+}
+
 .lab-policy-card {
   padding: 14px;
   border: 1px solid var(--hairline);
@@ -931,6 +1037,16 @@ input[type="checkbox"] {
 .lab-policy-card.is-open {
   border-color: var(--accent-line);
   box-shadow: inset 0 0 0 1px rgba(58, 90, 140, 0.08);
+}
+
+.lab-policy-section-header {
+  cursor: pointer;
+}
+
+.lab-policy-section-header:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: 10px;
 }
 
 .lab-policy-meta,
@@ -974,18 +1090,6 @@ input[type="checkbox"] {
   width: 100%;
 }
 
-.lab-policy-scope {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 7px;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: var(--paper);
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 600;
-}
-
 .lab-inspection-pane {
   display: grid;
   gap: 10px;
@@ -1016,7 +1120,33 @@ input[type="checkbox"] {
   font-size: 12px;
 }
 
+.lab-audit-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.lab-audit-table {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.lab-audit-table table {
+  background: var(--panel);
+}
+
+.lab-audit-table td,
+.lab-audit-table th {
+  padding-inline: 10px;
+}
+
 @media (max-width: 1180px) {
+  .lab-dashboard-breakdowns {
+    grid-template-columns: 1fr;
+  }
+
   .lab-preview-controls {
     display: flex;
     flex-wrap: wrap;

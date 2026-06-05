@@ -59,7 +59,7 @@ Lane-agnostic today or trivially extractable:
 | Token/crud hygiene | `movie_naming.py` + shared calls from `movie_identity.py` | `canonicalize_token_sequence`, `split_compact_technical_token`, `normalize_token`, `strip_leading_site_credit`, `cleanup_title_text`, `CANONICAL_TOKEN_MAP`, year-finding. Edge tracker/domain credit stripping (`www.tracker.com`, split domains, bracketed domain tags), `x265`, `BluRay`, a `sample` file — identical for TV. |
 | Junk/artifact cleanup | `movie_junk.py`, `plan_*_artifact_folder_cleanup` | Same crud (samples, nfo, posters, AppleDouble `._*`). |
 | Media analysis | `movie_scan.py` → `movie_profile.py`, `probe_cache.py` | ffprobe/MediaFacts/quality scoring are identical for an episode file. Probe cache is keyed by path+mtime — lane-neutral. |
-| Web plumbing | `normal/web/` | activity tracker, scan guard, single-flight, the parser-tester row-shaping pattern in `serializers.py`. |
+| Web plumbing | `normal/web/` | activity tracker, scan guard, single-flight, the workbench row-shaping pattern in `serializers.py`. |
 
 ## Lane-specific — fork deliberately
 
@@ -76,7 +76,7 @@ TV violates every one of these *by design*. 24 files in a folder is the correct 
 
 1. **Pre-work status:** the movie parser/display cleanup seam has already been extracted into `movie_naming.py`, and `movie_identity.py` / `movie_plan.py` now reuse it. TV should build on that seam rather than recreating parser hygiene locally.
 2. **Parallel, not nested:** new `tv_identity.py` + `tv_plan.py` that emit the *same* `ChangePlan`/`ProposedChange`. The executor consumes them unchanged — that is the entire payoff of the clean contract. No new `change_type` values should be needed; `file_move` + `folder_rename`/`folder_delete` already cover the restructure.
-3. **Serializer sibling, not branch:** `build_tv_normalize_results` reusing the change-indexing pattern from `serializers.py:22` but yielding a hierarchical series→season→episode payload. The richer-row contract the parser tester already expects (linked changes, warning messages) generalizes cleanly.
+3. **Serializer sibling, not branch:** `build_tv_normalize_results` reusing the change-indexing pattern from `serializers.py:22` but yielding a hierarchical series→season→episode payload. The richer-row contract the workbench already expects (linked changes, warning messages) generalizes cleanly.
 4. **Lane is user-chosen.** Separate TV page/source (roadmap already frames it this way). **Do not build a mixed-tree "is this TV or movies" auto-classifier for 0.8** — that classifier is a brand-new cross-lane bug source. Separate sources sidesteps it.
 
 ## Existing TV hooks worth knowing

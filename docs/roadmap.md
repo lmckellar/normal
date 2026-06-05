@@ -12,9 +12,10 @@ shape. Normalize, weak-encode triage, junk cleanup, repair defaults, canonical
 list coverage, and export are materially useful. Recent scan/cache work and the
 new shell pivot mean the product now feels more deliberate than exploratory,
 but it is still pre-1.0 and still best suited to Linux users comfortable with
-alpha software. Present `v0.7.0-alpha.3` is the current tagged cut of that new
-default surface and focuses on stabilizing policy ownership inside the same
-shell rather than widening the release surface again.
+alpha software. Present `v0.7.0-alpha.4` is the current tagged cut of that new
+default surface and focuses on restoring auditability, richer inspection, and
+IMDb-first canonical coverage inside the same shell rather than widening the
+release surface again.
 
 ### Concerns
 
@@ -29,10 +30,12 @@ shell rather than widening the release surface again.
 - **Safety / mutation confidence** — rename, delete, and remux lanes are
   meaningfully bounded and preview-driven, but they still deserve active
   caution to retain clear boundaries in the face of TV parsing logic.
-- **Auditability / receipts** — the old patchwork histories have been pared
-  back. A more cohesive global audit system is now a near-term product need.
+- **Auditability / receipts** — the unified ledger now exists and is useful.
+  The next need is UI polish, breadth validation, and keeping follow-up
+  semantics coherent as more workflows return.
 - **Performance / scan economics** — recent cache and shared-scan work improved
-  the runtime reality materially. retain strength and defend against boundary regressions.
+  the runtime reality materially. The next task is to retain that strength
+  while defending against boundary regressions.
 - **Architecture health** — backend workflows and parser hardening are ahead of
   the newly narrowed UI surface. The next step is resurfacing that backend
   strength without growing another incoherent dashboard.
@@ -76,7 +79,7 @@ shell rather than widening the release surface again.
 - Keep public release truth honest without rewriting the whole doc set.
 - Defend concise-only movie normalization and its parser hardening gains.
 - Finish the immediate movie-lane stabilization work that directly affects the
-  alpha.3 default surface.
+  alpha.4 default surface.
 - Keep UI cleanup focused on coherence inside this new shell, not on reviving
   the old dashboard structure.
 - Land the left Policy rail as the sole write owner for library policy and
@@ -88,12 +91,12 @@ shell rather than widening the release surface again.
 - Remove deprecated alternate UI routes rather than carrying multiple active
   shells through the same prerelease band.
 
-## 0.8.x — Resurfacing, TV, and unified audit
+## 0.8.x — Resurfacing, TV, and audit maturation
 
 - Resurface withheld backend-backed movie lanes and support surfaces into the
   new workbench shape after they are stable enough to return.
-- Replace the removed patchwork histories with one cohesive global audit /
-  receipt system that covers destructive and repair actions cleanly.
+- Harden the new audit / receipt system across resurfaced workflows and keep
+  its storage, follow-up semantics, and UI reading model coherent.
 - Add the **TV Show Normalize** lane as the next major product family inside
   the same workbench grammar.
 - Keep apply safety, source-root validation, and preview discipline consistent
@@ -145,4 +148,4 @@ analogue.
   `movie_profile.py`; the UI remains hidden until the workflow shape is clear.
 
 ## Disclaimer
-  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, and the current release is `v0.7.0-alpha.3`; both have matching prerelease intent. Earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.
+  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, and the current release is `v0.7.0-alpha.4`; both have matching prerelease intent. Earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.

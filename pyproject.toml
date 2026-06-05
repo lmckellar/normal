@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "normal"
-version = "0.7.0a3"
+version = "0.7.0a4"
 description = "Local workbench for diagnosing and cleaning movie libraries"
 readme = "README.md"
 license = "MIT"

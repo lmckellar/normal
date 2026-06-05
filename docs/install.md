@@ -52,6 +52,7 @@ Example:
 ```bash
 export TMDB_KEY=your_tmdb_key
 export OMDB_KEY=your_omdb_key
+export IMDB_DATASET_DIR=/path/to/imdb-datasets
 ```
 
 ## Verify
@@ -71,7 +72,8 @@ Both must succeed before running `normal`.
 If you plan to use `Movies / Canonical Lists`, also verify:
 
 ```bash
-printf '%s\n' "${TMDB_KEY:+TMDB_KEY loaded}"
+printf '%s\n' "${IMDB_DATASET_DIR:+IMDB_DATASET_DIR loaded}"
+test -f "$IMDB_DATASET_DIR/title.basics.tsv.gz" && test -f "$IMDB_DATASET_DIR/title.ratings.tsv.gz" && printf 'IMDb dataset files found\n'
 ```
 
 ## Platform notes

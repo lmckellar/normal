@@ -5,6 +5,16 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from normal.audit import (
+    AuditEffect,
+    AuditEvent,
+    AuditFollowUpUpdate,
+    AuditSubject,
+    FOLLOW_UP_KIND_REPLACEMENT,
+    make_event_id,
+    make_follow_up_id,
+)
+from normal.models import utc_now_iso
 from normal.movie_audio_fix import fix_english_audio_defaults
 from normal.movie_junk import (
     detect_movie_junk_document_reasons,
@@ -17,9 +27,10 @@ from normal.movie_profile import load_operator_preferences, normalize_delete_mod
 
 from .activity import tracked_probe
 from .http import RequestContext
+from .routes_audit import normalize_subject_from_path, record_scan_event
 from .scan_guard import guarded_heavy_scan
 from .serializers import build_updated_profile_items
-from .state import MOVIE_PROFILE_CACHE, PROBE_CACHE
+from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE, PROBE_CACHE
 
 
 SAFE_MOVIE_SIDECAR_EXTENSIONS = {
@@ -119,6 +130,15 @@ def handle_movies_junk(ctx: RequestContext, payload: dict[str, Any]) -> None:
                 source,
                 probe_media=tracked_probe(source, "ffprobe movie junk", cache=PROBE_CACHE),
             )
+    record_scan_event(
+        source,
+        workflow="junk",
+        label="Movie junk scan",
+        metadata={
+            "video_junk_count": len(report.items),
+            "document_junk_count": len(report.promo_documents),
+        },
+    )
     ctx.respond_json(report.to_dict())
 
 
@@ -129,6 +149,7 @@ def handle_movies_junk_delete(ctx: RequestContext, payload: dict[str, Any]) -> N
         raise ValueError("paths must be a list")
     with ctx.handler.activity_tracker.track(source, "Movie junk delete"):
         result = delete_movie_junk_files(source, paths, load_operator_preferences())
+    _record_junk_delete_event(source, result)
     ctx.respond_json(result)
 
 
@@ -227,6 +248,7 @@ def delete_movie_files(
 ) -> dict[str, Any]:
     source = source_root.resolve()
     deleted: list[str] = []
+    deleted_media: list[dict[str, Any]] = []
     cleaned_sidecars: list[str] = []
     removed_folders: list[str] = []
     skipped: list[dict[str, str]] = []
@@ -247,8 +269,10 @@ def delete_movie_files(
         if not resolved.is_file():
             skipped.append({"path": str(resolved), "reason": "not_file"})
             continue
+        size_bytes = resolved.stat().st_size
         execute_delete_path(resolved, "media", preferences)
         deleted.append(str(resolved))
+        deleted_media.append({"path": str(resolved), "size_bytes": size_bytes})
         cleanup = cleanup_safe_movie_sidecars(source, resolved.parent, preferences)
         cleaned_sidecars.extend(cleanup["sidecars"])
         if cleanup["folder"]:
@@ -256,6 +280,7 @@ def delete_movie_files(
 
     return {
         "deleted": deleted,
+        "deleted_media": deleted_media,
         "cleaned_sidecars": cleaned_sidecars,
         "removed_folders": removed_folders,
         "skipped": skipped,
@@ -275,10 +300,13 @@ def handle_movies_delete(ctx: RequestContext, payload: dict[str, Any]) -> None:
     paths = payload.get("paths")
     if not isinstance(paths, list):
         raise ValueError("paths must be a list")
+    issue_family = str(payload.get("issue_family") or "").strip() or None
     with ctx.handler.activity_tracker.track(source, "Movie delete"):
         result = delete_movie_files(source, paths, load_operator_preferences())
+    _record_media_delete_event(source, result, issue_family=issue_family)
     if result["deleted"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
+        MOVIE_CANONICAL_CACHE.invalidate(source)
     ctx.respond_json(result)
 
 
@@ -299,7 +327,27 @@ def handle_movies_audio_packaging_fix(ctx: RequestContext, payload: dict[str, An
         )
     if result["fixed"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
+        MOVIE_CANONICAL_CACHE.invalidate(source)
     result["updated_items"] = build_updated_profile_items(source, result["fixed"])
+    _record_repair_event(
+        source,
+        workflow="audio_packaging",
+        action="repair",
+        summary=(
+            f"Repaired audio defaults for {len(result['fixed'])} title{'s' if len(result['fixed']) != 1 else ''}."
+            if result["fixed"]
+            else "Audio defaults repair made no changes."
+        ),
+        fixed_paths=result["fixed"],
+        metadata={
+            "drop_foreign_audio": drop_foreign_audio,
+            "skipped": result.get("skipped", []),
+            "audio_tracks_removed": {
+                "count": sum(int(item.get("removed_audio_tracks") or 0) for item in result.get("fixed", []) if isinstance(item, dict)),
+                "total_bytes": sum(int(item.get("removed_audio_bytes") or 0) for item in result.get("fixed", []) if isinstance(item, dict)),
+            },
+        },
+    )
     ctx.respond_json(result)
 
 
@@ -318,4 +366,152 @@ def handle_movies_subtitle_readiness_fix(ctx: RequestContext, payload: dict[str,
     result["updated_items"] = build_updated_profile_items(source, result["fixed"])
     if result["updated_items"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
+        MOVIE_CANONICAL_CACHE.invalidate(source)
+    _record_repair_event(
+        source,
+        workflow="subtitle_readiness",
+        action="repair",
+        summary=(
+            f"Repaired subtitle defaults for {len(result['fixed'])} title{'s' if len(result['fixed']) != 1 else ''}."
+            if result["fixed"]
+            else "Subtitle defaults repair made no changes."
+        ),
+        fixed_paths=result["fixed"],
+        metadata={"skipped": result.get("skipped", [])},
+    )
     ctx.respond_json(result)
+
+
+def _record_junk_delete_event(source: Path, result: dict[str, Any]) -> None:
+    if not result.get("deleted") and not result.get("skipped"):
+        return
+    recorded_at = utc_now_iso()
+    effects = [
+        AuditEffect(kind="junk_delete", status="applied", path=str(path), message="Junk file deleted.")
+        for path in result.get("deleted", [])
+    ]
+    effects.extend(
+        AuditEffect(
+            kind="junk_delete",
+            status="skipped",
+            path=str(item.get("path") or "") or None,
+            message=str(item.get("reason") or "skipped"),
+        )
+        for item in result.get("skipped", [])
+        if isinstance(item, dict)
+    )
+    event = AuditEvent(
+        event_id=make_event_id(str(source.resolve()), "junk", "delete", recorded_at, salt=str(len(effects))),
+        recorded_at=recorded_at,
+        source_root=str(source.resolve()),
+        workflow="junk",
+        action="delete",
+        summary=f"Deleted {len(result.get('deleted', []))} junk file{'s' if len(result.get('deleted', [])) != 1 else ''}.",
+        subjects=[AuditSubject(kind="file", path=str(path)) for path in result.get("deleted", [])],
+        effects=effects,
+        metadata={"skipped": result.get("skipped", [])},
+    )
+    AUDIT_STORE.append(event)
+
+
+def _record_media_delete_event(source: Path, result: dict[str, Any], *, issue_family: str | None) -> None:
+    deleted = [str(path) for path in result.get("deleted", [])]
+    deleted_media = [item for item in result.get("deleted_media", []) if isinstance(item, dict)]
+    skipped = [item for item in result.get("skipped", []) if isinstance(item, dict)]
+    if not deleted and not skipped:
+        return
+    recorded_at = utc_now_iso()
+    subjects = [normalize_subject_from_path(Path(path), issue_family=issue_family) for path in deleted]
+    effects = [AuditEffect(kind="delete", status="applied", path=path, message="Media file deleted.") for path in deleted]
+    effects.extend(
+        AuditEffect(kind="cleanup_sidecar_delete", status="applied", path=str(path), message="Safe sidecar deleted.")
+        for path in result.get("cleaned_sidecars", [])
+    )
+    effects.extend(
+        AuditEffect(kind="cleanup_folder_delete", status="applied", path=str(path), message="Empty folder removed.")
+        for path in result.get("removed_folders", [])
+    )
+    effects.extend(
+        AuditEffect(
+            kind="delete",
+            status="skipped",
+            path=str(item.get("path") or "") or None,
+            message=str(item.get("reason") or "skipped"),
+        )
+        for item in skipped
+    )
+    follow_up_updates: list[AuditFollowUpUpdate] = []
+    if issue_family in {"weak_encode", "audio_packaging"}:
+        for subject in subjects:
+            follow_up_id = make_follow_up_id(
+                str(source.resolve()),
+                FOLLOW_UP_KIND_REPLACEMENT,
+                issue_family,
+                subject.title,
+                subject.year,
+                subject.path,
+            )
+            follow_up_updates.append(
+                AuditFollowUpUpdate(
+                    follow_up_id=follow_up_id,
+                    kind=FOLLOW_UP_KIND_REPLACEMENT,
+                    action="create",
+                    status="active",
+                    summary=f"{subject.title or Path(subject.path or '').stem} is awaiting replacement.",
+                    details={
+                        "path": subject.path,
+                        "title": subject.title,
+                        "year": subject.year,
+                        "issue_family": issue_family,
+                    },
+                )
+            )
+    summary = f"Deleted {len(deleted)} media file{'s' if len(deleted) != 1 else ''}."
+    if issue_family in {"weak_encode", "audio_packaging"} and deleted:
+        summary = f"Deleted {len(deleted)} {issue_family.replace('_', ' ')} file{'s' if len(deleted) != 1 else ''}."
+    event = AuditEvent(
+        event_id=make_event_id(str(source.resolve()), issue_family or "movies", "delete", recorded_at, salt=str(len(deleted))),
+        recorded_at=recorded_at,
+        source_root=str(source.resolve()),
+        workflow=issue_family or "movies",
+        action="delete",
+        summary=summary,
+        subjects=subjects,
+        effects=effects,
+        follow_up_updates=follow_up_updates,
+        metadata={
+            "deleted_media": deleted_media,
+            "cleaned_sidecars": result.get("cleaned_sidecars", []),
+            "removed_folders": result.get("removed_folders", []),
+            "skipped": skipped,
+        },
+    )
+    AUDIT_STORE.append(event)
+
+
+def _record_repair_event(
+    source: Path,
+    *,
+    workflow: str,
+    action: str,
+    summary: str,
+    fixed_paths: list[Any],
+    metadata: dict[str, Any],
+) -> None:
+    normalized_paths = [str(Path(str(path)).expanduser().resolve()) for path in fixed_paths]
+    if not normalized_paths and not metadata.get("skipped"):
+        return
+    recorded_at = utc_now_iso()
+    event = AuditEvent(
+        event_id=make_event_id(str(source.resolve()), workflow, action, recorded_at, salt=str(len(normalized_paths))),
+        recorded_at=recorded_at,
+        source_root=str(source.resolve()),
+        workflow=workflow,
+        action=action,
+        summary=summary,
+        subjects=[normalize_subject_from_path(Path(path), issue_family=workflow) for path in normalized_paths],
+        effects=[AuditEffect(kind="remux_repair", status="applied", path=path, message=summary) for path in normalized_paths],
+        reversal={"capability": "none"},
+        metadata=metadata,
+    )
+    AUDIT_STORE.append(event)

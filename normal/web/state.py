@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator
 
+from normal.audit import AuditStore
+from normal.movie_canonical_lists import CanonicalListsReport
 from normal.movie_profile import MovieProfileReport
 from normal.probe_cache import ProbeCache
 
@@ -60,7 +62,36 @@ class MovieProfileCache:
             self._entries.pop(key, None)
 
 
+@dataclass
+class _CanonicalCacheEntry:
+    report: CanonicalListsReport
+
+
+class MovieCanonicalCache:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, _CanonicalCacheEntry] = {}
+
+    def get(self, source: Path) -> CanonicalListsReport | None:
+        key = str(source.resolve())
+        with self._lock:
+            entry = self._entries.get(key)
+            return entry.report if entry is not None else None
+
+    def put(self, source: Path, report: CanonicalListsReport) -> None:
+        key = str(source.resolve())
+        with self._lock:
+            self._entries[key] = _CanonicalCacheEntry(report=report)
+
+    def invalidate(self, source: Path) -> None:
+        key = str(source.resolve())
+        with self._lock:
+            self._entries.pop(key, None)
+
+
 ACTIVITY_TRACKER = None
 HEAVY_SCAN_REGISTRY = HeavyScanRegistry()
 MOVIE_PROFILE_CACHE = MovieProfileCache()
+MOVIE_CANONICAL_CACHE = MovieCanonicalCache()
 PROBE_CACHE = ProbeCache()
+AUDIT_STORE = AuditStore()

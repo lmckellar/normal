@@ -24,6 +24,8 @@ class AudioDefaultFixResult:
     status: str
     message: str
     facts: MediaFacts | None = None
+    removed_audio_tracks: int = 0
+    removed_audio_bytes: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -134,10 +136,22 @@ def fix_english_audio_default(
         )
         temp_path.replace(resolved)
         message = "english_default_set"
+        removed_count = 0
+        removed_bytes = 0
         if drop_foreign_audio:
             removed_count = len(audio_streams) - len(kept_ordinals)
+            original_size = original_facts.file_size_bytes or 0
+            fixed_size = fixed_facts.file_size_bytes or 0
+            removed_bytes = max(original_size - fixed_size, 0)
             message = "english_default_set_and_removed_foreign_audio" if removed_count > 0 else "english_default_set_no_foreign_audio_removed"
-        return AudioDefaultFixResult(str(resolved), "fixed", message, facts=fixed_facts)
+        return AudioDefaultFixResult(
+            str(resolved),
+            "fixed",
+            message,
+            facts=fixed_facts,
+            removed_audio_tracks=removed_count,
+            removed_audio_bytes=removed_bytes,
+        )
     except FileNotFoundError:
         return AudioDefaultFixResult(str(resolved), "skipped", "ffmpeg_missing")
     except Exception as exc:

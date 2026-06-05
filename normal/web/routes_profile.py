@@ -6,12 +6,20 @@ from pathlib import Path
 from typing import Any
 
 from normal.models import utc_now_iso
-from normal.movie_canonical_lists import build_canonical_lists_report
+from normal.library_improvement import build_library_improvement_payload
+from normal.movie_canonical_lists import (
+    build_canonical_lists_report,
+    build_canonical_summary,
+    canonical_status_payload,
+    ensure_canonical_provider_ready,
+)
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_omdb import lookup_omdb_ratings
 from normal.movie_profile import (
+    build_default_source_definition,
     build_delete_mode_definition,
     build_histogram_payload_from_items,
+    build_library_defaults_definition,
     build_movie_profile_definitions,
     build_policy_definitions,
     build_replacement_candidate_definition,
@@ -32,9 +40,10 @@ from normal.movie_profile import (
 from normal.movie_scan import MovieScanProgress, scan_movie_library
 from .activity import tracked_probe
 from .http import RequestContext
+from .routes_audit import record_export_event, record_policy_update_event, record_scan_event
 from .scan_guard import guarded_heavy_scan
 from .serializers import build_profile_response
-from .state import MOVIE_PROFILE_CACHE, PROBE_CACHE, RequestConflictError
+from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE, PROBE_CACHE, RequestConflictError
 
 
 def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
@@ -45,7 +54,37 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
     cached = MOVIE_PROFILE_CACHE.get(source)
     if cached is not None:
         response_report = reclassify_report_with_standards(cached, effective_standards) if floor_overridden else cached
-        ctx.respond_json(build_profile_response(source, response_report, effective_standards))
+        response = build_profile_response(source, response_report, effective_standards)
+        response["canonical_summary"] = build_canonical_summary(
+            source,
+            standards=effective_standards,
+            tmdb_key=ctx.tmdb_key,
+            movie_paths=[Path(item.path) for item in response_report.movies],
+            audit_store=AUDIT_STORE,
+        )
+        response["canonical_status"] = response["canonical_summary"].get("canonical_status")
+        improvement = build_library_improvement_payload(
+            source,
+            response_report,
+            effective_standards,
+            audit_store=AUDIT_STORE,
+            tmdb_key=ctx.tmdb_key,
+            pending_scan_count=1,
+        )
+        response["library_improvement_metrics"] = improvement
+        record_scan_event(
+            source,
+            workflow="profile",
+            label="Movie profile scan",
+            status="cached",
+            summary="Reused cached Movie profile scan.",
+            metadata={
+                "movie_count": len(cached.movies),
+                "cache_hit": True,
+                "canonical_top_500_above_floor_count": improvement["canonical_top_500_above_floor"]["count"],
+            },
+        )
+        ctx.respond_json(response)
         return
     with guarded_heavy_scan(source, "Movie profile scan"):
         with ctx.handler.activity_tracker.track(source, "Movie profile scan") as activity_id:
@@ -70,6 +109,33 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
         MOVIE_PROFILE_CACHE.put(source, report)
         response_report = reclassify_report_with_standards(report, effective_standards) if floor_overridden else report
         response = build_profile_response(source, response_report, effective_standards)
+        response["canonical_summary"] = build_canonical_summary(
+            source,
+            standards=effective_standards,
+            tmdb_key=ctx.tmdb_key,
+            movie_paths=[Path(item.path) for item in response_report.movies],
+            audit_store=AUDIT_STORE,
+        )
+        response["canonical_status"] = response["canonical_summary"].get("canonical_status")
+        improvement = build_library_improvement_payload(
+            source,
+            response_report,
+            effective_standards,
+            audit_store=AUDIT_STORE,
+            tmdb_key=ctx.tmdb_key,
+            pending_scan_count=1,
+        )
+        response["library_improvement_metrics"] = improvement
+        record_scan_event(
+            source,
+            workflow="profile",
+            label="Movie profile scan",
+            metadata={
+                "movie_count": len(report.movies),
+                "cache_hit": False,
+                "canonical_top_500_above_floor_count": improvement["canonical_top_500_above_floor"]["count"],
+            },
+        )
     ctx.respond_json(response)
 
 
@@ -98,6 +164,7 @@ def handle_movies_dashboard_histogram(ctx: RequestContext, payload: dict[str, An
 
 
 def handle_movies_standards_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    source = ctx.resolve_source(payload.get("source"))
     label = str(payload.get("label") or "").strip()
     values = payload.get("values") if isinstance(payload.get("values"), dict) else {}
     revision = str(payload.get("revision") or "").strip() or None
@@ -110,6 +177,12 @@ def handle_movies_standards_update(ctx: RequestContext, payload: dict[str, Any])
         )
     except MovieStandardsConflictError as exc:
         raise RequestConflictError(str(exc)) from exc
+    record_policy_update_event(
+        source,
+        label=label or "unnamed",
+        request_kind="movies_standards_update",
+        metadata={"updated_keys": sorted(values.keys())},
+    )
     ctx.respond_json(
         {
             "policy": standards,
@@ -122,6 +195,7 @@ def handle_movies_standards_update(ctx: RequestContext, payload: dict[str, Any])
             "quality_profile_definitions": build_movie_profile_definitions(standards),
             "replacement_candidate_definition": build_replacement_candidate_definition(standards),
             "delete_mode_definition": build_delete_mode_definition(preferences),
+            "library_defaults_definition": build_library_defaults_definition(standards),
         }
     )
 
@@ -136,9 +210,13 @@ def handle_policy_read(ctx: RequestContext, payload: dict[str, Any]) -> None:
             "operator_preferences": preferences,
             "operator_preferences_revision": operator_preferences_revision(preferences),
             "policy_definitions": build_policy_definitions(standards, preferences),
+            "default_source_definition": build_default_source_definition(preferences),
             "quality_profile_definitions": build_movie_profile_definitions(standards),
             "replacement_candidate_definition": build_replacement_candidate_definition(standards),
             "delete_mode_definition": build_delete_mode_definition(preferences),
+            "library_defaults_definition": build_library_defaults_definition(standards),
+            "movie_standards": standards,
+            "movie_standards_revision": movie_standards_revision(standards),
         }
     )
 
@@ -148,6 +226,9 @@ def handle_policy_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
     values = payload.get("values") if isinstance(payload.get("values"), dict) else {}
     policy_revision = str(payload.get("policy_revision") or "").strip() or None
     preferences_revision = str(payload.get("operator_preferences_revision") or "").strip() or None
+    source = ctx.resolve_source(payload.get("source")) if payload.get("source") else None
+    if source is None and label not in {"default_source", "delete_mode"}:
+        source = ctx.resolve_source(payload.get("source"))
     try:
         standards, preferences = update_policy_definition(
             label,
@@ -157,6 +238,13 @@ def handle_policy_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
         )
     except MovieStandardsConflictError as exc:
         raise RequestConflictError(str(exc)) from exc
+    if source is not None:
+        record_policy_update_event(
+            source,
+            label=label or "unnamed",
+            request_kind="policy_update",
+            metadata={"updated_keys": sorted(values.keys())},
+        )
     ctx.respond_json(
         {
             "policy": standards,
@@ -164,23 +252,84 @@ def handle_policy_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
             "operator_preferences": preferences,
             "operator_preferences_revision": operator_preferences_revision(preferences),
             "policy_definitions": build_policy_definitions(standards, preferences),
+            "default_source_definition": build_default_source_definition(preferences),
             "quality_profile_definitions": build_movie_profile_definitions(standards),
             "replacement_candidate_definition": build_replacement_candidate_definition(standards),
             "delete_mode_definition": build_delete_mode_definition(preferences),
+            "library_defaults_definition": build_library_defaults_definition(standards),
+            "movie_standards": standards,
+            "movie_standards_revision": movie_standards_revision(standards),
         }
     )
 
 
 def handle_movies_canonical_lists(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
+    standards = load_movie_standards()
+    force_refresh = bool(payload.get("refresh"))
+    if force_refresh:
+        ensure_canonical_provider_ready(
+            standards=standards,
+            tmdb_key=ctx.tmdb_key,
+            force_refresh=True,
+            block=False,
+            audit_store=AUDIT_STORE,
+            audit_source_root=source,
+        )
+    cached = MOVIE_CANONICAL_CACHE.get(source)
+    if cached is not None and not force_refresh and (cached.canonical_status or {}).get("ready", True):
+        record_scan_event(
+            source,
+            workflow="canonical_lists",
+            label="Movie canonical lists",
+            status="cached",
+            summary="Reused cached Movie canonical lists.",
+            metadata={"cache_hit": True},
+        )
+        ctx.respond_json(cached.to_dict())
+        return
     with guarded_heavy_scan(source, "Movie canonical lists"):
         with ctx.handler.activity_tracker.track(source, "Movie canonical lists"):
             report = build_canonical_lists_report(
                 source,
+                standards=standards,
                 tmdb_key=ctx.tmdb_key,
                 should_cancel=ctx.client_disconnected,
+                movie_paths=[Path(item.path) for item in MOVIE_PROFILE_CACHE.get(source).movies] if MOVIE_PROFILE_CACHE.get(source) is not None else None,
+                audit_store=AUDIT_STORE,
             )
+    MOVIE_CANONICAL_CACHE.put(source, report)
+    record_scan_event(
+        source,
+        workflow="canonical_lists",
+        label="Movie canonical lists",
+        metadata={"cache_hit": False},
+    )
     ctx.respond_json(report.to_dict())
+
+
+def handle_movies_canonical_status(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    del payload
+    standards = load_movie_standards()
+    status = canonical_status_payload(
+        standards=standards,
+        tmdb_key=ctx.tmdb_key,
+    )
+    ctx.respond_json(status)
+
+
+def handle_movies_canonical_refresh(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    standards = load_movie_standards()
+    source = ctx.resolve_source(payload.get("source")) if payload.get("source") else None
+    status = ensure_canonical_provider_ready(
+        standards=standards,
+        tmdb_key=ctx.tmdb_key,
+        force_refresh=True,
+        block=False,
+        audit_store=AUDIT_STORE,
+        audit_source_root=source,
+    )
+    ctx.respond_json(status)
 
 
 def handle_movies_omdb_ratings(ctx: RequestContext, payload: dict[str, Any]) -> None:
@@ -208,6 +357,12 @@ def handle_movies_register(ctx: RequestContext, payload: dict[str, Any]) -> None
             finally:
                 report_path.unlink(missing_ok=True)
                 xlsx_path.unlink(missing_ok=True)
+    record_export_event(
+        source,
+        workflow="catalogue",
+        label="movie catalogue",
+        metadata={"movie_count": len(scan_report.movies), "filename": "movie-catalogue.xlsx"},
+    )
     ctx.respond_bytes(
         data,
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

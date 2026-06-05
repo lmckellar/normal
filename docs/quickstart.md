@@ -64,11 +64,11 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/Example\ Movies
 
 Open `http://127.0.0.1:8765` in a browser.
 
-For the internal focused tester shell, use:
+Workflow deep links use the main workbench route:
 
-- `http://127.0.0.1:8765/parser-tester-ui?workflow=normalize`
-- `http://127.0.0.1:8765/parser-tester-ui?workflow=weak-encodes`
-- `http://127.0.0.1:8765/parser-tester-ui?workflow=repair-defaults`
+- `http://127.0.0.1:8765/?workflow=normalize`
+- `http://127.0.0.1:8765/?workflow=weak-encodes`
+- `http://127.0.0.1:8765/?workflow=repair-defaults`
 
 Use the test library to exercise the full workflow in order:
 

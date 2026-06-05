@@ -60,7 +60,7 @@ The movie replacement queue is source-scoped and stored under `~/.local/share/no
 
 Queue items move forward through states such as `pending`, `deleted`, `dismissed`, and `completed`. The tool does not silently remove queue history.
 
-Subtitle repair also keeps a separate source-scoped subtitle history. Junk deletion has useful UI history today, but not yet the same durable coherent audit posture.
+Subtitle repair still has its legacy source-scoped history file, but the main audit posture is now the unified ledger: scans, deletes, repairs, exports, policy updates, and junk deletion all write durable audit events.
 
 ## Scan control
 

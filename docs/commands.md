@@ -216,7 +216,9 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 | `--port` | No | Port (default: `8765`) |
 | `--source` | No | Default source path pre-filled in the UI |
 | `--omdb-key` | No | OMDb API key for cached server-side IMDb ratings in the replacement queue (falls back to `OMDB_KEY` env var) |
-| `--tmdb-key` | No | TMDb API key for the Canonical Lists page (falls back to `TMDB_KEY` env var) |
+| `--tmdb-key` | No | TMDb API key for Canonical Lists only when the provider is explicitly set to TMDb (falls back to `TMDB_KEY` env var) |
+
+Canonical Lists defaults to the IMDb provider. For that default path, set `IMDB_DATASET_DIR` to a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
 
 Movie pages currently exposed in the web UI:
 
@@ -227,12 +229,12 @@ Movie pages currently exposed in the web UI:
 - `Delete Junk & Spam Files`
 - `Canonical Lists`
 
-Internal focused tester routes:
+Workflow deep links:
 
-- `/parser-tester-ui?workflow=normalize`
-- `/parser-tester-ui?workflow=weak-encodes`
-- `/parser-tester-ui?workflow=repair-defaults`
-- `/parser-tester-ui?workflow=junk`
+- `/?workflow=normalize`
+- `/?workflow=weak-encodes`
+- `/?workflow=repair-defaults`
+- `/?workflow=junk`
 
 Heavy recursive web scans now show a confirmation warning for risky sources such as drive-root style paths and NTFS/FUSE mounts. The server also rejects overlapping heavy scans for the same source instead of running them concurrently.
 

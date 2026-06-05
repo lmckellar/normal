@@ -6,6 +6,26 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.4] — 2026-06-05
+
+### Added
+
+- A persisted audit ledger now tracks system start, scans, normalize apply actions, media deletes, junk deletes, repair actions, exports, policy updates, and follow-up state changes through one source-scoped read surface in the main workbench.
+- The workbench now exposes an Audit surface and library-improvement summary signals, including file removals, removed audio tracks, scan count, and Top 500 progress above the active weak-floor policy.
+
+### Changed
+
+- The root workbench is now the only active web shell. Old parser-tester routes and their packaged assets were removed, and workflow deep links now use `/?workflow=...`.
+- Canonical Lists now defaults to a local IMDb-dataset provider with consensus-weighted ranking, per-provider caching, automatic dataset refresh support, and TMDb retained as an explicit fallback provider.
+- Library policy now includes a canonical-list provider selector under `Library Defaults`, allowing the default IMDb path or explicit TMDb routing without adding a separate workflow.
+- Canonical list coverage now includes `Top 500`, which also feeds the new library-improvement progress metric.
+- Web scan surfaces now carry richer inspection context without reviving the older multi-shell UI split. Some scan performance was intentionally traded back to support the restored audit and inspection depth, while warm-cache maintenance scans remain fast.
+
+### Fixed
+
+- Junk deletion now writes durable audit events instead of remaining a session-only history gap.
+- Legacy replacement-queue and subtitle-fix history can now be migrated into the unified audit ledger instead of remaining isolated state islands.
+
 ## [0.7.0-alpha.3] — 2026-06-04
 
 ### Changed

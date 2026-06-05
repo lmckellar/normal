@@ -3,6 +3,7 @@
     normalize: 'Movie Normalize',
     'weak-encodes': 'Weak Encodes',
     'repair-defaults': 'Repair Defaults',
+    'canonical-lists': 'Canonical Lists',
     junk: 'Delete Junk & Spam',
   };
 
@@ -10,6 +11,7 @@
     normalize: 'Review naming fixes and apply clean movie title/path changes.',
     'weak-encodes': 'Find low-quality encodes that are better deleted or replaced.',
     'repair-defaults': 'Fix audio and subtitle defaults to save space and improve playback behaviour.',
+    'canonical-lists': 'Compare owned titles against canonical lists and inspect owned copy quality at a glance.',
     junk: 'Surface obvious junk files and remove them safely.',
   };
 
@@ -62,6 +64,15 @@
     { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
   ];
 
+  const CANONICAL_HEADERS = [
+    { key: 'rank', label: 'Rank', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '8ch' },
+    { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
+    { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '8ch' },
+    { key: 'in_library', label: 'In Library', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '12ch' },
+    { key: 'quality_profile', label: 'Quality Profile', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '16ch' },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'desktop', width: '24%' },
+  ];
+
   const state = {
     workflow: workflowFromUrl(),
     layoutMode: LAYOUT_MODES.default,
@@ -69,6 +80,10 @@
     weakPayload: null,
     repairPayload: null,
     junkPayload: null,
+    canonicalPayload: null,
+    canonicalProfilePayload: null,
+    canonicalProfileSource: '',
+    canonicalSelectedListId: 'top_100',
     policyPayload: null,
     rows: [],
     filteredRows: [],
@@ -82,23 +97,35 @@
     weakPreview: null,
     weakPreviewKey: '',
     weakPreviewLoading: false,
-    policyEditing: false,
+    dashboardProfilePayload: null,
+    dashboardProfileSource: '',
+    dashboardRequestedSource: '',
+    surfaceMode: 'default',
     policyBusy: false,
     policySectionLabel: '',
     policyDrafts: {},
+    auditPayload: null,
+    auditBusy: false,
     repairAction: 'set_english_default',
     repairActionNotice: '',
     audioFixBusy: false,
     subtitleFixBusy: false,
     audioPopoverRowId: '',
+    weakPayloadSource: '',
+    repairPayloadSource: '',
     junkDeleteSkipped: [],
     junkFilenameResizeObserver: null,
     junkFilenameResizeFrame: 0,
+    sliverResizeObserver: null,
+    sliverResizeFrame: 0,
+    catalogueExportInFlight: false,
   };
 
   const el = {
     shell: document.querySelector('.lab-shell'),
     pages: Array.from(document.querySelectorAll('.lab-page')),
+    sliverSlot: document.querySelector('.lab-sliver-slot'),
+    sliver: document.querySelector('.lab-sliver'),
     workflowButton: document.getElementById('workflowButton'),
     workflowTitle: document.getElementById('workflowTitle'),
     workflowDescription: document.getElementById('workflowDescription'),
@@ -106,6 +133,7 @@
     workflowNormalize: document.getElementById('workflowNormalize'),
     workflowWeakEncodes: document.getElementById('workflowWeakEncodes'),
     workflowRepairDefaults: document.getElementById('workflowRepairDefaults'),
+    workflowCanonicalLists: document.getElementById('workflowCanonicalLists'),
     workflowJunk: document.getElementById('workflowJunk'),
     sourcePath: document.getElementById('sourcePath'),
     runButton: document.getElementById('runButton'),
@@ -116,14 +144,23 @@
     reasonFilter: document.getElementById('reasonFilter'),
     warningFilter: document.getElementById('warningFilter'),
     workflowStatusFilter: document.getElementById('workflowStatusFilter'),
+    canonicalListFilter: document.getElementById('canonicalListFilter'),
+    previewScopeLabel: document.getElementById('previewScopeLabel'),
     selectAllButton: document.getElementById('selectAllButton'),
     deselectAllButton: document.getElementById('deselectAllButton'),
     tableColGroup: document.getElementById('tableColGroup'),
     tableHeaderRow: document.getElementById('tableHeaderRow'),
     rowsBody: document.getElementById('rowsBody'),
+    scanPage: document.querySelector('.lab-page-scan'),
     scanTablePanel: document.getElementById('scanTablePanel'),
+    dashboardPanel: document.getElementById('dashboardPanel'),
     policyEditorPanel: document.getElementById('policyEditorPanel'),
+    auditPanel: document.getElementById('auditPanel'),
     policyToggle: document.getElementById('policyToggle'),
+    dashboardToggle: document.getElementById('dashboardToggle'),
+    auditToggle: document.getElementById('auditToggle'),
+    placeholderToggle: document.getElementById('placeholderToggle'),
+    placeholderDownloadToggle: document.getElementById('placeholderDownloadToggle'),
     policyRail: document.getElementById('policyRail'),
     previewControls: document.getElementById('previewControls'),
     previewScopeSelect: document.getElementById('previewScopeSelect'),
@@ -143,7 +180,7 @@
   function workflowFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const workflow = params.get('workflow');
-    if (workflow === 'weak-encodes' || workflow === 'junk' || workflow === 'repair-defaults') return workflow;
+    if (workflow === 'weak-encodes' || workflow === 'junk' || workflow === 'repair-defaults' || workflow === 'canonical-lists') return workflow;
     return 'normalize';
   }
 
@@ -156,6 +193,7 @@
   function activePayload() {
     if (state.workflow === 'weak-encodes') return state.weakPayload;
     if (state.workflow === 'repair-defaults') return state.repairPayload;
+    if (state.workflow === 'canonical-lists') return state.canonicalPayload;
     if (state.workflow === 'junk') return state.junkPayload;
     return state.normalizePayload;
   }
@@ -163,6 +201,7 @@
   function activeProfilePayload() {
     if (state.workflow === 'weak-encodes') return state.weakPayload;
     if (state.workflow === 'repair-defaults') return state.repairPayload;
+    if (state.workflow === 'canonical-lists') return state.canonicalProfilePayload;
     return null;
   }
 
@@ -170,9 +209,76 @@
     return state.policyPayload || activeProfilePayload() || null;
   }
 
+  function normalizeSourceKey(value) {
+    const text = String(value || '').trim();
+    if (!text) return '';
+    return text.length > 1 ? text.replace(/\/+$/, '') : text;
+  }
+
+  function updateDashboardPayload(payload, requestedSource = '') {
+    const source = normalizeSourceKey(payload?.source_root);
+    if (!payload || !payload.histogram || !source) return;
+    state.dashboardProfilePayload = payload;
+    state.dashboardProfileSource = source;
+    state.dashboardRequestedSource = normalizeSourceKey(requestedSource) || source;
+  }
+
+  function activeProfilePayloadContext() {
+    if (state.workflow === 'weak-encodes') {
+      return { payload: state.weakPayload, requestedSource: state.weakPayloadSource };
+    }
+    if (state.workflow === 'repair-defaults') {
+      return { payload: state.repairPayload, requestedSource: state.repairPayloadSource };
+    }
+    if (state.workflow === 'canonical-lists') {
+      return { payload: state.canonicalProfilePayload, requestedSource: state.canonicalProfileSource };
+    }
+    return { payload: null, requestedSource: '' };
+  }
+
+  function currentDashboardPayload() {
+    const source = normalizeSourceKey(el.sourcePath.value);
+    if (
+      state.dashboardProfilePayload
+      && (!source || state.dashboardProfileSource === source || state.dashboardRequestedSource === source)
+    ) {
+      return state.dashboardProfilePayload;
+    }
+    const { payload, requestedSource } = activeProfilePayloadContext();
+    const payloadSource = normalizeSourceKey(payload?.source_root);
+    if (payload?.histogram && (!source || payloadSource === source || normalizeSourceKey(requestedSource) === source)) return payload;
+    return null;
+  }
+
+  function surfaceOpen() {
+    return state.surfaceMode !== 'default';
+  }
+
+  function dashboardSurfaceOpen() {
+    return state.surfaceMode === 'dashboard';
+  }
+
+  function policySurfaceOpen() {
+    return state.surfaceMode === 'policy';
+  }
+
+  function auditSurfaceOpen() {
+    return state.surfaceMode === 'audit';
+  }
+
   function currentPolicyDefinitions() {
     const payload = currentPolicyPayload();
-    return Array.isArray(payload?.policy_definitions) ? payload.policy_definitions : [];
+    if (!Array.isArray(payload?.policy_definitions)) return [];
+    const preferredOrder = ['default_source', 'delete_mode', 'library_defaults'];
+    const filtered = payload.policy_definitions.filter(definition => definition?.label !== 'replacement_candidate');
+    return filtered.slice().sort((left, right) => {
+      const leftIndex = preferredOrder.indexOf(left?.label || '');
+      const rightIndex = preferredOrder.indexOf(right?.label || '');
+      if (leftIndex === -1 && rightIndex === -1) return 0;
+      if (leftIndex === -1) return 1;
+      if (rightIndex === -1) return -1;
+      return leftIndex - rightIndex;
+    });
   }
 
   function currentReplacementDefinition() {
@@ -190,6 +296,10 @@
 
   function isRepairDefaultsMode() {
     return state.workflow === 'repair-defaults';
+  }
+
+  function isCanonicalMode() {
+    return state.workflow === 'canonical-lists';
   }
 
   function usesSimpleSelectionShell() {
@@ -414,17 +524,77 @@
     return Array.isArray(row?.item?.facts?.audio_streams) ? row.item.facts.audio_streams : [];
   }
 
+  function canonicalListsForPayload(payload = state.canonicalPayload) {
+    return Array.isArray(payload?.list_summaries) ? payload.list_summaries : [];
+  }
+
+  function activeCanonicalListSummary() {
+    const lists = canonicalListsForPayload();
+    if (!lists.length) return null;
+    return lists.find(item => item.id === state.canonicalSelectedListId) || lists[0] || null;
+  }
+
+  function canonicalProfileItemsByPath() {
+    const items = Array.isArray(state.canonicalProfilePayload?.movies) ? state.canonicalProfilePayload.movies : [];
+    return new Map(items.map(item => [item.path || '', item]));
+  }
+
+  function canonicalOwnedStatusLabel(row) {
+    return row.owned ? 'Owned' : 'Missing';
+  }
+
+  function imdbTitleUrl(imdbId) {
+    const value = String(imdbId || '').trim();
+    return value ? `https://www.imdb.com/title/${value}/` : '';
+  }
+
+  function canonicalTitleMarkup(title, imdbId) {
+    const label = escapeHtml(title || '—');
+    const url = imdbTitleUrl(imdbId);
+    if (!url) return `<span class="lab-cell-text">${label}</span>`;
+    return `<a class="lab-cell-text" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  }
+
+  function canonicalQualityProfileLabel(item) {
+    const label = item?.profile?.quality_label || '';
+    return label ? humanProfileLabel(label) : '';
+  }
+
+  function canonicalPrimaryAudioType(item) {
+    const stream = movieDefaultAudioStream(item);
+    if (!stream) return '—';
+    const parts = [audioCodecDisplayName(stream.codec, stream.profile), audioChannelLayout(stream.channels)].filter(Boolean);
+    return parts.join(' · ') || '—';
+  }
+
+  function canonicalInspectorFacts(row) {
+    const item = row?.item || null;
+    if (!item) return [];
+    const languages = audioTracksForRow(row).map(track => displayAudioLanguage(track.language));
+    const uniqueLanguages = [...new Set(languages.filter(Boolean))];
+    const width = Number(item?.facts?.width || 0);
+    const height = Number(item?.facts?.height || 0);
+    return [
+      ['Video resolution', width > 0 && height > 0 ? `${width} x ${height}` : '—'],
+      ['Video bitrate', formatBitrate(item?.facts?.video_bitrate_kbps || 0)],
+      ['Audio bitrate', formatBitrate(item?.facts?.audio_bitrate_kbps || 0)],
+      ['Audio type', canonicalPrimaryAudioType(item)],
+      ['Audio languages', uniqueLanguages.length ? uniqueLanguages.join(', ') : '—'],
+    ];
+  }
+
   function fileNameFromPath(path) {
     const parts = String(path || '').split('/').filter(Boolean);
     return parts.length ? parts[parts.length - 1] : String(path || '');
   }
 
   function humanProfileLabel(label) {
-    if (label === 'standard_definition') return 'Standard Definition';
+    if (label === 'standard_definition') return 'Suspect Encode';
     if (label === 'compact_grade') return 'Compact Grade';
     if (label === 'library_grade') return 'Library Grade';
     if (label === 'collector_grade') return 'Collector Grade';
     if (label === 'reference') return 'Reference';
+    if (label === 'default_source') return 'Default Library Directory';
     if (label === 'library_defaults') return 'Library Defaults';
     if (label === 'delete_mode') return 'Delete Posture';
     if (label === 'meets_minimum') return 'Meets Minimum';
@@ -444,6 +614,12 @@
     return payload;
   }
 
+  function downloadFilenameFromDisposition(header, fallback = 'movie-catalogue.xlsx') {
+    const value = String(header || '');
+    const match = value.match(/filename="([^"]+)"/i);
+    return match?.[1] || fallback;
+  }
+
   function applyPolicyPayload(payload) {
     if (!payload) return;
     state.policyPayload = payload;
@@ -457,6 +633,10 @@
     if (state.repairPayload) {
       state.repairPayload = { ...state.repairPayload, ...payload };
     }
+  }
+
+  function preferredDefaultSource() {
+    return normalizeSourceKey(state.policyPayload?.operator_preferences?.default_source || '');
   }
 
   function qualityStanceRank(label) {
@@ -715,12 +895,13 @@
     el.workflowNormalize.classList.toggle('is-active', state.workflow === 'normalize');
     el.workflowWeakEncodes.classList.toggle('is-active', state.workflow === 'weak-encodes');
     el.workflowRepairDefaults.classList.toggle('is-active', state.workflow === 'repair-defaults');
+    el.workflowCanonicalLists.classList.toggle('is-active', state.workflow === 'canonical-lists');
     el.workflowJunk.classList.toggle('is-active', state.workflow === 'junk');
   }
 
   function renderShellLayout() {
     if (el.shell) el.shell.dataset.layoutMode = state.layoutMode;
-    if (el.shell) el.shell.dataset.policyMode = state.policyEditing ? 'editing' : 'default';
+    if (el.shell) el.shell.dataset.policyMode = surfaceOpen() ? 'editing' : 'default';
     el.pages.forEach(page => {
       const role = page.dataset.pageRole || '';
       const hidden = false;
@@ -731,11 +912,54 @@
     });
   }
 
+  function activePrimarySurface() {
+    if (auditSurfaceOpen() && el.auditPanel && !el.auditPanel.hidden) return el.auditPanel;
+    if (policySurfaceOpen() && el.policyEditorPanel && !el.policyEditorPanel.hidden) return el.policyEditorPanel;
+    if (dashboardSurfaceOpen() && el.dashboardPanel && !el.dashboardPanel.hidden) return el.dashboardPanel;
+    if (el.scanTablePanel && !el.scanTablePanel.hidden) return el.scanTablePanel;
+    return el.scanPage;
+  }
+
+  function primarySurfaceMinHeight() {
+    const value = getComputedStyle(el.shell || document.documentElement).getPropertyValue('--lab-primary-surface-min-height');
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 220;
+  }
+
+  function syncSliverHeight() {
+    if (!el.sliver || !el.sliverSlot) return;
+    if (!surfaceOpen()) {
+      el.sliverSlot.style.height = '';
+      el.sliver.style.height = '';
+      return;
+    }
+    const surface = activePrimarySurface();
+    if (!surface) return;
+    const nextHeight = Math.max(Math.ceil(surface.getBoundingClientRect().height), primarySurfaceMinHeight());
+    el.sliverSlot.style.height = `${nextHeight}px`;
+    el.sliver.style.height = `${nextHeight}px`;
+  }
+
+  function ensureSliverResizeObserver() {
+    if (!window.ResizeObserver || state.sliverResizeObserver) return;
+    state.sliverResizeObserver = new ResizeObserver(() => {
+      if (state.sliverResizeFrame) cancelAnimationFrame(state.sliverResizeFrame);
+      state.sliverResizeFrame = requestAnimationFrame(() => {
+        state.sliverResizeFrame = 0;
+        syncSliverHeight();
+      });
+    });
+    [el.scanPage, el.scanTablePanel, el.dashboardPanel, el.policyEditorPanel, el.auditPanel].forEach(node => {
+      if (node) state.sliverResizeObserver.observe(node);
+    });
+  }
+
   function renderRunButton() {
     const normalize = state.workflow === 'normalize';
     const repairDefaults = state.workflow === 'repair-defaults';
+    const canonical = state.workflow === 'canonical-lists';
     const junk = state.workflow === 'junk';
-    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize' : (repairDefaults ? 'Run Repair Defaults' : (junk ? 'Run Delete Junk & Spam Files' : 'Run Weak Encodes')));
+    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize' : (repairDefaults ? 'Run Repair Defaults' : (canonical ? 'Run Canonical Lists' : (junk ? 'Run Delete Junk & Spam Files' : 'Run Weak Encodes'))));
     el.runButton.disabled = state.runInFlight;
     el.runButton.classList.toggle('is-running', state.runInFlight);
   }
@@ -743,16 +967,39 @@
   function renderFilterVisibility() {
     const weak = isWeakMode();
     const repairDefaults = isRepairDefaultsMode();
+    const canonical = isCanonicalMode();
     const junk = isJunkMode();
     if (el.filterBar) el.filterBar.hidden = false;
-    el.bucketFilter.hidden = weak || repairDefaults || junk;
-    el.caseFilter.hidden = weak || repairDefaults || junk;
-    el.reasonFilter.hidden = weak || repairDefaults || junk;
-    el.warningFilter.hidden = weak || repairDefaults || junk;
+    el.bucketFilter.hidden = weak || repairDefaults || canonical || junk;
+    el.caseFilter.hidden = weak || repairDefaults || canonical || junk;
+    el.reasonFilter.hidden = weak || repairDefaults || canonical || junk;
+    el.warningFilter.hidden = weak || repairDefaults || canonical || junk;
     el.workflowStatusFilter.hidden = !(weak || repairDefaults || junk);
+    el.canonicalListFilter.hidden = !canonical;
+    el.previewScopeLabel.hidden = canonical;
+    el.previewScopeSelect.hidden = canonical;
+    el.selectAllButton.hidden = canonical;
+    el.deselectAllButton.hidden = canonical;
     renderWorkflowStatusFilter();
+    renderCanonicalListFilter();
     renderWeakFloorControl();
     renderWorkflowActionControls();
+  }
+
+  function renderCanonicalListFilter() {
+    if (!el.canonicalListFilter) return;
+    if (!isCanonicalMode()) {
+      el.canonicalListFilter.innerHTML = '<option value="top_100">Top 100</option><option value="top_250">Top 250</option><option value="top_500">Top 500</option>';
+      return;
+    }
+    const lists = canonicalListsForPayload();
+    const options = lists.length
+      ? lists.map(item => `<option value="${escapeHtml(item.id || '')}">${escapeHtml(item.label || item.id || 'List')}</option>`).join('')
+      : '<option value="top_100">Top 100</option><option value="top_250">Top 250</option><option value="top_500">Top 500</option>';
+    el.canonicalListFilter.innerHTML = options;
+    const active = activeCanonicalListSummary();
+    state.canonicalSelectedListId = active?.id || state.canonicalSelectedListId || 'top_100';
+    el.canonicalListFilter.value = state.canonicalSelectedListId;
   }
 
   function renderWorkflowStatusFilter() {
@@ -852,51 +1099,317 @@
     }).join('');
   }
 
+  function railIconSvg(name) {
+    if (name === 'scroll-text') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 12h-5" /><path d="M15 8h-5" /><path d="M19 17V5a2 2 0 0 0-2-2H4" /><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3" /></svg>';
+    }
+    if (name === 'layout-grid') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>';
+    }
+    if (name === 'list-indent-decrease') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 5H11" /><path d="M21 12H11" /><path d="M21 19H11" /><path d="m7 8-4 4 4 4" /></svg>';
+    }
+    if (name === 'clipboard-paste') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 14h10" /><path d="M16 4h2a2 2 0 0 1 2 2v1.344" /><path d="m17 18 4-4-4-4" /><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" /><rect x="8" y="2" width="8" height="4" rx="1" /></svg>';
+    }
+    if (name === 'clipboard-copy') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1" /><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" /><path d="M16 4h2a2 2 0 0 1 2 2v4" /><path d="M21 14H11" /><path d="m15 10-4 4 4 4" /></svg>';
+    }
+    if (name === 'ellipsis') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" /></svg>';
+    }
+    if (name === 'trophy') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V4Z" /><path d="M17 5h2a2 2 0 0 1 2 2 5 5 0 0 1-5 5" /><path d="M7 5H5a2 2 0 0 0-2 2 5 5 0 0 0 5 5" /></svg>';
+    }
+    if (name === 'download') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>';
+    }
+    if (name === 'arrow-big-left') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m11 19-7-7 7-7" /><path d="M4 12h16" /></svg>';
+    }
+    return '';
+  }
+
   function renderPolicyRail() {
-    const payload = currentPolicyPayload();
-    const deleteModeValue = payload?.delete_mode_definition?.fields?.[0]?.value || payload?.operator_preferences?.delete_mode || 'recycle_all';
-    const policyLinks = [
-      ['replacement_candidate', 'Weak Floor'],
-      ['library_defaults', 'Library Defaults'],
-      ['delete_mode', 'Delete Posture'],
-    ];
-    const toggleLabel = 'Open Policy';
-    const toggleIcon = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg>';
+    const toggleLabel = policySurfaceOpen() ? 'Close Policy' : 'Open Policy';
     el.policyToggle.setAttribute('aria-label', toggleLabel);
     el.policyToggle.setAttribute('title', toggleLabel);
-    el.policyToggle.innerHTML = toggleIcon;
-    if (!state.policyEditing) {
-      el.policyRail.innerHTML = '';
+    el.policyToggle.setAttribute('aria-pressed', policySurfaceOpen() ? 'true' : 'false');
+    el.policyToggle.dataset.active = policySurfaceOpen() ? 'true' : 'false';
+    el.policyToggle.innerHTML = railIconSvg('scroll-text');
+    if (el.dashboardToggle) {
+      const dashboardLabel = dashboardSurfaceOpen() ? 'Close Dashboard' : 'Open Dashboard';
+      el.dashboardToggle.setAttribute('aria-label', dashboardLabel);
+      el.dashboardToggle.setAttribute('title', dashboardLabel);
+      el.dashboardToggle.setAttribute('aria-pressed', dashboardSurfaceOpen() ? 'true' : 'false');
+      el.dashboardToggle.dataset.active = dashboardSurfaceOpen() ? 'true' : 'false';
+      el.dashboardToggle.innerHTML = railIconSvg('layout-grid');
+    }
+    const auditLabel = auditSurfaceOpen() ? 'Close Audit' : 'Open Audit';
+    el.auditToggle.setAttribute('aria-label', auditLabel);
+    el.auditToggle.setAttribute('title', auditLabel);
+    el.auditToggle.setAttribute('aria-pressed', auditSurfaceOpen() ? 'true' : 'false');
+    el.auditToggle.dataset.active = auditSurfaceOpen() ? 'true' : 'false';
+    el.auditToggle.innerHTML = railIconSvg('clipboard-paste');
+    if (el.placeholderToggle) {
+      el.placeholderToggle.setAttribute('aria-label', 'Placeholder');
+      el.placeholderToggle.setAttribute('title', 'Placeholder');
+      el.placeholderToggle.setAttribute('aria-pressed', 'false');
+      el.placeholderToggle.dataset.active = 'false';
+      el.placeholderToggle.innerHTML = railIconSvg('trophy');
+    }
+    if (el.placeholderDownloadToggle) {
+      const sourceReady = Boolean(normalizeSourceKey(el.sourcePath.value));
+      const exportBusy = state.catalogueExportInFlight;
+      const exportLabel = exportBusy ? 'Exporting Catalogue' : 'Export Catalogue';
+      el.placeholderDownloadToggle.setAttribute('aria-label', exportLabel);
+      el.placeholderDownloadToggle.setAttribute('title', sourceReady ? exportLabel : 'Export Catalogue');
+      el.placeholderDownloadToggle.setAttribute('aria-pressed', 'false');
+      el.placeholderDownloadToggle.dataset.active = 'false';
+      el.placeholderDownloadToggle.disabled = !sourceReady || exportBusy;
+      el.placeholderDownloadToggle.innerHTML = railIconSvg('download');
+    }
+    el.policyRail.innerHTML = '';
+  }
+
+  function formatDashboardRuntime(minutes) {
+    const total = Number(minutes || 0);
+    if (!total) return '—';
+    const hours = Math.floor(total / 60);
+    const mins = Math.round(total % 60);
+    return hours ? `${hours}h ${mins}m` : `${mins}m`;
+  }
+
+  function formatDashboardVideoBitrate(kbps) {
+    const total = Number(kbps || 0);
+    return total ? `${(total / 1000).toFixed(1)} Mbps` : '—';
+  }
+
+  function dashboardMetricCard(label, value) {
+    return `
+      <section class="lab-policy-card">
+        <div class="lab-dashboard-metric-value">${escapeHtml(value)}</div>
+        <div class="lab-dashboard-metric-label">${escapeHtml(label)}</div>
+      </section>
+    `;
+  }
+
+  function dashboardBreakdownCard(group, rows) {
+    return `
+      <section class="lab-policy-card">
+        <div class="lab-policy-meta">
+          <span class="lab-kicker">${escapeHtml(group)}</span>
+        </div>
+        <div class="lab-dashboard-list">
+          ${rows.length ? rows.map(row => `
+            <div class="lab-dashboard-row">
+              <span class="lab-dashboard-row-label">${escapeHtml(row.label)}</span>
+              <span class="lab-dashboard-row-value">${escapeHtml(row.value)}</span>
+            </div>
+          `).join('') : '<div class="lab-dashboard-row"><span class="lab-dashboard-row-label">No data</span><span class="lab-dashboard-row-value">—</span></div>'}
+        </div>
+      </section>
+    `;
+  }
+
+  function dashboardImprovementRows(metrics) {
+    const filesRemoved = metrics?.files_removed || {};
+    const audioRemoved = metrics?.audio_tracks_removed || {};
+    const canonicalTop500 = metrics?.canonical_top_500_above_floor || {};
+    const canonicalImprovement = metrics?.canonical_improvement || {};
+    const canonicalValue = canonicalImprovement.percent != null
+      ? `${canonicalImprovement.percent}% · ${canonicalImprovement.baseline_count || 0}/500 -> ${canonicalImprovement.latest_count || 0}/500`
+      : (canonicalTop500.count != null ? `${canonicalTop500.count}/500` : '—');
+    return [
+      {
+        label: 'Files removed',
+        value: `${Number(filesRemoved.count || 0).toLocaleString()} · ${formatFileSize(filesRemoved.total_bytes || 0)}`,
+      },
+      {
+        label: 'Audio tracks removed',
+        value: `${Number(audioRemoved.count || 0).toLocaleString()} · ${formatFileSize(audioRemoved.total_bytes || 0)}`,
+      },
+      {
+        label: 'Canonical improvement',
+        value: canonicalValue,
+      },
+      {
+        label: 'Total scans performed',
+        value: Number(metrics?.total_scans_performed || 0).toLocaleString(),
+      },
+      {
+        label: 'Current Top 500 above weak floor',
+        value: canonicalTop500.count != null ? `${canonicalTop500.count}/500` : '—',
+      },
+    ];
+  }
+
+  function dashboardBreakdownRows(counts, total, labels, options = {}) {
+    const rows = labels.map(entry => {
+      const key = typeof entry === 'string' ? entry : entry.key;
+      const label = typeof entry === 'string' ? humanProfileLabel(entry) : entry.label;
+      const count = Number(counts?.[key] || 0);
+      const share = total ? `${((count / total) * 100).toFixed(1)}%` : '0.0%';
+      return {
+        count,
+        label,
+        value: `${count.toLocaleString()} · ${share}`,
+      };
+    });
+    return options.hideZero ? rows.filter(row => row.count > 0) : rows;
+  }
+
+  function dashboardResolutionBreakdownKey(item) {
+    const facts = item?.facts || {};
+    const resolution = String(facts.resolution_bucket || '').trim().toLowerCase();
+    const width = Number(facts.width || 0);
+    const height = Number(facts.height || 0);
+    const sar = String(facts.sample_aspect_ratio || '').trim();
+    const dar = String(facts.display_aspect_ratio || '').trim();
+    const squarePixels = !sar || sar === '1:1';
+    let aspectRatio = 0;
+    if (dar.includes(':')) {
+      const [left, right] = dar.split(':').map(Number);
+      if (left > 0 && right > 0) aspectRatio = left / right;
+    }
+    if (!aspectRatio && width > 0 && height > 0) {
+      aspectRatio = width / height;
+      if (!squarePixels && sar.includes(':')) {
+        const [left, right] = sar.split(':').map(Number);
+        if (left > 0 && right > 0) aspectRatio = (width * left / right) / height;
+      }
+    }
+
+    if (resolution === '2160p') return aspectRatio >= 2.0 ? 'uhd_scope' : 'uhd_flat';
+    if (resolution === '1080p') return aspectRatio >= 2.0 ? 'full_hd_scope' : 'full_hd_flat';
+    if (resolution === '720p') return aspectRatio >= 2.0 ? 'hd_ready_scope' : 'hd_ready_flat';
+    if (resolution === 'sd') {
+      if (!squarePixels && aspectRatio >= 1.7) return 'anamorphic_sd';
+      if (aspectRatio >= 1.7) return 'letterbox_sd';
+      return 'academy_sd';
+    }
+    return 'unknown';
+  }
+
+  function dashboardSurroundBreakdownKey(item) {
+    const facts = item?.facts || {};
+    const channels = Number(facts.audio_channels || 0);
+    const immersive = String(facts.audio_immersive_extension || '').trim().toLowerCase();
+    const summary = String(facts.audio_summary || '').trim().toLowerCase();
+    if (!channels) return 'unknown';
+    if (channels === 1) return 'mono_archive';
+    if (channels === 2) return 'stereo_ltrt';
+    if (channels === 3) return 'three_channel_stage';
+    if (channels === 4) return 'quad_matrix';
+    if (channels === 5) return 'five_channel_surround';
+    if (channels === 6) return 'five_one_surround';
+    if (channels === 7) return 'six_one_surround';
+    if (immersive === 'atmos' || summary.includes('atmos')) return 'seven_one_atmos';
+    if (immersive === 'dtsx' || summary.includes('dts:x')) return 'seven_one_dtsx';
+    return 'seven_one_surround';
+  }
+
+  function movieBreakdownCounts(items, keyFn) {
+    return (Array.isArray(items) ? items : []).reduce((counts, item) => {
+      const key = keyFn(item);
+      counts[key] = Number(counts[key] || 0) + 1;
+      return counts;
+    }, {});
+  }
+
+  function renderDashboardPanel() {
+    if (!dashboardSurfaceOpen()) {
+      el.dashboardPanel.innerHTML = '';
       return;
     }
-    el.policyRail.innerHTML = `
-      <div class="lab-sliver-note">Single write owner for library policy and operator delete posture.</div>
-      <div class="lab-sliver-chip">
-        <strong>Weak Floor</strong>
-        <span>${escapeHtml(currentWeakFloorLabel())}</span>
+    const payload = currentDashboardPayload();
+    if (!payload) {
+      el.dashboardPanel.innerHTML = `
+        <div class="lab-policy-header">
+          <div class="lab-policy-heading">
+            <div class="lab-kicker">Dashboard View</div>
+            <h2>Profile scan required</h2>
+            <p>Dashboard currently reuses the latest profile-bearing scan for this source. Run Weak Encodes, Repair Defaults, or Canonical Lists first.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    const histogram = payload.histogram || {};
+    const total = Number(histogram.movie_count ?? ((payload.movies || []).length));
+    const movieResolutionCounts = movieBreakdownCounts(payload.movies || [], dashboardResolutionBreakdownKey);
+    const movieSurroundCounts = movieBreakdownCounts(payload.movies || [], dashboardSurroundBreakdownKey);
+    const qualityRows = dashboardBreakdownRows(
+      histogram.quality_profile_counts || {},
+      total,
+      ['standard_definition', 'compact_grade', 'library_grade', 'collector_grade', 'reference'],
+    );
+    const improvementRows = dashboardImprovementRows(payload.library_improvement_metrics || {});
+    const resolutionRows = dashboardBreakdownRows(
+      Object.keys(histogram.resolution_breakdown_counts || {}).length ? histogram.resolution_breakdown_counts : movieResolutionCounts,
+      total,
+      [
+        { key: 'uhd_scope', label: '4K Scope Frame' },
+        { key: 'uhd_flat', label: '4K Flat Frame' },
+        { key: 'full_hd_scope', label: '1080p Scope Frame' },
+        { key: 'full_hd_flat', label: '1080p Flat Frame' },
+        { key: 'hd_ready_scope', label: '720p Scope Frame' },
+        { key: 'hd_ready_flat', label: '720p Flat Frame' },
+        { key: 'anamorphic_sd', label: 'Anamorphic SD' },
+        { key: 'letterbox_sd', label: 'Letterbox SD' },
+        { key: 'academy_sd', label: 'Fullscreen SD' },
+        { key: 'unknown', label: 'Unknown' },
+      ],
+      { hideZero: true },
+    );
+    const surroundSoundRows = dashboardBreakdownRows(
+      Object.keys(histogram.surround_sound_breakdown_counts || {}).length ? histogram.surround_sound_breakdown_counts : movieSurroundCounts,
+      total,
+      [
+        { key: 'mono_archive', label: 'Mono Archive' },
+        { key: 'stereo_ltrt', label: 'Stereo / LtRt' },
+        { key: 'three_channel_stage', label: '3-Channel Stage' },
+        { key: 'quad_matrix', label: 'Quad / Matrixed' },
+        { key: 'five_channel_surround', label: '5.0 Surround' },
+        { key: 'five_one_surround', label: '5.1 Surround' },
+        { key: 'six_one_surround', label: '6.1 Surround' },
+        { key: 'seven_one_surround', label: '7.1 Surround' },
+        { key: 'seven_one_atmos', label: '7.1 Atmos Bed' },
+        { key: 'seven_one_dtsx', label: '7.1 DTS:X Bed' },
+        { key: 'unknown', label: 'Unknown' },
+      ],
+      { hideZero: true },
+    );
+    el.dashboardPanel.innerHTML = `
+      <div class="lab-policy-header">
+        <div class="lab-policy-heading">
+          <div class="lab-kicker">Dashboard View</div>
+          <h2>Library visibility snapshot</h2>
+          <p>At a glance quality overview of Media Library</p>
+        </div>
+        <div class="lab-policy-chips">
+          <span class="chip">${escapeHtml(fileNameFromPath(payload.source_root || el.sourcePath.value || 'Current source'))}</span>
+          <span class="chip">${escapeHtml(total.toLocaleString())} movies</span>
+        </div>
       </div>
-      <div class="lab-sliver-chip">
-        <strong>Delete Posture</strong>
-        <span>${escapeHtml(humanProfileLabel(deleteModeValue))}</span>
+      <div class="lab-dashboard-metrics">
+        ${dashboardMetricCard('Total Size', formatFileSize(histogram.total_size_bytes))}
+        ${dashboardMetricCard('Total Runtime', formatDashboardRuntime(histogram.total_runtime_minutes))}
+        ${dashboardMetricCard('Avg Video Bitrate', formatDashboardVideoBitrate(histogram.video_bitrate_kbps?.mean))}
+        ${dashboardMetricCard('Avg Audio Bitrate', formatBitrate(histogram.audio_bitrate_kbps?.mean))}
       </div>
-      <div class="lab-sliver-chip">
-        <strong>Workflow</strong>
-        <span>${escapeHtml(WORKFLOW_LABELS[state.workflow])}</span>
-      </div>
-      <div class="lab-sliver-links">
-        ${policyLinks.map(([label, text]) => `<button class="lab-sliver-link" type="button" data-policy-open="${escapeHtml(label)}">${escapeHtml(text)}</button>`).join('')}
+      <div class="lab-dashboard-breakdowns">
+        ${dashboardBreakdownCard('Quality Profile Breakdown', qualityRows)}
+        ${dashboardBreakdownCard('Library Improvement Metrics', improvementRows)}
+        ${dashboardBreakdownCard('Resolution Breakdown', resolutionRows)}
+        ${dashboardBreakdownCard('Surround Sound Breakdown', surroundSoundRows)}
       </div>
     `;
-    el.policyRail.querySelectorAll('[data-policy-open]').forEach(button => {
-      button.addEventListener('click', () => {
-        openPolicySection(button.dataset.policyOpen || 'library_defaults');
-      });
-    });
   }
 
   function renderPolicyEditor() {
     const definitions = currentPolicyDefinitions();
-    if (!state.policyEditing) {
+    if (!policySurfaceOpen()) {
       el.policyEditorPanel.innerHTML = '';
       return;
     }
@@ -908,28 +1421,21 @@
             <h2>Policy loading required</h2>
             <p>Open policy with a source selected to load the current library policy contract.</p>
           </div>
-          <button id="policyCloseButton" class="lab-sliver-toggle lab-icon-toggle" type="button" aria-label="Close Policy" title="Close Policy">
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
-          </button>
         </div>
       `;
-      const closeButton = document.getElementById('policyCloseButton');
-      if (closeButton) closeButton.addEventListener('click', () => togglePolicyEditor().catch(handlePolicyToggleError));
       return;
     }
     const sections = definitions.map(definition => {
-      const isOpen = state.policySectionLabel === definition.label || (!state.policySectionLabel && definition.label === 'library_defaults');
+      const isOpen = state.policySectionLabel === definition.label;
       return `
         <section class="lab-policy-card ${isOpen ? 'is-open' : ''}">
-          <div class="lab-policy-meta">
-            <span class="lab-kicker">${escapeHtml(definition.group || 'Policy')}</span>
-            <span class="lab-policy-scope">${escapeHtml(definition.scope === 'operator_preferences' ? 'User-local' : 'Repo-local')}</span>
-          </div>
-          <h3>${escapeHtml(definition.display_name || humanProfileLabel(definition.label))}</h3>
-          <p>${escapeHtml(definition.summary || '')}</p>
-          <p>${escapeHtml(definition.rule_summary || '')}</p>
-          <div class="lab-policy-actions">
-            <button type="button" data-policy-section="${escapeHtml(definition.label)}">${isOpen ? 'Collapse' : 'Edit'}</button>
+          <div class="lab-policy-section-header" data-policy-section="${escapeHtml(definition.label)}" role="button" tabindex="0" aria-expanded="${isOpen ? 'true' : 'false'}">
+            <div class="lab-policy-meta">
+              <span class="lab-kicker">${escapeHtml(definition.group || 'Policy')}</span>
+            </div>
+            <h3>${escapeHtml(definition.display_name || humanProfileLabel(definition.label))}</h3>
+            <p>${escapeHtml(definition.summary || '')}</p>
+            <p>${escapeHtml(definition.rule_summary || '')}</p>
           </div>
           ${isOpen ? `
             <div class="lab-policy-fields" data-policy-editor="${escapeHtml(definition.label)}">${policyDefinitionFields(definition)}</div>
@@ -945,26 +1451,22 @@
       <div class="lab-policy-header">
         <div class="lab-policy-heading">
           <div class="lab-kicker">Policy Editor</div>
-          <h2>Library policy in situ</h2>
-          <p>Repo-local policy owns weak floor, subtitle behavior, and junk-floor defaults. User-local preference owns delete posture.</p>
+          <p>Define global policies for your media library that will be enforced by the repair workflows.</p>
         </div>
-        <button id="policyCloseButton" class="lab-sliver-toggle lab-icon-toggle" type="button" aria-label="Close Policy" title="Close Policy">
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
-        </button>
-      </div>
-      <div class="lab-policy-chips">
-        <span class="chip">repo-local <span class="lab-cell-mono">movie_standards.json</span></span>
-        <span class="chip">user-local delete posture</span>
       </div>
       <div class="lab-policy-sections">${sections}</div>
     `;
-    const closeButton = document.getElementById('policyCloseButton');
-    if (closeButton) closeButton.addEventListener('click', () => togglePolicyEditor().catch(handlePolicyToggleError));
-    el.policyEditorPanel.querySelectorAll('[data-policy-section]').forEach(button => {
-      button.addEventListener('click', () => {
-        const label = button.dataset.policySection || '';
+    el.policyEditorPanel.querySelectorAll('[data-policy-section]').forEach(section => {
+      const toggle = () => {
+        const label = section.dataset.policySection || '';
         state.policySectionLabel = state.policySectionLabel === label ? '' : label;
         renderPolicyEditor();
+      };
+      section.addEventListener('click', toggle);
+      section.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggle();
       });
     });
     el.policyEditorPanel.querySelectorAll('[data-policy-reset]').forEach(button => {
@@ -1007,12 +1509,21 @@
       const result = await postJson('/api/policy/update', {
         label,
         values: state.policyDrafts[label],
+        source: normalizeSourceKey(el.sourcePath.value),
         policy_revision: payload.policy_revision || '',
         operator_preferences_revision: payload.operator_preferences_revision || '',
       });
       applyPolicyPayload(result);
       delete state.policyDrafts[label];
-      if (el.sourcePath.value.trim()) {
+      if (label === 'default_source') {
+        const nextSource = preferredDefaultSource();
+        el.sourcePath.value = nextSource;
+        if (nextSource) {
+          state.surfaceMode = 'audit';
+          await loadAuditPayload();
+        }
+      }
+      if (label !== 'default_source' && el.sourcePath.value.trim()) {
         if (isWeakMode()) await runWeakEncodes();
         else if (isRepairDefaultsMode()) await runRepairDefaults();
         else if (isJunkMode() && label === 'library_defaults') await runJunk();
@@ -1036,38 +1547,262 @@
 
   async function openPolicySection(label) {
     await ensurePolicyPayload();
-    state.policySectionLabel = label || 'library_defaults';
-    state.policyEditing = true;
+    state.policySectionLabel = label || '';
+    state.surfaceMode = 'policy';
     renderFilterVisibility();
     renderRows();
     renderSidePanel();
   }
 
   async function togglePolicyEditor() {
-    if (state.policyEditing) {
-      state.policyEditing = false;
+    if (policySurfaceOpen()) {
+      state.surfaceMode = 'default';
       renderFilterVisibility();
       renderRows();
       renderSidePanel();
       return;
     }
-    await openPolicySection(state.policySectionLabel || 'library_defaults');
+    await openPolicySection(state.policySectionLabel || '');
   }
 
   function handlePolicyToggleError(error) {
     el.inspectionPane.textContent = error.message;
   }
 
+  function formatAuditRecordedAt(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString([], {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  }
+
+  function auditSubjectLabel(event) {
+    const subject = Array.isArray(event?.subjects) ? event.subjects[0] : null;
+    if (!subject) return '—';
+    if (subject.title) return subject.year ? `${subject.title} (${subject.year})` : subject.title;
+    if (subject.path) return fileNameFromPath(subject.path);
+    if (subject.kind) return humanProfileLabel(subject.kind);
+    return '—';
+  }
+
+  function auditEffectLabel(event) {
+    const effects = Array.isArray(event?.effects) ? event.effects : [];
+    if (!effects.length) return event?.reversal?.capability === 'recorded_only' ? 'Recorded reversal' : 'Recorded only';
+    const lead = effects[0];
+    const kind = humanProfileLabel(lead.kind || 'event');
+    const status = humanProfileLabel(lead.status || 'recorded');
+    return effects.length === 1 ? `${kind} · ${status}` : `${kind} · ${status} +${effects.length - 1}`;
+  }
+
+  async function loadAuditPayload() {
+    const source = el.sourcePath.value.trim();
+    if (!source) {
+      state.auditPayload = null;
+      return null;
+    }
+    state.auditBusy = true;
+    renderAuditPanel();
+    renderInspectionPane();
+    try {
+      const payload = await postJson('/api/audit/read', { source, limit: 40 });
+      state.auditPayload = payload;
+      return payload;
+    } finally {
+      state.auditBusy = false;
+      renderAuditPanel();
+      renderInspectionPane();
+    }
+  }
+
+  function renderAuditPanel() {
+    if (!auditSurfaceOpen()) {
+      el.auditPanel.innerHTML = '';
+      return;
+    }
+    if (!el.sourcePath.value.trim()) {
+      el.auditPanel.innerHTML = `
+        <div class="lab-policy-header">
+          <div class="lab-policy-heading">
+            <div class="lab-kicker">Audit Ledger</div>
+            <h2>Source required</h2>
+            <p>Select a source to load recorded actions for this library.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    if (state.auditBusy) {
+      el.auditPanel.innerHTML = `
+        <div class="lab-policy-header">
+          <div class="lab-policy-heading">
+            <div class="lab-kicker">Audit Ledger</div>
+            <h2>Loading activity</h2>
+            <p>Reading recent ledger activity and active follow-ups.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    const events = Array.isArray(state.auditPayload?.events) ? state.auditPayload.events.slice().reverse() : [];
+    const followups = Array.isArray(state.auditPayload?.active_followups) ? state.auditPayload.active_followups : [];
+    if (!events.length) {
+      el.auditPanel.innerHTML = `
+        <div class="lab-policy-header">
+          <div class="lab-policy-heading">
+            <div class="lab-kicker">Audit Ledger</div>
+            <h2>No recorded actions</h2>
+            <p>Run a workflow and confirm an action to populate this ledger surface.</p>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    el.auditPanel.innerHTML = `
+      <div class="lab-policy-header">
+        <div class="lab-policy-heading">
+          <div class="lab-kicker">Audit Ledger</div>
+          <h2>Recent library actions</h2>
+          <p>Action-first history for this source, ordered from most recent to oldest.</p>
+        </div>
+      </div>
+      <div class="lab-audit-summary">
+        <span class="chip">${events.length} recent event${events.length === 1 ? '' : 's'}</span>
+        <span class="chip queue">${followups.length} active follow-up${followups.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="lab-audit-table lab-rhythm-surface" data-rhythm-surface="rows">
+        <table class="lab-scan-table">
+          <thead>
+            <tr>
+              <th>Recorded</th>
+              <th>Action</th>
+              <th>Workflow</th>
+              <th>Subject</th>
+              <th>Effect</th>
+              <th>Summary</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${events.map(event => `
+              <tr>
+                <td class="lab-cell-supporting lab-cell-mono" title="${escapeHtml(event.recorded_at || '')}"><span class="lab-cell-text">${escapeHtml(formatAuditRecordedAt(event.recorded_at || ''))}</span></td>
+                <td class="lab-cell-status" title="${escapeHtml(event.action || '')}"><span class="lab-cell-pill">${escapeHtml(humanProfileLabel(event.action || 'recorded'))}</span></td>
+                <td class="lab-cell-supporting" title="${escapeHtml(event.workflow || '')}"><span class="lab-cell-text">${escapeHtml(humanProfileLabel(event.workflow || 'audit'))}</span></td>
+                <td class="lab-cell-anchor" title="${escapeHtml(auditSubjectLabel(event))}"><span class="lab-cell-text">${escapeHtml(auditSubjectLabel(event))}</span></td>
+                <td class="lab-cell-supporting" title="${escapeHtml(auditEffectLabel(event))}"><span class="lab-cell-text">${escapeHtml(auditEffectLabel(event))}</span></td>
+                <td class="lab-cell-supporting" title="${escapeHtml(event.summary || '')}"><span class="lab-cell-text">${escapeHtml(event.summary || '—')}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
   function inspectionSummaryForRow(row) {
     if (isWeakMode()) return `${row.issue} · ${row.resolution || '—'}`;
     if (isRepairDefaultsMode()) return `${row.issue_family || 'Issue'} · ${row.issue}`;
+    if (isCanonicalMode()) return `${canonicalOwnedStatusLabel(row)} · ${row.quality_profile || '—'}`;
     if (isJunkMode()) return `${row.issue} · ${row.confidence || 'review'}`;
     return `${row.projected_path || row.current_value} · ${row.confidence || 'review'}`;
   }
 
   function renderInspectionPane() {
-    if (!state.policyEditing) {
+    if (!surfaceOpen()) {
       el.inspectionPane.innerHTML = '';
+      return;
+    }
+    if (auditSurfaceOpen()) {
+      const followups = Array.isArray(state.auditPayload?.active_followups) ? state.auditPayload.active_followups : [];
+      const events = Array.isArray(state.auditPayload?.events) ? state.auditPayload.events.slice().reverse().slice(0, 8) : [];
+      if (!el.sourcePath.value.trim()) {
+        el.inspectionPane.innerHTML = '<div class="lab-preview-empty"><strong>Audit source required.</strong><div>Select a source to open the ledger surface.</div></div>';
+        return;
+      }
+      if (state.auditBusy) {
+        el.inspectionPane.innerHTML = '<div class="lab-preview-empty"><strong>Loading audit context.</strong><div>Recent activity and follow-ups are being read now.</div></div>';
+        return;
+      }
+      el.inspectionPane.innerHTML = `
+        <div class="lab-inspection-pane">
+          <div class="lab-inspection-summary"><strong>${followups.length}</strong> active follow-up${followups.length === 1 ? '' : 's'} currently remain open for this source.</div>
+          <div class="lab-inspection-table">
+            <table class="lab-scan-table">
+              <thead>
+                <tr>
+                  <th>Subject</th>
+                  <th>Audit Reading</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(followups.length ? followups : events).map(item => {
+                  const subject = item.subject?.title
+                    ? (item.subject.year ? `${item.subject.title} (${item.subject.year})` : item.subject.title)
+                    : auditSubjectLabel(item);
+                  const reading = followups.length
+                    ? `${humanProfileLabel(item.kind || 'follow_up')} · ${item.summary || 'Active'}`
+                    : `${humanProfileLabel(item.action || 'recorded')} · ${item.summary || 'Recorded action'}`;
+                  return `
+                    <tr>
+                      <td class="lab-cell-anchor" title="${escapeHtml(subject || '—')}"><span class="lab-cell-text">${escapeHtml(subject || '—')}</span></td>
+                      <td class="lab-cell-supporting" title="${escapeHtml(reading)}"><span class="lab-cell-text">${escapeHtml(reading)}</span></td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="lab-inspection-note">Preview and action controls are suppressed while the audit ledger is open.</div>
+        </div>
+      `;
+      return;
+    }
+    if (dashboardSurfaceOpen()) {
+      const payload = currentDashboardPayload();
+      if (!payload) {
+        el.inspectionPane.innerHTML = '<div class="lab-preview-empty"><strong>No dashboard payload.</strong><div>Run a profile-bearing workflow for this source to load the dashboard surface.</div></div>';
+        return;
+      }
+      const histogram = payload.histogram || {};
+      const total = Number(histogram.movie_count ?? ((payload.movies || []).length));
+      const reviewCount = Number(histogram.profile_counts?.needs_review || 0);
+      const replacementDefinition = currentReplacementDefinition();
+      const cutoff = replacementDefinition?.fields?.[0]?.value || state.weakFloor;
+      el.inspectionPane.innerHTML = `
+        <div class="lab-inspection-pane">
+          <div class="lab-inspection-summary"><strong>${total.toLocaleString()}</strong> movies are represented in the current dashboard snapshot for this source.</div>
+          <div class="lab-inspection-table">
+            <table class="lab-scan-table">
+              <thead>
+                <tr>
+                  <th>Reading</th>
+                  <th>Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="lab-cell-anchor"><span class="lab-cell-text">Needs Review</span></td>
+                  <td class="lab-cell-supporting"><span class="lab-cell-text">${escapeHtml(reviewCount.toLocaleString())}</span></td>
+                </tr>
+                <tr>
+                  <td class="lab-cell-anchor"><span class="lab-cell-text">Weak Encode Floor</span></td>
+                  <td class="lab-cell-supporting"><span class="lab-cell-text">${escapeHtml(humanProfileLabel(cutoff))}</span></td>
+                </tr>
+                <tr>
+                  <td class="lab-cell-anchor"><span class="lab-cell-text">Scan Model</span></td>
+                  <td class="lab-cell-supporting"><span class="lab-cell-text">Reuses latest profile-bearing scan for this source</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="lab-inspection-note">Preview and action controls are suppressed while dashboard view is open.</div>
+        </div>
+      `;
       return;
     }
     const rows = state.filteredRows.slice(0, 10);
@@ -1075,7 +1810,7 @@
       el.inspectionPane.innerHTML = '<div class="lab-preview-empty"><strong>No inspection rows.</strong><div>Run the current workflow or relax the active filters.</div></div>';
       return;
     }
-    const key = usesSimpleSelectionShell() ? 'row_id' : 'result_id';
+    const key = (usesSimpleSelectionShell() || isCanonicalMode()) ? 'row_id' : 'result_id';
     el.inspectionPane.innerHTML = `
       <div class="lab-inspection-pane">
         <div class="lab-inspection-summary"><strong>${rows.length}</strong> visible inspection row${rows.length === 1 ? '' : 's'} shown in reduced-reading mode while policy editing is active.</div>
@@ -1105,6 +1840,7 @@
   function currentHeaders() {
     if (isWeakMode()) return WEAK_HEADERS;
     if (isRepairDefaultsMode()) return REPAIR_HEADERS;
+    if (isCanonicalMode()) return CANONICAL_HEADERS;
     if (isJunkMode()) return JUNK_HEADERS;
     return NORMALIZE_HEADERS;
   }
@@ -1311,8 +2047,32 @@
         .filter(item => repairItemMatchesAction(item))
         .map(repairRowForItem);
     }
+    if (isCanonicalMode()) return canonicalRows();
     if (isJunkMode()) return (state.junkPayload?.junk || []).map(junkRowForItem);
     return normalizeRows();
+  }
+
+  function canonicalRows() {
+    const summary = activeCanonicalListSummary();
+    const entries = Array.isArray(summary?.all_entries) ? summary.all_entries : [];
+    const profileByPath = canonicalProfileItemsByPath();
+    return entries.map((entry, index) => {
+      const currentPath = entry.path || '';
+      const item = currentPath ? (profileByPath.get(currentPath) || null) : null;
+      return {
+        row_id: `${summary?.id || 'canonical'}:${index + 1}:${entry.title || ''}:${entry.year || ''}`,
+        rank: index + 1,
+        title: entry.title || '',
+        year: entry.year || '',
+        imdb_id: entry.imdb_id || '',
+        owned: !!entry.owned,
+        in_library: entry.owned ? 'owned' : 'missing',
+        quality_profile: canonicalQualityProfileLabel(item) || (entry.owned ? 'Owned' : '—'),
+        current_path: currentPath,
+        item,
+        path: currentPath,
+      };
+    });
   }
 
   function applyFilters() {
@@ -1361,6 +2121,14 @@
         }
         return true;
       });
+    } else if (isCanonicalMode()) {
+      rows = rows.filter(row => {
+        if (query) {
+          const haystack = `${row.rank} ${row.title} ${row.year} ${canonicalOwnedStatusLabel(row)} ${row.quality_profile} ${row.current_path}`.toLowerCase();
+          if (!haystack.includes(query)) return false;
+        }
+        return true;
+      });
     } else {
       const bucket = el.bucketFilter.value;
       const caseFilter = el.caseFilter.value;
@@ -1390,6 +2158,16 @@
 
   function compareRows(a, b, key, dir) {
     const mult = dir === 'asc' ? 1 : -1;
+    if (isCanonicalMode()) {
+      const read = row => {
+        if (key === 'rank' || key === 'year') return Number(row[key] || 0);
+        if (key === 'in_library') return row.owned ? 0 : 1;
+        return String(row[key] || '').toLowerCase();
+      };
+      const av = read(a);
+      const bv = read(b);
+      return av < bv ? -1 * mult : av > bv ? 1 * mult : 0;
+    }
     if (usesSimpleSelectionShell()) {
       const read = row => {
         if (key === 'video_bitrate' || key === 'audio_bitrate' || key === 'channels' || key === 'file_size') return Number(row[key] || 0);
@@ -1405,7 +2183,7 @@
   }
 
   function renderFilters() {
-    if (isWeakMode() || isRepairDefaultsMode() || isJunkMode()) return;
+    if (isWeakMode() || isRepairDefaultsMode() || isCanonicalMode() || isJunkMode()) return;
     const rows = normalizeRows();
     const reasonCodes = [...new Set(rows.flatMap(row => row.reason_codes || []))].sort();
     const warningCodes = [...new Set(rows.flatMap(row => row.warning_codes || []))].sort();
@@ -1450,6 +2228,13 @@
   }
 
   function renderSelectionButtons() {
+    if (isCanonicalMode()) {
+      el.selectAllButton.disabled = true;
+      el.deselectAllButton.disabled = true;
+      el.selectAllButton.textContent = 'Select all';
+      el.deselectAllButton.textContent = 'Deselect all';
+      return;
+    }
     const selectableRows = usesSimpleSelectionShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
     const filteredCount = selectableRows.length;
     const selectedVisibleCount = selectableRows.filter(row => state.selected.has(usesSimpleSelectionShell() ? row.row_id : row.result_id)).length;
@@ -1533,6 +2318,13 @@
 
   function renderConfirmButton() {
     el.confirmButton.hidden = false;
+    if (isCanonicalMode()) {
+      el.confirmButton.hidden = true;
+      el.confirmButton.disabled = true;
+      el.confirmButton.classList.remove('is-danger');
+      el.confirmButton.textContent = 'Read-only';
+      return;
+    }
     if (isWeakMode()) {
       const count = selectedWeakPaths().length;
       el.confirmButton.disabled = count === 0 || state.applyInFlight;
@@ -1571,15 +2363,18 @@
 
   function renderPanelVisibility() {
     if (!usesDeletePreviewShell()) closeAudioPopover();
-    renderShellLayout();
-    el.scanTablePanel.hidden = state.policyEditing;
-    el.policyEditorPanel.hidden = !state.policyEditing;
-    el.previewPane.hidden = false;
-    el.inspectionPane.hidden = true;
-    el.previewControls.hidden = false;
-    el.previewPanelKicker.textContent = 'Downstream Preview';
-    el.previewPanelHeading.textContent = 'Projected Output';
+    el.scanTablePanel.hidden = surfaceOpen();
+    el.dashboardPanel.hidden = !dashboardSurfaceOpen();
+    el.policyEditorPanel.hidden = !policySurfaceOpen();
+    el.auditPanel.hidden = !auditSurfaceOpen();
+    el.previewPane.hidden = surfaceOpen();
+    el.inspectionPane.hidden = !surfaceOpen();
+    el.previewControls.hidden = surfaceOpen();
+    el.previewPanelKicker.textContent = auditSurfaceOpen() ? 'Audit Context' : (dashboardSurfaceOpen() ? 'Dashboard Context' : 'Downstream Preview');
+    el.previewPanelHeading.textContent = auditSurfaceOpen() ? 'Ledger Reading' : (dashboardSurfaceOpen() ? 'Library Overview' : 'Projected Output');
     el.previewScopeSelect.value = state.previewMode;
+    renderShellLayout();
+    syncSliverHeight();
     renderConfirmButton();
     renderWorkflowActionControls();
   }
@@ -1599,9 +2394,11 @@
       ? state.filteredRows.map(renderWeakRow).join('')
       : (isRepairDefaultsMode()
         ? state.filteredRows.map(renderRepairRow).join('')
-        : (isJunkMode()
+        : (isCanonicalMode()
+          ? state.filteredRows.map(renderCanonicalRow).join('')
+          : (isJunkMode()
           ? state.filteredRows.map(renderJunkRow).join('')
-          : state.filteredRows.map(renderNormalizeRow).join('')));
+          : state.filteredRows.map(renderNormalizeRow).join(''))));
     attachRowHandlers();
     renderJunkFilenameCells();
     renderAudioPopover();
@@ -1665,6 +2462,27 @@
         <td class="lab-cell-signal" data-priority="medium" title="${escapeHtml(row.confidence)}"><span class="lab-cell-pill ${junkConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
         <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(formatFileSize(row.file_size))}"><span class="lab-cell-text">${escapeHtml(formatFileSize(row.file_size))}</span></td>
+      </tr>
+    `;
+  }
+
+  function canonicalStatusClass(row) {
+    return row.owned ? 'is-safe' : 'is-unchanged';
+  }
+
+  function renderCanonicalRow(row) {
+    const inspectable = row.owned && row.item;
+    const qualityMarkup = inspectable
+      ? `<button class="lab-audio-popover-trigger" type="button" data-audio-popover="${escapeHtml(row.row_id)}" aria-expanded="${state.audioPopoverRowId === row.row_id ? 'true' : 'false'}">${escapeHtml(row.quality_profile || 'Owned')}</button>`
+      : `<span class="lab-cell-text">${escapeHtml(row.quality_profile || '—')}</span>`;
+    return `
+      <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
+        <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(String(row.rank || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.rank || '—'))}</span></td>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.title || '—')}">${canonicalTitleMarkup(row.title, row.imdb_id)}</td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(String(row.year || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
+        <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${canonicalStatusClass(row)}">${escapeHtml(canonicalOwnedStatusLabel(row))}</span></td>
+        <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.quality_profile || '—')}">${qualityMarkup}</td>
+        <td class="lab-cell-anchor lab-cell-mono" data-priority="desktop" title="${escapeHtml(row.current_path || '—')}"><span class="lab-cell-text">${escapeHtml(row.current_path ? fileNameFromPath(row.current_path) : '—')}</span></td>
       </tr>
     `;
   }
@@ -1820,7 +2638,35 @@
       ? el.rowsBody.querySelector(`button[data-audio-popover="${CSS.escape(state.audioPopoverRowId)}"]`)
       : null;
     const tracks = audioTracksForRow(row);
-    if (!usesDeletePreviewShell() || !row || !anchor || !tracks.length) {
+    if (!row || !anchor) {
+      closeAudioPopover();
+      return;
+    }
+    if (isCanonicalMode()) {
+      const facts = canonicalInspectorFacts(row);
+      if (!row.item || !facts.length) {
+        closeAudioPopover();
+        return;
+      }
+      popover.innerHTML = `
+        <div class="lab-audio-popover-title">Quality Profile Inspector</div>
+        <ul class="lab-audio-popover-list">
+          ${facts.map(([label, value]) => `
+            <li class="lab-audio-popover-row">
+              <span class="lab-audio-popover-lang">${escapeHtml(label)}</span>
+              <span class="lab-audio-popover-facts">${escapeHtml(value)}</span>
+            </li>
+          `).join('')}
+        </ul>
+      `;
+      popover.hidden = false;
+      positionAudioPopover(anchor, popover);
+      el.rowsBody.querySelectorAll('button[data-audio-popover]').forEach(button => {
+        button.setAttribute('aria-expanded', button.dataset.audioPopover === state.audioPopoverRowId ? 'true' : 'false');
+      });
+      return;
+    }
+    if (!usesDeletePreviewShell() || !tracks.length) {
       closeAudioPopover();
       return;
     }
@@ -1867,7 +2713,7 @@
   }
 
   function rowById(rowId) {
-    const key = usesSimpleSelectionShell() ? 'row_id' : 'result_id';
+    const key = (usesSimpleSelectionShell() || isCanonicalMode()) ? 'row_id' : 'result_id';
     return state.rows.find(item => item[key] === rowId) || state.filteredRows.find(item => item[key] === rowId) || null;
   }
 
@@ -2213,6 +3059,10 @@
       renderRepairPreviewPane();
       return;
     }
+    if (isCanonicalMode()) {
+      renderCanonicalPreviewPane();
+      return;
+    }
     if (isJunkMode()) {
       renderJunkPreviewPane();
       return;
@@ -2224,12 +3074,71 @@
   function renderSidePanel() {
     renderPanelVisibility();
     renderPolicyRail();
+    renderDashboardPanel();
     renderPolicyEditor();
-    if (state.policyEditing) {
+    renderAuditPanel();
+    if (surfaceOpen()) {
       renderInspectionPane();
       return;
     }
     renderPreviewPane();
+  }
+
+  function renderCanonicalPreviewPane() {
+    if (!state.canonicalPayload) {
+      el.previewPane.textContent = 'Run Canonical Lists to inspect list coverage.';
+      return;
+    }
+    const summary = activeCanonicalListSummary();
+    if (!summary) {
+      el.previewPane.innerHTML = '<div class="lab-preview-empty"><strong>No canonical lists loaded.</strong><div>Run Canonical Lists to load list coverage.</div></div>';
+      return;
+    }
+    const activeRow = rowById(state.activeRowId);
+    if (!activeRow) {
+      const missingPreview = Array.isArray(summary.missing_titles) ? summary.missing_titles.slice(0, 6) : [];
+      el.previewPane.innerHTML = `
+        <div class="lab-preview-summary">
+          <strong>${escapeHtml(summary.label || 'Canonical List')}</strong>
+          <span class="chip">${summary.covered_count || 0}/${summary.total_count || 0} owned</span>
+          <span class="chip">${summary.missing_count || 0} missing</span>
+        </div>
+        <div class="lab-preview-list">
+          <div class="lab-preview-item">
+            <div class="lab-preview-item-title">Coverage</div>
+            <div class="lab-preview-item-body">${escapeHtml(`${summary.coverage_percent || 0}% coverage across ${summary.total_count || 0} titles.`)}</div>
+          </div>
+          <div class="lab-preview-item">
+            <div class="lab-preview-item-title">Missing Preview</div>
+            <div class="lab-preview-item-body">${missingPreview.length ? escapeHtml(missingPreview.map(item => `${item.title} (${item.year})`).join(' | ')) : 'Complete or near-complete coverage.'}</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    const facts = canonicalInspectorFacts(activeRow);
+    el.previewPane.innerHTML = `
+      <div class="lab-preview-summary">
+        <strong>${canonicalTitleMarkup(activeRow.title, activeRow.imdb_id)}${activeRow.year ? ` (${escapeHtml(String(activeRow.year))})` : ''}</strong>
+        <span class="chip ${activeRow.owned ? '' : 'queue'}">${escapeHtml(canonicalOwnedStatusLabel(activeRow))}</span>
+      </div>
+      <div class="lab-preview-list">
+        <div class="lab-preview-item">
+          <div class="lab-preview-item-title">Library State</div>
+          <div class="lab-preview-item-body">${escapeHtml(activeRow.current_path || 'Not present in the current library.')}</div>
+        </div>
+        <div class="lab-preview-item">
+          <div class="lab-preview-item-title">Quality Profile</div>
+          <div class="lab-preview-item-body">${escapeHtml(activeRow.quality_profile || '—')}</div>
+        </div>
+        ${facts.length ? `
+          <div class="lab-preview-item">
+            <div class="lab-preview-item-title">Inspector Reading</div>
+            <div class="lab-preview-item-body">${escapeHtml(facts.map(([label, value]) => `${label}: ${value}`).join(' | '))}</div>
+          </div>
+        ` : ''}
+      </div>
+    `;
   }
 
   async function runNormalize() {
@@ -2244,9 +3153,12 @@
   }
 
   async function runWeakEncodes() {
-    const payload = await postJson('/api/movies/profile', { source: el.sourcePath.value, weak_floor: state.weakFloor });
+    const source = el.sourcePath.value.trim();
+    const payload = await postJson('/api/movies/profile', { source, weak_floor: state.weakFloor });
     state.weakPayload = payload;
+    state.weakPayloadSource = normalizeSourceKey(source);
     applyPolicyPayload(payload);
+    updateDashboardPayload(payload, source);
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
@@ -2256,9 +3168,12 @@
   }
 
   async function runRepairDefaults() {
-    const payload = await postJson('/api/movies/profile', { source: el.sourcePath.value });
+    const source = el.sourcePath.value.trim();
+    const payload = await postJson('/api/movies/profile', { source });
     state.repairPayload = payload;
+    state.repairPayloadSource = normalizeSourceKey(source);
     applyPolicyPayload(payload);
+    updateDashboardPayload(payload, source);
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
@@ -2279,12 +3194,74 @@
     renderSidePanel();
   }
 
+  async function runCanonicalLists() {
+    const source = el.sourcePath.value.trim();
+    const requestedListId = state.canonicalSelectedListId || el.canonicalListFilter?.value || 'top_100';
+    const payload = await postJson('/api/movies/canonical-lists', { source });
+    state.canonicalPayload = payload;
+    const lists = canonicalListsForPayload(payload);
+    state.canonicalSelectedListId = lists.find(item => item.id === requestedListId)?.id
+      || lists.find(item => item.id === 'top_100')?.id
+      || lists.find(item => item.id === 'top_250')?.id
+      || lists.find(item => item.id === 'top_500')?.id
+      || lists[0]?.id
+      || 'top_100';
+    if (!state.canonicalProfilePayload || state.canonicalProfileSource !== source) {
+      state.canonicalProfilePayload = await postJson('/api/movies/profile', { source });
+    }
+    state.canonicalProfileSource = normalizeSourceKey(source);
+    applyPolicyPayload(state.canonicalProfilePayload);
+    updateDashboardPayload(state.canonicalProfilePayload, source);
+    state.selected = new Set();
+    state.activeRowId = '';
+    state.previewMode = 'selected';
+    renderRows();
+    renderSidePanel();
+  }
+
+  async function exportCatalogue() {
+    const source = normalizeSourceKey(el.sourcePath.value);
+    if (!source) throw new Error('Source path required for catalogue export.');
+    state.catalogueExportInFlight = true;
+    renderSidePanel();
+    try {
+      const response = await fetch('/api/movies/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source }),
+      });
+      if (!response.ok) {
+        let message = '/api/movies/register failed';
+        try {
+          const payload = await response.json();
+          message = payload.error || message;
+        } catch {
+          // Keep the fallback message when the response body is not JSON.
+        }
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = downloadFilenameFromDisposition(response.headers.get('Content-Disposition'));
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(downloadUrl);
+    } finally {
+      state.catalogueExportInFlight = false;
+      renderSidePanel();
+    }
+  }
+
   async function runActiveWorkflow() {
     state.runInFlight = true;
     renderRunButton();
     try {
       if (isWeakMode()) await runWeakEncodes();
       else if (isRepairDefaultsMode()) await runRepairDefaults();
+      else if (isCanonicalMode()) await runCanonicalLists();
       else if (isJunkMode()) await runJunk();
       else await runNormalize();
     } finally {
@@ -2545,15 +3522,17 @@
   }
 
   function setWorkflow(workflow) {
-    state.workflow = ['weak-encodes', 'repair-defaults', 'junk'].includes(workflow) ? workflow : 'normalize';
+    state.workflow = ['weak-encodes', 'repair-defaults', 'canonical-lists', 'junk'].includes(workflow) ? workflow : 'normalize';
     state.layoutMode = LAYOUT_MODES.default;
-    state.policyEditing = false;
+    state.surfaceMode = 'default';
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
     state.repairAction = defaultRepairAction();
     state.repairActionNotice = '';
-    state.sort = usesSimpleSelectionShell() ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' };
+    state.sort = isCanonicalMode()
+      ? { key: 'rank', dir: 'asc' }
+      : (usesSimpleSelectionShell() ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' });
     clearDeletePreviewState();
     closeAudioPopover();
     syncWorkflowUrl();
@@ -2572,7 +3551,7 @@
     el.workflowButton.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 
-  [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowJunk].forEach(button => {
+  [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowJunk].forEach(button => {
     button.addEventListener('click', async () => {
       el.workflowMenu.hidden = true;
       el.workflowButton.setAttribute('aria-expanded', 'false');
@@ -2601,6 +3580,7 @@
   });
 
   window.addEventListener('resize', () => {
+    syncSliverHeight();
     if (state.audioPopoverRowId) renderAudioPopover();
   });
 
@@ -2608,8 +3588,11 @@
     if (state.audioPopoverRowId) renderAudioPopover();
   }, true);
 
-  [el.searchInput, el.bucketFilter, el.caseFilter, el.reasonFilter, el.warningFilter, el.workflowStatusFilter].forEach(control => {
+  [el.searchInput, el.bucketFilter, el.caseFilter, el.reasonFilter, el.warningFilter, el.workflowStatusFilter, el.canonicalListFilter].forEach(control => {
     control.addEventListener('change', async () => {
+      if (control === el.canonicalListFilter) {
+        state.canonicalSelectedListId = el.canonicalListFilter.value || 'top_100';
+      }
       renderRows();
       renderSidePanel();
       if (isWeakMode() && state.previewMode === 'selected' && selectedWeakPaths().length) {
@@ -2689,11 +3672,21 @@
     }
   });
 
+  if (el.dashboardToggle) {
+    el.dashboardToggle.addEventListener('click', () => {
+      state.surfaceMode = dashboardSurfaceOpen() ? 'default' : 'dashboard';
+      renderFilterVisibility();
+      renderRows();
+      renderSidePanel();
+    });
+  }
+
   renderWorkflowHeader();
   renderFilterVisibility();
   renderRunButton();
   renderTableHeader();
   renderSelectionButtons();
+  ensureSliverResizeObserver();
   renderPanelVisibility();
   renderSidePanel();
   syncWorkflowUrl();
@@ -2702,15 +3695,61 @@
     togglePolicyEditor().catch(handlePolicyToggleError);
   });
 
+  el.auditToggle.addEventListener('click', () => {
+    (async () => {
+      if (auditSurfaceOpen()) {
+        state.surfaceMode = 'default';
+      } else {
+        state.surfaceMode = 'audit';
+        await loadAuditPayload();
+      }
+      renderFilterVisibility();
+      renderRows();
+      renderSidePanel();
+    })().catch(handlePolicyToggleError);
+  });
+
   el.runButton.addEventListener('click', () => {
     runActiveWorkflow().catch(error => {
       el.previewPane.textContent = error.message;
     });
   });
 
+  el.sourcePath.addEventListener('input', () => {
+    renderSidePanel();
+  });
+
+  if (el.placeholderDownloadToggle) {
+    el.placeholderDownloadToggle.addEventListener('click', () => {
+      exportCatalogue().catch(error => {
+        el.previewPane.textContent = error.message;
+      });
+    });
+  }
+
   el.confirmButton.addEventListener('click', () => {
     confirmSelected().catch(error => {
       el.previewPane.textContent = error.message;
     });
   });
+
+  (async () => {
+    try {
+      await ensurePolicyPayload();
+      if (!normalizeSourceKey(el.sourcePath.value)) {
+        const startupSource = preferredDefaultSource();
+        if (startupSource) el.sourcePath.value = startupSource;
+      }
+      if (normalizeSourceKey(el.sourcePath.value)) {
+        state.surfaceMode = 'audit';
+        await loadAuditPayload();
+      }
+    } catch (error) {
+      el.inspectionPane.textContent = error.message;
+    } finally {
+      renderFilterVisibility();
+      renderRows();
+      renderSidePanel();
+    }
+  })();
 })();

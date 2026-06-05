@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>normal workbench</title>
-  <link rel="stylesheet" href="/parser-tester-ui-assets/normalize_lab.css">
+  <link rel="stylesheet" href="/assets/workbench.css">
 </head>
 <body>
   <div class="lab-shell" data-layout-mode="2-page-lopsided">
     <header class="lab-topbar">
       <div>
-        <div class="lab-kicker">alpha.3 default</div>
+        <div class="lab-kicker">alpha.4 workbench</div>
         <div class="lab-workflow-switch">
           <button id="workflowButton" class="lab-workflow-button" type="button" aria-haspopup="listbox" aria-expanded="false">
             <span id="workflowTitle">Movie Normalize</span>
@@ -20,6 +20,7 @@
             <button id="workflowNormalize" class="lab-workflow-option" type="button" data-workflow="normalize" role="option">Movie Normalize</button>
             <button id="workflowWeakEncodes" class="lab-workflow-option" type="button" data-workflow="weak-encodes" role="option">Weak Encodes</button>
             <button id="workflowRepairDefaults" class="lab-workflow-option" type="button" data-workflow="repair-defaults" role="option">Repair Defaults</button>
+            <button id="workflowCanonicalLists" class="lab-workflow-option" type="button" data-workflow="canonical-lists" role="option">Canonical Lists</button>
             <button id="workflowJunk" class="lab-workflow-option" type="button" data-workflow="junk" role="option">Delete Junk &amp; Spam</button>
           </div>
         </div>
@@ -56,7 +57,10 @@
         <option value="review">review</option>
         <option value="queued">queued</option>
       </select>
-      <label for="previewScopeSelect">Preview Scope</label>
+      <select id="canonicalListFilter" aria-label="Canonical list" hidden>
+        <option value="top_100">Top 100</option>
+      </select>
+      <label id="previewScopeLabel" for="previewScopeSelect">Preview Scope</label>
       <select id="previewScopeSelect">
         <option value="selected">Selected</option>
         <option value="library">Full library</option>
@@ -66,12 +70,22 @@
     </section>
 
     <main class="lab-layout">
-      <aside class="lab-sliver">
-        <div class="lab-sliver-head">
-          <button id="policyToggle" class="lab-sliver-toggle" type="button" aria-label="Open Policy" title="Open Policy"></button>
-        </div>
-        <div id="policyRail" class="lab-sliver-body"></div>
-      </aside>
+      <div class="lab-sliver-slot">
+        <aside class="lab-sliver">
+          <div class="lab-sliver-stack">
+            <button id="policyToggle" class="lab-sliver-toggle" type="button" aria-label="Open Policy" title="Open Policy"></button>
+            <div class="lab-sliver-separator" aria-hidden="true"></div>
+            <button id="dashboardToggle" class="lab-sliver-toggle" type="button" aria-label="Open Dashboard" title="Open Dashboard"></button>
+            <div class="lab-sliver-separator" aria-hidden="true"></div>
+            <button id="auditToggle" class="lab-sliver-toggle" type="button" aria-label="Open Audit" title="Open Audit"></button>
+            <div class="lab-sliver-separator" aria-hidden="true"></div>
+            <button id="placeholderToggle" class="lab-sliver-toggle" type="button" aria-label="Placeholder" title="Placeholder" disabled></button>
+            <div class="lab-sliver-separator" aria-hidden="true"></div>
+            <button id="placeholderDownloadToggle" class="lab-sliver-toggle" type="button" aria-label="Placeholder" title="Placeholder" disabled></button>
+          </div>
+          <div id="policyRail" class="lab-sliver-body"></div>
+        </aside>
+      </div>
       <section class="lab-page lab-page-scan" data-page-role="scan" data-collapse-mode="reflow" data-panel-state="expanded">
         <div class="lab-page-frame">
           <section id="scanTablePanel" class="lab-table-panel lab-rhythm-surface" data-rhythm-surface="rows">
@@ -89,7 +103,9 @@
               <tbody id="rowsBody"></tbody>
             </table>
           </section>
+          <section id="dashboardPanel" class="lab-panel lab-policy-panel lab-dashboard-panel" hidden></section>
           <section id="policyEditorPanel" class="lab-panel lab-policy-panel" hidden></section>
+          <section id="auditPanel" class="lab-panel lab-audit-panel" hidden></section>
         </div>
       </section>
       <aside class="lab-page lab-page-preview" data-page-role="preview" data-collapse-mode="anchored-slot" data-panel-state="expanded">
@@ -120,6 +136,6 @@
   </div>
   <div id="audioTrackPopover" class="lab-audio-popover" hidden></div>
   <script>__NORMAL_BOOTSTRAP__</script>
-  <script src="/parser-tester-ui-assets/normalize_lab.js"></script>
+  <script src="/assets/workbench.js"></script>
 </body>
 </html>

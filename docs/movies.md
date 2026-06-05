@@ -4,8 +4,6 @@
 
 The movie workflow is the product now. It is not a generic media organizer. It is a deliberate local system for forcing a pirate movie library toward a cleaner downstream shape with as little ambiguity, scan waste, and junk tolerance as possible.
 
-![Movies dashboard](assets/readme_dashboard.png)
-
 ## Dashboard
 
 A library-wide view of encode quality, resolution mix, standards posture, and replacement pressure. This is the first stop if you want to understand what kind of library you actually have rather than what you imagine you have.
@@ -16,9 +14,9 @@ To export a formatted XLSX catalogue of the current library, use the **Export** 
 
 ## Canonical Lists
 
-The **Canonical Lists** page compares owned titles against live all-time movie lists using TMDb and a local cache. It is title-coverage focused. Bitrate, quality tiers, and warning telemetry do not affect the result.
+The **Canonical Lists** page compares owned titles against IMDb-derived all-time movie lists using a local dataset plus a local cache. IMDb-backed lists are consensus-weighted locally rather than sorted by raw average rating alone, so broadly validated films outrank niche high-average outliers. It is title-coverage focused. Bitrate, quality tiers, and warning telemetry do not affect the result.
 
-Pass `--tmdb-key` to `normal web` or set `TMDB_KEY` before launch. Current badges are intentionally simple and good enough for first-pass coverage tracking; badge-system refinement is deferred.
+Set `IMDB_DATASET_DIR` to a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz` before launch. TMDb remains available as an explicit secondary provider when `TMDB_KEY` is provided. Current badges are intentionally simple and good enough for first-pass coverage tracking; badge-system refinement is deferred.
 For the broader local-first versus outbound API posture, see [Safety](safety.md#networking-behaviour).
 
 ![Canonical Lists](assets/canonical_lists.png)
@@ -33,14 +31,14 @@ Title (Year)/Title (Year).mkv
 
 The production normalizer is concise-first and treated as the intended movie shape. **All Results** includes already-normalized items as no-change rows so the preview shows the full downstream structure, not just the diffs.
 
-The internal testing surface at `/parser-tester-ui` is now useful for real downstream inspection rather than just row debugging. It renders the projected library shape inline as a compact directory tree, supports staged preview through row selection, and can confirm the same normalize apply action the main UI uses. That makes it useful both for checking whether a proposal is merely parsable and for checking whether the selected downstream shape is coherent before applying it.
+The main workbench is now the only shell. It renders the projected library shape inline as a compact directory tree, supports staged preview through row selection, and can confirm the same normalize apply action it previews. That makes it useful both for checking whether a proposal is merely parsable and for checking whether the selected downstream shape is coherent before applying it.
 
-Current internal tester routes:
+Current workflow deep links:
 
-- `/parser-tester-ui?workflow=normalize`
-- `/parser-tester-ui?workflow=weak-encodes`
-- `/parser-tester-ui?workflow=repair-defaults`
-- `/parser-tester-ui?workflow=junk`
+- `/?workflow=normalize`
+- `/?workflow=weak-encodes`
+- `/?workflow=repair-defaults`
+- `/?workflow=junk`
 
 Verbose naming still exists temporarily in the CLI as parser-hardening scaffolding, but it is not the public end state:
 
@@ -125,7 +123,7 @@ Profiles also expose **Allow original mono before year**. This is narrower than 
 
 Quality scan results include a normalized main-audio summary for the playback-relevant stream alongside audio bitrate — `AAC 2.0`, `Dolby Digital 5.1`, `Dolby Digital Plus 5.1 Atmos`, `Dolby TrueHD 7.1 Atmos`, `DTS-HD MA 5.1`, and similar labels.
 
-In the internal testing shell at `/parser-tester-ui?workflow=weak-encodes`, the
+In the main workbench at `/?workflow=weak-encodes`, the
 audio bitrate value is clickable. It opens a compact adjacent track inspector
 showing each audio stream's language, bitrate, channel layout, and which stream
 is marked default. This is primarily there to expose multi-audio packaging
@@ -157,9 +155,8 @@ This is one of the few optional outbound API paths; see [Safety](safety.md#netwo
 `Repair Defaults` is one page that now stages audio-packaging and
 subtitle-readiness issues together inside one compact shell.
 
-The same lane is also available in the focused internal shell at
-`/parser-tester-ui?workflow=repair-defaults`, which is useful when you want to
-inspect repair consequences without the rest of the main dashboard chrome.
+The same lane is also available directly at `/?workflow=repair-defaults`, which
+is useful when you want to jump straight into repair consequences.
 
 ### Audio Packaging
 

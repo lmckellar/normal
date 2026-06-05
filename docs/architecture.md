@@ -23,8 +23,8 @@ Current normalize contract is intentionally evidence-driven:
 - parser evidence and local folder context can promote a collision from `review` to `safe`
 - shared display-title and token cleanup now lives in `movie_naming.py`, with `movie_identity.py` and downstream lookup/matching surfaces reusing that seam
 - normalize web payloads now carry linked change detail plus warning detail for each movie row
-- `/parser-tester-ui` is an internal inspection and apply surface for that richer backend reasoning; it reuses the same normalize confirm/apply endpoint as the main UI rather than introducing a separate mutation contract
-- `/parser-tester-ui` also acts as a downstream-shape harness: selected rows can be staged into an inline tree preview, the filtered library view can be rendered as a compact projected directory shape, and safe wrapper-folder deletes implied by a fully selected package split can be confirmed alongside the row-linked movie moves
+- the main workbench is the only web shell for that richer backend reasoning; it reuses the same normalize confirm/apply endpoint rather than introducing a separate mutation contract
+- the same workbench also acts as a downstream-shape harness: selected rows can be staged into an inline tree preview, the filtered library view can be rendered as a compact projected directory shape, and safe wrapper-folder deletes implied by a fully selected package split can be confirmed alongside the row-linked movie moves
 - parser cleanup is still local-only and intentionally narrow: edge tracker/domain credit stripping, compact token cleanup, a small settled punctuation family, and a tiny explicit canonical-title exception seam for non-generalizable settled cases; no remote canonical-title recovery
 
 ### Quality and triage pipeline
@@ -67,9 +67,9 @@ The scan is read-only. Deletion happens only after explicit selection and confir
 
 ### Canonical lists and ratings
 
-Two optional network-backed surfaces sit beside the local pipelines:
+Two provider-backed support surfaces sit beside the local pipelines:
 
-- Canonical Lists uses TMDb plus a local cache for title coverage comparisons.
+- Canonical Lists defaults to local IMDb datasets plus a local cache for title coverage comparisons, with local consensus-weighted IMDb ranking and optional TMDb fallback when explicitly selected.
 - Replacement-history IMDb ratings use OMDb plus a local cache.
 
 These do not drive mutation decisions. They are support surfaces around the local library state.
@@ -94,10 +94,11 @@ Under `~/.local/share/normal/`:
   delete posture.
 - `probe-cache.json` stores per-file probe results keyed by resolved path, mtime, and size.
 - `library-roots.json` stores the last active movie root and a short recent-roots list.
+- `audit-ledger.jsonl` stores the unified audit/event ledger for scans, deletes, repairs, exports, policy updates, and follow-up state changes.
 
 ### User-local caches
 
-- `~/.local/share/normal/canonical_lists/<schema-version>/` stores TMDb canonical-list cache files.
+- `~/.local/share/normal/canonical_lists/<schema-version>/<provider>/` stores canonical-list cache files per provider.
 - `~/.cache/normal/omdb_ratings/<schema-version>/` stores cached OMDb rating lookups.
 
 ### Browser-local convenience state
@@ -143,7 +144,7 @@ Current behavior is intentionally narrow: saving standards updates the definitio
 
 ### Canonical-list and OMDb caches
 
-- TMDb canonical-list data is cached on disk and may be returned as fresh, live, or stale cached data depending on fetch state.
+- Canonical-list data is cached per provider on disk and may be returned as fresh, live, or stale cached data depending on fetch state.
 - OMDb ratings are cached per lookup key so repeated replacement-history loads do not keep spending quota.
 
 ## Mutation model
@@ -201,6 +202,6 @@ These are still explicit mutations, but they are repair operations rather than f
 - Heavy recursive scans are single-flight per source in the web UI.
 - Recursive discovery is streamed rather than fully enumerated up front in the heavy movie workflows.
 - Backend row serializers are expected to work from indexed or precomputed scan/plan state rather than re-walking or reparsing per row on hot paths.
-- Most product decisions are local-file-first. Remote metadata is limited to the optional TMDb and OMDb surfaces.
+- Most product decisions are local-file-first. Remote metadata is limited to optional TMDb and OMDb calls; the default canonical-list path uses local IMDb datasets.
 
 For user-facing operation and safety guidance, see [Movies](movies.md) and [Safety](safety.md). For agent/developer operational detail, see [Agent reference](agent.md).
