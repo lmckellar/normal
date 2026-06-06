@@ -135,7 +135,8 @@
     repairActionNotice: '',
     audioFixBusy: false,
     subtitleFixBusy: false,
-    audioPopoverRowId: '',
+    trackPopoverRowId: '',
+    trackPopoverKind: '',
     weakPayloadSource: '',
     repairPayloadSource: '',
     junkDeleteSkipped: [],
@@ -198,7 +199,7 @@
     previewPanelHeading: document.getElementById('previewPanelHeading'),
     previewPane: document.getElementById('previewPane'),
     inspectionPane: document.getElementById('inspectionPane'),
-    audioTrackPopover: document.getElementById('audioTrackPopover'),
+    trackPopover: document.getElementById('trackPopover'),
   };
 
   el.sourcePath.value = window.DEFAULT_SOURCE || '';
@@ -1151,6 +1152,11 @@
       .join(' · ');
   }
 
+  function describeSubtitlePolicyTarget(stream, options = {}) {
+    if (!stream) return options.clearLabel || 'no subtitle default';
+    return `${describeSubtitleStream(stream)} default`;
+  }
+
   function repairDefaultSubtitleLabel(item) {
     const subtitleStreams = item?.facts?.subtitle_streams || [];
     const defaultCount = Number(item?.facts?.default_subtitle_streams || 0);
@@ -1160,6 +1166,10 @@
     if (!stream) return 'None';
     const language = displayAudioLanguage(stream.language);
     return stream.is_forced ? `${language} Forced` : language;
+  }
+
+  function subtitleTracksForRow(row) {
+    return row?.item?.facts?.subtitle_streams || [];
   }
 
   function movieAudioPackagingTarget(item) {
@@ -2338,28 +2348,28 @@
     const parts = [];
     const audioIssue = movieAudioPackagingIssueCode(item);
     const subtitleIssue = movieSubtitleReadinessIssueCode(item);
-    if (audioIssue) parts.push(audioIssue === 'default_non_english_audio_with_weak_english' ? 'wrong language · weak English' : 'wrong default language');
+    if (audioIssue) parts.push(audioIssue === 'default_non_english_audio_with_weak_english' ? 'non-English audio is default · English backup is weaker' : 'non-English audio is default');
     if (subtitleIssue && movieSubtitleReadinessIsRepairable(item)) parts.push(humanSubtitleReadinessIssueLabel(subtitleIssue));
     if (audioIssue && combinedSubtitleWillRun(item) && combinedSubtitleSecondOrder(item)) {
       const stagedIssue = repairPlanCombinedSubtitle(item)?.issue_code || '';
-      parts.push(`then ${humanSubtitleReadinessIssueLabel(stagedIssue)}`);
+      parts.push(`after audio default flips: ${humanSubtitleReadinessIssueLabel(stagedIssue)}`);
     }
     return parts.join(' | ');
   }
 
   function repairCurrentDefaultSummary(item) {
     const parts = [];
-    if (movieAudioPackagingIssueCode(item)) parts.push(describeAudioStream(movieDefaultAudioStream(item)));
-    if (movieSubtitleReadinessIsRepairable(item)) parts.push(`subtitle: ${describeSubtitleStream(movieDefaultSubtitleStream(item))}`);
+    if (movieAudioPackagingIssueCode(item)) parts.push(`audio default: ${describeAudioStream(movieDefaultAudioStream(item))}`);
+    if (movieSubtitleReadinessIsRepairable(item) || combinedSubtitleWillRun(item)) parts.push(`subtitle default: ${describeSubtitleStream(movieDefaultSubtitleStream(item))}`);
     return parts.join(' | ') || '—';
   }
 
   function repairTargetSummary(item) {
     const parts = [];
-    if (movieAudioPackagingIssueCode(item)) parts.push(describeAudioStream(movieAudioPackagingTarget(item)));
-    if (movieSubtitleReadinessIsRepairable(item)) parts.push(`subtitle: ${describeSubtitleStream(movieSubtitleReadinessRepairTarget(item)) || 'clear defaults'}`);
+    if (movieAudioPackagingIssueCode(item)) parts.push(`audio default: ${describeAudioStream(movieAudioPackagingTarget(item))}`);
+    if (movieSubtitleReadinessIsRepairable(item)) parts.push(`subtitle default: ${describeSubtitlePolicyTarget(movieSubtitleReadinessRepairTarget(item))}`);
     if (movieAudioPackagingIssueCode(item) && combinedSubtitleWillRun(item) && combinedSubtitleSecondOrder(item)) {
-      parts.push(`then subtitle: ${describeSubtitleStream(movieCombinedSubtitleRepairTarget(item)) || 'clear defaults'}`);
+      parts.push(`after audio switch, subtitle default: ${describeSubtitlePolicyTarget(movieCombinedSubtitleRepairTarget(item))}`);
     }
     return parts.join(' | ') || '—';
   }
@@ -2786,7 +2796,7 @@
   }
 
   function renderPanelVisibility() {
-    if (!usesDeletePreviewShell()) closeAudioPopover();
+    if (!usesDeletePreviewShell()) closeTrackPopover();
     el.workflowButton.dataset.active = surfaceOpen() ? 'false' : 'true';
     el.scanTablePanel.hidden = surfaceOpen();
     el.dashboardPanel.hidden = !dashboardSurfaceOpen();
@@ -2809,7 +2819,7 @@
     synchronizeSelectionWithRows();
     renderSelectionButtons();
     if (!state.filteredRows.length) {
-      closeAudioPopover();
+      closeTrackPopover();
       const colspan = String(currentHeaders().length);
       el.rowsBody.innerHTML = `<tr><td colspan="${colspan}">No rows for the active filters.</td></tr>`;
       renderConfirmButton();
@@ -2827,7 +2837,7 @@
           : state.filteredRows.map(renderNormalizeRow).join(''))));
     attachRowHandlers();
     renderJunkFilenameCells();
-    renderAudioPopover();
+    renderTrackPopover();
     renderConfirmButton();
     renderWorkflowActionControls();
   }
@@ -2848,7 +2858,7 @@
     const checked = state.selected.has(row.row_id) ? 'checked' : '';
     const hasAudioTracks = audioTracksForRow(row).length > 0;
     const audioBitrateMarkup = hasAudioTracks
-      ? `<button class="lab-audio-popover-trigger" type="button" data-audio-popover="${escapeHtml(row.row_id)}" aria-expanded="${state.audioPopoverRowId === row.row_id ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
+      ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
       : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
@@ -2873,7 +2883,7 @@
     const checked = state.selected.has(row.row_id) ? 'checked' : '';
     const hasAudioTracks = audioTracksForRow(row).length > 0;
     const audioBitrateMarkup = hasAudioTracks
-      ? `<button class="lab-audio-popover-trigger" type="button" data-audio-popover="${escapeHtml(row.row_id)}" aria-expanded="${state.audioPopoverRowId === row.row_id ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
+      ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
       : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
@@ -2899,7 +2909,7 @@
   function renderCanonicalRow(row) {
     const inspectable = row.owned && row.item;
     const qualityMarkup = inspectable
-      ? `<button class="lab-audio-popover-trigger" type="button" data-audio-popover="${escapeHtml(row.row_id)}" aria-expanded="${state.audioPopoverRowId === row.row_id ? 'true' : 'false'}">${escapeHtml(row.quality_profile || 'Owned')}</button>`
+      ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(row.quality_profile || 'Owned')}</button>`
       : `<span class="lab-cell-text">${escapeHtml(row.quality_profile || '—')}</span>`;
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
@@ -2924,15 +2934,19 @@
     const checked = state.selected.has(row.row_id) ? 'checked' : '';
     const disabled = repairDefaultsSelectionLocked() ? 'disabled' : '';
     const hasAudioTracks = audioTracksForRow(row).length > 0;
+    const hasSubtitleTracks = subtitleTracksForRow(row).length > 0;
     const audioBitrateMarkup = hasAudioTracks
-      ? `<button class="lab-audio-popover-trigger" type="button" data-audio-popover="${escapeHtml(row.row_id)}" aria-expanded="${state.audioPopoverRowId === row.row_id ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
+      ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
       : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
+    const defaultSubtitleMarkup = hasSubtitleTracks
+      ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="subtitle" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'subtitle' ? 'true' : 'false'}">${escapeHtml(row.default_subtitle || 'None')}</button>`
+      : `<span class="lab-cell-text">${escapeHtml(row.default_subtitle || 'None')}</span>`;
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked} ${disabled}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(formatBitrate(row.audio_bitrate))}">${audioBitrateMarkup}</td>
-        <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.default_subtitle || 'None')}"><span class="lab-cell-text">${escapeHtml(row.default_subtitle || 'None')}</span></td>
+        <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.default_subtitle || 'None')}">${defaultSubtitleMarkup}</td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
         <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.current_default || '—')}"><span class="lab-cell-text">${escapeHtml(row.current_default || '—')}</span></td>
         <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.repair_target || '—')}"><span class="lab-cell-text">${escapeHtml(row.repair_target || '—')}</span></td>
@@ -3057,33 +3071,40 @@
         refreshSelectionState();
       });
     });
-    el.rowsBody.querySelectorAll('button[data-audio-popover]').forEach(button => {
+    el.rowsBody.querySelectorAll('button[data-track-popover]').forEach(button => {
       button.addEventListener('click', event => {
         event.stopPropagation();
-        const rowId = button.dataset.audioPopover || '';
+        const rowId = button.dataset.trackPopover || '';
+        const kind = button.dataset.trackPopoverKind || 'audio';
         if (!rowId) return;
-        state.audioPopoverRowId = state.audioPopoverRowId === rowId ? '' : rowId;
-        renderAudioPopover();
+        if (state.trackPopoverRowId === rowId && state.trackPopoverKind === kind) {
+          closeTrackPopover();
+          return;
+        }
+        state.trackPopoverRowId = rowId;
+        state.trackPopoverKind = kind;
+        renderTrackPopover();
       });
     });
   }
 
-  function renderAudioPopover() {
-    const popover = el.audioTrackPopover;
+  function renderTrackPopover() {
+    const popover = el.trackPopover;
     if (!popover) return;
-    const row = rowById(state.audioPopoverRowId);
-    const anchor = state.audioPopoverRowId
-      ? el.rowsBody.querySelector(`button[data-audio-popover="${CSS.escape(state.audioPopoverRowId)}"]`)
+    const row = rowById(state.trackPopoverRowId);
+    const anchor = state.trackPopoverRowId
+      ? el.rowsBody.querySelector(`button[data-track-popover="${CSS.escape(state.trackPopoverRowId)}"][data-track-popover-kind="${CSS.escape(state.trackPopoverKind || 'audio')}"]`)
       : null;
     const tracks = audioTracksForRow(row);
+    const subtitleTracks = subtitleTracksForRow(row);
     if (!row || !anchor) {
-      closeAudioPopover();
+      closeTrackPopover();
       return;
     }
     if (isCanonicalMode()) {
       const facts = canonicalInspectorFacts(row);
       if (!row.item || !facts.length) {
-        closeAudioPopover();
+        closeTrackPopover();
         return;
       }
       popover.innerHTML = `
@@ -3098,14 +3119,38 @@
         </ul>
       `;
       popover.hidden = false;
-      positionAudioPopover(anchor, popover);
-      el.rowsBody.querySelectorAll('button[data-audio-popover]').forEach(button => {
-        button.setAttribute('aria-expanded', button.dataset.audioPopover === state.audioPopoverRowId ? 'true' : 'false');
+      positionTrackPopover(anchor, popover);
+      el.rowsBody.querySelectorAll('button[data-track-popover]').forEach(button => {
+        button.setAttribute('aria-expanded', button.dataset.trackPopover === state.trackPopoverRowId && button.dataset.trackPopoverKind === state.trackPopoverKind ? 'true' : 'false');
+      });
+      return;
+    }
+    if (state.trackPopoverKind === 'subtitle') {
+      if (!isRepairDefaultsMode() || !subtitleTracks.length) {
+        closeTrackPopover();
+        return;
+      }
+      popover.innerHTML = `
+        <div class="lab-audio-popover-title">Subtitle Tracks</div>
+        <ul class="lab-audio-popover-list">
+          ${subtitleTracks.map(track => `
+            <li class="lab-audio-popover-row">
+              <span class="lab-audio-popover-lang">${escapeHtml(describeSubtitleStream(track))}</span>
+              <span class="lab-audio-popover-facts">${escapeHtml(track.is_forced ? 'forced' : 'full')}</span>
+              ${track.is_default ? '<span class="lab-audio-popover-default">default</span>' : ''}
+            </li>
+          `).join('')}
+        </ul>
+      `;
+      popover.hidden = false;
+      positionTrackPopover(anchor, popover);
+      el.rowsBody.querySelectorAll('button[data-track-popover]').forEach(button => {
+        button.setAttribute('aria-expanded', button.dataset.trackPopover === state.trackPopoverRowId && button.dataset.trackPopoverKind === state.trackPopoverKind ? 'true' : 'false');
       });
       return;
     }
     if (!usesDeletePreviewShell() || !tracks.length) {
-      closeAudioPopover();
+      closeTrackPopover();
       return;
     }
     popover.innerHTML = `
@@ -3121,13 +3166,13 @@
       </ul>
     `;
     popover.hidden = false;
-    positionAudioPopover(anchor, popover);
-    el.rowsBody.querySelectorAll('button[data-audio-popover]').forEach(button => {
-      button.setAttribute('aria-expanded', button.dataset.audioPopover === state.audioPopoverRowId ? 'true' : 'false');
+    positionTrackPopover(anchor, popover);
+    el.rowsBody.querySelectorAll('button[data-track-popover]').forEach(button => {
+      button.setAttribute('aria-expanded', button.dataset.trackPopover === state.trackPopoverRowId && button.dataset.trackPopoverKind === state.trackPopoverKind ? 'true' : 'false');
     });
   }
 
-  function positionAudioPopover(anchor, popover) {
+  function positionTrackPopover(anchor, popover) {
     const anchorRect = anchor.getBoundingClientRect();
     const popoverRect = popover.getBoundingClientRect();
     const margin = 12;
@@ -3140,12 +3185,13 @@
     popover.style.top = `${Math.max(margin, top)}px`;
   }
 
-  function closeAudioPopover() {
-    state.audioPopoverRowId = '';
-    if (!el.audioTrackPopover) return;
-    el.audioTrackPopover.hidden = true;
-    el.audioTrackPopover.innerHTML = '';
-    el.rowsBody.querySelectorAll('button[data-audio-popover]').forEach(button => {
+  function closeTrackPopover() {
+    state.trackPopoverRowId = '';
+    state.trackPopoverKind = '';
+    if (!el.trackPopover) return;
+    el.trackPopover.hidden = true;
+    el.trackPopover.innerHTML = '';
+    el.rowsBody.querySelectorAll('button[data-track-popover]').forEach(button => {
       button.setAttribute('aria-expanded', 'false');
     });
   }
@@ -3168,7 +3214,16 @@
       });
       flattenPreviewTree(entry, lines, depth + 1);
     });
-    (node._files || []).sort((a, b) => a.name.localeCompare(b.name)).forEach(file => {
+    (node._files || []).slice().sort((a, b) => {
+      const leftHasSequence = Number.isFinite(a.sequence);
+      const rightHasSequence = Number.isFinite(b.sequence);
+      if (leftHasSequence || rightHasSequence) {
+        if (!leftHasSequence) return 1;
+        if (!rightHasSequence) return -1;
+        if (a.sequence !== b.sequence) return a.sequence - b.sequence;
+      }
+      return a.name.localeCompare(b.name);
+    }).forEach(file => {
       lines.push({
         label: file.folder ? `${file.name}/` : file.name,
         depth,
@@ -3176,6 +3231,8 @@
         selected: Boolean(file.selected),
         deleted: Boolean(file.deleted),
         cleanup: Boolean(file.cleanup),
+        staged: Boolean(file.staged),
+        landing: Boolean(file.landing),
       });
     });
   }
@@ -3233,8 +3290,8 @@
     return `
       <div class="lab-tree">
         ${lines.map(line => `
-          <div class="lab-tree-line lab-indent-${Math.min(line.depth, 5)} ${line.mutated ? 'is-mutated' : ''} ${line.selected ? 'is-selected' : ''} ${line.deleted ? 'is-deleted' : ''} ${line.cleanup ? 'is-cleanup' : ''}">
-            ${escapeHtml(line.label)}
+          <div class="lab-tree-line lab-indent-${Math.min(line.depth, 5)} ${line.mutated ? 'is-mutated' : ''} ${line.selected ? 'is-selected' : ''} ${line.deleted ? 'is-deleted' : ''} ${line.cleanup ? 'is-cleanup' : ''} ${line.staged ? 'is-staged' : ''} ${line.landing ? 'is-landing' : ''}">
+            <span class="lab-tree-line-label">${escapeHtml(line.label)}</span>
           </div>
         `).join('')}
       </div>
@@ -3424,31 +3481,35 @@
       node[part] = node[part] || {};
       return node[part];
     }, tree);
+    let sequence = 0;
+    const addRepairPath = (path, flags) => addPathToTree(containerNode, path, { ...flags, sequence: sequence++ });
     const audioTouched = rowTouchesFamily(row, 'audio');
     const subtitleTouched = rowTouchesFamily(row, 'subtitle');
     const combinedSubtitleTouched = actionTouchesAudio(action) && actionTouchesSubtitle(action) && rowTouchesFamily(row, 'audio') && combinedSubtitleWillRun(row.item);
     if (actionTouchesAudio(action) && rowTouchesFamily(row, 'audio')) {
       const defaultAudio = movieDefaultAudioStream(row.item);
       const targetAudio = movieAudioPackagingTarget(row.item);
-      if (defaultAudio) addPathToTree(containerNode, `streams/audio-${defaultAudio.index || 0}-${displayAudioLanguage(defaultAudio.language)}${repairActionConfig(action).dropForeignAudio ? ' [default -> passenger]' : ' [default -> cleared]'}`, { mutated: true });
-      if (targetAudio) addPathToTree(containerNode, `streams/audio-${targetAudio.index || 0}-${displayAudioLanguage(targetAudio.language)} [English default target]`, { mutated: true });
+      if (defaultAudio) addRepairPath(`audio/default: ${describeAudioStream(defaultAudio)}${repairActionConfig(action).dropForeignAudio ? ' [default cleared, stream kept if retained]' : ' [default cleared]'}`, { mutated: true, staged: true });
+      if (targetAudio) addRepairPath(`audio/default: ${describeAudioStream(targetAudio)} [becomes default]`, { mutated: true, landing: true });
       if (repairActionConfig(action).dropForeignAudio) {
         (row.item?.facts?.audio_streams || [])
           .filter(stream => canonicalAudioLanguageValue(stream.language) && canonicalAudioLanguageValue(stream.language) !== 'english')
-          .forEach(stream => addPathToTree(containerNode, `streams/audio-${stream.index || 0}-${displayAudioLanguage(stream.language)} [removed]`, { deleted: true }));
+          .forEach(stream => addRepairPath(`audio/remove: ${describeAudioStream(stream)}`, { deleted: true }));
       }
     }
     if (actionTouchesAudio(action) && !audioTouched) {
-      addPathToTree(containerNode, 'streams/audio [no audio-default change for this file]', {});
+      addRepairPath('audio/no change', {});
     }
     if (actionTouchesSubtitle(action) && (subtitleTouched || combinedSubtitleTouched)) {
       const defaultSubtitle = movieDefaultSubtitleStream(row.item);
       const targetSubtitle = subtitleTouched ? movieSubtitleReadinessRepairTarget(row.item) : movieCombinedSubtitleRepairTarget(row.item);
-      if (defaultSubtitle) addPathToTree(containerNode, `streams/subtitle-${defaultSubtitle.index || 0}-${displayAudioLanguage(defaultSubtitle.language)} [default -> cleared]`, { mutated: true });
-      if (targetSubtitle) addPathToTree(containerNode, `streams/subtitle-${targetSubtitle.index || 0}-${displayAudioLanguage(targetSubtitle.language)}${targetSubtitle.is_forced ? ' forced' : ''} [default target]`, { mutated: true });
+      const hasLandingSubtitleResult = Boolean(targetSubtitle) || Boolean(defaultSubtitle);
+      if (defaultSubtitle) addRepairPath(`subtitle/default: ${describeSubtitleStream(defaultSubtitle)} [default cleared]`, { mutated: true, staged: hasLandingSubtitleResult });
+      if (targetSubtitle) addRepairPath(`subtitle/default: ${describeSubtitleStream(targetSubtitle)} [becomes default]`, { mutated: true, landing: true });
+      if (!targetSubtitle) addRepairPath('subtitle/default: no subtitle default', { mutated: true, landing: true });
     }
     if (actionTouchesSubtitle(action) && !subtitleTouched && !combinedSubtitleTouched) {
-      addPathToTree(containerNode, 'streams/subtitles [no subtitle-default change for this file]', {});
+      addRepairPath('subtitle/no change', {});
     }
     return renderPreviewTreeMarkup(tree);
   }
@@ -4109,7 +4170,7 @@
       ? { key: 'rank', dir: 'asc' }
       : (usesSimpleSelectionShell() ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' });
     clearDeletePreviewState();
-    closeAudioPopover();
+    closeTrackPopover();
     syncWorkflowUrl();
     renderWorkflowHeader();
     renderFilterVisibility();
@@ -4180,26 +4241,26 @@
       el.workflowButton.setAttribute('aria-expanded', 'false');
     }
     if (
-      el.audioTrackPopover
-      && !el.audioTrackPopover.hidden
-      && !el.audioTrackPopover.contains(event.target)
-      && !(event.target instanceof Element && event.target.closest('button[data-audio-popover]'))
+      el.trackPopover
+      && !el.trackPopover.hidden
+      && !el.trackPopover.contains(event.target)
+      && !(event.target instanceof Element && event.target.closest('button[data-track-popover]'))
     ) {
-      closeAudioPopover();
+      closeTrackPopover();
     }
   });
 
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') closeAudioPopover();
+    if (event.key === 'Escape') closeTrackPopover();
   });
 
   window.addEventListener('resize', () => {
     syncSliverHeight();
-    if (state.audioPopoverRowId) renderAudioPopover();
+    if (state.trackPopoverRowId) renderTrackPopover();
   });
 
   window.addEventListener('scroll', () => {
-    if (state.audioPopoverRowId) renderAudioPopover();
+    if (state.trackPopoverRowId) renderTrackPopover();
   }, true);
 
   [el.searchInput, el.bucketFilter, el.workflowStatusFilter, el.canonicalListFilter].forEach(control => {

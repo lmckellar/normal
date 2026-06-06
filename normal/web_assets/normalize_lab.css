@@ -1240,6 +1240,7 @@ input[type="checkbox"] {
 .lab-tree-line {
   display: flex;
   align-items: center;
+  gap: 8px;
   min-height: var(--lab-local-row-height, var(--lab-rhythm-row-height));
   box-sizing: border-box;
   white-space: nowrap;
@@ -1252,6 +1253,10 @@ input[type="checkbox"] {
   padding-right: var(--lab-local-row-inline-pad, var(--lab-rhythm-row-inline-pad));
   border-bottom: 1px solid var(--lab-local-row-rule, var(--lab-rhythm-row-rule));
   margin: 0;
+}
+
+.lab-tree-line-label {
+  min-width: 0;
 }
 
 .lab-tree-line:last-child { border-bottom: 0; }
@@ -1274,6 +1279,27 @@ input[type="checkbox"] {
 .lab-tree-line.is-cleanup {
   color: #8d5d1d;
   font-weight: 600;
+}
+
+.lab-tree-line.is-staged {
+  color: color-mix(in srgb, var(--muted) 78%, var(--accent) 22%);
+  font-weight: 500;
+}
+
+.lab-tree-line.is-staged.is-deleted,
+.lab-tree-line.is-staged.is-cleanup {
+  font-weight: 600;
+}
+
+.lab-tree-line.is-landing {
+  background: linear-gradient(90deg, rgba(58, 90, 140, 0.07), rgba(58, 90, 140, 0));
+}
+
+.lab-tree-line.is-landing::before {
+  content: "->";
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .lab-indent-0 { padding-left: var(--lab-local-row-inline-pad, var(--lab-rhythm-row-inline-pad)); }

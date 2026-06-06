@@ -236,7 +236,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("'repair-defaults': 'Fix Audio and Subtitle Defaults'", FRONTEND)
         self.assertIn("audioFixBusy: false", FRONTEND)
         self.assertIn("function repairWorkflowBusy()", FRONTEND)
-        self.assertIn("wrong language · weak English", FRONTEND)
+        self.assertIn("non-English audio is default · English backup is weaker", FRONTEND)
         self.assertIn("'/api/movies/audio-packaging/fix'", FRONTEND)
         self.assertIn("Make Best English Audio Default", FRONTEND)
         self.assertIn("Make Best English Audio Default + Remove Foreign Audio", FRONTEND)
@@ -491,11 +491,20 @@ class WebTests(unittest.TestCase):
         self.assertIn("Make Best English Audio Default + Remove Foreign Audio + Normalize Subtitle Defaults", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("Repair Lane", NORMALIZE_LAB_FRONTEND)
         self.assertIn("This page is non-destructive", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("wrong language · weak English", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("non-English audio is default · English backup is weaker", NORMALIZE_LAB_FRONTEND)
         self.assertIn("default_non_english_audio", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function actualResolutionLabel(item)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("return `${width} x ${height}`;", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("data-audio-popover=\"${escapeHtml(row.row_id)}\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("data-track-popover=\"${escapeHtml(row.row_id)}\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("data-track-popover-kind=\"subtitle\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Subtitle Tracks", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("after audio default flips:", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("audio/default:", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("subtitle/default: no subtitle default", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("sequence: sequence++", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("is-staged", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("is-landing", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("content: \"->\";", NORMALIZE_LAB_FRONTEND)
         self.assertIn("selectable: Boolean(item.path) && issueFamilies.length > 0 && !repairDefaultsSelectionLocked()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("File Name", NORMALIZE_LAB_FRONTEND)
         self.assertIn("label: 'Confidence'", NORMALIZE_LAB_FRONTEND)
@@ -633,8 +642,8 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("selectedSubtitleRowsFromPayload", combined_branch)
 
     def test_repair_preview_calls_out_family_noops_for_combined_actions(self) -> None:
-        self.assertIn("streams/audio [no audio-default change for this file]", NORMALIZE_LAB_JS)
-        self.assertIn("streams/subtitles [no subtitle-default change for this file]", NORMALIZE_LAB_JS)
+        self.assertIn("audio/no change", NORMALIZE_LAB_JS)
+        self.assertIn("subtitle/no change", NORMALIZE_LAB_JS)
 
     def test_normalize_lab_selection_refreshes_all_selection_dependent_controls(self) -> None:
         self.assertIn("function refreshSelectionState() {", NORMALIZE_LAB_JS)
@@ -645,7 +654,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("renderSidePanel();", refresh_section)
 
     def test_normalize_lab_row_checkbox_changes_use_shared_selection_refresh(self) -> None:
-        checkbox_section = NORMALIZE_LAB_JS.split("el.rowsBody.querySelectorAll('input[data-row-check]').forEach(input => {", 1)[1].split("el.rowsBody.querySelectorAll('button[data-audio-popover]')", 1)[0]
+        checkbox_section = NORMALIZE_LAB_JS.split("el.rowsBody.querySelectorAll('input[data-row-check]').forEach(input => {", 1)[1].split("el.rowsBody.querySelectorAll('button[data-track-popover]')", 1)[0]
         self.assertIn("clearDeletePreviewState();", checkbox_section)
         self.assertIn("refreshSelectionState();", checkbox_section)
         self.assertNotIn("clearDeletePreviewState();\n        renderSidePanel();", checkbox_section)
