@@ -15,6 +15,20 @@
     junk: 'Review obvious junk files and remove them safely.',
   };
 
+  const CANONICAL_FALLBACK_LISTS = [
+    { id: 'top_100', label: 'Top 100' },
+    { id: 'top_250', label: 'Top 250' },
+    { id: 'top_500', label: 'Top 500' },
+    { id: 'animation', label: 'Animation' },
+    { id: 'sci_fi', label: 'Sci-Fi' },
+    { id: 'fantasy', label: 'Fantasy' },
+    { id: 'action', label: 'Action' },
+    { id: 'thriller_mystery', label: 'Thriller / Mystery' },
+    { id: 'drama_romance', label: 'Drama / Romance' },
+    { id: 'documentary', label: 'Documentary' },
+    { id: 'comedy', label: 'Comedy' },
+  ];
+
   const LAYOUT_MODES = {
     default: '2-page-lopsided',
     book: '3-page-book',
@@ -257,7 +271,10 @@
     }
     const { payload, requestedSource } = activeProfilePayloadContext();
     const payloadSource = normalizeSourceKey(payload?.source_root);
-    if (payload?.histogram && (!source || payloadSource === source || normalizeSourceKey(requestedSource) === source)) return payload;
+    if (payload?.histogram) {
+      if (!source || payloadSource === source || normalizeSourceKey(requestedSource) === source) return payload;
+      return payload;
+    }
     return null;
   }
 
@@ -583,6 +600,12 @@
 
   function canonicalListsForPayload(payload = state.canonicalPayload) {
     return Array.isArray(payload?.list_summaries) ? payload.list_summaries : [];
+  }
+
+  function canonicalFallbackOptionsMarkup() {
+    return CANONICAL_FALLBACK_LISTS
+      .map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.label)}</option>`)
+      .join('');
   }
 
   function activeCanonicalListSummary() {
@@ -1260,15 +1283,16 @@
 
   function renderCanonicalListFilter() {
     if (!el.canonicalListFilter) return;
+    const inertPlaceholders = '<option value="anime" disabled>Anime</option><option value="tv_shows" disabled>TV Shows</option>';
     if (!isCanonicalMode()) {
-      el.canonicalListFilter.innerHTML = '<option value="top_100">Top 100</option><option value="top_250">Top 250</option><option value="top_500">Top 500</option>';
+      el.canonicalListFilter.innerHTML = `${canonicalFallbackOptionsMarkup()}${inertPlaceholders}`;
       return;
     }
     const lists = canonicalListsForPayload();
     const options = lists.length
       ? lists.map(item => `<option value="${escapeHtml(item.id || '')}">${escapeHtml(item.label || item.id || 'List')}</option>`).join('')
-      : '<option value="top_100">Top 100</option><option value="top_250">Top 250</option><option value="top_500">Top 500</option>';
-    el.canonicalListFilter.innerHTML = options;
+      : canonicalFallbackOptionsMarkup();
+    el.canonicalListFilter.innerHTML = `${options}${inertPlaceholders}`;
     const active = activeCanonicalListSummary();
     state.canonicalSelectedListId = active?.id || state.canonicalSelectedListId || 'top_100';
     el.canonicalListFilter.value = state.canonicalSelectedListId;
@@ -1557,13 +1581,10 @@
       }
     }
 
-    if (resolution === '2160p') return aspectRatio >= 2.0 ? 'uhd_scope' : 'uhd_flat';
-    if (resolution === '1080p') return aspectRatio >= 2.0 ? 'full_hd_scope' : 'full_hd_flat';
-    if (resolution === '720p') return aspectRatio >= 2.0 ? 'hd_ready_scope' : 'hd_ready_flat';
-    if (resolution === 'sd') {
-      if (!squarePixels && aspectRatio >= 1.7) return 'anamorphic_sd';
-      if (aspectRatio >= 1.7) return 'letterbox_sd';
-      return 'academy_sd';
+    if (resolution === '2160p' || resolution === '1080p' || resolution === '720p') {
+      if (!squarePixels && aspectRatio >= 1.7) return `${resolution}_anamorphic`;
+      if (aspectRatio >= 1.7) return `${resolution}_letterbox`;
+      return `${resolution}_standard`;
     }
     return 'unknown';
   }
@@ -1626,15 +1647,15 @@
       Object.keys(histogram.resolution_breakdown_counts || {}).length ? histogram.resolution_breakdown_counts : movieResolutionCounts,
       total,
       [
-        { key: 'uhd_scope', label: '4K Scope Frame' },
-        { key: 'uhd_flat', label: '4K Flat Frame' },
-        { key: 'full_hd_scope', label: '1080p Scope Frame' },
-        { key: 'full_hd_flat', label: '1080p Flat Frame' },
-        { key: 'hd_ready_scope', label: '720p Scope Frame' },
-        { key: 'hd_ready_flat', label: '720p Flat Frame' },
-        { key: 'anamorphic_sd', label: 'Anamorphic SD' },
-        { key: 'letterbox_sd', label: 'Letterbox SD' },
-        { key: 'academy_sd', label: 'Fullscreen SD' },
+        { key: '2160p_anamorphic', label: '4K Anamorphic' },
+        { key: '2160p_letterbox', label: '4K Letterbox' },
+        { key: '2160p_standard', label: '4K Standard' },
+        { key: '1080p_anamorphic', label: '1080p Anamorphic' },
+        { key: '1080p_letterbox', label: '1080p Letterbox' },
+        { key: '1080p_standard', label: '1080p Standard' },
+        { key: '720p_anamorphic', label: '720p Anamorphic' },
+        { key: '720p_letterbox', label: '720p Letterbox' },
+        { key: '720p_standard', label: '720p Standard' },
         { key: 'unknown', label: 'Unknown' },
       ],
       { hideZero: true },
@@ -3583,6 +3604,7 @@
     state.activeRowId = '';
     state.previewMode = 'selected';
     markAuditLedgerDirty();
+    renderFilterVisibility();
     renderRows();
     renderSidePanel();
   }

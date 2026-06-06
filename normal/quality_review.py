@@ -249,9 +249,9 @@ def classify_resolution(
     long_edge = max(display_width, display_height)
     if long_edge >= 3000:
         return "2160p"
-    if long_edge >= 1800:
+    if long_edge >= 1440:
         return "1080p"
-    if long_edge >= 1200:
+    if long_edge >= 960:
         return "720p"
     return "sd"
 

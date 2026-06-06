@@ -26,6 +26,7 @@ from normal.movie_scan import iter_video_files
 
 TMDB_API_ROOT = "https://api.themoviedb.org/3"
 CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
+IMDB_CANONICAL_CACHE_VERSION = 2
 GENRE_VOTE_FLOOR = 5000
 TOP_RATED_PAGE_LIMIT = 50
 CACHE_SCHEMA_VERSION = "v6"
@@ -152,12 +153,13 @@ CANONICAL_LISTS: tuple[CanonicalListConfig, ...] = (
     CanonicalListConfig("top_100", "Top 100", 100, "TOP 100", 75.0, "#f94144", "top_rated"),
     CanonicalListConfig("top_250", "Top 250", 250, "TOP 250", 65.0, "#f3722c", "top_rated"),
     CanonicalListConfig("top_500", "Top 500", 500, "TOP 500", 55.0, "#f9844a", "top_rated"),
-    CanonicalListConfig("animation", "Top 50 Animation", 50, "ANIMATION", 60.0, "#f8961e", "genre", (16,)),
+    CanonicalListConfig("animation", "Animation", 100, "ANIMATION", 60.0, "#f8961e", "genre", (16,)),
     CanonicalListConfig("sci_fi", "Sci-Fi", 100, "SCI-FI", 60.0, "#f9c74f", "genre", (878,)),
     CanonicalListConfig("fantasy", "Fantasy", 100, "FANTASY", 60.0, "#90be6d", "genre", (14,)),
     CanonicalListConfig("action", "Action", 100, "ACTION", 60.0, "#43aa8b", "genre", (28,)),
     CanonicalListConfig("thriller_mystery", "Thriller / Mystery", 100, "THRILLER", 60.0, "#577590", "genre", (53, 9648)),
-    CanonicalListConfig("documentary", "Top 50 Documentary", 50, "DOCUMENTARY", 60.0, "#277da1", "genre", (99,)),
+    CanonicalListConfig("drama_romance", "Drama / Romance", 100, "DRAMA", 60.0, "#7b6d8d", "genre", (18, 10749)),
+    CanonicalListConfig("documentary", "Documentary", 100, "DOCUMENTARY", 60.0, "#277da1", "genre", (99,)),
     CanonicalListConfig("comedy", "Comedy", 100, "COMEDY", 60.0, "#4d908e", "genre", (35,)),
 )
 
@@ -167,6 +169,7 @@ TMDB_GENRE_TO_IMDB_GENRES: dict[tuple[int, ...], frozenset[str]] = {
     (14,): frozenset({"fantasy"}),
     (28,): frozenset({"action"}),
     (53, 9648): frozenset({"thriller", "mystery"}),
+    (18, 10749): frozenset({"drama", "romance"}),
     (99,): frozenset({"documentary"}),
     (35,): frozenset({"comedy"}),
 }
@@ -649,7 +652,10 @@ class IMDbCanonicalProvider:
     def list_entries(self, config: CanonicalListConfig) -> tuple[list[CanonicalListEntry], str]:
         namespace = imdb_dataset_cache_namespace(self.dataset_dir)
         cache_key = hashlib.sha1(
-            f"imdb:{namespace}:{config.id}:{config.source_kind}:{config.genre_ids}".encode("utf-8")
+            (
+                f"imdb:v{IMDB_CANONICAL_CACHE_VERSION}:"
+                f"{namespace}:{config.id}:{config.source_kind}:{config.genre_ids}"
+            ).encode("utf-8")
         ).hexdigest()[:10]
         return self._fetch_with_cache(
             cache_name=f"{config.id}_{cache_key}.json",
@@ -684,12 +690,21 @@ class IMDbCanonicalProvider:
                     desired_size=config.size,
                 ),
                 weight_votes=IMDB_TOP_RATED_WEIGHT_VOTES,
-            )
+        )
             return [record.to_entry() for record in ranked[: config.size]]
         target_genres = TMDB_GENRE_TO_IMDB_GENRES.get(config.genre_ids)
         if not target_genres:
             return []
-        genre_records = [record for record in self._load_movies() if record.genres.intersection(target_genres)]
+        require_all_genres = len(target_genres) > 1
+        genre_records = [
+            record
+            for record in self._load_movies()
+            if (
+                target_genres.issubset(record.genres)
+                if require_all_genres
+                else bool(record.genres.intersection(target_genres))
+            )
+        ]
         ranked = self._rank_records(
             self._records_with_genre_floor(genre_records, desired_size=config.size),
             weight_votes=IMDB_GENRE_WEIGHT_VOTES,

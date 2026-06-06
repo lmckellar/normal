@@ -1883,18 +1883,12 @@ def classify_resolution_breakdown(
     aspect_ratio = display_aspect_ratio_value(width, height, sample_aspect_ratio, display_aspect_ratio)
     anamorphic = has_non_square_pixels(sample_aspect_ratio)
 
-    if resolution == "2160p":
-        return "uhd_scope" if aspect_ratio and aspect_ratio >= 2.0 else "uhd_flat"
-    if resolution == "1080p":
-        return "full_hd_scope" if aspect_ratio and aspect_ratio >= 2.0 else "full_hd_flat"
-    if resolution == "720p":
-        return "hd_ready_scope" if aspect_ratio and aspect_ratio >= 2.0 else "hd_ready_flat"
-    if resolution == "sd":
+    if resolution in {"2160p", "1080p", "720p"}:
         if anamorphic and aspect_ratio and aspect_ratio >= 1.7:
-            return "anamorphic_sd"
+            return f"{resolution}_anamorphic"
         if aspect_ratio and aspect_ratio >= 1.7:
-            return "letterbox_sd"
-        return "academy_sd"
+            return f"{resolution}_letterbox"
+        return f"{resolution}_standard"
     return "unknown"
 
 

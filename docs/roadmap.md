@@ -67,8 +67,8 @@ release surface again.
 - **Instant quality-profile saves** — `POST /api/movies/standards/update`
   writes and returns; no scan is triggered.
 - **Canonical list swap** — `top_1000` and `suspense_horror` removed;
-  `animation` (Top 50 Animation, genre 16, 60%) and `documentary` (Top 50
-  Documentary, genre 99, 60%) added.
+  `animation` (Animation, genre 16, 60%) and `documentary` (Documentary,
+  genre 99, 60%) added.
 - **Fixed O(n²) reconcile regression** — `reconcile_replacement_queue` now
   calls `replacement_identities` once per issue family, not once per queue item.
 

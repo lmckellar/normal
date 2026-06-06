@@ -170,7 +170,11 @@ class MovieCanonicalListsTests(unittest.TestCase):
 
             animation = next(item for item in report.list_summaries if item.id == "animation")
             self.assertEqual(animation.covered_count, 1)
-            self.assertEqual(animation.total_count, 50)
+            self.assertEqual(animation.total_count, 100)
+            self.assertFalse(any(item.id == "anime" for item in report.list_summaries))
+            drama_romance = next(item for item in report.list_summaries if item.id == "drama_romance")
+            self.assertEqual(drama_romance.label, "Drama / Romance")
+            self.assertEqual(drama_romance.total_count, 100)
 
             sci_fi_badge = next(item for item in report.badges if item.id == "sci_fi")
             self.assertFalse(sci_fi_badge.unlocked)
@@ -211,12 +215,12 @@ class MovieCanonicalListsTests(unittest.TestCase):
                                     if index % 7 == 3
                                     else "Mystery,Thriller"
                                     if index % 7 == 4
-                                    else "Comedy"
+                                    else "Drama,Romance"
                                     if index % 7 == 5
                                     else "Action"
                                 ),
                             }
-                            for index in range(3, 620)
+                            for index in range(3, 720)
                         )
                         rows[2]["genres"] = "Animation,Comedy"
                         rows[3]["genres"] = "Fantasy,Action"
@@ -244,7 +248,13 @@ class MovieCanonicalListsTests(unittest.TestCase):
             top_500 = next(item for item in report.list_summaries if item.id == "top_500")
             self.assertEqual(top_500.covered_count, 2)
             self.assertEqual(top_500.total_count, 500)
-            self.assertTrue(any(item.id == "animation" and item.total_count == 50 for item in report.list_summaries))
+            animation = next(item for item in report.list_summaries if item.id == "animation")
+            self.assertEqual(animation.label, "Animation")
+            self.assertEqual(animation.total_count, 100)
+            self.assertFalse(any(item.id == "anime" for item in report.list_summaries))
+            drama_romance = next(item for item in report.list_summaries if item.id == "drama_romance")
+            self.assertEqual(drama_romance.label, "Drama / Romance")
+            self.assertEqual(drama_romance.total_count, 100)
 
     def test_imdb_top_lists_weight_votes_over_raw_average(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -341,13 +351,88 @@ class MovieCanonicalListsTests(unittest.TestCase):
         self.assertEqual(comedy.all_entries[0]["title"], "Groundhog Day")
         self.assertEqual(comedy.all_entries[1]["title"], "Tiny Cult Comedy")
 
+    def test_imdb_hybrid_genre_lists_require_all_genres(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            with tempfile.TemporaryDirectory() as dataset_tmp:
+                dataset_dir = Path(dataset_tmp)
+                rows = [
+                    {
+                        "tconst": "tt0111161",
+                        "title": "The Shawshank Redemption",
+                        "year": 1994,
+                        "rating": 9.3,
+                        "votes": 3100000,
+                        "genres": "Drama",
+                    },
+                    {
+                        "tconst": "tt0068646",
+                        "title": "The Godfather",
+                        "year": 1972,
+                        "rating": 9.2,
+                        "votes": 2200000,
+                        "genres": "Crime,Drama",
+                    },
+                    {
+                        "tconst": "tt0120737",
+                        "title": "The Lord of the Rings: The Fellowship of the Ring",
+                        "year": 2001,
+                        "rating": 8.9,
+                        "votes": 2100000,
+                        "genres": "Adventure,Drama,Fantasy",
+                    },
+                    {
+                        "tconst": "tt0332280",
+                        "title": "The Notebook",
+                        "year": 2004,
+                        "rating": 7.8,
+                        "votes": 650000,
+                        "genres": "Drama,Romance",
+                    },
+                    {
+                        "tconst": "tt0109830",
+                        "title": "Forrest Gump",
+                        "year": 1994,
+                        "rating": 8.8,
+                        "votes": 2400000,
+                        "genres": "Drama,Romance",
+                    },
+                ]
+                rows.extend(
+                    {
+                        "tconst": f"tt9{index:06d}",
+                        "title": f"Drama Romance {index}",
+                        "year": 1950 + index,
+                        "rating": max(5.0, 7.7 - (index / 1000)),
+                        "votes": 70000 + index,
+                        "genres": "Drama,Romance",
+                    }
+                    for index in range(3, 130)
+                )
+                write_imdb_dataset(dataset_dir, rows)
+
+                report = build_canonical_lists_report(
+                    source,
+                    standards={"canonical_list_provider": "imdb"},
+                    tmdb_key=None,
+                    imdb_dataset_dir=dataset_dir,
+                )
+
+        drama_romance = next(item for item in report.list_summaries if item.id == "drama_romance")
+        titles = [item["title"] for item in drama_romance.all_entries[:5]]
+        self.assertIn("Forrest Gump", titles)
+        self.assertIn("The Notebook", titles)
+        self.assertNotIn("The Shawshank Redemption", titles)
+        self.assertNotIn("The Godfather", titles)
+        self.assertNotIn("The Lord of the Rings: The Fellowship of the Ring", titles)
+
     def test_imdb_genre_lists_fall_back_to_base_vote_floor_when_pool_is_small(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)
             with tempfile.TemporaryDirectory() as dataset_tmp:
                 dataset_dir = Path(dataset_tmp)
                 rows = []
-                for index in range(1, 41):
+                for index in range(1, 71):
                     rows.append(
                         {
                             "tconst": f"ttdoc{index:04d}",
@@ -358,7 +443,7 @@ class MovieCanonicalListsTests(unittest.TestCase):
                             "genres": "Documentary",
                         }
                     )
-                for index in range(41, 56):
+                for index in range(71, 106):
                     rows.append(
                         {
                             "tconst": f"ttdoc{index:04d}",
@@ -390,7 +475,8 @@ class MovieCanonicalListsTests(unittest.TestCase):
                 )
 
         documentary = next(item for item in report.list_summaries if item.id == "documentary")
-        self.assertEqual(documentary.total_count, 50)
+        self.assertEqual(documentary.label, "Documentary")
+        self.assertEqual(documentary.total_count, 100)
         self.assertTrue(any(item["title"] == "Documentary 40" for item in documentary.all_entries))
 
     def test_build_canonical_lists_report_matches_imdb_primary_title_to_stylized_owned_copy(self) -> None:

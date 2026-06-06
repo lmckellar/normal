@@ -85,7 +85,7 @@ These are not final categories, but they show the shape of the idea.
 Examples:
 
 - highest IMDB Top 100 coverage
-- strongest Top 50 Animation coverage
+- strongest Animation coverage
 - strongest Action or other genre-bucket coverage
 
 ### Weight divisions

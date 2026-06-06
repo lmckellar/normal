@@ -15,12 +15,12 @@ class QualityReviewTests(unittest.TestCase):
     def test_classify_resolution_uses_cropped_height_for_hd_buckets(self) -> None:
         self.assertEqual(classify_resolution(1916, 952), "1080p")
         self.assertEqual(classify_resolution(1920, 800), "1080p")
-        self.assertEqual(classify_resolution(1440, 1080), "720p")
+        self.assertEqual(classify_resolution(1440, 1080), "1080p")
         self.assertEqual(classify_resolution(1440, 1080, sample_aspect_ratio="4:3"), "1080p")
 
     def test_classify_resolution_falls_back_when_aspect_ratio_is_unusable(self) -> None:
-        self.assertEqual(classify_resolution(1440, 1080, sample_aspect_ratio="0:1"), "720p")
-        self.assertEqual(classify_resolution(1440, 1080, sample_aspect_ratio="N/A"), "720p")
+        self.assertEqual(classify_resolution(1440, 1080, sample_aspect_ratio="0:1"), "1080p")
+        self.assertEqual(classify_resolution(1440, 1080, sample_aspect_ratio="N/A"), "1080p")
 
     def test_effective_display_dimensions_respects_orientation(self) -> None:
         self.assertEqual(effective_display_dimensions(1440, 1080, "4:3"), (1920, 1080))
