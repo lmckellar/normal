@@ -98,6 +98,7 @@ def delete_movie_junk_files(
 ) -> dict[str, Any]:
     source_root = source.resolve()
     deleted = []
+    deleted_media: list[dict[str, Any]] = []
     skipped = []
 
     for raw_path in raw_paths:
@@ -116,10 +117,12 @@ def delete_movie_junk_files(
         if not reasons:
             skipped.append({"path": str(resolved), "reason": "not_current_junk_candidate"})
             continue
+        size_bytes = resolved.stat().st_size
         execute_delete_path(resolved, "junk", preferences)
         deleted.append(str(resolved))
+        deleted_media.append({"path": str(resolved), "size_bytes": size_bytes})
 
-    return {"deleted": deleted, "skipped": skipped}
+    return {"deleted": deleted, "deleted_media": deleted_media, "skipped": skipped}
 
 
 def handle_movies_junk(ctx: RequestContext, payload: dict[str, Any]) -> None:
@@ -401,6 +404,7 @@ def _record_junk_delete_event(source: Path, result: dict[str, Any]) -> None:
         for item in result.get("skipped", [])
         if isinstance(item, dict)
     )
+    deleted_media = [item for item in result.get("deleted_media", []) if isinstance(item, dict)]
     event = AuditEvent(
         event_id=make_event_id(str(source.resolve()), "junk", "delete", recorded_at, salt=str(len(effects))),
         recorded_at=recorded_at,
@@ -410,7 +414,10 @@ def _record_junk_delete_event(source: Path, result: dict[str, Any]) -> None:
         summary=f"Deleted {len(result.get('deleted', []))} junk file{'s' if len(result.get('deleted', [])) != 1 else ''}.",
         subjects=[AuditSubject(kind="file", path=str(path)) for path in result.get("deleted", [])],
         effects=effects,
-        metadata={"skipped": result.get("skipped", [])},
+        metadata={
+            "deleted_media": deleted_media,
+            "skipped": result.get("skipped", []),
+        },
     )
     AUDIT_STORE.append(event)
 

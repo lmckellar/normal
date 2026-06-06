@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from normal.audit import AuditEvent, AuditStore
+from normal.audit import AuditEffect, AuditEvent, AuditStore
 from normal.library_improvement import build_library_improvement_payload
 from normal.movie_profile import MovieProfileReport
 
@@ -58,6 +58,18 @@ class LibraryImprovementTests(unittest.TestCase):
                         metadata={"deleted_media": [{"path": "a", "size_bytes": 1048576}, {"path": "b", "size_bytes": 2097152}]},
                     ),
                     AuditEvent(
+                        event_id="delete-2",
+                        recorded_at="2026-06-03T00:30:00+00:00",
+                        source_root=str(source.resolve()),
+                        workflow="junk",
+                        action="delete",
+                        summary="Deleted junk file.",
+                        effects=[
+                            AuditEffect(kind="junk_delete", status="applied", path=str(source / "junk.txt"), message="Junk file deleted.")
+                        ],
+                        metadata={},
+                    ),
+                    AuditEvent(
                         event_id="repair-1",
                         recorded_at="2026-06-03T01:00:00+00:00",
                         source_root=str(source.resolve()),
@@ -106,13 +118,32 @@ class LibraryImprovementTests(unittest.TestCase):
                     else:
                         os.environ["XDG_DATA_HOME"] = previous_data_home
 
-        self.assertEqual(payload["files_removed"]["count"], 2)
+        self.assertEqual(payload["files_removed"]["count"], 3)
         self.assertEqual(payload["files_removed"]["total_bytes"], 3145728)
         self.assertEqual(payload["audio_tracks_removed"]["count"], 3)
         self.assertEqual(payload["audio_tracks_removed"]["total_bytes"], 3145728)
         self.assertEqual(payload["canonical_top_500_above_floor"]["count"], 15)
         self.assertEqual(payload["canonical_improvement"]["percent"], 300)
         self.assertEqual(payload["total_scans_performed"], 3)
+
+    def test_summarize_file_removals_counts_delete_effects_without_deleted_media_metadata(self) -> None:
+        event = AuditEvent(
+            event_id="delete-legacy",
+            recorded_at="2026-06-03T00:00:00+00:00",
+            source_root="/library",
+            workflow="weak_encode",
+            action="delete",
+            summary="Deleted weak files.",
+            effects=[AuditEffect(kind="delete", status="applied", path="/library/movie.mkv", message="Media file deleted.")],
+            metadata={},
+        )
+
+        from normal.library_improvement import summarize_file_removals
+
+        payload = summarize_file_removals([event])
+
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["total_bytes"], 0)
 
 
 if __name__ == "__main__":

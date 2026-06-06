@@ -248,6 +248,14 @@
     state.dashboardRequestedSource = normalizeSourceKey(requestedSource) || source;
   }
 
+  async function refreshDashboardPayload(source, { weakFloor = state.weakFloor } = {}) {
+    const normalizedSource = normalizeSourceKey(source);
+    if (!normalizedSource) return null;
+    const payload = await postJson('/api/movies/profile', { source: normalizedSource, weak_floor: weakFloor });
+    updateDashboardPayload(payload, normalizedSource);
+    return payload;
+  }
+
   function activeProfilePayloadContext() {
     if (state.workflow === 'weak-encodes') {
       return { payload: state.weakPayload, requestedSource: state.weakPayloadSource };
@@ -3704,11 +3712,11 @@
     if (!paths.length) return;
     state.applyInFlight = true;
     renderConfirmButton();
-    try {
-      const source = el.sourcePath.value.trim();
-      const delResponse = await fetch('/api/movies/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      try {
+        const source = el.sourcePath.value.trim();
+        const delResponse = await fetch('/api/movies/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source, paths }),
       });
       const delPayload = await delResponse.json();
@@ -3872,6 +3880,7 @@
         const delPayload = await delResponse.json();
         if (!delResponse.ok) throw new Error(delPayload.error || 'delete failed');
         state.weakPayload = removeWeakDeletedItems(state.weakPayload, delPayload.deleted || []);
+        await refreshDashboardPayload(source, { weakFloor: state.weakFloor });
         markAuditLedgerDirty();
         state.selected = new Set();
         clearDeletePreviewState();
@@ -3904,6 +3913,7 @@
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'junk delete failed');
         state.junkPayload = removeJunkDeletedItems(state.junkPayload, payload.deleted || []);
+        await refreshDashboardPayload(source, { weakFloor: state.weakFloor });
         markAuditLedgerDirty();
         state.selected = new Set();
         state.activeRowId = '';

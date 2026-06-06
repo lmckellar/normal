@@ -65,13 +65,20 @@ def summarize_file_removals(events: list[AuditEvent]) -> dict[str, int]:
     total_bytes = 0
     for event in events:
         value = event.metadata.get("deleted_media")
-        if not isinstance(value, list):
+        if isinstance(value, list):
+            for item in value:
+                if not isinstance(item, dict):
+                    continue
+                count += 1
+                total_bytes += max(int(item.get("size_bytes") or 0), 0)
             continue
-        for item in value:
-            if not isinstance(item, dict):
-                continue
-            count += 1
-            total_bytes += max(int(item.get("size_bytes") or 0), 0)
+        if event.action != "delete":
+            continue
+        count += sum(
+            1
+            for effect in event.effects
+            if effect.status == "applied" and effect.kind in {"delete", "junk_delete"}
+        )
     return {"count": count, "total_bytes": total_bytes}
 
 
