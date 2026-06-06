@@ -692,7 +692,7 @@ def build_language_subtitle_defaults_definition(standards: dict[str, Any] | None
         "display_name": "Language & Subtitles",
         "scope": "library_policy",
         "group": "Playback Policy",
-        "summary": "Default language and subtitle behavior used by Repair Defaults.",
+        "summary": "Default language and subtitle behavior used by Fix Audio and Subtitle Defaults.",
         "rule_summary": "Choose what should happen when English audio is default and when non-English audio is default.",
         "fields": [
             {

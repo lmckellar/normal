@@ -94,7 +94,7 @@ class WebTests(unittest.TestCase):
                 served_index = response.read().decode("utf-8")
         self.assertIn("normal workbench", served)
         self.assertIn("/assets/workbench.js?v=", served)
-        self.assertIn("Movie Normalize", served)
+        self.assertIn("Normalize Movie Library Naming", served)
         self.assertEqual(served, served_index)
 
     def test_rendered_workbench_includes_current_shell_contract(self) -> None:
@@ -180,9 +180,9 @@ class WebTests(unittest.TestCase):
 
     def test_run_button_becomes_stop_while_scan_runs(self) -> None:
         self.assertIn("state.runInFlight ? 'Running' :", FRONTEND)
-        self.assertIn("'Run Normalize'", FRONTEND)
-        self.assertIn("'Run Repair Defaults'", FRONTEND)
-        self.assertIn("'Run Canonical Lists'", FRONTEND)
+        self.assertIn("'Run Normalize Movie Library Naming'", FRONTEND)
+        self.assertIn("'Run Fix Audio and Subtitle Defaults'", FRONTEND)
+        self.assertIn("'Run Compare Against Canonical Lists'", FRONTEND)
         self.assertNotIn("runButton.textContent = running ? 'Stop' : 'Run';", FRONTEND)
 
     def test_drive_activity_indicator_is_wired(self) -> None:
@@ -196,7 +196,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("'/api/movies/junk/delete'", FRONTEND)
         self.assertIn("state.junkPayload = payload;", FRONTEND)
         self.assertIn("clearDeletePreviewState();", FRONTEND)
-        self.assertIn("Run Delete Junk & Spam Files", FRONTEND)
+        self.assertIn("Run Remove Junk Files", FRONTEND)
         self.assertIn("markAncestorsSelected: false", FRONTEND)
         self.assertIn("folder: true", FRONTEND)
         self.assertIn(".lab-tree-line.is-cleanup {\n  color: #8d5d1d;\n  font-weight: 600;", FRONTEND)
@@ -229,7 +229,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("button:disabled {", APP_CSS)
 
     def test_movie_audio_packaging_page_is_wired(self) -> None:
-        self.assertIn("'repair-defaults': 'Repair Defaults'", FRONTEND)
+        self.assertIn("'repair-defaults': 'Fix Audio and Subtitle Defaults'", FRONTEND)
         self.assertIn("audioFixBusy: false", FRONTEND)
         self.assertIn("wrong language · weak English", FRONTEND)
         self.assertIn("'/api/movies/audio-packaging/fix'", FRONTEND)
@@ -253,7 +253,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("function repairDefaultSubtitleLabel(item)", FRONTEND)
 
     def test_movie_subtitle_readiness_page_is_wired(self) -> None:
-        self.assertIn("'repair-defaults': 'Repair Defaults'", FRONTEND)
+        self.assertIn("'repair-defaults': 'Fix Audio and Subtitle Defaults'", FRONTEND)
         self.assertIn("subtitleFixBusy: false", FRONTEND)
         self.assertIn("function movieSubtitleReadinessIsRepairable(item)", FRONTEND)
         self.assertIn("Normalize Subtitle Defaults", FRONTEND)
@@ -299,9 +299,9 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("user-local delete posture", NORMALIZE_LAB_FRONTEND)
 
     def test_movie_canonical_lists_page_is_wired(self) -> None:
-        self.assertIn("Canonical Lists", FRONTEND)
+        self.assertIn("Compare Against Canonical Lists", FRONTEND)
         self.assertIn("'/api/movies/canonical-lists'", FRONTEND)
-        self.assertIn("Run Canonical Lists", FRONTEND)
+        self.assertIn("Run Compare Against Canonical Lists", FRONTEND)
         self.assertIn("function renderCanonicalPreviewPane()", FRONTEND)
         self.assertIn("function canonicalRows()", FRONTEND)
         self.assertIn("Canonical improvement", FRONTEND)
@@ -333,11 +333,12 @@ class WebTests(unittest.TestCase):
         self.assertIn("/api/movies/subtitle-readiness/fix", NORMALIZE_LAB_FRONTEND)
         self.assertIn("weak_floor: state.weakFloor", NORMALIZE_LAB_FRONTEND)
         self.assertIn("/api/movies/delete-preview", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Movie Normalize", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Weak Encodes", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Repair Defaults", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Canonical Lists", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Delete Junk & Spam", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Normalize Movie Library Naming", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("workflowNormalize\" class=\"lab-workflow-option\" type=\"button\" data-workflow=\"normalize\" role=\"option\">Normalize Movie Library Naming</button>\n            <button id=\"workflowJunk\" class=\"lab-workflow-option\" type=\"button\" data-workflow=\"junk\" role=\"option\">Remove Junk Files</button>\n            <button id=\"workflowWeakEncodes\" class=\"lab-workflow-option\" type=\"button\" data-workflow=\"weak-encodes\" role=\"option\">Review Low-Quality Encodes</button>\n            <button id=\"workflowRepairDefaults\" class=\"lab-workflow-option\" type=\"button\" data-workflow=\"repair-defaults\" role=\"option\">Fix Audio and Subtitle Defaults</button>\n            <button id=\"workflowCanonicalLists\" class=\"lab-workflow-option\" type=\"button\" data-workflow=\"canonical-lists\" role=\"option\">Compare Against Canonical Lists</button>", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Review Low-Quality Encodes", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Fix Audio and Subtitle Defaults", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Compare Against Canonical Lists", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Remove Junk Files", NORMALIZE_LAB_FRONTEND)
         self.assertIn("/api/movies/canonical-lists", NORMALIZE_LAB_FRONTEND)
         self.assertIn("workflow === 'canonical-lists'", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"dashboardToggle\"", NORMALIZE_LAB_FRONTEND)
@@ -370,7 +371,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("histogram.resolution_breakdown_counts || {}", NORMALIZE_LAB_FRONTEND)
         self.assertIn("histogram.surround_sound_breakdown_counts || {}", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"canonicalListFilter\"", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Run Canonical Lists", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Run Compare Against Canonical Lists", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Quality Profile Inspector", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function renderCanonicalPreviewPane()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function canonicalRows()", NORMALIZE_LAB_FRONTEND)
@@ -464,7 +465,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("Action", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Run Repair", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Confirm (0 Operations)", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("Run Delete Junk & Spam Files", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Run Remove Junk Files", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("reason code", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("warning code", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("package cases", NORMALIZE_LAB_FRONTEND)
@@ -492,6 +493,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("function renderNormalizeSummaryChips(operationCounts, visibleMutationCount)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function renderConfirmButton()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function renderShellLayout()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("el.previewControls.classList.remove('is-repair-delete-leading');", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("el.previewControls.classList.add('is-repair-delete-leading');", NORMALIZE_LAB_FRONTEND)
         self.assertIn("change.change_type !== 'folder_delete' || change.confidence !== 'safe' || !change.current_value", NORMALIZE_LAB_FRONTEND)
         self.assertIn("selectedRelatedCount !== relatedRows.length", NORMALIZE_LAB_FRONTEND)
         self.assertIn("mutated media file", NORMALIZE_LAB_FRONTEND)
@@ -544,6 +547,8 @@ class WebTests(unittest.TestCase):
         self.assertIn('min-height: var(--lab-primary-surface-min-height);', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-policy-panel', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-inspection-pane', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-preview-controls.is-repair-delete-leading .lab-confirm-button {', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-preview-controls.is-repair-delete-leading .lab-preview-group {', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-page[data-panel-state="collapsed"][data-collapse-mode="anchored-slot"]', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-page[data-panel-state="collapsed"][data-collapse-mode="reflow"]', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-rhythm-surface[data-rhythm-surface="rows"]', NORMALIZE_LAB_CSS)

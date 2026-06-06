@@ -1,18 +1,18 @@
 (function () {
   const WORKFLOW_LABELS = {
-    normalize: 'Movie Normalize',
-    'weak-encodes': 'Weak Encodes',
-    'repair-defaults': 'Repair Defaults',
-    'canonical-lists': 'Canonical Lists',
-    junk: 'Delete Junk & Spam',
+    normalize: 'Normalize Movie Library Naming',
+    'weak-encodes': 'Review Low-Quality Encodes',
+    'repair-defaults': 'Fix Audio and Subtitle Defaults',
+    'canonical-lists': 'Compare Against Canonical Lists',
+    junk: 'Remove Junk Files',
   };
 
   const WORKFLOW_DESCRIPTIONS = {
-    normalize: 'Review naming fixes and apply clean movie title/path changes.',
-    'weak-encodes': 'Find low-quality encodes that are better deleted or replaced.',
-    'repair-defaults': 'Fix audio and subtitle defaults to save space and improve playback behaviour.',
-    'canonical-lists': 'Compare owned titles against canonical lists and inspect owned copy quality at a glance.',
-    junk: 'Surface obvious junk files and remove them safely.',
+    normalize: 'Review naming fixes and apply clean movie title and path changes across the library.',
+    'weak-encodes': 'Review low-quality encodes that are better deleted or replaced.',
+    'repair-defaults': 'Fix audio and subtitle defaults to improve playback behaviour and keep repair cases visible.',
+    'canonical-lists': 'Compare the library against canonical lists and inspect owned copy quality at a glance.',
+    junk: 'Review obvious junk files and remove them safely.',
   };
 
   const LAYOUT_MODES = {
@@ -1197,7 +1197,7 @@
     const repairDefaults = state.workflow === 'repair-defaults';
     const canonical = state.workflow === 'canonical-lists';
     const junk = state.workflow === 'junk';
-    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize' : (repairDefaults ? 'Run Repair Defaults' : (canonical ? 'Run Canonical Lists' : (junk ? 'Run Delete Junk & Spam Files' : 'Run Weak Encodes'))));
+    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize Movie Library Naming' : (repairDefaults ? 'Run Fix Audio and Subtitle Defaults' : (canonical ? 'Run Compare Against Canonical Lists' : (junk ? 'Run Remove Junk Files' : 'Run Review Low-Quality Encodes'))));
     el.runButton.disabled = state.runInFlight;
     el.runButton.classList.toggle('is-running', state.runInFlight);
   }
@@ -1272,6 +1272,7 @@
   function renderWorkflowActionControls() {
     const repairMode = isRepairDefaultsMode();
     el.repairActionControls.hidden = !repairMode;
+    el.previewControls.classList.remove('is-repair-delete-leading');
     if (!repairMode) {
       el.repairActionSelect.innerHTML = '';
       el.repairActionButton.disabled = true;
@@ -1299,6 +1300,9 @@
     el.repairActionButton.textContent = locked ? config.busyText : config.buttonText;
     el.repairActionSelect.disabled = locked || busy;
     el.repairActionButton.disabled = !selection.applicableRows.length || locked || busy;
+    if (actionSupportsDelete()) {
+      el.previewControls.classList.add('is-repair-delete-leading');
+    }
   }
 
   function renderWeakFloorControl() {
@@ -1568,7 +1572,7 @@
           <div class="lab-policy-heading">
             <div class="lab-kicker">Dashboard View</div>
             <h2>Profile scan required</h2>
-            <p>Dashboard currently reuses the latest profile-bearing scan for this source. Run Weak Encodes, Repair Defaults, or Canonical Lists first.</p>
+            <p>Dashboard currently reuses the latest profile-bearing scan for this source. Run Review Low-Quality Encodes, Fix Audio and Subtitle Defaults, or Compare Against Canonical Lists first.</p>
           </div>
         </div>
       `;
@@ -3227,7 +3231,7 @@
   function renderJunkPreviewPane() {
     const selected = selectedJunkItems();
     if (!state.junkPayload) {
-      el.previewPane.textContent = 'Run Delete Junk & Spam Files to inspect delete preview.';
+      el.previewPane.textContent = 'Run Remove Junk Files to inspect delete preview.';
       return;
     }
     if (state.previewMode === 'selected' && !selected.length) {
@@ -3313,7 +3317,7 @@
 
   function renderRepairPreviewPane() {
     if (!state.repairPayload) {
-      el.previewPane.textContent = 'Run Repair Defaults to inspect repair consequences.';
+      el.previewPane.textContent = 'Run Fix Audio and Subtitle Defaults to inspect repair consequences.';
       return;
     }
     const selection = selectedRepairApplicability();
@@ -3395,12 +3399,12 @@
 
   function renderCanonicalPreviewPane() {
     if (!state.canonicalPayload) {
-      el.previewPane.textContent = 'Run Canonical Lists to inspect list coverage.';
+      el.previewPane.textContent = 'Run Compare Against Canonical Lists to inspect list coverage.';
       return;
     }
     const summary = activeCanonicalListSummary();
     if (!summary) {
-      el.previewPane.innerHTML = '<div class="lab-preview-empty"><strong>No canonical lists loaded.</strong><div>Run Canonical Lists to load list coverage.</div></div>';
+      el.previewPane.innerHTML = '<div class="lab-preview-empty"><strong>No canonical lists loaded.</strong><div>Run Compare Against Canonical Lists to load list coverage.</div></div>';
       return;
     }
     const activeRow = rowById(state.activeRowId);

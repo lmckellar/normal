@@ -801,6 +801,16 @@ input[type="checkbox"] {
   min-width: 0;
 }
 
+.lab-preview-controls.is-repair-delete-leading .lab-confirm-button {
+  order: 1;
+  justify-self: start;
+}
+
+.lab-preview-controls.is-repair-delete-leading .lab-preview-group {
+  order: 2;
+  justify-self: end;
+}
+
 #previewScopeSelect {
   min-width: 11ch;
 }

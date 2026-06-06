@@ -13,15 +13,15 @@
         <div class="lab-kicker">alpha.4 workbench</div>
         <div class="lab-workflow-switch">
           <button id="workflowButton" class="lab-workflow-button" type="button" aria-haspopup="listbox" aria-expanded="false">
-            <span id="workflowTitle">Movie Normalize</span>
+            <span id="workflowTitle">Normalize Movie Library Naming</span>
             <span class="lab-workflow-caret" aria-hidden="true">▾</span>
           </button>
           <div id="workflowMenu" class="lab-workflow-menu" role="listbox" hidden>
-            <button id="workflowNormalize" class="lab-workflow-option" type="button" data-workflow="normalize" role="option">Movie Normalize</button>
-            <button id="workflowWeakEncodes" class="lab-workflow-option" type="button" data-workflow="weak-encodes" role="option">Weak Encodes</button>
-            <button id="workflowRepairDefaults" class="lab-workflow-option" type="button" data-workflow="repair-defaults" role="option">Repair Defaults</button>
-            <button id="workflowCanonicalLists" class="lab-workflow-option" type="button" data-workflow="canonical-lists" role="option">Canonical Lists</button>
-            <button id="workflowJunk" class="lab-workflow-option" type="button" data-workflow="junk" role="option">Delete Junk &amp; Spam</button>
+            <button id="workflowNormalize" class="lab-workflow-option" type="button" data-workflow="normalize" role="option">Normalize Movie Library Naming</button>
+            <button id="workflowJunk" class="lab-workflow-option" type="button" data-workflow="junk" role="option">Remove Junk Files</button>
+            <button id="workflowWeakEncodes" class="lab-workflow-option" type="button" data-workflow="weak-encodes" role="option">Review Low-Quality Encodes</button>
+            <button id="workflowRepairDefaults" class="lab-workflow-option" type="button" data-workflow="repair-defaults" role="option">Fix Audio and Subtitle Defaults</button>
+            <button id="workflowCanonicalLists" class="lab-workflow-option" type="button" data-workflow="canonical-lists" role="option">Compare Against Canonical Lists</button>
           </div>
         </div>
         <p id="workflowDescription">Normalize diagnostics with row reasoning and direct confirm/apply.</p>
@@ -29,7 +29,7 @@
       <div class="lab-controls">
         <label for="sourcePath">Source</label>
         <input id="sourcePath" type="text" placeholder="/path/to/library">
-        <button id="runButton">Run Normalize</button>
+        <button id="runButton">Run Normalize Movie Library Naming</button>
       </div>
     </header>
 

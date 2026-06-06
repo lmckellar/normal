@@ -73,10 +73,11 @@ Workflow deep links use the main workbench route:
 Use the test library to exercise the full workflow in order:
 
 1. `Dashboard View` to understand current library shape
-2. `Normalize Movie Files & Folders` to confirm the downstream naming shape matches your taste
-3. `Delete Weak Encodes` to see whether the replacement-candidate policy feels sane
-4. `Repair Defaults` to review audio-packaging and subtitle-default logic
-5. `Delete Junk & Spam Files` to confirm junk detection is neither too timid nor too reckless
+2. `Normalize Movie Library Naming` to confirm the downstream naming shape matches your taste
+3. `Remove Junk Files` to confirm junk detection is neither too timid nor too reckless
+4. `Review Low-Quality Encodes` to see whether the replacement-candidate policy feels sane
+5. `Fix Audio and Subtitle Defaults` to review audio-packaging and subtitle-default logic
+6. `Compare Against Canonical Lists` when you want the distinct coverage/comparison pass after the core cleanup lanes
 
 ## 4. Only then consider live use
 

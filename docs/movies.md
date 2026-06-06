@@ -12,14 +12,14 @@ A library-wide view of encode quality, resolution mix, standards posture, and re
 
 To export a formatted XLSX catalogue of the current library, use the **Export** button on the Movies library card in the Library Switcher.
 
-## Canonical Lists
+## Compare Against Canonical Lists
 
-The **Canonical Lists** page compares owned titles against IMDb-derived all-time movie lists using a local dataset plus a local cache. IMDb-backed lists are consensus-weighted locally rather than sorted by raw average rating alone, so broadly validated films outrank niche high-average outliers. It is title-coverage focused. Bitrate, quality tiers, and warning telemetry do not affect the result.
+The **Compare Against Canonical Lists** page compares owned titles against IMDb-derived all-time movie lists using a local dataset plus a local cache. IMDb-backed lists are consensus-weighted locally rather than sorted by raw average rating alone, so broadly validated films outrank niche high-average outliers. It is title-coverage focused. Bitrate, quality tiers, and warning telemetry do not affect the result.
 
 Set `IMDB_DATASET_DIR` to a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz` before launch. TMDb remains available as an explicit secondary provider when `TMDB_KEY` is provided. Current badges are intentionally simple and good enough for first-pass coverage tracking; badge-system refinement is deferred.
 For the broader local-first versus outbound API posture, see [Safety](safety.md#networking-behaviour).
 
-![Canonical Lists](assets/canonical_lists.png)
+![Compare Against Canonical Lists](assets/canonical_lists.png)
 
 ## Normalize names
 
@@ -72,7 +72,7 @@ Current parser hardening is intentionally narrow:
 - it keeps the existing punctuation-light stance elsewhere instead of broad apostrophe/colon recovery across arbitrary titles
 - it strips stacked tracker or domain credit noise only at the path edges, including `www...`, split-domain forms such as `Oxtorrent Com`, and bracketed domain tags, without trying to clean mid-title words
 
-![Normalize Movie Files & Folders](assets/normalize_movies.png)
+![Normalize Movie Library Naming](assets/normalize_movies.png)
 
 ## Quality triage
 
@@ -138,21 +138,21 @@ by default.
 
 Weak-encode ownership is also narrower than general review ownership. If a file
 already contains a good English audio track and the real defect is wrong
-default-language packaging, that belongs to `Repair Defaults` rather than
-`Delete Weak Encodes`.
+default-language packaging, that belongs to `Fix Audio and Subtitle Defaults` rather than
+`Review Low-Quality Encodes`.
 
-The **Delete Weak Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue. When a better encode for the same title shows up in a future scan, it is automatically marked complete.
+The **Review Low-Quality Encodes** page lets you select weak files for deletion. Each deleted file goes into a replacement queue. When a better encode for the same title shows up in a future scan, it is automatically marked complete.
 
 Queue history has four hard filters: `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Deleted rows can be dismissed from queue history inline when the release is no longer worth replacing. That action only changes queue state; it does not touch media files.
 
 The queue-history table is sortable by title, year, and IMDb rating. IMDb ratings are fetched server-side from [OMDb](https://www.omdbapi.com/) and require a free API key passed via `--omdb-key` or the `OMDB_KEY` environment variable. Lookups use local title cleanup plus a small cache, so repeated page loads do not keep spending the OMDb quota. Without a key the column is hidden; when OMDb is rate-limited, new cells show `limit` and cached ratings still display.
 This is one of the few optional outbound API paths; see [Safety](safety.md#networking-behaviour).
 
-![Delete Weak Encodes](assets/delete_weak_encodes.png)
+![Review Low-Quality Encodes](assets/delete_weak_encodes.png)
 
-## Repair defaults
+## Fix Audio and Subtitle Defaults
 
-`Repair Defaults` is one page that now stages audio-packaging and
+`Fix Audio and Subtitle Defaults` is one page that now stages audio-packaging and
 subtitle-readiness issues together inside one compact shell.
 
 The same lane is also available directly at `/?workflow=repair-defaults`, which
@@ -168,7 +168,7 @@ Some MKVs are muxed with the wrong main audio track: for example, Italian marked
 
 For MKVs, the page can do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers stay review-only.
 
-While a remux is running, the page locks checkbox selection and disables conflicting bulk actions. The destructive **Delete Selected Files** button is separated to the far right of the action row so it is visually distinct from the two repair actions.
+While a remux is running, the page locks checkbox selection and disables conflicting bulk actions. In the delete-capable audio-packaging lane, the destructive **Delete Selected Files** button now sits at the leading edge of the action row and the repair-action cluster sits opposite it so the bar shape matches the other workflows more closely.
 
 Current safety note: **Make Best English Audio Default** has been exercised against real files. **Make Best English Audio Default + Remove Foreign Audio** is implemented but currently untested on real libraries and should still be treated cautiously.
 
@@ -186,11 +186,11 @@ Current scope is embedded subtitle streams already inside the container. Externa
 
 Subtitle fixes now return immediate results only. Review-only items remain visible from current diagnostics and disappear after a fresh scan when the underlying issue is gone. No durable subtitle history is recorded in this flow.
 
-![Repair Defaults](assets/repair_defaults.png)
+![Fix Audio and Subtitle Defaults](assets/repair_defaults.png)
 
 ## Junk cleanup
 
-`Delete Junk & Spam Files` is one combined scan with two result panels:
+`Remove Junk Files` is one combined scan with two result panels:
 
 - junk-marker videos such as samples, extras, and featurettes, detected from filenames, ancestor folders, and conservative size thresholds with a hard 4 GB suppression ceiling
 - promo PDFs, NFOs, HTML files, and other non-video sidecar spam
@@ -199,7 +199,7 @@ Both are preview-first. Nothing is deleted until you select rows and confirm.
 
 Current honesty note: junk deletion history in the UI is useful for the session, but long-term permanence and coherence of junk-deletion audit logging still has a real gap.
 
-![Delete Junk & Spam Files](assets/delete_junk_spam.png)
+![Remove Junk Files](assets/delete_junk_spam.png)
 
 ## Catalogue export
 
@@ -216,11 +216,11 @@ The `Audio` column uses the same normalized main-audio summary as the scan and w
 | Page | What it does |
 |---|---|
 | Dashboard View | Quality overview, replacement pressure, histograms, standards editing |
-| Normalize Movie Files & Folders | Review and apply rename plans |
-| Delete Weak Encodes | Triage low-floor encodes and queue replacements |
-| Repair Defaults | Fix default audio/subtitle behavior where supported, or keep review cases visible |
-| Delete Junk & Spam Files | Remove junk videos and sidecar spam after preview and confirmation |
-| Canonical Lists | Compare owned titles against curated movie lists and unlock simple coverage badges |
+| Normalize Movie Library Naming | Review and apply rename plans |
+| Remove Junk Files | Remove junk videos and sidecar spam after preview and confirmation |
+| Review Low-Quality Encodes | Triage low-floor encodes and queue replacements |
+| Fix Audio and Subtitle Defaults | Fix default audio/subtitle behavior where supported, or keep review cases visible |
+| Compare Against Canonical Lists | Compare owned titles against curated movie lists and unlock simple coverage badges |
 
 Movie scan cancellation is cooperative rather than instantaneous. Scans check for cancellation between files, while a currently running `ffprobe` may still finish or hit its timeout before unwind completes. The earlier cancelled-scan / stray-`ffprobe` rough edge is no longer treated as an active concern after the current scan-control hardening.
 

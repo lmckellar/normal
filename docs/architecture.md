@@ -36,7 +36,7 @@ The quality workflow starts with local media facts, then classifies them into ac
 - `ffprobe` gathers per-file media facts.
 - Probe facts now include stream aspect metadata, so `resolution_bucket` can represent effective display class rather than raw stored raster when the container exposes usable SAR/DAR data.
 - `movie_profile.py` classifies those facts against repo-local movie standards.
-- The same profile result feeds the Dashboard, Delete Weak Encodes, Audio Packaging, and Subtitle Readiness flows.
+- The same profile result feeds the Dashboard, Review Low-Quality Encodes, Audio Packaging, and Subtitle Readiness flows.
 - This shared-scan model is deliberate. It avoids separate full-library rescans for each page.
 
 The scan economics matter here:
@@ -129,7 +129,7 @@ There are four main freshness models in the current architecture.
 ### Server-side movie profile cache
 
 - The web server keeps one in-memory `MovieProfileReport` per resolved source path.
-- Dashboard, Delete Weak Encodes, Audio Packaging, and Subtitle Readiness all reuse it.
+- Dashboard, Review Low-Quality Encodes, Audio Packaging, and Subtitle Readiness all reuse it.
 - This cache is explicitly invalidated after normalize apply, after successful audio repairs, and after successful subtitle repairs.
 
 This cache is process-local. Restarting the web server clears it.

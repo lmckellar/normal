@@ -124,8 +124,8 @@ Dashboard notes:
 
 The same `movie-profile` report also powers the main web triage lanes:
 
-- `Delete Weak Encodes`
-- `Repair Defaults`
+- `Review Low-Quality Encodes`
+- `Fix Audio and Subtitle Defaults`
 
 ---
 
@@ -216,18 +216,18 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 | `--port` | No | Port (default: `8765`) |
 | `--source` | No | Default source path pre-filled in the UI |
 | `--omdb-key` | No | OMDb API key for cached server-side IMDb ratings in the replacement queue (falls back to `OMDB_KEY` env var) |
-| `--tmdb-key` | No | TMDb API key for Canonical Lists only when the provider is explicitly set to TMDb (falls back to `TMDB_KEY` env var) |
+| `--tmdb-key` | No | TMDb API key for Compare Against Canonical Lists only when the provider is explicitly set to TMDb (falls back to `TMDB_KEY` env var) |
 
-Canonical Lists defaults to the IMDb provider. For that default path, set `IMDB_DATASET_DIR` to a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
+Compare Against Canonical Lists defaults to the IMDb provider. For that default path, set `IMDB_DATASET_DIR` to a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
 
 Movie pages currently exposed in the web UI:
 
 - `Dashboard View`
-- `Normalize Movie Files & Folders`
-- `Delete Weak Encodes`
-- `Repair Defaults`
-- `Delete Junk & Spam Files`
-- `Canonical Lists`
+- `Normalize Movie Library Naming`
+- `Remove Junk Files`
+- `Review Low-Quality Encodes`
+- `Fix Audio and Subtitle Defaults`
+- `Compare Against Canonical Lists`
 
 Workflow deep links:
 

@@ -73,19 +73,19 @@ Workflow deep links still use the main route with a query string, for example `/
 
   `normal` works without external API keys for its core local workflows: movie normalize, profile scans, junk detection, repair defaults, inspect, and exports all run against local files.
 
-  `Movies / Canonical Lists` is now IMDb-first and does not require an API key, but it does require local IMDb dataset files. The IMDb-backed rankings are consensus-weighted locally so broadly validated films outrank niche high-average outliers:
+  `Movies / Compare Against Canonical Lists` is now IMDb-first and does not require an API key, but it does require local IMDb dataset files. The IMDb-backed rankings are consensus-weighted locally so broadly validated films outrank niche high-average outliers:
 
   - `IMDB_DATASET_DIR` should point at a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
 
   One web feature still uses an optional third-party API:
 
   - `OMDB_KEY` enables IMDb ratings in movie list views that still surface ratings.
-  - `TMDB_KEY` remains optional if you explicitly switch Canonical Lists back to the TMDb provider.
+  - `TMDB_KEY` remains optional if you explicitly switch Compare Against Canonical Lists back to the TMDb provider.
 
   If you do not provide these settings:
 
   - the app still launches and the main movie workflows still work as you would expect
-  - `Canonical Lists` cannot run in IMDb mode unless `IMDB_DATASET_DIR` points at the required local files
+  - `Compare Against Canonical Lists` cannot run in IMDb mode unless `IMDB_DATASET_DIR` points at the required local files
   - movie pages that can show IMDb ratings simply omit them when no key is present.
 
   `OMDB_KEY` can be passed either by environment variable or via `normal web --omdb-key ...`. `TMDB_KEY` can still be passed via environment variable or `normal web --tmdb-key ...` when using the TMDb provider.

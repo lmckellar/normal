@@ -39,9 +39,9 @@ All destructive web UI actions follow the same pattern:
 
 Those first two steps are the minimum two approval gates the product promises before deletion: explicit selection and explicit confirmation.
 
-**Delete Junk & Spam Files**: selected files are revalidated as current junk candidates before unlink. A file that no longer meets the junk criteria is skipped.
+**Remove Junk Files**: selected files are revalidated as current junk candidates before unlink. A file that no longer meets the junk criteria is skipped.
 
-**Delete Weak Encodes / Repair Defaults (Audio Packaging)**: selected files are added to the movie Replacement Queue and then deleted after confirmation. Deleted items remain visible as `deleted, awaiting replacement` and can be auto-completed by a future scan when a replacement copy appears that no longer matches the queued issue family. Deleted queue items can also be manually marked `deleted from queue` when they are no longer worth replacing. That action is queue-only and does not delete media.
+**Review Low-Quality Encodes / Fix Audio and Subtitle Defaults (Audio Packaging)**: selected files are added to the movie Replacement Queue and then deleted after confirmation. Deleted items remain visible as `deleted, awaiting replacement` and can be auto-completed by a future scan when a replacement copy appears that no longer matches the queued issue family. Deleted queue items can also be manually marked `deleted from queue` when they are no longer worth replacing. That action is queue-only and does not delete media.
 
 The CLI does not delete media. Deletion workflows are web-only and require checkbox selection plus confirmation.
 
