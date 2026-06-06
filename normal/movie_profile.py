@@ -194,6 +194,7 @@ DELETE_MODES = (
 JUNK_DELETE_CONFIDENCE_FLOORS = ("high", "review")
 ENGLISH_AUDIO_SUBTITLE_BEHAVIORS = ("off", "english", "primary_language")
 FOREIGN_AUDIO_SUBTITLE_BEHAVIORS = ("forced_english", "english", "off")
+WARNING_GATE_SAFETY_LEVELS = ("safe", "confident", "yolo")
 DEFAULT_OPERATOR_PREFERENCES = {
     "delete_mode": "recycle_all",
     "default_source": "",
@@ -396,6 +397,7 @@ def default_library_policy() -> dict[str, Any]:
         DEFAULT_MOVIE_STANDARDS,
         {
             "canonical_list_provider": "imdb",
+            "warning_gate_safety_level": "safe",
             "primary_language": "english",
             "subtitle_preferences": {
                 "english_audio_subtitles": "off",
@@ -680,6 +682,17 @@ def build_library_defaults_definition(standards: dict[str, Any] | None = None) -
                     {"value": "review", "label": "Review and high confidence"},
                 ],
             },
+            {
+                "key": "warning_gate_safety_level",
+                "label": "User warning gate safety level",
+                "type": "select",
+                "value": normalize_warning_gate_safety_level(active.get("warning_gate_safety_level")),
+                "options": [
+                    {"value": "safe", "label": "Safe"},
+                    {"value": "confident", "label": "Confident"},
+                    {"value": "yolo", "label": "YOLO"},
+                ],
+            },
         ],
     }
 
@@ -870,6 +883,10 @@ def update_policy_definition(
         active_policy.setdefault("junk_rules", {})["delete_confidence_floor"] = normalize_junk_delete_confidence_floor(
             values.get("junk_delete_confidence_floor")
         )
+        active_policy["warning_gate_safety_level"] = normalize_warning_gate_safety_level(
+            values.get("warning_gate_safety_level"),
+            active_policy.get("warning_gate_safety_level", "safe"),
+        )
         return save_library_policy(active_policy), active_preferences
     if label == "language_subtitle_defaults":
         if expected_policy_revision and expected_policy_revision != library_policy_revision(active_policy):
@@ -911,6 +928,7 @@ def deep_merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str
 def strip_removed_quality_stance_keys(policy: dict[str, Any]) -> dict[str, Any]:
     normalized = json.loads(json.dumps(policy))
     normalized["canonical_list_provider"] = normalize_canonical_list_provider(normalized.get("canonical_list_provider"))
+    normalized["warning_gate_safety_level"] = normalize_warning_gate_safety_level(normalized.get("warning_gate_safety_level"))
     subtitle_preferences = normalized.get("subtitle_preferences")
     if isinstance(subtitle_preferences, dict):
         subtitle_preferences.pop("mode", None)
@@ -1007,6 +1025,12 @@ def normalize_primary_language(value: Any) -> str:
 def normalize_junk_delete_confidence_floor(value: Any) -> str:
     floor = str(value or "").strip().casefold()
     return floor if floor in JUNK_DELETE_CONFIDENCE_FLOORS else "high"
+
+
+def normalize_warning_gate_safety_level(value: Any, default: str = "safe") -> str:
+    level = str(value or "").strip().casefold()
+    fallback = default if default in WARNING_GATE_SAFETY_LEVELS else "safe"
+    return level if level in WARNING_GATE_SAFETY_LEVELS else fallback
 
 
 def normalize_english_audio_subtitle_behavior(value: Any, default: str = "off") -> str:

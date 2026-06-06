@@ -168,7 +168,7 @@ Some MKVs are muxed with the wrong main audio track: for example, Italian marked
 
 For MKVs, the page can do an in-place lossless repair that flips the default audio flag to the best English track. It also supports a stricter variant that drops streams explicitly tagged as non-English while keeping English and untagged audio. Unsupported containers stay review-only.
 
-While a remux is running, the page locks checkbox selection and disables conflicting bulk actions. In the delete-capable audio-packaging lane, the destructive **Delete Selected Files** button now sits at the leading edge of the action row and the repair-action cluster sits opposite it so the bar shape matches the other workflows more closely.
+While a remux is running, the page locks checkbox selection and disables conflicting bulk actions. In the current shared Audio/Sub Repair UI, the lane is intentionally non-destructive: the repair action cluster remains, but direct delete is not surfaced in this workflow.
 
 Current safety note: **Make Best English Audio Default** has been exercised against real files. **Make Best English Audio Default + Remove Foreign Audio** is implemented but currently untested on real libraries and should still be treated cautiously.
 

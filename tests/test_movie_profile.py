@@ -538,6 +538,8 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(library_defaults["fields"][0]["key"], "canonical_list_provider")
         self.assertEqual(library_defaults["fields"][0]["value"], "imdb")
         self.assertEqual(library_defaults["fields"][1]["key"], "quality_profile_floor")
+        self.assertEqual(library_defaults["fields"][3]["key"], "warning_gate_safety_level")
+        self.assertEqual(library_defaults["fields"][3]["value"], "safe")
         language_defaults = next(definition for definition in definitions if definition["label"] == "language_subtitle_defaults")
         self.assertEqual(language_defaults["fields"][0]["key"], "primary_language")
         self.assertEqual(language_defaults["fields"][1]["key"], "english_audio_subtitles")
@@ -563,6 +565,7 @@ class MovieProfileTests(unittest.TestCase):
                         "canonical_list_provider": "imdb",
                         "quality_profile_floor": "compact_grade",
                         "junk_delete_confidence_floor": "review",
+                        "warning_gate_safety_level": "yolo",
                     },
                     expected_policy_revision=library_policy_revision(load_movie_standards()),
                 )
@@ -571,9 +574,11 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(policy["canonical_list_provider"], "imdb")
         self.assertEqual(policy["replacement_candidate_rules"]["quality_profile_floor"], "compact_grade")
         self.assertEqual(policy["junk_rules"]["delete_confidence_floor"], "review")
+        self.assertEqual(policy["warning_gate_safety_level"], "yolo")
         self.assertEqual(preferences["delete_mode"], "recycle_all")
         self.assertIn('"replacement_candidate_rules"', saved)
         self.assertIn('"canonical_list_provider": "imdb"', saved)
+        self.assertIn('"warning_gate_safety_level": "yolo"', saved)
 
     def test_update_policy_definition_persists_language_and_subtitle_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -653,6 +658,7 @@ class MovieProfileTests(unittest.TestCase):
 
         self.assertEqual(policy["replacement_candidate_rules"]["quality_profile_floor"], "compact_grade")
         self.assertEqual(policy["canonical_list_provider"], "imdb")
+        self.assertEqual(policy["warning_gate_safety_level"], "safe")
         self.assertEqual(policy["primary_language"], "english")
         self.assertEqual(policy["subtitle_preferences"]["english_audio_subtitles"], "off")
         self.assertEqual(policy["subtitle_preferences"]["foreign_audio_subtitles"], "forced_english")

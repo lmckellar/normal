@@ -61,6 +61,7 @@ body {
   --lab-rhythm-panel-body-offset: 10px;
   --lab-panel-stub-inline: 56px;
   --lab-primary-surface-min-height: 220px;
+  --lab-preview-action-button-min-inline: 25ch;
   width: 100%;
   padding: var(--shell-pad-block) var(--shell-pad-inline);
   display: grid;
@@ -218,7 +219,7 @@ button {
 button:hover:not(:disabled) { background: var(--hover); }
 
 button:disabled {
-  cursor: default;
+  cursor: not-allowed;
   color: var(--faint);
   opacity: 0.7;
 }
@@ -782,6 +783,14 @@ input[type="checkbox"] {
   align-self: center;
 }
 
+.lab-preview-select-group {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .lab-preview-group label {
   font-size: 11px;
   text-transform: uppercase;
@@ -820,6 +829,12 @@ input[type="checkbox"] {
   max-width: min(100%, 18ch);
 }
 
+#repairActionButton {
+  min-inline-size: var(--lab-preview-action-button-min-inline);
+  justify-content: center;
+  white-space: nowrap;
+}
+
 .lab-pane-note {
   color: var(--muted);
   font-size: 13px;
@@ -827,6 +842,9 @@ input[type="checkbox"] {
 
 .lab-confirm-button {
   justify-self: end;
+  min-inline-size: var(--lab-preview-action-button-min-inline);
+  justify-content: center;
+  white-space: nowrap;
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;

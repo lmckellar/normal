@@ -22,6 +22,7 @@
   };
 
   const AUDIT_STREAM_RETRY_MS = 2000;
+  const ACTIVITY_POLL_MS = 2000;
 
   const NORMALIZE_HEADERS = [
     { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
@@ -128,6 +129,9 @@
     sliverResizeObserver: null,
     sliverResizeFrame: 0,
     catalogueExportInFlight: false,
+    activityPayload: null,
+    activityRefreshInFlight: false,
+    activityPollTimer: 0,
   };
 
   const el = {
@@ -292,6 +296,10 @@
       if (rightIndex === -1) return -1;
       return leftIndex - rightIndex;
     });
+  }
+
+  function currentWarningGateSafetyLevel() {
+    return String(currentPolicyPayload()?.policy?.warning_gate_safety_level || 'safe').trim().toLowerCase() || 'safe';
   }
 
   function currentReplacementDefinition() {
@@ -1092,6 +1100,21 @@
     return state.audioFixBusy || state.subtitleFixBusy;
   }
 
+  function activityPayloadHasRemux(payload = state.activityPayload) {
+    const appItems = Array.isArray(payload?.app) ? payload.app : [];
+    if (appItems.some(item => item?.kind === 'remux')) return true;
+    const externalItems = Array.isArray(payload?.external) ? payload.external : [];
+    return externalItems.some(item => {
+      const command = String(item?.command || '').trim().toLowerCase();
+      const summary = String(item?.summary || '').trim().toLowerCase();
+      return command === 'ffmpeg' || summary.includes('ffmpeg');
+    });
+  }
+
+  function repairWorkflowBusy() {
+    return state.audioFixBusy || state.subtitleFixBusy || activityPayloadHasRemux();
+  }
+
   function actionTouchesFamily(action, family) {
     return repairActionConfig(action).families.includes(family);
   }
@@ -1135,6 +1158,10 @@
     el.workflowRepairDefaults.classList.toggle('is-active', state.workflow === 'repair-defaults');
     el.workflowCanonicalLists.classList.toggle('is-active', state.workflow === 'canonical-lists');
     el.workflowJunk.classList.toggle('is-active', state.workflow === 'junk');
+    el.workflowButton.disabled = repairWorkflowBusy();
+    [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowJunk].forEach(button => {
+      button.disabled = repairWorkflowBusy();
+    });
   }
 
   function renderShellLayout() {
@@ -1198,7 +1225,7 @@
     const canonical = state.workflow === 'canonical-lists';
     const junk = state.workflow === 'junk';
     el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize Movie Library Naming' : (repairDefaults ? 'Run Fix Audio and Subtitle Defaults' : (canonical ? 'Run Compare Against Canonical Lists' : (junk ? 'Run Remove Junk Files' : 'Run Review Low-Quality Encodes'))));
-    el.runButton.disabled = state.runInFlight;
+    el.runButton.disabled = state.runInFlight || repairWorkflowBusy();
     el.runButton.classList.toggle('is-running', state.runInFlight);
   }
 
@@ -1300,9 +1327,6 @@
     el.repairActionButton.textContent = locked ? config.busyText : config.buttonText;
     el.repairActionSelect.disabled = locked || busy;
     el.repairActionButton.disabled = !selection.applicableRows.length || locked || busy;
-    if (actionSupportsDelete()) {
-      el.previewControls.classList.add('is-repair-delete-leading');
-    }
   }
 
   function renderWeakFloorControl() {
@@ -2604,14 +2628,9 @@
       return;
     }
     if (isRepairDefaultsMode()) {
-      el.confirmButton.hidden = !actionSupportsDelete();
-      if (actionSupportsDelete()) {
-        const count = selectedRepairAudioPaths().length;
-        el.confirmButton.disabled = count === 0 || state.applyInFlight || repairDefaultsSelectionLocked();
-        el.confirmButton.classList.add('is-danger');
-        el.confirmButton.textContent = state.applyInFlight ? `Deleting Selected Files (${count})` : `Delete Selected Files (${count})`;
-        return;
-      }
+      // Audio/Sub Repair is intentionally non-destructive in the current UI.
+      // Keep the shared confirm button available for delete-capable flows only.
+      el.confirmButton.hidden = true;
       el.confirmButton.disabled = true;
       el.confirmButton.classList.remove('is-danger');
       el.confirmButton.textContent = 'This page is non-destructive';
@@ -3574,6 +3593,7 @@
   }
 
   async function runActiveWorkflow() {
+    if (repairWorkflowBusy()) return;
     const auditDismissed = dismissAuditSurface();
     if (auditDismissed) {
       renderFilterVisibility();
@@ -3733,10 +3753,41 @@
       .filter(row => rowTouchesFamily(row, 'subtitle'));
   }
 
+  function confirmSafeRepairWarningGates(action, applicableRows) {
+    if (currentWarningGateSafetyLevel() !== 'safe') return true;
+    const count = applicableRows.length;
+    if (!count) return false;
+    const actionLabel = repairActionConfig(action).label.toLowerCase();
+    const initialMessage = [
+      `This action runs ffmpeg remux workloads for each selected movie, including subtitle repair actions.`,
+      'These are larger and more CPU-intensive than the rest of the system.',
+      'On a reasonable modern PC, expect roughly 1-10 minutes per movie depending on CPU speed and drive read/write bandwidth.',
+      'Recommended starting posture: try single-file jobs until you are comfortable chaining repair actions together.',
+      '',
+      `Continue with ${actionLabel} for ${count} file${count === 1 ? '' : 's'}?`,
+    ].join('\n');
+    if (!window.confirm(initialMessage)) return false;
+    if (count <= 3) return true;
+    const queueMessage = [
+      `You selected ${count} files.`,
+      'These remux jobs are queued and processed as a chain, one file at a time.',
+      'The system will keep working through the selection until the queue is finished.',
+      '',
+      'Continue with this multi-file remux queue?',
+    ].join('\n');
+    return window.confirm(queueMessage);
+  }
+
   async function runSelectedRepairAction(action) {
     const applicableRows = selectedRepairRowsForAction(action);
     const selectedPaths = applicableRows.map(row => row.path);
     if (!selectedPaths.length) return;
+    if (!confirmSafeRepairWarningGates(action, applicableRows)) {
+      state.repairActionNotice = 'Remux action canceled.';
+      renderRows();
+      renderSidePanel();
+      return;
+    }
     if (actionTouchesAudio(action)) {
       const audioPaths = applicableRows.filter(row => rowTouchesFamily(row, 'audio')).map(row => row.path);
       if (audioPaths.length) await runAudioRepair(audioPaths, action);
@@ -3781,7 +3832,6 @@
       return;
     }
     if (isRepairDefaultsMode()) {
-      await deleteSelectedRepairAudio();
       return;
     }
     if (isJunkMode()) {
@@ -3872,7 +3922,46 @@
     renderSidePanel();
   }
 
+  async function refreshActivityPayload() {
+    const source = normalizeSourceKey(el.sourcePath.value);
+    if (!source) {
+      state.activityPayload = null;
+      state.activityRefreshInFlight = false;
+      renderWorkflowHeader();
+      renderRunButton();
+      renderRows();
+      renderSidePanel();
+      return;
+    }
+    if (state.activityRefreshInFlight) return;
+    state.activityRefreshInFlight = true;
+    try {
+      const response = await fetch(`/api/activity?source=${encodeURIComponent(source)}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'activity read failed');
+      state.activityPayload = payload;
+    } catch (error) {
+      state.activityPayload = null;
+    } finally {
+      state.activityRefreshInFlight = false;
+      renderWorkflowHeader();
+      renderRunButton();
+      renderRows();
+      renderSidePanel();
+    }
+  }
+
+  function scheduleActivityPoll() {
+    if (state.activityPollTimer) window.clearTimeout(state.activityPollTimer);
+    state.activityPollTimer = window.setTimeout(async () => {
+      state.activityPollTimer = 0;
+      await refreshActivityPayload();
+      scheduleActivityPoll();
+    }, ACTIVITY_POLL_MS);
+  }
+
   el.workflowButton.addEventListener('click', () => {
+    if (repairWorkflowBusy()) return;
     const open = el.workflowMenu.hidden;
     el.workflowMenu.hidden = !open;
     el.workflowButton.setAttribute('aria-expanded', open ? 'true' : 'false');
@@ -3880,6 +3969,7 @@
 
   [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowJunk].forEach(button => {
     button.addEventListener('click', async () => {
+      if (repairWorkflowBusy()) return;
       el.workflowMenu.hidden = true;
       el.workflowButton.setAttribute('aria-expanded', 'false');
       setWorkflow(button.dataset.workflow || 'normalize');
@@ -4036,6 +4126,7 @@
   });
 
   el.runButton.addEventListener('click', () => {
+    if (repairWorkflowBusy()) return;
     runActiveWorkflow().catch(error => {
       el.previewPane.textContent = error.message;
     });
@@ -4047,7 +4138,10 @@
     state.auditRefreshInFlight = false;
     state.auditBusy = false;
     state.auditSignature = '';
+    state.activityPayload = null;
     closeAuditEventSource();
+    refreshActivityPayload().catch(() => {});
+    scheduleActivityPoll();
     renderSidePanel();
     if (auditSurfaceOpen() && auditSourceKey()) {
       refreshAuditPayload({ immediate: true }).catch(error => {
@@ -4077,6 +4171,8 @@
         const startupSource = preferredDefaultSource();
         if (startupSource) el.sourcePath.value = startupSource;
       }
+      await refreshActivityPayload();
+      scheduleActivityPoll();
       if (normalizeSourceKey(el.sourcePath.value)) {
         state.surfaceMode = 'audit';
         await refreshAuditPayload({ immediate: true });
