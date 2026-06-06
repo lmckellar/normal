@@ -287,6 +287,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("function renderDashboardPanel()", FRONTEND)
         self.assertIn("function currentDashboardPayload()", FRONTEND)
         self.assertIn("function updateDashboardPayload(payload, requestedSource = '')", FRONTEND)
+        self.assertIn("function qualityProfileDisplayLabel(label)", FRONTEND)
+        self.assertIn("resolveLabel: entry => qualityProfileDisplayLabel(entry)", FRONTEND)
         self.assertIn("Dashboard currently reuses the latest profile-bearing scan for this source.", FRONTEND)
         self.assertIn("Library visibility snapshot", FRONTEND)
         self.assertIn("Quality Profile Breakdown", FRONTEND)
@@ -298,6 +300,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("/api/policy/update", FRONTEND)
         self.assertIn("function renderPolicyEditor()", FRONTEND)
         self.assertIn("function togglePolicyEditor()", FRONTEND)
+        self.assertIn("function currentQualityProfileDefinitions()", FRONTEND)
+        self.assertIn("function policyDefinitionDisplayLabel(label)", FRONTEND)
         self.assertIn("policyDrafts: {}", FRONTEND)
         self.assertIn("payload.policy_definitions.filter(definition => definition?.label !== 'replacement_candidate')", FRONTEND)
 
@@ -370,6 +374,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("function renderDashboardPanel()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function currentDashboardPayload()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function updateDashboardPayload(payload, requestedSource = '')", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function replacementFloorDisplayLabel(label)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("dashboardRequestedSource", NORMALIZE_LAB_FRONTEND)
         self.assertIn("normalizeSourceKey(value)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("state.dashboardProfileSource === source || state.dashboardRequestedSource === source", NORMALIZE_LAB_FRONTEND)
@@ -388,6 +393,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("function movieBreakdownCounts(items, keyFn)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("histogram.resolution_breakdown_counts : movieResolutionCounts", NORMALIZE_LAB_FRONTEND)
         self.assertIn("histogram.surround_sound_breakdown_counts : movieSurroundCounts", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("escapeHtml(replacementFloorDisplayLabel(cutoff))", NORMALIZE_LAB_FRONTEND)
         self.assertIn("histogram.resolution_breakdown_counts || {}", NORMALIZE_LAB_FRONTEND)
         self.assertIn("histogram.surround_sound_breakdown_counts || {}", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"canonicalListFilter\"", NORMALIZE_LAB_FRONTEND)
@@ -612,9 +618,19 @@ class WebTests(unittest.TestCase):
         self.assertIn("Running English-default remux for ${paths.length} file", NORMALIZE_LAB_JS)
         self.assertIn("Running English-default remux and foreign-audio prune for ${paths.length} file", NORMALIZE_LAB_JS)
         self.assertIn("Running subtitle-default remux for ${paths.length} file", NORMALIZE_LAB_JS)
+        self.assertIn("Running single-pass audio and subtitle remux for ${paths.length} file", NORMALIZE_LAB_JS)
+        self.assertIn("Running single-pass audio, subtitle, and foreign-audio remux for ${paths.length} file", NORMALIZE_LAB_JS)
         self.assertIn("body: JSON.stringify({ source: el.sourcePath.value.trim(), paths, drop_foreign_audio: dropForeignAudio }),", NORMALIZE_LAB_JS)
+        self.assertIn("await fetch('/api/movies/repair-defaults/fix', {", NORMALIZE_LAB_JS)
         self.assertIn("if (actionTouchesSubtitle(action)) {", NORMALIZE_LAB_JS)
         self.assertIn("const applicableRows = selectedRepairRowsForAction(action);", NORMALIZE_LAB_JS)
+
+    def test_combined_repair_action_uses_single_backend_remux_request(self) -> None:
+        action_section = NORMALIZE_LAB_JS.split("async function runSelectedRepairAction(action) {", 1)[1].split("async function confirmSelected()", 1)[0]
+        self.assertIn("if (actionTouchesAudio(action) && actionTouchesSubtitle(action)) {", action_section)
+        self.assertIn("await runCombinedRepair(selectedPaths, action);", action_section)
+        combined_branch = action_section.split("if (actionTouchesAudio(action) && actionTouchesSubtitle(action)) {", 1)[1].split("} else if (actionTouchesAudio(action)) {", 1)[0]
+        self.assertNotIn("selectedSubtitleRowsFromPayload", combined_branch)
 
     def test_repair_preview_calls_out_family_noops_for_combined_actions(self) -> None:
         self.assertIn("streams/audio [no audio-default change for this file]", NORMALIZE_LAB_JS)
@@ -678,6 +694,36 @@ class WebTests(unittest.TestCase):
         self.assertEqual(payload["fixed"], [])
         self.assertTrue(fix_audio.call_args.kwargs["drop_foreign_audio"])
         self.assertNotIn("replacement_queue", payload)
+
+    def test_repair_defaults_fix_route_forwards_combined_flags(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "movies"
+            source.mkdir()
+            fixed_result = {"fixed": [], "skipped": []}
+            with patch("normal.web.routes_cleanup.fix_movie_repair_defaults", return_value=fixed_result) as fix_repair:
+                with patch("normal.web.routes_cleanup.build_updated_profile_items", return_value=[]):
+                    with self.run_test_server() as base_url:
+                        body = json.dumps(
+                            {
+                                "source": str(source),
+                                "paths": [str(source / "Movie.mkv")],
+                                "include_audio": True,
+                                "include_subtitle": True,
+                                "drop_foreign_audio": True,
+                            }
+                        ).encode("utf-8")
+                        req = urllib.request.Request(
+                            f"{base_url}/api/movies/repair-defaults/fix",
+                            data=body,
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        with urllib.request.urlopen(req) as response:
+                            payload = json.loads(response.read().decode("utf-8"))
+        self.assertEqual(payload["fixed"], [])
+        self.assertTrue(fix_repair.call_args.kwargs["include_audio"])
+        self.assertTrue(fix_repair.call_args.kwargs["include_subtitle"])
+        self.assertTrue(fix_repair.call_args.kwargs["drop_foreign_audio"])
 
     def test_movies_delete_preview_route(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

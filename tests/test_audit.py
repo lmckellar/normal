@@ -13,7 +13,9 @@ from unittest.mock import patch
 from normal.audit import AuditEvent, AuditFollowUpUpdate, AuditStore
 from normal.models import utc_now_iso
 from normal.movie_canonical_lists import CanonicalLibrarySummary, CanonicalListsReport
+from normal.movie_profile import MovieProfileReport
 from normal.web import build_handler
+from normal.web.state import MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE
 
 
 class AuditStoreTests(unittest.TestCase):
@@ -469,6 +471,103 @@ class AuditRouteTests(unittest.TestCase):
 
         self.assertEqual(payload["operator_preferences"]["default_source"], "~/Movies")
         self.assertEqual(events, [])
+
+    def test_policy_update_route_invalidates_profile_and_canonical_caches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "movies"
+            source.mkdir()
+            profile_report = MovieProfileReport(source_root=str(source.resolve()), generated_at="2026-01-01T00:00:00+00:00")
+            canonical_report = CanonicalListsReport(
+                source_root=str(source.resolve()),
+                generated_at="2026-01-01T00:00:00+00:00",
+                provider="imdb",
+                cache_state="warm",
+                library_summary=CanonicalLibrarySummary(
+                    owned_movies=0,
+                    matched_canonical_titles=0,
+                    lists_cleared=0,
+                    unparsed_files=0,
+                    duplicate_files=0,
+                ),
+            )
+            MOVIE_PROFILE_CACHE.put(source, profile_report)
+            MOVIE_CANONICAL_CACHE.put(source, canonical_report)
+            try:
+                with patch(
+                    "normal.web.routes_profile.update_policy_definition",
+                    return_value=({"replacement_candidate_rules": {}}, {"delete_mode": "recycle_all"}),
+                ):
+                    with self.run_test_server() as base_url:
+                        request = urllib.request.Request(
+                            f"{base_url}/api/policy/update",
+                            data=json.dumps(
+                                {
+                                    "source": str(source),
+                                    "label": "library_defaults",
+                                    "values": {"quality_profile_floor": "compact_grade"},
+                                }
+                            ).encode("utf-8"),
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        with urllib.request.urlopen(request):
+                            pass
+            finally:
+                MOVIE_PROFILE_CACHE.invalidate(source)
+                MOVIE_CANONICAL_CACHE.invalidate(source)
+
+        self.assertIsNone(MOVIE_PROFILE_CACHE.get(source))
+        self.assertIsNone(MOVIE_CANONICAL_CACHE.get(source))
+
+    def test_default_source_policy_update_keeps_profile_and_canonical_caches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "movies"
+            source.mkdir()
+            profile_report = MovieProfileReport(source_root=str(source.resolve()), generated_at="2026-01-01T00:00:00+00:00")
+            canonical_report = CanonicalListsReport(
+                source_root=str(source.resolve()),
+                generated_at="2026-01-01T00:00:00+00:00",
+                provider="imdb",
+                cache_state="warm",
+                library_summary=CanonicalLibrarySummary(
+                    owned_movies=0,
+                    matched_canonical_titles=0,
+                    lists_cleared=0,
+                    unparsed_files=0,
+                    duplicate_files=0,
+                ),
+            )
+            MOVIE_PROFILE_CACHE.put(source, profile_report)
+            MOVIE_CANONICAL_CACHE.put(source, canonical_report)
+            try:
+                with patch(
+                    "normal.web.routes_profile.update_policy_definition",
+                    return_value=({"replacement_candidate_rules": {}}, {"delete_mode": "recycle_all", "default_source": "~/Movies"}),
+                ):
+                    with self.run_test_server() as base_url:
+                        request = urllib.request.Request(
+                            f"{base_url}/api/policy/update",
+                            data=json.dumps(
+                                {
+                                    "label": "default_source",
+                                    "values": {"default_source": "~/Movies"},
+                                }
+                            ).encode("utf-8"),
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        with urllib.request.urlopen(request):
+                            pass
+                        cached_profile = MOVIE_PROFILE_CACHE.get(source)
+                        cached_canonical = MOVIE_CANONICAL_CACHE.get(source)
+            finally:
+                MOVIE_PROFILE_CACHE.invalidate(source)
+                MOVIE_CANONICAL_CACHE.invalidate(source)
+
+        self.assertIsNotNone(cached_profile)
+        self.assertIsNotNone(cached_canonical)
 
     def test_movie_catalogue_export_writes_audit_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

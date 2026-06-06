@@ -22,7 +22,9 @@ from normal.movie_profile import (
     build_replacement_candidate_definition,
     load_movie_standards,
     movie_standards_revision,
+    normalized_subtitle_preferences,
 )
+from normal.movie_repair_planner import build_movie_repair_plan
 from normal.movie_scan import media_facts_from_dict
 
 
@@ -253,6 +255,7 @@ def build_profile_response(source: Path, report: MovieProfileReport, standards: 
     standards_payload = standards if standards is not None else load_library_policy()
     operator_preferences = load_operator_preferences()
     response = report.to_dict()
+    attach_repair_plans_to_payload_movies(response.get("movies"), standards_payload)
     response["histogram"] = build_histogram_payload(report)
     response["policy"] = standards_payload
     response["policy_revision"] = library_policy_revision(standards_payload)
@@ -270,12 +273,37 @@ def build_profile_response(source: Path, report: MovieProfileReport, standards: 
 
 
 def build_updated_profile_items(source: Path, fixed_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    subtitle_preferences = normalized_subtitle_preferences(load_library_policy().get("subtitle_preferences"))
     updated_items = []
     for item in fixed_items:
         raw_facts = item.get("facts")
         if not isinstance(raw_facts, dict):
             continue
         movie_path = Path(str(item["path"]))
-        profiled = build_movie_profile_item(source, movie_path, media_facts_from_dict(raw_facts))
-        updated_items.append(asdict(profiled))
+        parsed_facts = media_facts_from_dict(raw_facts)
+        profiled = build_movie_profile_item(source, movie_path, parsed_facts)
+        payload = asdict(profiled)
+        payload["repair_plan"] = build_movie_repair_plan(
+            parsed_facts,
+            path=payload.get("path"),
+            subtitle_preferences=subtitle_preferences,
+        )
+        updated_items.append(payload)
     return updated_items
+
+
+def attach_repair_plans_to_payload_movies(movies: Any, standards_payload: dict[str, Any]) -> None:
+    if not isinstance(movies, list):
+        return
+    subtitle_preferences = normalized_subtitle_preferences(standards_payload.get("subtitle_preferences"))
+    for item in movies:
+        if not isinstance(item, dict):
+            continue
+        raw_facts = item.get("facts")
+        if not isinstance(raw_facts, dict):
+            continue
+        item["repair_plan"] = build_movie_repair_plan(
+            media_facts_from_dict(raw_facts),
+            path=str(item.get("path") or ""),
+            subtitle_preferences=subtitle_preferences,
+        )

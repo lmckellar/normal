@@ -46,6 +46,15 @@ from .serializers import build_profile_response
 from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE, PROBE_CACHE, RequestConflictError
 
 
+def invalidate_policy_caches(source: Path | None, label: str) -> None:
+    if source is None:
+        return
+    if label in {"default_source", "delete_mode"}:
+        return
+    MOVIE_PROFILE_CACHE.invalidate(source)
+    MOVIE_CANONICAL_CACHE.invalidate(source)
+
+
 def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
     standards = load_movie_standards()
@@ -177,6 +186,7 @@ def handle_movies_standards_update(ctx: RequestContext, payload: dict[str, Any])
         )
     except MovieStandardsConflictError as exc:
         raise RequestConflictError(str(exc)) from exc
+    invalidate_policy_caches(source, label)
     record_policy_update_event(
         source,
         label=label or "unnamed",
@@ -238,6 +248,7 @@ def handle_policy_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
         )
     except MovieStandardsConflictError as exc:
         raise RequestConflictError(str(exc)) from exc
+    invalidate_policy_caches(source, label)
     if source is not None:
         record_policy_update_event(
             source,

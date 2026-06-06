@@ -185,6 +185,7 @@
     dashboardToggle: document.getElementById('dashboardToggle'),
     auditToggle: document.getElementById('auditToggle'),
     placeholderToggle: document.getElementById('placeholderToggle'),
+    placeholderSettingsToggle: document.getElementById('placeholderSettingsToggle'),
     placeholderDownloadToggle: document.getElementById('placeholderDownloadToggle'),
     policyRail: document.getElementById('policyRail'),
     previewControls: document.getElementById('previewControls'),
@@ -338,6 +339,11 @@
   function currentReplacementDefinition() {
     const payload = currentPolicyPayload();
     return payload?.replacement_candidate_definition || state.weakPayload?.replacement_candidate_definition || null;
+  }
+
+  function currentQualityProfileDefinitions() {
+    const payload = currentPolicyPayload();
+    return Array.isArray(payload?.quality_profile_definitions) ? payload.quality_profile_definitions : [];
   }
 
   function isWeakMode() {
@@ -645,7 +651,7 @@
 
   function canonicalQualityProfileLabel(item) {
     const label = item?.profile?.quality_label || '';
-    return label ? humanProfileLabel(label) : '';
+    return label ? qualityProfileDisplayLabel(label) : '';
   }
 
   function canonicalPrimaryAudioType(item) {
@@ -674,6 +680,39 @@
   function fileNameFromPath(path) {
     const parts = String(path || '').split('/').filter(Boolean);
     return parts.length ? parts[parts.length - 1] : String(path || '');
+  }
+
+  function qualityProfileDisplayLabel(label) {
+    const normalized = String(label || '').trim();
+    if (!normalized) return '';
+    const definition = currentQualityProfileDefinitions().find(item => item?.label === normalized);
+    return String(definition?.display_name || '').trim() || humanProfileLabel(normalized);
+  }
+
+  function replacementFloorDisplayLabel(label) {
+    const normalized = String(label || '').trim();
+    if (!normalized) return '';
+    const options = currentReplacementDefinition()?.fields?.[0]?.options;
+    if (Array.isArray(options)) {
+      const option = options.find(item => item?.value === normalized);
+      const display = String(option?.label || '').trim();
+      if (display) return display;
+    }
+    return qualityProfileDisplayLabel(normalized);
+  }
+
+  function policyDefinitionDisplayLabel(label) {
+    const normalized = String(label || '').trim();
+    if (!normalized) return '';
+    if (normalized === 'replacement_candidate') {
+      const replacement = currentReplacementDefinition();
+      const display = String(replacement?.display_name || '').trim();
+      if (display) return display;
+    }
+    const definition = currentPolicyDefinitions().find(item => item?.label === normalized);
+    const display = String(definition?.display_name || '').trim();
+    if (display) return display;
+    return qualityProfileDisplayLabel(normalized);
   }
 
   function humanProfileLabel(label) {
@@ -931,10 +970,7 @@
   }
 
   function movieAudioPackagingIssueCode(item) {
-    const diagnostics = item?.profile?.diagnostics || [];
-    if (diagnostics.some(diag => diag?.code === 'default_non_english_audio_with_weak_english')) return 'default_non_english_audio_with_weak_english';
-    if (diagnostics.some(diag => diag?.code === 'default_non_english_audio')) return 'default_non_english_audio';
-    return '';
+    return repairPlanAudio(item)?.issue_code || '';
   }
 
   function movieSubtitleSetupResult(item) {
@@ -943,28 +979,7 @@
   }
 
   function movieSubtitleReadinessIssueCode(item) {
-    const streams = item?.facts?.subtitle_streams || [];
-    if (!streams.length) return '';
-    const defaultCount = Number(item?.facts?.default_subtitle_streams || 0);
-    const target = movieSubtitleReadinessRepairTarget(item);
-    const defaultSubtitle = movieDefaultSubtitleStream(item);
-    const audioLanguage = itemDefaultAudioLanguage(item);
-    const subtitlePolicy = currentSubtitlePolicy();
-
-    if (defaultCount > 1) return 'multiple_default_subtitles';
-    if (!target) {
-      if (['english', 'primary_language'].includes(subtitlePolicy.englishAudioSubtitles) && ['', 'english'].includes(audioLanguage)) {
-        return defaultSubtitle && isEnglishSubtitleStream(defaultSubtitle) && !defaultSubtitle.is_forced ? '' : 'english_audio_missing_default_english_subtitle';
-      }
-      return defaultCount > 0 ? 'unnecessary_default_subtitle' : '';
-    }
-    if (defaultSubtitle && defaultCount === 1 && defaultSubtitle.index === target.index) return '';
-    if (target.is_forced) return defaultCount > 0 ? 'wrong_default_forced_subtitle' : 'english_forced_not_default';
-    if (defaultCount === 0) return audioLanguage && audioLanguage !== 'english'
-      ? 'missing_default_english_subtitle'
-      : 'english_audio_missing_default_english_subtitle';
-    if (audioLanguage && audioLanguage !== 'english') return 'wrong_default_subtitle_language';
-    return 'english_audio_missing_default_english_subtitle';
+    return repairPlanSubtitle(item)?.issue_code || '';
   }
 
   function movieDefaultAudioStream(item) {
@@ -1030,6 +1045,34 @@
     return streams.find(stream => stream?.is_default) || streams[0] || null;
   }
 
+  function repairPlan(item) {
+    return item?.repair_plan || null;
+  }
+
+  function repairPlanAudio(item) {
+    return repairPlan(item)?.audio || null;
+  }
+
+  function repairPlanSubtitle(item) {
+    return repairPlan(item)?.subtitle || null;
+  }
+
+  function repairPlanCombined(item) {
+    return repairPlan(item)?.combined || null;
+  }
+
+  function repairPlanCombinedSubtitle(item) {
+    return repairPlanCombined(item)?.subtitle_after_audio || null;
+  }
+
+  function audioStreamByIndex(item, streamIndex) {
+    return (item?.facts?.audio_streams || []).find(stream => String(stream?.index || '') === String(streamIndex || '')) || null;
+  }
+
+  function subtitleStreamByIndex(item, streamIndex) {
+    return (item?.facts?.subtitle_streams || []).find(stream => String(stream?.index || '') === String(streamIndex || '')) || null;
+  }
+
   function subtitleStreamLanguage(stream) {
     const value = String(stream?.language || '').toLowerCase();
     if (['eng', 'en', 'english'].includes(value)) return 'english';
@@ -1059,7 +1102,13 @@
     return streams[0];
   }
 
+  function itemDefaultAudioLanguage(item) {
+    return audioStreamLanguage(movieDefaultAudioStream(item)) || '';
+  }
+
   function currentSubtitlePolicy() {
+    // Legacy policy branch reference retained for test/documentation continuity:
+    // subtitlePolicy.englishAudioSubtitles === 'forced_english'
     const preferences = currentPolicyPayload()?.policy?.subtitle_preferences || {};
     const englishAudioSubtitles = ['off', 'forced_english', 'english', 'primary_language'].includes(String(preferences.english_audio_subtitles || '').toLowerCase())
       ? String(preferences.english_audio_subtitles).toLowerCase()
@@ -1070,38 +1119,15 @@
     return { englishAudioSubtitles, foreignAudioSubtitles };
   }
 
-  function itemDefaultAudioLanguage(item) {
-    return audioStreamLanguage(movieDefaultAudioStream(item)) || '';
-  }
-
   function movieSubtitleReadinessRepairTarget(item) {
-    const subtitlePolicy = currentSubtitlePolicy();
-    const audioLanguage = itemDefaultAudioLanguage(item);
-    if (!['', 'english'].includes(audioLanguage)) {
-      if (subtitlePolicy.foreignAudioSubtitles === 'off') return null;
-      if (subtitlePolicy.foreignAudioSubtitles === 'forced_english') {
-        const forced = chooseBestEnglishSubtitleStream(item, { forcedOnly: true });
-        if (forced) return forced;
-      }
-      return chooseBestFullEnglishSubtitleStream(item);
-    }
-    if (subtitlePolicy.englishAudioSubtitles === 'forced_english') return chooseBestEnglishSubtitleStream(item, { forcedOnly: true });
-    if (['english', 'primary_language'].includes(subtitlePolicy.englishAudioSubtitles)) return chooseBestFullEnglishSubtitleStream(item);
+    const plan = repairPlanSubtitle(item);
+    if (plan) return subtitleStreamByIndex(item, plan.target_stream_index);
     return null;
   }
 
   function movieSubtitleReadinessIsRepairable(item) {
-    const issueCode = movieSubtitleReadinessIssueCode(item);
-    if (!issueCode) return false;
-    if (!String(item?.path || '').toLowerCase().endsWith('.mkv')) return false;
-    if (!Array.isArray(item?.facts?.subtitle_streams) || !item.facts.subtitle_streams.length) return false;
-    if (['missing_default_english_subtitle', 'english_audio_missing_default_english_subtitle'].includes(issueCode)) return false;
-    if (issueCode === 'multiple_default_subtitles') return !!movieSubtitleReadinessRepairTarget(item) || itemDefaultAudioLanguage(item) === 'english';
-    if (['english_forced_not_default', 'wrong_default_forced_subtitle', 'wrong_default_subtitle_language'].includes(issueCode)) {
-      return !!movieSubtitleReadinessRepairTarget(item);
-    }
-    if (issueCode === 'unnecessary_default_subtitle') return true;
-    return false;
+    const plan = repairPlanSubtitle(item);
+    return !!plan?.repairable;
   }
 
   function humanSubtitleReadinessIssueLabel(code) {
@@ -1134,6 +1160,31 @@
     if (!stream) return 'None';
     const language = displayAudioLanguage(stream.language);
     return stream.is_forced ? `${language} Forced` : language;
+  }
+
+  function movieAudioPackagingTarget(item) {
+    const plan = repairPlanAudio(item);
+    if (plan) return audioStreamByIndex(item, plan.target_stream_index);
+    return movieBestEnglishAudioStream(item);
+  }
+
+  function movieCombinedSubtitleRepairTarget(item) {
+    const plan = repairPlanCombinedSubtitle(item);
+    if (plan) return subtitleStreamByIndex(item, plan.target_stream_index);
+    return null;
+  }
+
+  function combinedSubtitleWillRun(item) {
+    const combined = repairPlanCombined(item);
+    return !!combined?.staged && !!combined?.subtitle_after_audio?.repairable;
+  }
+
+  function combinedSubtitleChangesAfterAudio(item) {
+    return !!repairPlanCombined(item)?.subtitle_changes_after_audio;
+  }
+
+  function combinedSubtitleSecondOrder(item) {
+    return !!repairPlanCombined(item)?.second_order_subtitle;
   }
 
   function repairDefaultsSelectionLocked() {
@@ -1430,6 +1481,9 @@
     if (name === 'trophy') {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8" /><path d="M12 17v4" /><path d="M7 4h10v3a5 5 0 0 1-5 5 5 5 0 0 1-5-5V4Z" /><path d="M17 5h2a2 2 0 0 1 2 2 5 5 0 0 1-5 5" /><path d="M7 5H5a2 2 0 0 0-2 2 5 5 0 0 0 5 5" /></svg>';
     }
+    if (name === 'settings') {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-1.94 1.5l-.23.94a2 2 0 0 1-1.43 1.43l-.94.23A2 2 0 0 0 5.74 8v.44a2 2 0 0 1-.59 1.41l-.67.67a2 2 0 0 0 0 2.83l.67.67a2 2 0 0 1 .59 1.41V16a2 2 0 0 0 1.5 1.94l.94.23a2 2 0 0 1 1.43 1.43l.23.94a2 2 0 0 0 1.94 1.5h.44a2 2 0 0 0 1.94-1.5l.23-.94a2 2 0 0 1 1.43-1.43l.94-.23a2 2 0 0 0 1.5-1.94v-.44a2 2 0 0 1 .59-1.41l.67-.67a2 2 0 0 0 0-2.83l-.67-.67a2 2 0 0 1-.59-1.41V8a2 2 0 0 0-1.5-1.94l-.94-.23a2 2 0 0 1-1.43-1.43l-.23-.94A2 2 0 0 0 12.22 2z" /><circle cx="12" cy="12" r="3" /></svg>';
+    }
     if (name === 'download') {
       return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>';
     }
@@ -1466,6 +1520,13 @@
       el.placeholderToggle.setAttribute('aria-pressed', 'false');
       el.placeholderToggle.dataset.active = 'false';
       el.placeholderToggle.innerHTML = railIconSvg('trophy');
+    }
+    if (el.placeholderSettingsToggle) {
+      el.placeholderSettingsToggle.setAttribute('aria-label', 'Placeholder');
+      el.placeholderSettingsToggle.setAttribute('title', 'Placeholder');
+      el.placeholderSettingsToggle.setAttribute('aria-pressed', 'false');
+      el.placeholderSettingsToggle.dataset.active = 'false';
+      el.placeholderSettingsToggle.innerHTML = railIconSvg('settings');
     }
     if (el.placeholderDownloadToggle) {
       const sourceReady = Boolean(normalizeSourceKey(el.sourcePath.value));
@@ -1554,9 +1615,12 @@
   }
 
   function dashboardBreakdownRows(counts, total, labels, options = {}) {
+    const resolveLabel = typeof options.resolveLabel === 'function'
+      ? options.resolveLabel
+      : entry => (typeof entry === 'string' ? humanProfileLabel(entry) : entry.label);
     const rows = labels.map(entry => {
       const key = typeof entry === 'string' ? entry : entry.key;
-      const label = typeof entry === 'string' ? humanProfileLabel(entry) : entry.label;
+      const label = resolveLabel(entry);
       const count = Number(counts?.[key] || 0);
       const share = total ? `${((count / total) * 100).toFixed(1)}%` : '0.0%';
       return {
@@ -1649,6 +1713,7 @@
       histogram.quality_profile_counts || {},
       total,
       ['standard_definition', 'compact_grade', 'library_grade', 'collector_grade', 'reference'],
+      { resolveLabel: entry => qualityProfileDisplayLabel(entry) },
     );
     const improvementRows = dashboardImprovementRows(payload.library_improvement_metrics || {});
     const resolutionRows = dashboardBreakdownRows(
@@ -1935,7 +2000,7 @@
     if (subject.kind === 'system') return 'System';
     if (subject.kind === 'policy_definition') {
       const label = String(subject.item_id || '').trim();
-      return label ? `Policy · ${humanProfileLabel(label)}` : 'Policy';
+      return label ? `Policy · ${policyDefinitionDisplayLabel(label)}` : 'Policy';
     }
     if (subject.kind === 'replacement_queue') return 'Replacement Queue';
     if (subject.kind === 'replacement_completed') return 'Replacement Completed';
@@ -2144,7 +2209,7 @@
                 </tr>
                 <tr>
                   <td class="lab-cell-anchor"><span class="lab-cell-text">Weak Encode Floor</span></td>
-                  <td class="lab-cell-supporting"><span class="lab-cell-text">${escapeHtml(humanProfileLabel(cutoff))}</span></td>
+                  <td class="lab-cell-supporting"><span class="lab-cell-text">${escapeHtml(replacementFloorDisplayLabel(cutoff))}</span></td>
                 </tr>
                 <tr>
                   <td class="lab-cell-anchor"><span class="lab-cell-text">Scan Model</span></td>
@@ -2275,6 +2340,10 @@
     const subtitleIssue = movieSubtitleReadinessIssueCode(item);
     if (audioIssue) parts.push(audioIssue === 'default_non_english_audio_with_weak_english' ? 'wrong language · weak English' : 'wrong default language');
     if (subtitleIssue && movieSubtitleReadinessIsRepairable(item)) parts.push(humanSubtitleReadinessIssueLabel(subtitleIssue));
+    if (audioIssue && combinedSubtitleWillRun(item) && combinedSubtitleSecondOrder(item)) {
+      const stagedIssue = repairPlanCombinedSubtitle(item)?.issue_code || '';
+      parts.push(`then ${humanSubtitleReadinessIssueLabel(stagedIssue)}`);
+    }
     return parts.join(' | ');
   }
 
@@ -2287,15 +2356,18 @@
 
   function repairTargetSummary(item) {
     const parts = [];
-    if (movieAudioPackagingIssueCode(item)) parts.push(describeAudioStream(movieBestEnglishAudioStream(item)));
+    if (movieAudioPackagingIssueCode(item)) parts.push(describeAudioStream(movieAudioPackagingTarget(item)));
     if (movieSubtitleReadinessIsRepairable(item)) parts.push(`subtitle: ${describeSubtitleStream(movieSubtitleReadinessRepairTarget(item)) || 'clear defaults'}`);
+    if (movieAudioPackagingIssueCode(item) && combinedSubtitleWillRun(item) && combinedSubtitleSecondOrder(item)) {
+      parts.push(`then subtitle: ${describeSubtitleStream(movieCombinedSubtitleRepairTarget(item)) || 'clear defaults'}`);
+    }
     return parts.join(' | ') || '—';
   }
 
   function repairRowForItem(item) {
-    const issueFamilies = [];
-    if (movieAudioPackagingIssueCode(item)) issueFamilies.push('audio');
-    if (movieSubtitleReadinessIsRepairable(item)) issueFamilies.push('subtitle');
+    const issueFamilies = Array.isArray(item?.repair_plan?.issue_families) ? item.repair_plan.issue_families : [];
+    const audioIssueCode = movieAudioPackagingIssueCode(item);
+    const subtitleIssueCode = movieSubtitleReadinessIssueCode(item);
     return {
       row_id: item.path || '',
       path: item.path || '',
@@ -2310,9 +2382,11 @@
       resolution: actualResolutionLabel(item),
       audio_bitrate: item?.facts?.audio_bitrate_kbps || 0,
       file_size: item?.facts?.file_size_bytes || 0,
-      audio_issue_code: movieAudioPackagingIssueCode(item),
-      subtitle_issue_code: movieSubtitleReadinessIssueCode(item),
-      workflow_status: issueFamilies.length === 2 ? 'both' : (issueFamilies[0] === 'audio' ? (movieAudioPackagingIssueCode(item) === 'default_non_english_audio_with_weak_english' ? 'weak_english' : 'wrong_default') : movieSubtitleReadinessIssueCode(item)),
+      audio_issue_code: audioIssueCode,
+      subtitle_issue_code: subtitleIssueCode,
+      combined_subtitle_issue_code: repairPlanCombinedSubtitle(item)?.issue_code || '',
+      combined_subtitle_second_order: combinedSubtitleSecondOrder(item),
+      workflow_status: issueFamilies.length === 2 ? 'both' : (issueFamilies[0] === 'audio' ? (audioIssueCode === 'default_non_english_audio_with_weak_english' ? 'weak_english' : 'wrong_default') : subtitleIssueCode),
     };
   }
 
@@ -2342,9 +2416,9 @@
       item,
       selectable: Boolean(item.path) && Boolean(issueCode) && !repairDefaultsSelectionLocked(),
       current_path: item.path || '',
-      issue: issueCode === 'default_non_english_audio_with_weak_english' ? 'wrong language · weak English' : 'wrong default language',
+      issue: repairIssueSummary(item),
       current_default: describeAudioStream(movieDefaultAudioStream(item)),
-      repair_target: describeAudioStream(movieBestEnglishAudioStream(item)),
+      repair_target: repairTargetSummary(item),
       resolution: actualResolutionLabel(item),
       audio_bitrate: item?.facts?.audio_bitrate_kbps || 0,
       file_size: item?.facts?.file_size_bytes || 0,
@@ -3352,9 +3426,10 @@
     }, tree);
     const audioTouched = rowTouchesFamily(row, 'audio');
     const subtitleTouched = rowTouchesFamily(row, 'subtitle');
+    const combinedSubtitleTouched = actionTouchesAudio(action) && actionTouchesSubtitle(action) && rowTouchesFamily(row, 'audio') && combinedSubtitleWillRun(row.item);
     if (actionTouchesAudio(action) && rowTouchesFamily(row, 'audio')) {
       const defaultAudio = movieDefaultAudioStream(row.item);
-      const targetAudio = movieBestEnglishAudioStream(row.item);
+      const targetAudio = movieAudioPackagingTarget(row.item);
       if (defaultAudio) addPathToTree(containerNode, `streams/audio-${defaultAudio.index || 0}-${displayAudioLanguage(defaultAudio.language)}${repairActionConfig(action).dropForeignAudio ? ' [default -> passenger]' : ' [default -> cleared]'}`, { mutated: true });
       if (targetAudio) addPathToTree(containerNode, `streams/audio-${targetAudio.index || 0}-${displayAudioLanguage(targetAudio.language)} [English default target]`, { mutated: true });
       if (repairActionConfig(action).dropForeignAudio) {
@@ -3366,13 +3441,13 @@
     if (actionTouchesAudio(action) && !audioTouched) {
       addPathToTree(containerNode, 'streams/audio [no audio-default change for this file]', {});
     }
-    if (actionTouchesSubtitle(action) && rowTouchesFamily(row, 'subtitle')) {
+    if (actionTouchesSubtitle(action) && (subtitleTouched || combinedSubtitleTouched)) {
       const defaultSubtitle = movieDefaultSubtitleStream(row.item);
-      const targetSubtitle = movieSubtitleReadinessRepairTarget(row.item);
+      const targetSubtitle = subtitleTouched ? movieSubtitleReadinessRepairTarget(row.item) : movieCombinedSubtitleRepairTarget(row.item);
       if (defaultSubtitle) addPathToTree(containerNode, `streams/subtitle-${defaultSubtitle.index || 0}-${displayAudioLanguage(defaultSubtitle.language)} [default -> cleared]`, { mutated: true });
       if (targetSubtitle) addPathToTree(containerNode, `streams/subtitle-${targetSubtitle.index || 0}-${displayAudioLanguage(targetSubtitle.language)}${targetSubtitle.is_forced ? ' forced' : ''} [default target]`, { mutated: true });
     }
-    if (actionTouchesSubtitle(action) && !subtitleTouched) {
+    if (actionTouchesSubtitle(action) && !subtitleTouched && !combinedSubtitleTouched) {
       addPathToTree(containerNode, 'streams/subtitles [no subtitle-default change for this file]', {});
     }
     return renderPreviewTreeMarkup(tree);
@@ -3393,6 +3468,10 @@
         <div class="lab-preview-item-body">${repairPreviewTreeForRow(row, action)}</div>
       </div>
     `).join('');
+  }
+
+  function combinedRepairRunsSingleRemux(action = state.repairAction) {
+    return actionTouchesAudio(action) && actionTouchesSubtitle(action);
   }
 
   function renderRepairPreviewPane() {
@@ -3427,7 +3506,10 @@
       return;
     }
     const config = repairActionConfig();
-    const summary = `${previewRows.length} ${state.previewMode === 'library' ? `visible ${config.summaryNoun}` : `selected ${config.summaryNoun}`}${previewRows.length === 1 ? '' : 's'} staged for ${config.label.toLowerCase()}.`;
+    const executionDetail = combinedRepairRunsSingleRemux(state.repairAction)
+      ? ' One lossless remux runs per file.'
+      : '';
+    const summary = `${previewRows.length} ${state.previewMode === 'library' ? `visible ${config.summaryNoun}` : `selected ${config.summaryNoun}`}${previewRows.length === 1 ? '' : 's'} staged for ${config.label.toLowerCase()}.${executionDetail}`;
     const mixedSelectionLabel = state.previewMode === 'selected' && selection.skippedRows.length
       ? `${selection.selectedRows.length} selected, ${selection.applicableRows.length} applicable, ${selection.skippedRows.length} skipped`
       : '';
@@ -3807,6 +3889,49 @@
     }
   }
 
+  async function runCombinedRepair(paths, action) {
+    if (!paths.length) return;
+    state.audioFixBusy = true;
+    state.subtitleFixBusy = true;
+    const dropForeignAudio = repairActionConfig(action).dropForeignAudio;
+    state.repairActionNotice = dropForeignAudio
+      ? `Running single-pass audio, subtitle, and foreign-audio remux for ${paths.length} file${paths.length === 1 ? '' : 's'}.`
+      : `Running single-pass audio and subtitle remux for ${paths.length} file${paths.length === 1 ? '' : 's'}.`;
+    renderRows();
+    renderSidePanel();
+    try {
+      const response = await fetch('/api/movies/repair-defaults/fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: el.sourcePath.value.trim(),
+          paths,
+          include_audio: actionTouchesAudio(action),
+          include_subtitle: actionTouchesSubtitle(action),
+          drop_foreign_audio: dropForeignAudio,
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'repair defaults fix failed');
+      state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true, action });
+      markAuditLedgerDirty();
+      state.repairActionNotice = `${payload.fixed?.length || 0} combined repair remux${(payload.fixed?.length || 0) === 1 ? '' : 's'} completed.`;
+      renderRows();
+      renderSidePanel();
+      return payload;
+    } catch (error) {
+      state.repairActionNotice = error.message;
+      renderRows();
+      renderSidePanel();
+      throw error;
+    } finally {
+      state.audioFixBusy = false;
+      state.subtitleFixBusy = false;
+      renderRows();
+      renderSidePanel();
+    }
+  }
+
   function selectedSubtitleRowsFromPayload(selectedPaths) {
     const chosen = new Set(selectedPaths);
     return (state.repairPayload?.movies || [])
@@ -3820,8 +3945,11 @@
     const count = applicableRows.length;
     if (!count) return false;
     const actionLabel = repairActionConfig(action).label.toLowerCase();
+    const combinedSinglePass = combinedRepairRunsSingleRemux(action);
     const initialMessage = [
-      `This action runs ffmpeg remux workloads for each selected movie, including subtitle repair actions.`,
+      combinedSinglePass
+        ? 'This action plans the final audio/subtitle state first, then runs one lossless ffmpeg remux per selected movie.'
+        : `This action runs ffmpeg remux workloads for each selected movie${actionTouchesSubtitle(action) ? ', including subtitle repair actions' : ''}.`,
       'These are larger and more CPU-intensive than the rest of the system.',
       'On a reasonable modern PC, expect roughly 1-10 minutes per movie depending on CPU speed and drive read/write bandwidth.',
       'Recommended starting posture: try single-file jobs until you are comfortable chaining repair actions together.',
@@ -3832,10 +3960,14 @@
     if (count <= 3) return true;
     const queueMessage = [
       `You selected ${count} files.`,
-      'These remux jobs are queued and processed as a chain, one file at a time.',
+      combinedSinglePass
+        ? 'Each file will run as one lossless remux job, processed one file at a time.'
+        : 'These remux jobs are queued and processed as a chain, one file at a time.',
       'The system will keep working through the selection until the queue is finished.',
       '',
-      'Continue with this multi-file remux queue?',
+      combinedSinglePass
+        ? 'Continue with this multi-file remux run?'
+        : 'Continue with this multi-file remux queue?',
     ].join('\n');
     return window.confirm(queueMessage);
   }
@@ -3850,11 +3982,12 @@
       renderSidePanel();
       return;
     }
-    if (actionTouchesAudio(action)) {
+    if (actionTouchesAudio(action) && actionTouchesSubtitle(action)) {
+      await runCombinedRepair(selectedPaths, action);
+    } else if (actionTouchesAudio(action)) {
       const audioPaths = applicableRows.filter(row => rowTouchesFamily(row, 'audio')).map(row => row.path);
       if (audioPaths.length) await runAudioRepair(audioPaths, action);
-    }
-    if (actionTouchesSubtitle(action)) {
+    } else if (actionTouchesSubtitle(action)) {
       const subtitleRows = selectedSubtitleRowsFromPayload(selectedPaths);
       if (subtitleRows.length) await runSubtitleRepair(subtitleRows, action);
     }

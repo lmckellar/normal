@@ -191,6 +191,7 @@ Audio Packaging and Subtitle Readiness are in-place repair workflows for support
 
 - audio repair changes default-audio behavior, with an optional stricter mode that drops foreign audio
 - subtitle repair changes embedded subtitle default flags
+- combined audio + subtitle repair now plans the final post-audio subtitle intent up front and executes one lossless remux per file rather than chaining two remux passes
 
 These are still explicit mutations, but they are repair operations rather than file-structure operations.
 

@@ -171,11 +171,14 @@ class WebSerializersTests(unittest.TestCase):
                 "normal.web.serializers.build_movie_profile_item",
                 return_value=FakeProfiledItem(path="/library/Movie.mkv", facts={"parsed": True}, status="ok"),
             ) as build_item:
-                updated = build_updated_profile_items(source, items)
+                with patch("normal.web.serializers.load_library_policy", return_value={"subtitle_preferences": {}}):
+                    with patch("normal.web.serializers.build_movie_repair_plan", return_value={"audio": {}, "subtitle": {}, "combined": {}, "issue_families": []}) as repair_plan:
+                        updated = build_updated_profile_items(source, items)
 
         media_facts.assert_called_once_with({"video_codec": "h264"})
         build_item.assert_called_once_with(source, Path("/library/Movie.mkv"), {"parsed": True})
-        self.assertEqual(updated, [{"path": "/library/Movie.mkv", "facts": {"parsed": True}, "status": "ok"}])
+        repair_plan.assert_called_once_with({"parsed": True}, path="/library/Movie.mkv", subtitle_preferences={"english_audio_subtitles": "forced_english", "foreign_audio_subtitles": "forced_english"})
+        self.assertEqual(updated, [{"path": "/library/Movie.mkv", "facts": {"parsed": True}, "status": "ok", "repair_plan": {"audio": {}, "subtitle": {}, "combined": {}, "issue_families": []}}])
 
 
 if __name__ == "__main__":

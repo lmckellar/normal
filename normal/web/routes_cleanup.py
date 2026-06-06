@@ -21,6 +21,7 @@ from normal.movie_junk import (
     detect_movie_junk_reasons,
     scan_movie_cleanup,
 )
+from normal.movie_repair_fix import fix_movie_repair_defaults
 from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
 from normal.movie_scan import VIDEO_EXTENSIONS
 from normal.movie_profile import load_operator_preferences, normalize_delete_mode
@@ -382,6 +383,71 @@ def handle_movies_subtitle_readiness_fix(ctx: RequestContext, payload: dict[str,
         ),
         fixed_paths=result["fixed"],
         metadata={"skipped": result.get("skipped", [])},
+    )
+    ctx.respond_json(result)
+
+
+def handle_movies_repair_defaults_fix(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    source = ctx.resolve_source(payload.get("source"))
+    paths = payload.get("paths")
+    if not isinstance(paths, list):
+        raise ValueError("paths must be a list")
+    include_audio = bool(payload.get("include_audio"))
+    include_subtitle = bool(payload.get("include_subtitle"))
+    if not include_audio and not include_subtitle:
+        raise ValueError("at least one repair family must be enabled")
+    drop_foreign_audio = bool(payload.get("drop_foreign_audio"))
+    if drop_foreign_audio and not include_audio:
+        raise ValueError("drop_foreign_audio requires audio repair")
+    label_parts = []
+    if include_audio:
+        label_parts.append("audio default")
+    if drop_foreign_audio:
+        label_parts.append("foreign-audio prune")
+    if include_subtitle:
+        label_parts.append("subtitle default")
+    label = "Movie repair defaults: " + " + ".join(label_parts)
+    with ctx.handler.activity_tracker.track(source, label, kind="remux") as activity_id:
+        result = fix_movie_repair_defaults(
+            source,
+            [str(path) for path in paths],
+            include_audio=include_audio,
+            include_subtitle=include_subtitle,
+            drop_foreign_audio=drop_foreign_audio,
+            probe_media=tracked_probe(source, "ffprobe repair defaults fix", cache=PROBE_CACHE),
+            progress_callback=lambda update: ctx.handler.activity_tracker.update(activity_id, **update),
+        )
+    result["updated_items"] = build_updated_profile_items(source, result["fixed"])
+    if result["updated_items"]:
+        MOVIE_PROFILE_CACHE.invalidate(source)
+        MOVIE_CANONICAL_CACHE.invalidate(source)
+    summary_bits = []
+    if include_audio:
+        summary_bits.append("audio defaults")
+    if drop_foreign_audio:
+        summary_bits.append("foreign audio")
+    if include_subtitle:
+        summary_bits.append("subtitle defaults")
+    _record_repair_event(
+        source,
+        workflow="repair_defaults",
+        action="repair",
+        summary=(
+            f"Repaired {' + '.join(summary_bits)} for {len(result['fixed'])} title{'s' if len(result['fixed']) != 1 else ''}."
+            if result["fixed"]
+            else "Repair defaults action made no changes."
+        ),
+        fixed_paths=result["fixed"],
+        metadata={
+            "include_audio": include_audio,
+            "include_subtitle": include_subtitle,
+            "drop_foreign_audio": drop_foreign_audio,
+            "skipped": result.get("skipped", []),
+            "audio_tracks_removed": {
+                "count": sum(int(item.get("removed_audio_tracks") or 0) for item in result.get("fixed", []) if isinstance(item, dict)),
+                "total_bytes": sum(int(item.get("removed_audio_bytes") or 0) for item in result.get("fixed", []) if isinstance(item, dict)),
+            },
+        },
     )
     ctx.respond_json(result)
 

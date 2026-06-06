@@ -18,6 +18,7 @@ from .routes_cleanup import (
     handle_movies_audio_packaging_fix,
     handle_movies_junk,
     handle_movies_junk_delete,
+    handle_movies_repair_defaults_fix,
     handle_movies_subtitle_readiness_fix,
 )
 from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
@@ -158,6 +159,7 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/movies/delete-preview": handle_movies_delete_preview,
         "/api/movies/delete": handle_movies_delete,
         "/api/movies/audio-packaging/fix": handle_movies_audio_packaging_fix,
+        "/api/movies/repair-defaults/fix": handle_movies_repair_defaults_fix,
         "/api/movies/subtitle-readiness/fix": handle_movies_subtitle_readiness_fix,
     }
 

@@ -182,6 +182,8 @@ The `Subtitle Readiness` tab is the sibling repair lane built on the same profil
 
 This workflow is non-destructive: it does not delete media files or subtitle files. For supported MKVs it can do a lossless in-place remux that only updates embedded subtitle default flags. If the needed English or forced-English subtitle does not exist, the item stays review-only.
 
+When you run a combined audio + subtitle repair action, `normal` now computes the final intended subtitle target before execution and performs one lossless remux per file. It no longer accepts a second subtitle remux pass after an audio remux for the same selected combined repair.
+
 Current scope is embedded subtitle streams already inside the container. External `.srt` / `.ass` sidecars are not modified.
 
 Subtitle fixes now return immediate results only. Review-only items remain visible from current diagnostics and disappear after a fresh scan when the underlying issue is gone. No durable subtitle history is recorded in this flow.

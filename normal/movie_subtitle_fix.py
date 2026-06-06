@@ -8,13 +8,13 @@ from typing import Any, Callable
 
 from normal.movie_audio_fix import build_ffmpeg_progress_update
 from normal.movie_profile import (
-    canonical_audio_language,
-    choose_best_english_subtitle_stream,
-    choose_default_audio_stream,
-    choose_default_subtitle_stream,
     is_english_subtitle,
     load_library_policy,
     normalized_subtitle_preferences,
+)
+from normal.movie_repair_planner import (
+    build_subtitle_repair_plan,
+    choose_target_subtitle_stream,
 )
 from normal.movie_scan import probe_media_facts
 from normal.quality_review import MediaFacts, SubtitleStreamFacts
@@ -149,7 +149,8 @@ def choose_subtitle_fix_plan(facts: MediaFacts, subtitle_preferences: dict[str, 
     if not subtitle_streams:
         return SubtitleFixPlan("review", None, "subtitle_streams_missing", "subtitle_defaults_cleared")
 
-    target_ordinal = choose_target_subtitle_ordinal(facts, subtitle_preferences=subtitle_preferences)
+    subtitle_plan = build_subtitle_repair_plan(facts, subtitle_preferences=subtitle_preferences)
+    target_ordinal = subtitle_plan["target_ordinal"]
     default_ordinals = [index for index, stream in enumerate(subtitle_streams) if stream.is_default]
 
     if target_ordinal is None:
@@ -163,42 +164,10 @@ def choose_subtitle_fix_plan(facts: MediaFacts, subtitle_preferences: dict[str, 
 
 
 def choose_target_subtitle_ordinal(facts: MediaFacts, subtitle_preferences: dict[str, Any] | None = None) -> int | None:
-    subtitle_streams = list(facts.subtitle_streams)
-    active_preferences = normalized_subtitle_preferences(subtitle_preferences)
-
-    default_audio = choose_default_audio_stream(facts.audio_streams)
-    default_audio_language = canonical_audio_language(default_audio.language) if default_audio else None
-    if default_audio_language not in {None, "english"}:
-        if active_preferences["foreign_audio_subtitles"] == "off":
-            return None
-        if active_preferences["foreign_audio_subtitles"] == "forced_english":
-            forced_target = choose_best_english_subtitle_stream(subtitle_streams, forced_only=True)
-            if forced_target is not None:
-                return subtitle_streams.index(forced_target)
-        english_target = choose_non_forced_english_subtitle_stream(subtitle_streams)
-        if english_target is None:
-            return None
-        return subtitle_streams.index(english_target)
-    if active_preferences["english_audio_subtitles"] == "forced_english":
-        forced_target = choose_best_english_subtitle_stream(subtitle_streams, forced_only=True)
-        if forced_target is None:
-            return None
-        return subtitle_streams.index(forced_target)
-    if active_preferences["english_audio_subtitles"] in {"english", "primary_language"}:
-        english_target = choose_non_forced_english_subtitle_stream(subtitle_streams)
-        if english_target is None:
-            return None
-        return subtitle_streams.index(english_target)
-    return None
-
-
-def choose_non_forced_english_subtitle_stream(streams: list[SubtitleStreamFacts]) -> SubtitleStreamFacts | None:
-    candidates = [stream for stream in streams if is_english_subtitle(stream) and not stream.is_forced]
-    if not candidates:
-        return None
-    default_stream = choose_default_subtitle_stream(candidates)
-    return default_stream or candidates[0]
-
+    return choose_target_subtitle_stream(
+        facts,
+        subtitle_preferences=subtitle_preferences,
+    )[0]
 
 def subtitle_target_success_message(facts: MediaFacts, target_ordinal: int) -> str:
     stream = facts.subtitle_streams[target_ordinal]
