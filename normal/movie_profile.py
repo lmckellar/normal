@@ -192,7 +192,7 @@ DELETE_MODES = (
     "hybrid_junk_to_bin_media_hard_delete",
 )
 JUNK_DELETE_CONFIDENCE_FLOORS = ("high", "review")
-ENGLISH_AUDIO_SUBTITLE_BEHAVIORS = ("off", "english", "primary_language")
+ENGLISH_AUDIO_SUBTITLE_BEHAVIORS = ("off", "forced_english", "english", "primary_language")
 FOREIGN_AUDIO_SUBTITLE_BEHAVIORS = ("forced_english", "english", "off")
 WARNING_GATE_SAFETY_LEVELS = ("safe", "confident", "yolo")
 DEFAULT_OPERATOR_PREFERENCES = {
@@ -400,7 +400,7 @@ def default_library_policy() -> dict[str, Any]:
             "warning_gate_safety_level": "safe",
             "primary_language": "english",
             "subtitle_preferences": {
-                "english_audio_subtitles": "off",
+                "english_audio_subtitles": "forced_english",
                 "foreign_audio_subtitles": "forced_english",
             },
             "junk_rules": {"delete_confidence_floor": "high"},
@@ -723,9 +723,10 @@ def build_language_subtitle_defaults_definition(standards: dict[str, Any] | None
                 "type": "select",
                 "value": subtitle_preferences["english_audio_subtitles"],
                 "options": [
-                    {"value": "off", "label": "No subtitle by default"},
+                    {"value": "forced_english", "label": "Keep forced English subtitle where present"},
                     {"value": "english", "label": "Default English subtitle"},
                     {"value": "primary_language", "label": "Default [Primary Language] Subtitle when present"},
+                    {"value": "off", "label": "No subtitle by default"},
                 ],
             },
             {
@@ -1033,9 +1034,9 @@ def normalize_warning_gate_safety_level(value: Any, default: str = "safe") -> st
     return level if level in WARNING_GATE_SAFETY_LEVELS else fallback
 
 
-def normalize_english_audio_subtitle_behavior(value: Any, default: str = "off") -> str:
+def normalize_english_audio_subtitle_behavior(value: Any, default: str = "forced_english") -> str:
     behavior = str(value or "").strip().casefold()
-    fallback = default if default in ENGLISH_AUDIO_SUBTITLE_BEHAVIORS else "off"
+    fallback = default if default in ENGLISH_AUDIO_SUBTITLE_BEHAVIORS else "forced_english"
     return behavior if behavior in ENGLISH_AUDIO_SUBTITLE_BEHAVIORS else fallback
 
 
@@ -1050,7 +1051,7 @@ def normalized_subtitle_preferences(value: Any) -> dict[str, str]:
     return {
         "english_audio_subtitles": normalize_english_audio_subtitle_behavior(
             payload.get("english_audio_subtitles"),
-            "off",
+            "forced_english",
         ),
         "foreign_audio_subtitles": normalize_foreign_audio_subtitle_behavior(
             payload.get("foreign_audio_subtitles"),

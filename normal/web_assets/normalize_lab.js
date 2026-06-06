@@ -108,6 +108,7 @@
     policyBusy: false,
     policySectionLabel: '',
     policyDrafts: {},
+    policyEditorRenderKey: '',
     auditPayload: null,
     auditBusy: false,
     auditRefreshInFlight: false,
@@ -280,6 +281,13 @@
     if (!auditSurfaceOpen()) return false;
     state.surfaceMode = 'default';
     closeAuditEventSource();
+    return true;
+  }
+
+  function dismissActiveSurface() {
+    if (!surfaceOpen()) return false;
+    if (auditSurfaceOpen()) closeAuditEventSource();
+    state.surfaceMode = 'default';
     return true;
   }
 
@@ -914,7 +922,7 @@
 
     if (defaultCount > 1) return 'multiple_default_subtitles';
     if (!target) {
-      if (subtitlePolicy.englishAudioSubtitles === 'english' && ['', 'english'].includes(audioLanguage)) {
+      if (['english', 'primary_language'].includes(subtitlePolicy.englishAudioSubtitles) && ['', 'english'].includes(audioLanguage)) {
         return defaultSubtitle && isEnglishSubtitleStream(defaultSubtitle) && !defaultSubtitle.is_forced ? '' : 'english_audio_missing_default_english_subtitle';
       }
       return defaultCount > 0 ? 'unnecessary_default_subtitle' : '';
@@ -1022,7 +1030,7 @@
 
   function currentSubtitlePolicy() {
     const preferences = currentPolicyPayload()?.policy?.subtitle_preferences || {};
-    const englishAudioSubtitles = ['off', 'english', 'primary_language'].includes(String(preferences.english_audio_subtitles || '').toLowerCase())
+    const englishAudioSubtitles = ['off', 'forced_english', 'english', 'primary_language'].includes(String(preferences.english_audio_subtitles || '').toLowerCase())
       ? String(preferences.english_audio_subtitles).toLowerCase()
       : 'off';
     const foreignAudioSubtitles = ['forced_english', 'english', 'off'].includes(String(preferences.foreign_audio_subtitles || '').toLowerCase())
@@ -1046,6 +1054,7 @@
       }
       return chooseBestFullEnglishSubtitleStream(item);
     }
+    if (subtitlePolicy.englishAudioSubtitles === 'forced_english') return chooseBestEnglishSubtitleStream(item, { forcedOnly: true });
     if (['english', 'primary_language'].includes(subtitlePolicy.englishAudioSubtitles)) return chooseBestFullEnglishSubtitleStream(item);
     return null;
   }
@@ -1153,6 +1162,7 @@
   function renderWorkflowHeader() {
     el.workflowTitle.textContent = WORKFLOW_LABELS[state.workflow];
     el.workflowDescription.textContent = WORKFLOW_DESCRIPTIONS[state.workflow];
+    el.workflowButton.dataset.active = surfaceOpen() ? 'false' : 'true';
     el.workflowNormalize.classList.toggle('is-active', state.workflow === 'normalize');
     el.workflowWeakEncodes.classList.toggle('is-active', state.workflow === 'weak-encodes');
     el.workflowRepairDefaults.classList.toggle('is-active', state.workflow === 'repair-defaults');
@@ -1674,13 +1684,27 @@
     `;
   }
 
+  function currentPolicyEditorRenderKey(definitions) {
+    return JSON.stringify({
+      surfaceMode: state.surfaceMode,
+      section: state.policySectionLabel,
+      busy: state.policyBusy,
+      drafts: state.policyDrafts,
+      definitions,
+    });
+  }
+
   function renderPolicyEditor() {
     const definitions = currentPolicyDefinitions();
     if (!policySurfaceOpen()) {
+      state.policyEditorRenderKey = '';
       el.policyEditorPanel.innerHTML = '';
       return;
     }
+    const renderKey = currentPolicyEditorRenderKey(definitions);
+    if (state.policyEditorRenderKey === renderKey) return;
     if (!definitions.length) {
+      state.policyEditorRenderKey = renderKey;
       el.policyEditorPanel.innerHTML = `
         <div class="lab-policy-header">
           <div class="lab-policy-heading">
@@ -1723,6 +1747,7 @@
       </div>
       <div class="lab-policy-sections">${sections}</div>
     `;
+    state.policyEditorRenderKey = renderKey;
     el.policyEditorPanel.querySelectorAll('[data-policy-section]').forEach(section => {
       const toggle = () => {
         const label = section.dataset.policySection || '';
@@ -1792,6 +1817,12 @@
         }
       }
       if (label !== 'default_source' && el.sourcePath.value.trim()) {
+        const surfaceDismissed = dismissActiveSurface();
+        if (surfaceDismissed) {
+          renderFilterVisibility();
+          renderRows();
+          renderSidePanel();
+        }
         if (isWeakMode()) await runWeakEncodes();
         else if (isRepairDefaultsMode()) await runRepairDefaults();
         else if (isJunkMode() && label === 'library_defaults') await runJunk();
@@ -2653,6 +2684,7 @@
 
   function renderPanelVisibility() {
     if (!usesDeletePreviewShell()) closeAudioPopover();
+    el.workflowButton.dataset.active = surfaceOpen() ? 'false' : 'true';
     el.scanTablePanel.hidden = surfaceOpen();
     el.dashboardPanel.hidden = !dashboardSurfaceOpen();
     el.policyEditorPanel.hidden = !policySurfaceOpen();
@@ -3594,8 +3626,8 @@
 
   async function runActiveWorkflow() {
     if (repairWorkflowBusy()) return;
-    const auditDismissed = dismissAuditSurface();
-    if (auditDismissed) {
+    const surfaceDismissed = dismissActiveSurface();
+    if (surfaceDismissed) {
       renderFilterVisibility();
       renderRows();
       renderSidePanel();

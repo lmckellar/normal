@@ -126,15 +126,27 @@ body {
   align-items: center;
   gap: 8px;
   margin: 4px 0 2px;
-  padding: 0;
+  padding: 4px 8px;
   border: 0;
+  border-radius: 4px;
   background: transparent;
   font-size: 19px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .lab-workflow-button:hover { background: transparent; }
+
+.lab-workflow-button[data-active="true"] {
+  background: linear-gradient(180deg, rgba(58, 90, 140, 0.15), rgba(58, 90, 140, 0.08));
+  box-shadow: inset 0 0 0 1px rgba(58, 90, 140, 0.16);
+  color: var(--accent);
+}
+
+.lab-workflow-button[data-active="true"]:hover {
+  background: linear-gradient(180deg, rgba(58, 90, 140, 0.18), rgba(58, 90, 140, 0.1));
+}
 
 .lab-workflow-caret {
   font-size: 12px;

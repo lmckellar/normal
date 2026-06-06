@@ -179,6 +179,11 @@ def choose_target_subtitle_ordinal(facts: MediaFacts, subtitle_preferences: dict
         if english_target is None:
             return None
         return subtitle_streams.index(english_target)
+    if active_preferences["english_audio_subtitles"] == "forced_english":
+        forced_target = choose_best_english_subtitle_stream(subtitle_streams, forced_only=True)
+        if forced_target is None:
+            return None
+        return subtitle_streams.index(forced_target)
     if active_preferences["english_audio_subtitles"] in {"english", "primary_language"}:
         english_target = choose_non_forced_english_subtitle_stream(subtitle_streams)
         if english_target is None:

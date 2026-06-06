@@ -543,9 +543,10 @@ class MovieProfileTests(unittest.TestCase):
         language_defaults = next(definition for definition in definitions if definition["label"] == "language_subtitle_defaults")
         self.assertEqual(language_defaults["fields"][0]["key"], "primary_language")
         self.assertEqual(language_defaults["fields"][1]["key"], "english_audio_subtitles")
+        self.assertEqual(language_defaults["fields"][1]["value"], "forced_english")
         self.assertEqual(
             [option["value"] for option in language_defaults["fields"][1]["options"]],
-            ["off", "english", "primary_language"],
+            ["forced_english", "english", "primary_language", "off"],
         )
         self.assertEqual(
             [option["value"] for option in language_defaults["fields"][2]["options"]],
@@ -588,7 +589,7 @@ class MovieProfileTests(unittest.TestCase):
                     "language_subtitle_defaults",
                     {
                         "primary_language": "english",
-                        "english_audio_subtitles": "primary_language",
+                        "english_audio_subtitles": "forced_english",
                         "foreign_audio_subtitles": "off",
                     },
                     expected_policy_revision=library_policy_revision(load_movie_standards()),
@@ -596,9 +597,9 @@ class MovieProfileTests(unittest.TestCase):
                 saved = policy_path.read_text(encoding="utf-8")
 
         self.assertEqual(policy["primary_language"], "english")
-        self.assertEqual(policy["subtitle_preferences"]["english_audio_subtitles"], "primary_language")
+        self.assertEqual(policy["subtitle_preferences"]["english_audio_subtitles"], "forced_english")
         self.assertEqual(policy["subtitle_preferences"]["foreign_audio_subtitles"], "off")
-        self.assertIn('"english_audio_subtitles": "primary_language"', saved)
+        self.assertIn('"english_audio_subtitles": "forced_english"', saved)
         self.assertIn('"foreign_audio_subtitles": "off"', saved)
 
     def test_update_policy_definition_persists_operator_preferences_with_revision_check(self) -> None:
@@ -660,7 +661,7 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(policy["canonical_list_provider"], "imdb")
         self.assertEqual(policy["warning_gate_safety_level"], "safe")
         self.assertEqual(policy["primary_language"], "english")
-        self.assertEqual(policy["subtitle_preferences"]["english_audio_subtitles"], "off")
+        self.assertEqual(policy["subtitle_preferences"]["english_audio_subtitles"], "forced_english")
         self.assertEqual(policy["subtitle_preferences"]["foreign_audio_subtitles"], "forced_english")
         self.assertEqual(policy["junk_rules"]["delete_confidence_floor"], "high")
         self.assertNotIn("require_lossless_audio", policy["quality_stances"]["reference"])
