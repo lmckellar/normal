@@ -10,7 +10,7 @@ from typing import Callable
 
 from . import state
 from .activity import ActivityTracker
-from .routes_audit import handle_audit_follow_up_update, handle_audit_read, record_system_event
+from .routes_audit import handle_audit_follow_up_update, handle_audit_read, handle_audit_stream, record_system_event
 from .http import RequestContext
 from .routes_cleanup import (
     handle_movies_delete,
@@ -124,6 +124,7 @@ def serve_workbench(ctx: RequestContext) -> None:
 def build_get_routes() -> dict[str, Callable[[RequestContext], None]]:
     routes: dict[str, Callable[[RequestContext], None]] = {
         "/api/activity": handle_activity,
+        "/api/audit/stream": handle_audit_stream,
         "/api/library-roots": handle_library_roots_get,
         "/": serve_workbench,
         "/index.html": serve_workbench,

@@ -529,6 +529,7 @@ class MovieProfileTests(unittest.TestCase):
         self.assertNotIn("replacement_candidate", labels)
         self.assertIn("default_source", labels)
         self.assertIn("library_defaults", labels)
+        self.assertIn("language_subtitle_defaults", labels)
         self.assertIn("delete_mode", labels)
         default_source = next(definition for definition in definitions if definition["label"] == "default_source")
         self.assertEqual(default_source["scope"], "operator_preferences")
@@ -537,6 +538,17 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(library_defaults["fields"][0]["key"], "canonical_list_provider")
         self.assertEqual(library_defaults["fields"][0]["value"], "imdb")
         self.assertEqual(library_defaults["fields"][1]["key"], "quality_profile_floor")
+        language_defaults = next(definition for definition in definitions if definition["label"] == "language_subtitle_defaults")
+        self.assertEqual(language_defaults["fields"][0]["key"], "primary_language")
+        self.assertEqual(language_defaults["fields"][1]["key"], "english_audio_subtitles")
+        self.assertEqual(
+            [option["value"] for option in language_defaults["fields"][1]["options"]],
+            ["off", "english", "primary_language"],
+        )
+        self.assertEqual(
+            [option["value"] for option in language_defaults["fields"][2]["options"]],
+            ["forced_english", "english", "off"],
+        )
         delete_mode = next(definition for definition in definitions if definition["label"] == "delete_mode")
         self.assertEqual(delete_mode["scope"], "operator_preferences")
         self.assertEqual(delete_mode["fields"][0]["value"], "recycle_all")
@@ -550,8 +562,6 @@ class MovieProfileTests(unittest.TestCase):
                     {
                         "canonical_list_provider": "imdb",
                         "quality_profile_floor": "compact_grade",
-                        "primary_language": "english",
-                        "subtitle_mode": "conservative",
                         "junk_delete_confidence_floor": "review",
                     },
                     expected_policy_revision=library_policy_revision(load_movie_standards()),
@@ -564,6 +574,27 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(preferences["delete_mode"], "recycle_all")
         self.assertIn('"replacement_candidate_rules"', saved)
         self.assertIn('"canonical_list_provider": "imdb"', saved)
+
+    def test_update_policy_definition_persists_language_and_subtitle_defaults(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            policy_path = Path(tmpdir) / "movie_standards.json"
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", policy_path):
+                policy, _preferences = update_policy_definition(
+                    "language_subtitle_defaults",
+                    {
+                        "primary_language": "english",
+                        "english_audio_subtitles": "primary_language",
+                        "foreign_audio_subtitles": "off",
+                    },
+                    expected_policy_revision=library_policy_revision(load_movie_standards()),
+                )
+                saved = policy_path.read_text(encoding="utf-8")
+
+        self.assertEqual(policy["primary_language"], "english")
+        self.assertEqual(policy["subtitle_preferences"]["english_audio_subtitles"], "primary_language")
+        self.assertEqual(policy["subtitle_preferences"]["foreign_audio_subtitles"], "off")
+        self.assertIn('"english_audio_subtitles": "primary_language"', saved)
+        self.assertIn('"foreign_audio_subtitles": "off"', saved)
 
     def test_update_policy_definition_persists_operator_preferences_with_revision_check(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -623,9 +654,32 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(policy["replacement_candidate_rules"]["quality_profile_floor"], "compact_grade")
         self.assertEqual(policy["canonical_list_provider"], "imdb")
         self.assertEqual(policy["primary_language"], "english")
-        self.assertEqual(policy["subtitle_preferences"]["mode"], "conservative")
+        self.assertEqual(policy["subtitle_preferences"]["english_audio_subtitles"], "off")
+        self.assertEqual(policy["subtitle_preferences"]["foreign_audio_subtitles"], "forced_english")
         self.assertEqual(policy["junk_rules"]["delete_confidence_floor"], "high")
         self.assertNotIn("require_lossless_audio", policy["quality_stances"]["reference"])
+
+    def test_legacy_subtitle_mode_is_removed_when_loading_standards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "movie_standards.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "subtitle_preferences": {
+                            "mode": "conservative",
+                            "english_audio_subtitles": "english",
+                        }
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", path):
+                policy = load_movie_standards()
+
+        self.assertNotIn("mode", policy["subtitle_preferences"])
+        self.assertEqual(policy["subtitle_preferences"]["english_audio_subtitles"], "english")
+        self.assertEqual(policy["subtitle_preferences"]["foreign_audio_subtitles"], "forced_english")
 
     def test_unknown_canonical_list_provider_normalizes_to_imdb(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

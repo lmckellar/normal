@@ -9,6 +9,7 @@ from contextlib import contextmanager
 from http.server import ThreadingHTTPServer
 import json
 from pathlib import Path
+from urllib.parse import quote
 from unittest.mock import patch
 
 from normal.web import (
@@ -70,6 +71,20 @@ class WebTests(unittest.TestCase):
                 self.assertEqual(response.headers.get_content_type(), "application/javascript")
                 self.assertEqual(response.headers.get("Cache-Control"), "no-store")
                 self.assertIn("/api/movies/apply", response.read().decode("utf-8"))
+
+    def test_audit_stream_route_serves_sse_revision_notice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "movies"
+            source.mkdir()
+            with self.run_test_server() as base_url:
+                with urllib.request.urlopen(f"{base_url}/api/audit/stream?source={quote(str(source))}", timeout=2) as response:
+                    self.assertEqual(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+                    self.assertEqual(response.headers.get("Cache-Control"), "no-store")
+                    data_line = response.readline().decode("utf-8").strip()
+        self.assertTrue(data_line.startswith("data: "))
+        payload = json.loads(data_line[6:])
+        self.assertIn("revision", payload)
+        self.assertEqual(payload["source_roots"], [str(source.resolve())])
 
     def test_root_route_serves_default_workbench(self) -> None:
         with self.run_test_server() as base_url:
@@ -268,13 +283,14 @@ class WebTests(unittest.TestCase):
 
     def test_normalize_policy_editor_filters_redundant_replacement_candidate_and_starts_collapsed(self) -> None:
         self.assertIn("payload.policy_definitions.filter(definition => definition?.label !== 'replacement_candidate')", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("const preferredOrder = ['default_source', 'delete_mode', 'library_defaults'];", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("const preferredOrder = ['default_source', 'delete_mode', 'library_defaults', 'language_subtitle_defaults'];", NORMALIZE_LAB_FRONTEND)
         self.assertIn("return filtered.slice().sort((left, right) => {", NORMALIZE_LAB_FRONTEND)
         self.assertIn("const isOpen = state.policySectionLabel === definition.label;", NORMALIZE_LAB_FRONTEND)
         self.assertIn("state.policySectionLabel = label || '';", NORMALIZE_LAB_FRONTEND)
         self.assertIn("lab-policy-section-header", NORMALIZE_LAB_FRONTEND)
         self.assertIn("aria-expanded=\"${isOpen ? 'true' : 'false'}\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("section.addEventListener('keydown', event => {", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("if (label === 'language_subtitle_defaults') return 'Language & Subtitles';", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("${isOpen ? 'Collapse' : 'Edit'}", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("(!state.policySectionLabel && definition.label === 'library_defaults')", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("User-local", NORMALIZE_LAB_FRONTEND)
@@ -407,12 +423,21 @@ class WebTests(unittest.TestCase):
         self.assertIn("id=\"auditToggle\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"auditPanel\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("/api/audit/read", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("/api/audit/stream?source=${encodeURIComponent(source)}", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function refreshAuditPayload(", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function markAuditLedgerDirty()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function ensureAuditEventSource()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("const AUDIT_STREAM_RETRY_MS = 2000;", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function auditSessionContextLabel(payload)", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Session started ${formatAuditRecordedAt(event.recorded_at)}", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("class=\"lab-audit-context\"", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("lab-audit-sync-chip", NORMALIZE_LAB_FRONTEND)
         self.assertIn("await ensurePolicyPayload();", NORMALIZE_LAB_FRONTEND)
         self.assertIn("if (startupSource) el.sourcePath.value = startupSource;", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Preview and action controls are suppressed while policy editing is active.", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Preview and action controls are suppressed while dashboard view is open.", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Preview and action controls are suppressed while the audit ledger is open.", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("if (!state.runInFlight && state.workflow === 'normalize' && auditSurfaceOpen()) {", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("const auditDismissed = dismissAuditSurface();", NORMALIZE_LAB_FRONTEND)
         self.assertIn("applyPolicyPayload(payload);", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Make Best English Audio Default", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Normalize Subtitle Defaults", NORMALIZE_LAB_FRONTEND)
@@ -514,6 +539,8 @@ class WebTests(unittest.TestCase):
         self.assertIn('.lab-shell[data-policy-mode="default"] .lab-sliver-slot {', NORMALIZE_LAB_CSS)
         self.assertIn('grid-template-columns: repeat(2, minmax(0, 1fr));', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-dashboard-breakdowns {', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-audit-context {', NORMALIZE_LAB_CSS)
+        self.assertNotIn('.lab-audit-sync-chip {', NORMALIZE_LAB_CSS)
         self.assertIn('min-height: var(--lab-primary-surface-min-height);', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-policy-panel', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-inspection-pane', NORMALIZE_LAB_CSS)

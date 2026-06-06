@@ -21,6 +21,8 @@
     ledger: '4-page-ledger',
   };
 
+  const AUDIT_STREAM_RETRY_MS = 2000;
+
   const NORMALIZE_HEADERS = [
     { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
     { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
@@ -107,6 +109,12 @@
     policyDrafts: {},
     auditPayload: null,
     auditBusy: false,
+    auditRefreshInFlight: false,
+    auditNeedsRefresh: false,
+    auditSignature: '',
+    auditEventSource: null,
+    auditEventSourceKey: '',
+    auditEventReconnectTimer: 0,
     repairAction: 'set_english_default',
     repairActionNotice: '',
     audioFixBusy: false,
@@ -264,10 +272,17 @@
     return state.surfaceMode === 'audit';
   }
 
+  function dismissAuditSurface() {
+    if (!auditSurfaceOpen()) return false;
+    state.surfaceMode = 'default';
+    closeAuditEventSource();
+    return true;
+  }
+
   function currentPolicyDefinitions() {
     const payload = currentPolicyPayload();
     if (!Array.isArray(payload?.policy_definitions)) return [];
-    const preferredOrder = ['default_source', 'delete_mode', 'library_defaults'];
+    const preferredOrder = ['default_source', 'delete_mode', 'library_defaults', 'language_subtitle_defaults'];
     const filtered = payload.policy_definitions.filter(definition => definition?.label !== 'replacement_candidate');
     return filtered.slice().sort((left, right) => {
       const leftIndex = preferredOrder.indexOf(left?.label || '');
@@ -622,6 +637,7 @@
     if (label === 'reference') return 'Reference';
     if (label === 'default_source') return 'Default Library Directory';
     if (label === 'library_defaults') return 'Library Defaults';
+    if (label === 'language_subtitle_defaults') return 'Language & Subtitles';
     if (label === 'delete_mode') return 'Delete Posture';
     if (label === 'meets_minimum') return 'Meets Minimum';
     if (label === 'needs_review') return 'Needs Review';
@@ -638,6 +654,140 @@
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error || `${url} failed`);
     return payload;
+  }
+
+  function auditSourceKey() {
+    return normalizeSourceKey(el.sourcePath.value);
+  }
+
+  function auditPayloadSignature(payload) {
+    const events = Array.isArray(payload?.events) ? payload.events : [];
+    const followups = Array.isArray(payload?.active_followups) ? payload.active_followups : [];
+    const latestEvent = events[events.length - 1] || null;
+    return [
+      payload?.ledger_revision || '',
+      payload?.latest_event_id || latestEvent?.event_id || '',
+      payload?.latest_recorded_at || latestEvent?.recorded_at || '',
+      events.length,
+      followups.length,
+    ].join(':');
+  }
+
+  function clearAuditEventReconnectTimer() {
+    if (!state.auditEventReconnectTimer) return;
+    window.clearTimeout(state.auditEventReconnectTimer);
+    state.auditEventReconnectTimer = 0;
+  }
+
+  function closeAuditEventSource() {
+    clearAuditEventReconnectTimer();
+    if (state.auditEventSource) state.auditEventSource.close();
+    state.auditEventSource = null;
+    state.auditEventSourceKey = '';
+  }
+
+  function scheduleAuditEventReconnect(delayMs = AUDIT_STREAM_RETRY_MS) {
+    clearAuditEventReconnectTimer();
+    if (!auditSurfaceOpen() || !auditSourceKey()) return;
+    state.auditEventReconnectTimer = window.setTimeout(() => {
+      state.auditEventReconnectTimer = 0;
+      ensureAuditEventSource();
+    }, delayMs);
+  }
+
+  function ensureAuditEventSource() {
+    const source = auditSourceKey();
+    if (!auditSurfaceOpen() || !source) {
+      closeAuditEventSource();
+      return;
+    }
+    if (state.auditEventSource && state.auditEventSourceKey === source) return;
+    closeAuditEventSource();
+    const stream = new EventSource(`/api/audit/stream?source=${encodeURIComponent(source)}`);
+    state.auditEventSource = stream;
+    state.auditEventSourceKey = source;
+    stream.onmessage = event => {
+      if (state.auditEventSource !== stream) return;
+      let payload = null;
+      try {
+        payload = JSON.parse(event.data || '{}');
+      } catch {
+        return;
+      }
+      const changedSources = Array.isArray(payload?.source_roots) ? payload.source_roots.map(normalizeSourceKey) : [];
+      if (!changedSources.includes(source) && !changedSources.includes('__system__')) return;
+      if (state.auditRefreshInFlight) {
+        state.auditNeedsRefresh = true;
+        return;
+      }
+      refreshAuditPayload({ silent: true, immediate: true }).catch(error => {
+        if (!state.auditPayload) el.inspectionPane.textContent = error.message;
+      });
+    };
+    stream.onerror = () => {
+      if (state.auditEventSource !== stream) return;
+      closeAuditEventSource();
+      scheduleAuditEventReconnect();
+    };
+  }
+
+  function markAuditLedgerDirty() {
+    if (!auditSourceKey()) return;
+    state.auditNeedsRefresh = true;
+    if (!auditSurfaceOpen() || state.auditRefreshInFlight) return;
+    state.auditNeedsRefresh = false;
+    refreshAuditPayload({ silent: true, immediate: true }).catch(error => {
+      if (!state.auditPayload) el.inspectionPane.textContent = error.message;
+    });
+  }
+
+  async function refreshAuditPayload({ silent = false, immediate = false } = {}) {
+    const source = auditSourceKey();
+    if (!source) {
+      closeAuditEventSource();
+      state.auditPayload = null;
+      state.auditNeedsRefresh = false;
+      state.auditRefreshInFlight = false;
+      state.auditBusy = false;
+      state.auditSignature = '';
+      renderAuditPanel();
+      renderInspectionPane();
+      return null;
+    }
+    if (state.auditRefreshInFlight) return state.auditPayload;
+    state.auditRefreshInFlight = true;
+    const hadPayload = Boolean(state.auditPayload);
+    if (!silent && !hadPayload) {
+      state.auditBusy = true;
+      renderAuditPanel();
+      renderInspectionPane();
+    }
+    try {
+      const payload = await postJson('/api/audit/read', { source, limit: 40 });
+      const signature = auditPayloadSignature(payload);
+      const changed = signature !== state.auditSignature;
+      state.auditPayload = payload;
+      state.auditSignature = signature;
+      if (changed || !hadPayload || !silent || immediate) {
+        renderAuditPanel();
+        renderInspectionPane();
+      }
+      ensureAuditEventSource();
+      return payload;
+    } finally {
+      state.auditRefreshInFlight = false;
+      state.auditBusy = false;
+      if (state.auditNeedsRefresh) {
+        state.auditNeedsRefresh = false;
+        if (auditSurfaceOpen() && auditSourceKey()) {
+          refreshAuditPayload({ silent: true, immediate: true }).catch(error => {
+            if (!state.auditPayload) el.inspectionPane.textContent = error.message;
+          });
+        }
+      }
+      renderAuditPanel();
+      renderInspectionPane();
+    }
   }
 
   function downloadFilenameFromDisposition(header, fallback = 'movie-catalogue.xlsx') {
@@ -698,6 +848,7 @@
     if (code === 'english_forced_not_default') return 'Forced English Not Default';
     if (code === 'wrong_default_forced_subtitle') return 'Wrong Forced Subtitle Default';
     if (code === 'missing_default_english_subtitle') return 'Missing Default English Subtitle';
+    if (code === 'english_audio_missing_default_english_subtitle') return 'Missing English Subtitle Default';
     if (code === 'wrong_default_subtitle_language') return 'Wrong Default Subtitle Language';
     if (code === 'unnecessary_default_subtitle') return 'Unnecessary Default Subtitle';
     if (code === 'path_not_normalized') return 'Non-Standard Path';
@@ -740,11 +891,33 @@
   }
 
   function movieSubtitleSetupResult(item) {
-    return (item?.profile?.domain_results || []).find(result => result?.domain === 'subtitle_setup') || null;
+    const issueCode = movieSubtitleReadinessIssueCode(item);
+    return issueCode ? { domain: 'subtitle_setup', code: issueCode } : null;
   }
 
   function movieSubtitleReadinessIssueCode(item) {
-    return movieSubtitleSetupResult(item)?.code || '';
+    const streams = item?.facts?.subtitle_streams || [];
+    if (!streams.length) return '';
+    const defaultCount = Number(item?.facts?.default_subtitle_streams || 0);
+    const target = movieSubtitleReadinessRepairTarget(item);
+    const defaultSubtitle = movieDefaultSubtitleStream(item);
+    const audioLanguage = itemDefaultAudioLanguage(item);
+    const subtitlePolicy = currentSubtitlePolicy();
+
+    if (defaultCount > 1) return 'multiple_default_subtitles';
+    if (!target) {
+      if (subtitlePolicy.englishAudioSubtitles === 'english' && ['', 'english'].includes(audioLanguage)) {
+        return defaultSubtitle && isEnglishSubtitleStream(defaultSubtitle) && !defaultSubtitle.is_forced ? '' : 'english_audio_missing_default_english_subtitle';
+      }
+      return defaultCount > 0 ? 'unnecessary_default_subtitle' : '';
+    }
+    if (defaultSubtitle && defaultCount === 1 && defaultSubtitle.index === target.index) return '';
+    if (target.is_forced) return defaultCount > 0 ? 'wrong_default_forced_subtitle' : 'english_forced_not_default';
+    if (defaultCount === 0) return audioLanguage && audioLanguage !== 'english'
+      ? 'missing_default_english_subtitle'
+      : 'english_audio_missing_default_english_subtitle';
+    if (audioLanguage && audioLanguage !== 'english') return 'wrong_default_subtitle_language';
+    return 'english_audio_missing_default_english_subtitle';
   }
 
   function movieDefaultAudioStream(item) {
@@ -831,14 +1004,41 @@
     return matching[0];
   }
 
+  function chooseBestFullEnglishSubtitleStream(item) {
+    const streams = (item?.facts?.subtitle_streams || []).filter(stream => isEnglishSubtitleStream(stream) && !stream?.is_forced);
+    if (!streams.length) return null;
+    const currentDefault = movieDefaultSubtitleStream(item);
+    if (currentDefault && streams.includes(currentDefault)) return currentDefault;
+    return streams[0];
+  }
+
+  function currentSubtitlePolicy() {
+    const preferences = currentPolicyPayload()?.policy?.subtitle_preferences || {};
+    const englishAudioSubtitles = ['off', 'english', 'primary_language'].includes(String(preferences.english_audio_subtitles || '').toLowerCase())
+      ? String(preferences.english_audio_subtitles).toLowerCase()
+      : 'off';
+    const foreignAudioSubtitles = ['forced_english', 'english', 'off'].includes(String(preferences.foreign_audio_subtitles || '').toLowerCase())
+      ? String(preferences.foreign_audio_subtitles).toLowerCase()
+      : 'forced_english';
+    return { englishAudioSubtitles, foreignAudioSubtitles };
+  }
+
   function itemDefaultAudioLanguage(item) {
     return audioStreamLanguage(movieDefaultAudioStream(item)) || '';
   }
 
   function movieSubtitleReadinessRepairTarget(item) {
-    const forced = chooseBestEnglishSubtitleStream(item, { forcedOnly: true });
-    if (forced) return forced;
-    if (!['', 'english'].includes(itemDefaultAudioLanguage(item))) return chooseBestEnglishSubtitleStream(item);
+    const subtitlePolicy = currentSubtitlePolicy();
+    const audioLanguage = itemDefaultAudioLanguage(item);
+    if (!['', 'english'].includes(audioLanguage)) {
+      if (subtitlePolicy.foreignAudioSubtitles === 'off') return null;
+      if (subtitlePolicy.foreignAudioSubtitles === 'forced_english') {
+        const forced = chooseBestEnglishSubtitleStream(item, { forcedOnly: true });
+        if (forced) return forced;
+      }
+      return chooseBestFullEnglishSubtitleStream(item);
+    }
+    if (['english', 'primary_language'].includes(subtitlePolicy.englishAudioSubtitles)) return chooseBestFullEnglishSubtitleStream(item);
     return null;
   }
 
@@ -847,7 +1047,7 @@
     if (!issueCode) return false;
     if (!String(item?.path || '').toLowerCase().endsWith('.mkv')) return false;
     if (!Array.isArray(item?.facts?.subtitle_streams) || !item.facts.subtitle_streams.length) return false;
-    if (issueCode === 'missing_default_english_subtitle') return false;
+    if (['missing_default_english_subtitle', 'english_audio_missing_default_english_subtitle'].includes(issueCode)) return false;
     if (issueCode === 'multiple_default_subtitles') return !!movieSubtitleReadinessRepairTarget(item) || itemDefaultAudioLanguage(item) === 'english';
     if (['english_forced_not_default', 'wrong_default_forced_subtitle', 'wrong_default_subtitle_language'].includes(issueCode)) {
       return !!movieSubtitleReadinessRepairTarget(item);
@@ -861,6 +1061,7 @@
       english_forced_not_default: 'forced English exists but is not default',
       wrong_default_forced_subtitle: 'wrong subtitle is default instead of forced English',
       missing_default_english_subtitle: 'non-English audio but no default English subtitle',
+      english_audio_missing_default_english_subtitle: 'English audio should default to a full English subtitle',
       wrong_default_subtitle_language: 'non-English audio but default subtitle is not English',
       unnecessary_default_subtitle: 'English audio should default to no subtitles',
       multiple_default_subtitles: 'multiple subtitle streams are default',
@@ -1552,13 +1753,14 @@
         operator_preferences_revision: payload.operator_preferences_revision || '',
       });
       applyPolicyPayload(result);
+      markAuditLedgerDirty();
       delete state.policyDrafts[label];
       if (label === 'default_source') {
         const nextSource = preferredDefaultSource();
         el.sourcePath.value = nextSource;
         if (nextSource) {
           state.surfaceMode = 'audit';
-          await loadAuditPayload();
+          await refreshAuditPayload({ immediate: true });
         }
       }
       if (label !== 'default_source' && el.sourcePath.value.trim()) {
@@ -1623,8 +1825,36 @@
   function auditSubjectLabel(event) {
     const subject = Array.isArray(event?.subjects) ? event.subjects[0] : null;
     if (!subject) return '—';
-    if (subject.title) return subject.year ? `${subject.title} (${subject.year})` : subject.title;
-    if (subject.path) return fileNameFromPath(subject.path);
+    const movieLabel = subject.title ? (subject.year ? `${subject.title} (${subject.year})` : subject.title) : '';
+    if (subject.kind === 'movie' || subject.kind === 'follow_up') {
+      if (movieLabel) return `Movie · ${movieLabel}`;
+      if (subject.path) return `Movie · ${fileNameFromPath(subject.path)}`;
+      return 'Movie';
+    }
+    if (subject.kind === 'movie_change') {
+      if (movieLabel) return `Normalize Change · ${movieLabel}`;
+      const currentValue = String(subject.details?.current_value || '').trim();
+      if (currentValue) return `Normalize Change · ${currentValue}`;
+      if (subject.path) return `Normalize Change · ${fileNameFromPath(subject.path)}`;
+      return 'Normalize Change';
+    }
+    if (subject.kind === 'file') {
+      if (event?.workflow === 'junk') return 'Junk File';
+      if (subject.path) return `File · ${fileNameFromPath(subject.path)}`;
+      return event?.workflow === 'junk' ? 'Junk File' : 'File';
+    }
+    if (subject.kind === 'source_root') return 'Library';
+    if (subject.kind === 'system') return 'System';
+    if (subject.kind === 'policy_definition') {
+      const label = String(subject.item_id || '').trim();
+      return label ? `Policy · ${humanProfileLabel(label)}` : 'Policy';
+    }
+    if (subject.kind === 'replacement_queue') return 'Replacement Queue';
+    if (subject.kind === 'replacement_completed') return 'Replacement Completed';
+    if (subject.kind === 'delete') return 'Deletion Record';
+    if (subject.kind === 'repair_review') return 'Repair Review';
+    if (movieLabel) return movieLabel;
+    if (subject.path) return `Path · ${fileNameFromPath(subject.path)}`;
     if (subject.kind) return humanProfileLabel(subject.kind);
     return '—';
   }
@@ -1638,24 +1868,19 @@
     return effects.length === 1 ? `${kind} · ${status}` : `${kind} · ${status} +${effects.length - 1}`;
   }
 
-  async function loadAuditPayload() {
-    const source = el.sourcePath.value.trim();
-    if (!source) {
-      state.auditPayload = null;
-      return null;
-    }
-    state.auditBusy = true;
-    renderAuditPanel();
-    renderInspectionPane();
-    try {
-      const payload = await postJson('/api/audit/read', { source, limit: 40 });
-      state.auditPayload = payload;
-      return payload;
-    } finally {
-      state.auditBusy = false;
-      renderAuditPanel();
-      renderInspectionPane();
-    }
+  function auditEventsNewestFirst(events) {
+    return (Array.isArray(events) ? events.slice() : []).sort((left, right) => {
+      const leftRecordedAt = String(left?.recorded_at || '');
+      const rightRecordedAt = String(right?.recorded_at || '');
+      if (leftRecordedAt === rightRecordedAt) return 0;
+      return leftRecordedAt < rightRecordedAt ? 1 : -1;
+    });
+  }
+
+  function auditSessionContextLabel(payload) {
+    const event = payload?.latest_system_start;
+    if (!event?.recorded_at) return '';
+    return `Session started ${formatAuditRecordedAt(event.recorded_at)}`;
   }
 
   function renderAuditPanel() {
@@ -1675,7 +1900,7 @@
       `;
       return;
     }
-    if (state.auditBusy) {
+    if (state.auditBusy && !state.auditPayload) {
       el.auditPanel.innerHTML = `
         <div class="lab-policy-header">
           <div class="lab-policy-heading">
@@ -1687,8 +1912,9 @@
       `;
       return;
     }
-    const events = Array.isArray(state.auditPayload?.events) ? state.auditPayload.events.slice().reverse() : [];
+    const events = auditEventsNewestFirst(state.auditPayload?.events);
     const followups = Array.isArray(state.auditPayload?.active_followups) ? state.auditPayload.active_followups : [];
+    const sessionContextLabel = auditSessionContextLabel(state.auditPayload);
     if (!events.length) {
       el.auditPanel.innerHTML = `
         <div class="lab-policy-header">
@@ -1713,6 +1939,7 @@
         <span class="chip">${events.length} recent event${events.length === 1 ? '' : 's'}</span>
         <span class="chip queue">${followups.length} active follow-up${followups.length === 1 ? '' : 's'}</span>
       </div>
+      ${sessionContextLabel ? `<div class="lab-audit-context">${escapeHtml(sessionContextLabel)}</div>` : ''}
       <div class="lab-audit-table lab-rhythm-surface" data-rhythm-surface="rows">
         <table class="lab-scan-table">
           <thead>
@@ -1757,7 +1984,7 @@
     }
     if (auditSurfaceOpen()) {
       const followups = Array.isArray(state.auditPayload?.active_followups) ? state.auditPayload.active_followups : [];
-      const events = Array.isArray(state.auditPayload?.events) ? state.auditPayload.events.slice().reverse().slice(0, 8) : [];
+      const events = auditEventsNewestFirst(state.auditPayload?.events).slice(0, 8);
       if (!el.sourcePath.value.trim()) {
         el.inspectionPane.innerHTML = '<div class="lab-preview-empty"><strong>Audit source required.</strong><div>Select a source to open the ledger surface.</div></div>';
         return;
@@ -3226,6 +3453,7 @@
   async function runNormalize() {
     const payload = await postJson('/api/movies/normalize', { source: el.sourcePath.value });
     state.normalizePayload = payload;
+    markAuditLedgerDirty();
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
@@ -3237,6 +3465,7 @@
     const source = el.sourcePath.value.trim();
     const payload = await postJson('/api/movies/profile', { source, weak_floor: state.weakFloor });
     state.weakPayload = payload;
+    markAuditLedgerDirty();
     state.weakPayloadSource = normalizeSourceKey(source);
     applyPolicyPayload(payload);
     updateDashboardPayload(payload, source);
@@ -3252,6 +3481,7 @@
     const source = el.sourcePath.value.trim();
     const payload = await postJson('/api/movies/profile', { source });
     state.repairPayload = payload;
+    markAuditLedgerDirty();
     state.repairPayloadSource = normalizeSourceKey(source);
     applyPolicyPayload(payload);
     updateDashboardPayload(payload, source);
@@ -3267,6 +3497,7 @@
   async function runJunk() {
     const payload = await postJson('/api/movies/junk', { source: el.sourcePath.value });
     state.junkPayload = payload;
+    markAuditLedgerDirty();
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
@@ -3296,6 +3527,7 @@
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
+    markAuditLedgerDirty();
     renderRows();
     renderSidePanel();
   }
@@ -3330,6 +3562,7 @@
       link.click();
       link.remove();
       URL.revokeObjectURL(downloadUrl);
+      markAuditLedgerDirty();
     } finally {
       state.catalogueExportInFlight = false;
       renderSidePanel();
@@ -3337,6 +3570,12 @@
   }
 
   async function runActiveWorkflow() {
+    const auditDismissed = dismissAuditSurface();
+    if (auditDismissed) {
+      renderFilterVisibility();
+      renderRows();
+      renderSidePanel();
+    }
     state.runInFlight = true;
     renderRunButton();
     try {
@@ -3397,6 +3636,7 @@
       const delPayload = await delResponse.json();
       if (!delResponse.ok) throw new Error(delPayload.error || 'delete failed');
       state.repairPayload = removeWeakDeletedItems(state.repairPayload, delPayload.deleted || []);
+      markAuditLedgerDirty();
       state.selected = new Set();
       state.activeRowId = '';
       state.previewMode = 'selected';
@@ -3428,6 +3668,7 @@
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'audio packaging fix failed');
       state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true, action });
+      markAuditLedgerDirty();
       state.repairActionNotice = dropForeignAudio
         ? `${payload.fixed?.length || 0} audio prune remux${(payload.fixed?.length || 0) === 1 ? '' : 's'} completed.`
         : `${payload.fixed?.length || 0} audio default${(payload.fixed?.length || 0) === 1 ? '' : 's'} repaired.`;
@@ -3463,6 +3704,7 @@
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'subtitle readiness fix failed');
       state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true, action });
+      markAuditLedgerDirty();
       state.repairActionNotice = `${payload.fixed?.length || 0} subtitle default${(payload.fixed?.length || 0) === 1 ? '' : 's'} repaired.`;
       renderRows();
       renderSidePanel();
@@ -3521,6 +3763,7 @@
         const delPayload = await delResponse.json();
         if (!delResponse.ok) throw new Error(delPayload.error || 'delete failed');
         state.weakPayload = removeWeakDeletedItems(state.weakPayload, delPayload.deleted || []);
+        markAuditLedgerDirty();
         state.selected = new Set();
         clearDeletePreviewState();
         state.activeRowId = '';
@@ -3553,6 +3796,7 @@
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'junk delete failed');
         state.junkPayload = removeJunkDeletedItems(state.junkPayload, payload.deleted || []);
+        markAuditLedgerDirty();
         state.selected = new Set();
         state.activeRowId = '';
         state.previewMode = 'selected';
@@ -3578,6 +3822,7 @@
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'confirm failed');
       state.normalizePayload = payload.remaining_plan || null;
+      markAuditLedgerDirty();
       state.selected = new Set();
       state.activeRowId = '';
       state.previewMode = 'selected';
@@ -3600,6 +3845,7 @@
   }
 
   function setWorkflow(workflow) {
+    dismissAuditSurface();
     state.workflow = ['weak-encodes', 'repair-defaults', 'canonical-lists', 'junk'].includes(workflow) ? workflow : 'normalize';
     state.layoutMode = LAYOUT_MODES.default;
     state.surfaceMode = 'default';
@@ -3774,9 +4020,10 @@
     (async () => {
       if (auditSurfaceOpen()) {
         state.surfaceMode = 'default';
+        closeAuditEventSource();
       } else {
         state.surfaceMode = 'audit';
-        await loadAuditPayload();
+        await refreshAuditPayload({ immediate: true });
       }
       renderFilterVisibility();
       renderRows();
@@ -3785,19 +4032,24 @@
   });
 
   el.runButton.addEventListener('click', () => {
-    if (!state.runInFlight && state.workflow === 'normalize' && auditSurfaceOpen()) {
-      state.surfaceMode = 'default';
-      renderFilterVisibility();
-      renderRows();
-      renderSidePanel();
-    }
     runActiveWorkflow().catch(error => {
       el.previewPane.textContent = error.message;
     });
   });
 
   el.sourcePath.addEventListener('input', () => {
+    state.auditPayload = null;
+    state.auditNeedsRefresh = false;
+    state.auditRefreshInFlight = false;
+    state.auditBusy = false;
+    state.auditSignature = '';
+    closeAuditEventSource();
     renderSidePanel();
+    if (auditSurfaceOpen() && auditSourceKey()) {
+      refreshAuditPayload({ immediate: true }).catch(error => {
+        el.inspectionPane.textContent = error.message;
+      });
+    }
   });
 
   if (el.placeholderDownloadToggle) {
@@ -3823,7 +4075,7 @@
       }
       if (normalizeSourceKey(el.sourcePath.value)) {
         state.surfaceMode = 'audit';
-        await loadAuditPayload();
+        await refreshAuditPayload({ immediate: true });
       }
     } catch (error) {
       el.inspectionPane.textContent = error.message;

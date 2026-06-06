@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+import queue
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +14,7 @@ from normal.audit import (
     FOLLOW_UP_STATUS_DISMISSED,
     FOLLOW_UP_STATUS_RESOLVED,
     SYSTEM_SOURCE_ROOT,
+    AuditRevisionNotice,
     make_event_id,
     normalize_source_root,
 )
@@ -18,6 +22,17 @@ from normal.models import utc_now_iso
 
 from .http import RequestContext
 from .state import AUDIT_STORE
+
+
+def _latest_system_start_event(events: list[AuditEvent]) -> AuditEvent | None:
+    return next(
+        (
+            event
+            for event in reversed(events)
+            if event.source_root == SYSTEM_SOURCE_ROOT and event.workflow == "system" and event.action == "start"
+        ),
+        None,
+    )
 
 
 def handle_audit_read(ctx: RequestContext, payload: dict[str, Any]) -> None:
@@ -39,30 +54,67 @@ def handle_audit_read(ctx: RequestContext, payload: dict[str, Any]) -> None:
         workflow=workflow,
         action=action,
     )
+    latest_system_start = None
     if include_system_events:
         source_root = str(source.resolve())
         events = [event for event in events if event.source_root == source_root or event.workflow == "system"]
-        latest_system_start = next(
-            (
-                event
-                for event in reversed(events)
-                if event.source_root == SYSTEM_SOURCE_ROOT and event.workflow == "system" and event.action == "start"
-            ),
-            None,
-        )
-        if latest_system_start is not None:
-            events = [event for event in events if event.event_id != latest_system_start.event_id]
-            events.append(latest_system_start)
+        latest_system_start = _latest_system_start_event(events)
     if limit is not None and limit >= 0:
         events = events[-limit:]
     followups = AUDIT_STORE.read_followups(source, kind=kind, status=follow_up_status)
+    latest_event = events[-1] if events else None
     ctx.respond_json(
         {
             "source_root": str(source.resolve()),
             "events": [event.to_dict() for event in events],
             "active_followups": [item.to_dict() for item in followups],
+            "ledger_revision": AUDIT_STORE.revision,
+            "latest_event_id": latest_event.event_id if latest_event is not None else "",
+            "latest_recorded_at": latest_event.recorded_at if latest_event is not None else "",
+            "latest_system_start": latest_system_start.to_dict() if latest_system_start is not None else None,
+            "read_at": utc_now_iso(),
         }
     )
+
+
+def _write_sse_notice(ctx: RequestContext, notice: AuditRevisionNotice) -> None:
+    body = f"data: {json.dumps(notice.to_dict(), sort_keys=True)}\n\n".encode("utf-8")
+    ctx.handler.wfile.write(body)
+    ctx.handler.wfile.flush()
+
+
+def handle_audit_stream(ctx: RequestContext) -> None:
+    source = ctx.resolve_source(ctx.query_param("source"))
+    source_key = str(source.resolve())
+    subscriber = AUDIT_STORE.subscribe_revisions()
+    ctx.handler.send_response(HTTPStatus.OK)
+    ctx.handler.send_header("Content-Type", "text/event-stream; charset=utf-8")
+    ctx.handler.send_header("Cache-Control", "no-store")
+    ctx.handler.send_header("Connection", "keep-alive")
+    ctx.handler.end_headers()
+    try:
+        _write_sse_notice(
+            ctx,
+            AuditRevisionNotice(
+                revision=AUDIT_STORE.revision,
+                source_roots=[source_key],
+                recorded_at=utc_now_iso(),
+            ),
+        )
+        while True:
+            try:
+                notice = subscriber.get(timeout=25)
+            except queue.Empty:
+                ctx.handler.wfile.write(b": keepalive\n\n")
+                ctx.handler.wfile.flush()
+                continue
+            if source_key not in notice.source_roots and SYSTEM_SOURCE_ROOT not in notice.source_roots:
+                continue
+            _write_sse_notice(ctx, notice)
+    except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError):
+        return
+    finally:
+        AUDIT_STORE.unsubscribe_revisions(subscriber)
 
 
 def handle_audit_follow_up_update(ctx: RequestContext, payload: dict[str, Any]) -> None:

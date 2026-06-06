@@ -192,6 +192,8 @@ DELETE_MODES = (
     "hybrid_junk_to_bin_media_hard_delete",
 )
 JUNK_DELETE_CONFIDENCE_FLOORS = ("high", "review")
+ENGLISH_AUDIO_SUBTITLE_BEHAVIORS = ("off", "english", "primary_language")
+FOREIGN_AUDIO_SUBTITLE_BEHAVIORS = ("forced_english", "english", "off")
 DEFAULT_OPERATOR_PREFERENCES = {
     "delete_mode": "recycle_all",
     "default_source": "",
@@ -395,7 +397,10 @@ def default_library_policy() -> dict[str, Any]:
         {
             "canonical_list_provider": "imdb",
             "primary_language": "english",
-            "subtitle_preferences": {"mode": "conservative"},
+            "subtitle_preferences": {
+                "english_audio_subtitles": "off",
+                "foreign_audio_subtitles": "forced_english",
+            },
             "junk_rules": {"delete_confidence_floor": "high"},
         },
     )
@@ -632,7 +637,6 @@ def build_replacement_candidate_definition(standards: dict[str, Any] | None = No
 def build_library_defaults_definition(standards: dict[str, Any] | None = None) -> dict[str, Any]:
     active = standards or load_library_policy()
     junk_rules = active.get("junk_rules") or {}
-    subtitle_preferences = active.get("subtitle_preferences") or {}
     stances = active.get("quality_stances") or {}
     weak_floor = replacement_candidate_quality_floor(active)
     return {
@@ -640,8 +644,8 @@ def build_library_defaults_definition(standards: dict[str, Any] | None = None) -
         "display_name": "Library Defaults",
         "scope": "library_policy",
         "group": "Library Policy",
-        "summary": "Repository-owned canonical source, language, subtitle, and junk-floor defaults.",
-        "rule_summary": "Canonical list provider, primary language, subtitle policy, and junk deletion floor apply library-wide.",
+        "summary": "Repository-owned canonical source, weak-encode floor, and junk-floor defaults.",
+        "rule_summary": "Canonical list provider, weak-encode floor, and junk deletion floor apply library-wide.",
         "fields": [
             {
                 "key": "canonical_list_provider",
@@ -667,21 +671,6 @@ def build_library_defaults_definition(standards: dict[str, Any] | None = None) -
                 ],
             },
             {
-                "key": "primary_language",
-                "label": "Primary language",
-                "type": "text",
-                "value": str(active.get("primary_language") or "english"),
-            },
-            {
-                "key": "subtitle_mode",
-                "label": "Subtitle preference mode",
-                "type": "select",
-                "value": normalize_subtitle_mode(subtitle_preferences.get("mode")),
-                "options": [
-                    {"value": "conservative", "label": "Conservative"},
-                ],
-            },
-            {
                 "key": "junk_delete_confidence_floor",
                 "label": "Junk delete floor",
                 "type": "select",
@@ -689,6 +678,52 @@ def build_library_defaults_definition(standards: dict[str, Any] | None = None) -
                 "options": [
                     {"value": "high", "label": "High confidence only"},
                     {"value": "review", "label": "Review and high confidence"},
+                ],
+            },
+        ],
+    }
+
+
+def build_language_subtitle_defaults_definition(standards: dict[str, Any] | None = None) -> dict[str, Any]:
+    active = standards or load_library_policy()
+    subtitle_preferences = normalized_subtitle_preferences(active.get("subtitle_preferences"))
+    return {
+        "label": "language_subtitle_defaults",
+        "display_name": "Language & Subtitles",
+        "scope": "library_policy",
+        "group": "Playback Policy",
+        "summary": "Default language and subtitle behavior used by Repair Defaults.",
+        "rule_summary": "Choose what should happen when English audio is default and when non-English audio is default.",
+        "fields": [
+            {
+                "key": "primary_language",
+                "label": "Primary language",
+                "type": "select",
+                "value": normalize_primary_language(active.get("primary_language")),
+                "options": [
+                    {"value": "english", "label": "English"},
+                ],
+            },
+            {
+                "key": "english_audio_subtitles",
+                "label": "When default audio is English",
+                "type": "select",
+                "value": subtitle_preferences["english_audio_subtitles"],
+                "options": [
+                    {"value": "off", "label": "No subtitle by default"},
+                    {"value": "english", "label": "Default English subtitle"},
+                    {"value": "primary_language", "label": "Default [Primary Language] Subtitle when present"},
+                ],
+            },
+            {
+                "key": "foreign_audio_subtitles",
+                "label": "When default audio is non-English",
+                "type": "select",
+                "value": subtitle_preferences["foreign_audio_subtitles"],
+                "options": [
+                    {"value": "forced_english", "label": "Prefer forced English subtitle, else make English subtitle default"},
+                    {"value": "english", "label": "Default full English subtitle"},
+                    {"value": "off", "label": "Default no subtitle"},
                 ],
             },
         ],
@@ -748,6 +783,7 @@ def build_policy_definitions(
     definitions = build_movie_profile_definitions(standards)
     definitions.append(build_default_source_definition(preferences))
     definitions.append(build_library_defaults_definition(standards))
+    definitions.append(build_language_subtitle_defaults_definition(standards))
     definitions.append(build_delete_mode_definition(preferences))
     return definitions
 
@@ -831,10 +867,23 @@ def update_policy_definition(
             values.get("quality_profile_floor"),
             replacement_candidate_quality_floor(active_policy),
         )
-        active_policy["primary_language"] = normalize_primary_language(values.get("primary_language"))
-        active_policy.setdefault("subtitle_preferences", {})["mode"] = normalize_subtitle_mode(values.get("subtitle_mode"))
         active_policy.setdefault("junk_rules", {})["delete_confidence_floor"] = normalize_junk_delete_confidence_floor(
             values.get("junk_delete_confidence_floor")
+        )
+        return save_library_policy(active_policy), active_preferences
+    if label == "language_subtitle_defaults":
+        if expected_policy_revision and expected_policy_revision != library_policy_revision(active_policy):
+            raise MovieStandardsConflictError("Library policy changed since this view loaded. Refresh and retry.")
+        active_policy["primary_language"] = normalize_primary_language(values.get("primary_language"))
+        subtitle_preferences = active_policy.setdefault("subtitle_preferences", {})
+        subtitle_preferences.pop("mode", None)
+        subtitle_preferences["english_audio_subtitles"] = normalize_english_audio_subtitle_behavior(
+            values.get("english_audio_subtitles"),
+            subtitle_preferences.get("english_audio_subtitles"),
+        )
+        subtitle_preferences["foreign_audio_subtitles"] = normalize_foreign_audio_subtitle_behavior(
+            values.get("foreign_audio_subtitles"),
+            subtitle_preferences.get("foreign_audio_subtitles"),
         )
         return save_library_policy(active_policy), active_preferences
     return (
@@ -862,6 +911,9 @@ def deep_merge_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str
 def strip_removed_quality_stance_keys(policy: dict[str, Any]) -> dict[str, Any]:
     normalized = json.loads(json.dumps(policy))
     normalized["canonical_list_provider"] = normalize_canonical_list_provider(normalized.get("canonical_list_provider"))
+    subtitle_preferences = normalized.get("subtitle_preferences")
+    if isinstance(subtitle_preferences, dict):
+        subtitle_preferences.pop("mode", None)
     stances = normalized.get("quality_stances")
     if not isinstance(stances, dict):
         return normalized
@@ -957,9 +1009,30 @@ def normalize_junk_delete_confidence_floor(value: Any) -> str:
     return floor if floor in JUNK_DELETE_CONFIDENCE_FLOORS else "high"
 
 
-def normalize_subtitle_mode(value: Any) -> str:
-    mode = str(value or "").strip().casefold()
-    return mode if mode == "conservative" else "conservative"
+def normalize_english_audio_subtitle_behavior(value: Any, default: str = "off") -> str:
+    behavior = str(value or "").strip().casefold()
+    fallback = default if default in ENGLISH_AUDIO_SUBTITLE_BEHAVIORS else "off"
+    return behavior if behavior in ENGLISH_AUDIO_SUBTITLE_BEHAVIORS else fallback
+
+
+def normalize_foreign_audio_subtitle_behavior(value: Any, default: str = "forced_english") -> str:
+    behavior = str(value or "").strip().casefold()
+    fallback = default if default in FOREIGN_AUDIO_SUBTITLE_BEHAVIORS else "forced_english"
+    return behavior if behavior in FOREIGN_AUDIO_SUBTITLE_BEHAVIORS else fallback
+
+
+def normalized_subtitle_preferences(value: Any) -> dict[str, str]:
+    payload = value if isinstance(value, dict) else {}
+    return {
+        "english_audio_subtitles": normalize_english_audio_subtitle_behavior(
+            payload.get("english_audio_subtitles"),
+            "off",
+        ),
+        "foreign_audio_subtitles": normalize_foreign_audio_subtitle_behavior(
+            payload.get("foreign_audio_subtitles"),
+            "forced_english",
+        ),
+    }
 
 
 def human_quality_stance_label(label: str) -> str:

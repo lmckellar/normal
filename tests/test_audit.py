@@ -17,6 +17,82 @@ from normal.web import build_handler
 
 
 class AuditStoreTests(unittest.TestCase):
+    def test_repeated_reads_reuse_cached_ledger_state_until_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "movies"
+            source.mkdir()
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
+            store.append(
+                AuditEvent(
+                    event_id="event-1",
+                    recorded_at="2026-01-01T00:00:00+00:00",
+                    source_root=str(source.resolve()),
+                    workflow="audit",
+                    action="start",
+                    summary="Started normal web UI.",
+                    follow_up_updates=[
+                        AuditFollowUpUpdate(
+                            follow_up_id="followup-1",
+                            kind="replacement",
+                            action="create",
+                            status="active",
+                            summary="Replacement follow-up created.",
+                            details={"path": str(source.resolve()), "title": "Movie"},
+                        )
+                    ],
+                )
+            )
+            original_read_text = Path.read_text
+            read_count = 0
+
+            def counting_read_text(path: Path, *args: object, **kwargs: object) -> str:
+                nonlocal read_count
+                if path == store._ledger_path:
+                    read_count += 1
+                return original_read_text(path, *args, **kwargs)
+
+            with patch.object(Path, "read_text", autospec=True, side_effect=counting_read_text):
+                first_events = store.read_events(source, limit=10)
+                second_events = store.read_events(source, limit=10)
+                first_followups = store.read_followups(source, status="")
+                second_followups = store.read_followups(source, status="")
+
+                store.append(
+                    AuditEvent(
+                        event_id="event-2",
+                        recorded_at="2026-01-01T00:01:00+00:00",
+                        source_root=str(source.resolve()),
+                        workflow="audit",
+                        action="follow_up_resolve",
+                        summary="Resolved replacement follow-up.",
+                        follow_up_updates=[
+                            AuditFollowUpUpdate(
+                                follow_up_id="followup-1",
+                                kind="replacement",
+                                action="resolve",
+                                status="resolved",
+                                summary="Replacement follow-up resolved.",
+                                details={"path": str(source.resolve()), "title": "Movie"},
+                            )
+                        ],
+                    )
+                )
+                post_append_events = store.read_events(source, limit=10)
+                post_append_followups = store.read_followups(source, status="")
+
+        self.assertEqual([event.event_id for event in first_events], ["event-1"])
+        self.assertEqual([event.event_id for event in second_events], ["event-1"])
+        self.assertEqual([item.status for item in first_followups], ["active"])
+        self.assertEqual([item.status for item in second_followups], ["active"])
+        self.assertEqual([event.event_id for event in post_append_events], ["event-1", "event-2"])
+        self.assertEqual([item.status for item in post_append_followups], ["resolved"])
+        self.assertEqual(read_count, 2)
+
     def test_migrates_legacy_queue_and_subtitle_history_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -91,7 +167,11 @@ class AuditStoreTests(unittest.TestCase):
             movie = source / "Bad Movie (2001)" / "Bad Movie (2001).mkv"
             movie.parent.mkdir()
             movie.write_text("video", encoding="utf-8")
-            store = AuditStore(ledger_path=root / "audit-ledger.jsonl")
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
             with patch("normal.web.routes_cleanup.AUDIT_STORE", store):
                 from normal.web.routes_cleanup import _record_media_delete_event
 
@@ -117,7 +197,11 @@ class AuditStoreTests(unittest.TestCase):
             root = Path(tmpdir)
             source = root / "movies"
             source.mkdir()
-            store = AuditStore(ledger_path=root / "audit-ledger.jsonl")
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
             recorded_at = "2026-01-01T00:00:00+00:00"
             store.append_batch(
                 [
@@ -188,7 +272,11 @@ class AuditRouteTests(unittest.TestCase):
             folder.mkdir()
             movie = folder / "The.Matrix.1999.1080p.bluray.x264-GRP.mkv"
             movie.write_text("video", encoding="utf-8")
-            store = AuditStore(ledger_path=root / "audit-ledger.jsonl")
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
             patches = [
                 patch("normal.web.state.AUDIT_STORE", store),
                 patch("normal.web.routes_audit.AUDIT_STORE", store),
@@ -244,7 +332,11 @@ class AuditRouteTests(unittest.TestCase):
             movie = source / "Bad Movie (2001)" / "Bad Movie (2001).mkv"
             movie.parent.mkdir()
             movie.write_text("video", encoding="utf-8")
-            store = AuditStore(ledger_path=root / "audit-ledger.jsonl")
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
             patches = [
                 patch("normal.web.state.AUDIT_STORE", store),
                 patch("normal.web.routes_audit.AUDIT_STORE", store),
@@ -294,7 +386,11 @@ class AuditRouteTests(unittest.TestCase):
             root = Path(tmpdir)
             source = root / "movies"
             source.mkdir()
-            store = AuditStore(ledger_path=root / "audit-ledger.jsonl")
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
             patches = [
                 patch("normal.web.state.AUDIT_STORE", store),
                 patch("normal.web.routes_audit.AUDIT_STORE", store),
@@ -335,7 +431,11 @@ class AuditRouteTests(unittest.TestCase):
     def test_default_source_policy_update_without_source_skips_audit_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
-            store = AuditStore(ledger_path=root / "audit-ledger.jsonl")
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
             patches = [
                 patch("normal.web.state.AUDIT_STORE", store),
                 patch("normal.web.routes_audit.AUDIT_STORE", store),
@@ -535,9 +635,76 @@ class AuditRouteTests(unittest.TestCase):
                     mocked.stop()
 
         actions = [event["action"] for event in payload["events"]]
-        self.assertEqual(actions, ["scan", "start"])
-        self.assertEqual(payload["events"][-1]["workflow"], "system")
-        self.assertEqual(payload["events"][-1]["action"], "start")
+        self.assertEqual(actions, ["start", "scan"])
+        self.assertEqual(payload["events"][0]["workflow"], "system")
+        self.assertEqual(payload["events"][0]["action"], "start")
+        self.assertIn("ledger_revision", payload)
+        self.assertGreaterEqual(payload["ledger_revision"], 1)
+        self.assertIn("latest_event_id", payload)
+        self.assertTrue(payload["latest_event_id"])
+        self.assertEqual(payload["latest_event_id"], payload["events"][-1]["event_id"])
+        self.assertIn("latest_system_start", payload)
+        self.assertIsNotNone(payload["latest_system_start"])
+        self.assertEqual(payload["latest_system_start"]["workflow"], "system")
+        self.assertEqual(payload["latest_system_start"]["action"], "start")
+        self.assertIn("read_at", payload)
+        self.assertTrue(payload["read_at"])
+
+    def test_audit_store_revision_advances_with_appends(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "movies"
+            source.mkdir()
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
+            first_revision = store.revision
+            store.append(
+                AuditEvent(
+                    event_id="event-1",
+                    recorded_at="2026-01-01T00:00:00+00:00",
+                    source_root=str(source.resolve()),
+                    workflow="audit",
+                    action="start",
+                    summary="Started normal web UI.",
+                )
+            )
+            second_revision = store.revision
+
+        self.assertEqual(first_revision, 0)
+        self.assertEqual(second_revision, 1)
+
+    def test_audit_store_revision_subscription_reports_changed_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "movies"
+            source.mkdir()
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
+            subscriber = store.subscribe_revisions()
+            try:
+                store.append(
+                    AuditEvent(
+                        event_id="event-1",
+                        recorded_at="2026-01-01T00:00:00+00:00",
+                        source_root=str(source.resolve()),
+                        workflow="audit",
+                        action="update",
+                        summary="Recorded change.",
+                    )
+                )
+                notice = subscriber.get(timeout=1)
+            finally:
+                store.unsubscribe_revisions(subscriber)
+
+        self.assertEqual(notice.revision, 1)
+        self.assertEqual(notice.source_roots, [str(source.resolve())])
+        self.assertEqual(notice.recorded_at, "2026-01-01T00:00:00+00:00")
 
 
 if __name__ == "__main__":

@@ -1127,6 +1127,11 @@ input[type="checkbox"] {
   align-items: center;
 }
 
+.lab-audit-context {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .lab-audit-table {
   border: 1px solid var(--hairline);
   border-radius: var(--radius);

@@ -4,6 +4,7 @@ from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from pathlib import Path
+import queue
 import threading
 from typing import Any
 
@@ -85,6 +86,16 @@ class DerivedFollowUp:
         return asdict(self)
 
 
+@dataclass(slots=True)
+class AuditRevisionNotice:
+    revision: int
+    source_roots: list[str]
+    recorded_at: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
 def default_audit_path() -> Path:
     return Path.home() / ".local" / "share" / "normal" / "audit-ledger.jsonl"
 
@@ -140,10 +151,21 @@ class AuditStore:
         self._replacement_queue_path = (replacement_queue_path or default_replacement_queue_path()).expanduser()
         self._subtitle_history_path = (subtitle_history_path or default_subtitle_history_path()).expanduser()
         self._lock = threading.Lock()
+        self._revision = 0
+        self._events_cache_signature: tuple[int, int] | None = None
+        self._events_cache: list[AuditEvent] | None = None
+        self._followups_cache_signature: tuple[int, int] | None = None
+        self._followups_cache: dict[str, DerivedFollowUp] | None = None
+        self._revision_subscribers: set[queue.Queue[AuditRevisionNotice]] = set()
 
     @property
     def ledger_path(self) -> Path:
         return self._ledger_path
+
+    @property
+    def revision(self) -> int:
+        with self._lock:
+            return self._revision
 
     def append(self, event: AuditEvent) -> None:
         self.append_batch([event])
@@ -157,6 +179,9 @@ class AuditStore:
         with self._lock:
             with self._ledger_path.open("a", encoding="utf-8") as handle:
                 handle.write(lines)
+            self._revision += len(events)
+            self._invalidate_caches_unlocked()
+            self._publish_revision_notice_unlocked(events)
 
     def read_events(
         self,
@@ -230,6 +255,54 @@ class AuditStore:
             with self._ledger_path.open("w", encoding="utf-8") as handle:
                 for event in events:
                     handle.write(json.dumps(event.to_dict(), sort_keys=True) + "\n")
+            self._revision += len(events)
+            self._invalidate_caches_unlocked()
+            self._publish_revision_notice_unlocked(events)
+
+    def subscribe_revisions(self) -> queue.Queue[AuditRevisionNotice]:
+        subscriber: queue.Queue[AuditRevisionNotice] = queue.Queue(maxsize=1)
+        with self._lock:
+            self._revision_subscribers.add(subscriber)
+        return subscriber
+
+    def unsubscribe_revisions(self, subscriber: queue.Queue[AuditRevisionNotice]) -> None:
+        with self._lock:
+            self._revision_subscribers.discard(subscriber)
+
+    def _invalidate_caches_unlocked(self) -> None:
+        self._events_cache_signature = None
+        self._events_cache = None
+        self._followups_cache_signature = None
+        self._followups_cache = None
+
+    def _publish_revision_notice_unlocked(self, events: list[AuditEvent]) -> None:
+        if not self._revision_subscribers:
+            return
+        notice = AuditRevisionNotice(
+            revision=self._revision,
+            source_roots=sorted({event.source_root for event in events if event.source_root}),
+            recorded_at=events[-1].recorded_at or utc_now_iso(),
+        )
+        stale_subscribers: list[queue.Queue[AuditRevisionNotice]] = []
+        for subscriber in self._revision_subscribers:
+            try:
+                while True:
+                    subscriber.get_nowait()
+            except queue.Empty:
+                pass
+            try:
+                subscriber.put_nowait(notice)
+            except queue.Full:
+                stale_subscribers.append(subscriber)
+        for subscriber in stale_subscribers:
+            self._revision_subscribers.discard(subscriber)
+
+    def _ledger_signature(self) -> tuple[int, int] | None:
+        try:
+            stat_result = self._ledger_path.stat()
+        except OSError:
+            return None
+        return (stat_result.st_mtime_ns, stat_result.st_size)
 
     def _build_legacy_migration_events(self) -> list[AuditEvent]:
         events: list[AuditEvent] = []
@@ -502,7 +575,14 @@ class AuditStore:
         return events
 
     def _load_all_events(self) -> list[AuditEvent]:
-        if not self._ledger_path.exists():
+        signature = self._ledger_signature()
+        with self._lock:
+            if signature is not None and self._events_cache_signature == signature and self._events_cache is not None:
+                return self._events_cache
+        if signature is None:
+            with self._lock:
+                self._events_cache_signature = None
+                self._events_cache = []
             return []
         events: list[AuditEvent] = []
         for line in self._ledger_path.read_text(encoding="utf-8").splitlines():
@@ -517,9 +597,17 @@ class AuditStore:
             if event is not None:
                 events.append(event)
         events.sort(key=lambda item: item.recorded_at)
+        with self._lock:
+            current_signature = self._ledger_signature()
+            self._events_cache_signature = current_signature
+            self._events_cache = events
         return events
 
     def _derive_followups(self) -> dict[str, DerivedFollowUp]:
+        signature = self._ledger_signature()
+        with self._lock:
+            if signature is not None and self._followups_cache_signature == signature and self._followups_cache is not None:
+                return self._followups_cache
         derived: dict[str, DerivedFollowUp] = {}
         for event in self._load_all_events():
             for update in event.follow_up_updates:
@@ -545,6 +633,10 @@ class AuditStore:
                 subject = _followup_subject_from_update(update)
                 if subject:
                     existing.subject.update(subject)
+        with self._lock:
+            current_signature = self._ledger_signature()
+            self._followups_cache_signature = current_signature
+            self._followups_cache = derived
         return derived
 
 

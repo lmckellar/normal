@@ -6,6 +6,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from .scan_guard import client_disconnected, resolve_source_path
 
@@ -56,3 +57,7 @@ class RequestContext:
 
     def client_disconnected(self) -> bool:
         return client_disconnected(self.handler.connection)
+
+    def query_param(self, name: str) -> str:
+        values = parse_qs(urlsplit(self.handler.path).query).get(name, [])
+        return str(values[0]) if values else ""

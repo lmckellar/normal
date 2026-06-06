@@ -47,11 +47,11 @@ def build_facts(
 
 
 class MovieSubtitleFixTests(unittest.TestCase):
-    def test_choose_plan_targets_forced_english_first(self) -> None:
+    def test_choose_plan_clears_default_for_english_audio_under_conservative_policy(self) -> None:
         plan = choose_subtitle_fix_plan(build_facts(default_audio_language="eng", default_subtitle=1))
 
-        self.assertEqual(plan.target_ordinal, 0)
-        self.assertEqual(plan.success_message, "english_forced_defaulted")
+        self.assertIsNone(plan.target_ordinal)
+        self.assertEqual(plan.success_message, "subtitle_defaults_cleared")
 
     def test_choose_plan_targets_forced_english_even_with_non_english_default_audio(self) -> None:
         facts = build_facts(default_audio_language="ita", default_subtitle=2)
@@ -68,10 +68,32 @@ class MovieSubtitleFixTests(unittest.TestCase):
         self.assertEqual(plan.target_ordinal, 0)
         self.assertEqual(plan.success_message, "english_subtitle_defaulted")
 
-    def test_choose_plan_clears_default_for_english_audio(self) -> None:
+    def test_choose_plan_targets_full_english_for_english_audio_when_requested(self) -> None:
         facts = build_facts(default_audio_language="eng", default_subtitle=1)
         facts.subtitle_streams[0].is_forced = False
-        plan = choose_subtitle_fix_plan(facts)
+        plan = choose_subtitle_fix_plan(facts, subtitle_preferences={"english_audio_subtitles": "english"})
+
+        self.assertEqual(plan.target_ordinal, 1)
+        self.assertEqual(plan.success_message, "english_subtitle_defaulted")
+
+    def test_choose_plan_targets_primary_language_for_english_audio_when_requested(self) -> None:
+        facts = build_facts(default_audio_language="eng", default_subtitle=1)
+        facts.subtitle_streams[0].is_forced = False
+        plan = choose_subtitle_fix_plan(facts, subtitle_preferences={"english_audio_subtitles": "primary_language"})
+
+        self.assertEqual(plan.target_ordinal, 1)
+        self.assertEqual(plan.success_message, "english_subtitle_defaulted")
+
+    def test_choose_plan_targets_full_english_for_non_english_audio_when_requested(self) -> None:
+        facts = build_facts(default_audio_language="ita", default_subtitle=2)
+        plan = choose_subtitle_fix_plan(facts, subtitle_preferences={"foreign_audio_subtitles": "english"})
+
+        self.assertEqual(plan.target_ordinal, 1)
+        self.assertEqual(plan.success_message, "english_subtitle_defaulted")
+
+    def test_choose_plan_clears_default_for_non_english_audio_when_off_requested(self) -> None:
+        facts = build_facts(default_audio_language="ita", default_subtitle=2)
+        plan = choose_subtitle_fix_plan(facts, subtitle_preferences={"foreign_audio_subtitles": "off"})
 
         self.assertIsNone(plan.target_ordinal)
         self.assertEqual(plan.success_message, "subtitle_defaults_cleared")
@@ -84,8 +106,8 @@ class MovieSubtitleFixTests(unittest.TestCase):
 
             def probe_media(path: Path) -> MediaFacts:
                 if path == movie:
-                    return build_facts(default_audio_language="eng", default_subtitle=1)
-                return build_facts(default_audio_language="eng", forced_default=True)
+                    return build_facts(default_audio_language="ita", default_subtitle=1)
+                return build_facts(default_audio_language="ita", forced_default=True)
 
             def fake_popen(command: list[str], text: bool, stdout, stderr):
                 del text, stdout, stderr
@@ -134,7 +156,7 @@ class MovieSubtitleFixTests(unittest.TestCase):
             movie = Path(tmpdir) / "Movie (2001).mkv"
             movie.write_text("original", encoding="utf-8")
 
-            result = fix_movie_subtitle_default(movie, probe_media=lambda _: build_facts(default_audio_language="eng", forced_default=True))
+            result = fix_movie_subtitle_default(movie, probe_media=lambda _: build_facts(default_audio_language="ita", forced_default=True))
 
             self.assertEqual(result.status, "skipped")
             self.assertEqual(result.message, "already_repaired")
