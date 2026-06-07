@@ -251,7 +251,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("selectedRepairAudioPaths()", FRONTEND)
         self.assertIn("Running English-default remux", FRONTEND)
         self.assertIn("function actualResolutionLabel(item)", FRONTEND)
-        self.assertIn("label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' }", FRONTEND)
+        self.assertIn("label: 'Default Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '15ch' }", FRONTEND)
+        self.assertIn("label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: '24%' }", FRONTEND)
         self.assertIn("label: 'Default Subtitle', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '13ch' }", FRONTEND)
         self.assertIn("label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '13%' }", FRONTEND)
         self.assertIn("label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '15%' }", FRONTEND)
@@ -264,6 +265,14 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("audio: ${describeAudioStream(movieDefaultAudioStream(item))}", FRONTEND)
         self.assertNotIn("audio: ${describeAudioStream(movieBestEnglishAudioStream(item))}", FRONTEND)
         self.assertIn("function repairDefaultSubtitleLabel(item)", FRONTEND)
+        self.assertIn("function repairDefaultAudioLabel(item, row = null)", FRONTEND)
+        self.assertIn("function effectiveAudioStreamBitrateKbps(track, row = null)", FRONTEND)
+        self.assertIn("function describeAudioPopoverFacts(track, row = null)", FRONTEND)
+        self.assertIn("const defaultAudioLabel = repairDefaultAudioLabel(row.item, row);", FRONTEND)
+        self.assertIn("await refreshActivityPayload();", FRONTEND)
+        self.assertIn("return state.filteredRows.filter(row => state.selected.has(row.row_id));", FRONTEND)
+        self.assertNotIn("return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable);", FRONTEND)
+        self.assertNotIn("if (!usesDeletePreviewShell() || !tracks.length) {", FRONTEND)
 
     def test_movie_subtitle_readiness_page_is_wired(self) -> None:
         self.assertIn("'repair-defaults': 'Fix Audio and Subtitle Defaults'", FRONTEND)
@@ -277,6 +286,9 @@ class WebTests(unittest.TestCase):
         self.assertIn("state.subtitleFixBusy = true;", FRONTEND)
         self.assertIn("state.subtitleFixBusy = false;", FRONTEND)
         self.assertIn("selectedSubtitleRowsFromPayload", FRONTEND)
+        self.assertIn("function safeRepairLockOverlayEnabled()", FRONTEND)
+        self.assertIn("currentWarningGateSafetyLevel() === 'safe'", FRONTEND)
+        self.assertIn("Preview stays open; the rest of the workbench is paused.", FRONTEND)
 
     def test_policy_editor_render_is_guarded_against_unrelated_side_panel_refreshes(self) -> None:
         self.assertIn("policyEditorRenderKey: ''", NORMALIZE_LAB_JS)
@@ -382,6 +394,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("Library visibility snapshot", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Quality Profile Breakdown", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Library Improvement Metrics", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("Non-audio files removed", NORMALIZE_LAB_JS)
         self.assertIn("Resolution Breakdown", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Surround Sound Breakdown", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Current Top 500 above weak floor", NORMALIZE_LAB_FRONTEND)
@@ -472,6 +485,13 @@ class WebTests(unittest.TestCase):
         self.assertIn("function auditSessionContextLabel(payload)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Session started ${formatAuditRecordedAt(event.recorded_at)}", NORMALIZE_LAB_FRONTEND)
         self.assertIn("class=\"lab-audit-context\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("auditOpenBreakdowns: new Set()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function bindAuditBreakdownToggleState()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("data-audit-breakdown-toggle", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("lab-audit-summary-toggle", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("lab-audit-child-row", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("<th>Outcome</th>", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("<th>Effect</th>", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("lab-audit-sync-chip", NORMALIZE_LAB_FRONTEND)
         self.assertIn("await ensurePolicyPayload();", NORMALIZE_LAB_FRONTEND)
         self.assertIn("if (startupSource) el.sourcePath.value = startupSource;", NORMALIZE_LAB_FRONTEND)
@@ -540,7 +560,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("data-collapse-mode", NORMALIZE_LAB_FRONTEND)
         self.assertIn("data-panel-state", NORMALIZE_LAB_FRONTEND)
         self.assertIn("data-rhythm-surface", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("state.activeRowId = id;", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("state.activeRowId = rowEl.dataset.rowId || '';", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("state.activeRowId = id;", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function selectedProposedChanges()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function summarizeNormalizeRows(rows)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function renderNormalizeSummaryChips(operationCounts, visibleMutationCount)", NORMALIZE_LAB_FRONTEND)
@@ -599,6 +620,10 @@ class WebTests(unittest.TestCase):
         self.assertIn('box-shadow: inset 0 0 0 1px rgba(58, 90, 140, 0.16);', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-dashboard-breakdowns {', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-audit-context {', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-audit-summary-toggle {', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-audit-summary-toggle-copy::before {', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-audit-child-row td {', NORMALIZE_LAB_CSS)
+        self.assertIn('.lab-cell-pill.is-audit-media-repair {', NORMALIZE_LAB_CSS)
         self.assertNotIn('.lab-audit-sync-chip {', NORMALIZE_LAB_CSS)
         self.assertIn('min-height: var(--lab-primary-surface-min-height);', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-policy-panel', NORMALIZE_LAB_CSS)
@@ -608,6 +633,14 @@ class WebTests(unittest.TestCase):
         self.assertIn('.lab-page[data-panel-state="collapsed"][data-collapse-mode="anchored-slot"]', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-page[data-panel-state="collapsed"][data-collapse-mode="reflow"]', NORMALIZE_LAB_CSS)
         self.assertIn('.lab-rhythm-surface[data-rhythm-surface="rows"]', NORMALIZE_LAB_CSS)
+
+    def test_audit_ledger_colgroup_favors_recorded_action_and_workflow_width(self) -> None:
+        self.assertIn('<col style="width: 22ch">', NORMALIZE_LAB_JS)
+        self.assertIn('<col style="width: 14ch">', NORMALIZE_LAB_JS)
+        self.assertIn('<col style="width: 19ch">', NORMALIZE_LAB_JS)
+        self.assertIn('<col style="width: 12%">', NORMALIZE_LAB_JS)
+        self.assertIn('<col style="width: 20ch">', NORMALIZE_LAB_JS)
+        self.assertIn('<col style="width: 24%">', NORMALIZE_LAB_JS)
 
     def test_normalize_lab_table_declares_fixed_select_column_contract(self) -> None:
         self.assertIn('<colgroup id="tableColGroup"></colgroup>', NORMALIZE_LAB_TEMPLATE)
@@ -641,9 +674,30 @@ class WebTests(unittest.TestCase):
         combined_branch = action_section.split("if (actionTouchesAudio(action) && actionTouchesSubtitle(action)) {", 1)[1].split("} else if (actionTouchesAudio(action)) {", 1)[0]
         self.assertNotIn("selectedSubtitleRowsFromPayload", combined_branch)
 
+    def test_audit_labels_expand_multi_file_repair_rows(self) -> None:
+        self.assertIn("if (subjects.length > 1) {", NORMALIZE_LAB_JS)
+        self.assertIn("return `Movies · ${subjects.length} titles`;", NORMALIZE_LAB_JS)
+        self.assertIn("const unit = lead.kind === 'remux_repair' ? 'file' : 'item';", NORMALIZE_LAB_JS)
+        self.assertIn("return `${kind} · ${status} to ${effects.length} ${unit}${effects.length === 1 ? '' : 's'}`;", NORMALIZE_LAB_JS)
+        self.assertIn("function auditRepairBreakdownRows(event) {", NORMALIZE_LAB_JS)
+        self.assertIn("if (subjects.length <= 1 && familyLabels.length <= 1) return [];", NORMALIZE_LAB_JS)
+        self.assertIn("function auditRepairBreakdownMarkup(event) {", NORMALIZE_LAB_JS)
+        self.assertIn("function renderAuditRepairChildRows(event) {", NORMALIZE_LAB_JS)
+
+    def test_audit_action_chips_and_outcomes_use_taxonomy_labels(self) -> None:
+        self.assertIn("function auditActionChipMeta(event) {", NORMALIZE_LAB_JS)
+        self.assertIn("return { label: 'System Boot', tone: 'is-audit-system-user' };", NORMALIZE_LAB_JS)
+        self.assertIn("return { label: 'Remux Repair', tone: 'is-audit-media-repair' };", NORMALIZE_LAB_JS)
+        self.assertIn("function auditOutcomeLabel(event) {", NORMALIZE_LAB_JS)
+        self.assertIn("if (workflow === 'system' && action === 'start') return 'System booted';", NORMALIZE_LAB_JS)
+        self.assertIn("if (action === 'scan') return 'Scan performed';", NORMALIZE_LAB_JS)
+
     def test_repair_preview_calls_out_family_noops_for_combined_actions(self) -> None:
         self.assertIn("audio/no change", NORMALIZE_LAB_JS)
         self.assertIn("subtitle/no change", NORMALIZE_LAB_JS)
+        self.assertIn("const targetSubtitle = combinedSubtitleTouched", NORMALIZE_LAB_JS)
+        self.assertIn("? movieCombinedSubtitleRepairTarget(row.item)", NORMALIZE_LAB_JS)
+        self.assertIn(": (subtitleTouched ? movieSubtitleReadinessRepairTarget(row.item) : null);", NORMALIZE_LAB_JS)
 
     def test_normalize_lab_selection_refreshes_all_selection_dependent_controls(self) -> None:
         self.assertIn("function refreshSelectionState() {", NORMALIZE_LAB_JS)
@@ -657,6 +711,7 @@ class WebTests(unittest.TestCase):
         checkbox_section = NORMALIZE_LAB_JS.split("el.rowsBody.querySelectorAll('input[data-row-check]').forEach(input => {", 1)[1].split("el.rowsBody.querySelectorAll('button[data-track-popover]')", 1)[0]
         self.assertIn("clearDeletePreviewState();", checkbox_section)
         self.assertIn("refreshSelectionState();", checkbox_section)
+        self.assertNotIn("state.activeRowId = id;", checkbox_section)
         self.assertNotIn("clearDeletePreviewState();\n        renderSidePanel();", checkbox_section)
 
     def test_repair_defaults_rows_are_not_filtered_by_selected_action(self) -> None:
@@ -676,6 +731,54 @@ class WebTests(unittest.TestCase):
         self.assertIn("No applicable rows.", NORMALIZE_LAB_JS)
         self.assertIn("selected, ${selection.applicableRows.length} applicable, ${selection.skippedRows.length} skipped", NORMALIZE_LAB_JS)
         self.assertIn("selection.selectedRows.length && !option.applicableCount ? 'disabled' : ''", NORMALIZE_LAB_JS)
+
+    def test_default_subtitle_label_derives_from_actual_default_stream_flags(self) -> None:
+        self.assertIn("function defaultSubtitleStreamsForItem(item)", NORMALIZE_LAB_JS)
+        self.assertIn("const defaultStreams = defaultSubtitleStreamsForItem(item);", NORMALIZE_LAB_JS)
+        self.assertIn("const defaultCount = defaultStreams.length;", NORMALIZE_LAB_JS)
+        self.assertIn("const stream = defaultStreams[0] || null;", NORMALIZE_LAB_JS)
+
+    def test_audio_popover_truncates_verbose_facts_within_bubble(self) -> None:
+        self.assertIn("inline-size: min(480px, calc(100vw - 24px));", NORMALIZE_LAB_CSS)
+        self.assertIn("grid-template-columns: minmax(7ch, 12ch) minmax(0, 1fr);", NORMALIZE_LAB_CSS)
+        self.assertIn("text-overflow: ellipsis;", NORMALIZE_LAB_CSS)
+
+    def test_track_popover_highlights_default_language_cell(self) -> None:
+        self.assertIn("function popoverTrackLanguageMarkup(label, isDefault = false) {", NORMALIZE_LAB_JS)
+        self.assertIn('lab-audio-popover-lang${isDefault ? \' is-default\' : \'\'}', NORMALIZE_LAB_JS)
+        self.assertIn("${popoverTrackLanguageMarkup(describeSubtitleStream(track), !!track.is_default)}", NORMALIZE_LAB_JS)
+        self.assertIn("${popoverTrackLanguageMarkup(displayAudioLanguage(track.language), isEffectiveDefaultAudioTrack(track, row))}", NORMALIZE_LAB_JS)
+        self.assertIn(".lab-audio-popover-lang.is-default {", NORMALIZE_LAB_CSS)
+
+    def test_audio_popover_marks_only_effective_default_track(self) -> None:
+        self.assertIn("function isEffectiveDefaultAudioTrack(track, row) {", NORMALIZE_LAB_JS)
+        self.assertIn("return sameTrack(track, movieDefaultAudioStream(row?.item));", NORMALIZE_LAB_JS)
+        self.assertNotIn("track.is_default ? '<span class=\"lab-audio-popover-default\">default</span>' : ''", NORMALIZE_LAB_JS)
+
+    def test_simple_selection_rows_render_selected_state_separately_from_active_cursor(self) -> None:
+        self.assertIn("function simpleSelectionRowClass(rowId) {", NORMALIZE_LAB_JS)
+        self.assertIn("if (state.selected.has(rowId)) classes.push('is-selected');", NORMALIZE_LAB_JS)
+        self.assertIn("tbody tr.is-selected td { background: rgba(58, 90, 140, 0.12); }", NORMALIZE_LAB_CSS)
+        self.assertIn('class="${escapeHtml(simpleSelectionRowClass(row.row_id))}"', NORMALIZE_LAB_JS)
+
+    def test_safe_repair_lock_overlay_leaves_preview_page_open_while_blocking_rest_of_shell(self) -> None:
+        self.assertIn('id="repairLockOverlay"', NORMALIZE_LAB_TEMPLATE)
+        self.assertIn("previewPage: document.querySelector('.lab-page-preview')", NORMALIZE_LAB_JS)
+        self.assertIn("repairLockOverlay: document.getElementById('repairLockOverlay')", NORMALIZE_LAB_JS)
+        self.assertIn("function updateRepairLockOverlay() {", NORMALIZE_LAB_JS)
+        self.assertIn("closeTrackPopover();", NORMALIZE_LAB_JS)
+        self.assertIn("el.repairLockOverlay.style.setProperty('--lock-top',", NORMALIZE_LAB_JS)
+        self.assertIn(".lab-repair-lock-overlay {", NORMALIZE_LAB_CSS)
+        self.assertIn(".lab-repair-lock-block-top {", NORMALIZE_LAB_CSS)
+        self.assertIn(".lab-repair-lock-port-frame {", NORMALIZE_LAB_CSS)
+
+    def test_combined_repair_action_requires_audio_anchor_not_any_family_overlap(self) -> None:
+        self.assertIn("function rowSupportsCombinedRepairAction(row) {", NORMALIZE_LAB_JS)
+        self.assertIn("return rowSupportsAudioAction(row) && (rowSupportsSubtitleAction(row) || combinedSubtitleWillRun(row?.item));", NORMALIZE_LAB_JS)
+        repair_match_section = NORMALIZE_LAB_JS.split("function repairRowMatchesAction(row, action = state.repairAction) {", 1)[1].split("function issueFamilyLabel(families) {", 1)[0]
+        self.assertIn("if (actionTouchesAudio(action) && actionTouchesSubtitle(action)) {", repair_match_section)
+        self.assertIn("return rowSupportsCombinedRepairAction(row);", repair_match_section)
+        self.assertNotIn("repairActionConfig(action).families.some", repair_match_section)
 
     def test_audio_packaging_fix_route_forwards_drop_foreign_flag(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

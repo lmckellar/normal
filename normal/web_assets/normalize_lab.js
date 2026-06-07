@@ -72,8 +72,8 @@
 
   const REPAIR_HEADERS = [
     { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
-    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: '24%' },
+    { key: 'audio_bitrate', label: 'Default Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '15ch' },
     { key: 'default_subtitle', label: 'Default Subtitle', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '13ch' },
     { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '13%' },
     { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '15%' },
@@ -128,6 +128,7 @@
     auditRefreshInFlight: false,
     auditNeedsRefresh: false,
     auditSignature: '',
+    auditOpenBreakdowns: new Set(),
     auditEventSource: null,
     auditEventSourceKey: '',
     auditEventReconnectTimer: 0,
@@ -178,6 +179,7 @@
     tableHeaderRow: document.getElementById('tableHeaderRow'),
     rowsBody: document.getElementById('rowsBody'),
     scanPage: document.querySelector('.lab-page-scan'),
+    previewPage: document.querySelector('.lab-page-preview'),
     scanTablePanel: document.getElementById('scanTablePanel'),
     dashboardPanel: document.getElementById('dashboardPanel'),
     policyEditorPanel: document.getElementById('policyEditorPanel'),
@@ -200,6 +202,7 @@
     previewPane: document.getElementById('previewPane'),
     inspectionPane: document.getElementById('inspectionPane'),
     trackPopover: document.getElementById('trackPopover'),
+    repairLockOverlay: document.getElementById('repairLockOverlay'),
   };
 
   el.sourcePath.value = window.DEFAULT_SOURCE || '';
@@ -604,6 +607,55 @@
 
   function audioTracksForRow(row) {
     return Array.isArray(row?.item?.facts?.audio_streams) ? row.item.facts.audio_streams : [];
+  }
+
+  function effectiveAudioStreamBitrateKbps(track, row = null) {
+    const bitrate = Number(track?.bitrate_kbps || 0);
+    if (bitrate > 0) return bitrate;
+    if (track?.is_default) {
+      const fallback = Number(row?.item?.facts?.audio_bitrate_kbps || row?.audio_bitrate || 0);
+      if (fallback > 0) return fallback;
+    }
+    const tracks = audioTracksForRow(row);
+    if (tracks.length === 1) {
+      const fallback = Number(row?.item?.facts?.audio_bitrate_kbps || row?.audio_bitrate || 0);
+      if (fallback > 0) return fallback;
+    }
+    return 0;
+  }
+
+  function describeAudioPopoverFacts(track, row = null) {
+    const parts = [];
+    const format = describeAudioFormat(track);
+    const bitrate = formatBitrate(effectiveAudioStreamBitrateKbps(track, row));
+    if (track?.title) parts.push(track.title);
+    if (format && format !== '—') parts.push(format);
+    if (bitrate && bitrate !== '—') parts.push(bitrate);
+    return parts.length ? parts.join(' · ') : '—';
+  }
+
+  function repairDefaultAudioLabel(item, row = null) {
+    const stream = movieDefaultAudioStream(item);
+    if (!stream) return formatBitrate(row?.audio_bitrate);
+    const language = displayAudioLanguage(stream.language);
+    const bitrate = formatBitrate(effectiveAudioStreamBitrateKbps(stream, row));
+    return bitrate === '—' ? language : `${language} · ${bitrate}`;
+  }
+
+  function sameTrack(a, b) {
+    if (!a || !b) return false;
+    const aIndex = String(a.index || '');
+    const bIndex = String(b.index || '');
+    if (aIndex && bIndex) return aIndex === bIndex;
+    return a === b;
+  }
+
+  function isEffectiveDefaultAudioTrack(track, row) {
+    return sameTrack(track, movieDefaultAudioStream(row?.item));
+  }
+
+  function popoverTrackLanguageMarkup(label, isDefault = false) {
+    return `<span class="lab-audio-popover-lang${isDefault ? ' is-default' : ''}">${escapeHtml(label)}</span>`;
   }
 
   function actualResolutionLabel(item) {
@@ -1157,12 +1209,17 @@
     return `${describeSubtitleStream(stream)} default`;
   }
 
+  function defaultSubtitleStreamsForItem(item) {
+    return (item?.facts?.subtitle_streams || []).filter(stream => stream?.is_default);
+  }
+
   function repairDefaultSubtitleLabel(item) {
     const subtitleStreams = item?.facts?.subtitle_streams || [];
-    const defaultCount = Number(item?.facts?.default_subtitle_streams || 0);
+    const defaultStreams = defaultSubtitleStreamsForItem(item);
+    const defaultCount = defaultStreams.length;
     if (!subtitleStreams.length || defaultCount <= 0) return 'None';
     if (defaultCount > 1) return 'Multiple';
-    const stream = movieDefaultSubtitleStream(item);
+    const stream = defaultStreams[0] || null;
     if (!stream) return 'None';
     const language = displayAudioLanguage(stream.language);
     return stream.is_forced ? `${language} Forced` : language;
@@ -1216,6 +1273,28 @@
     return state.audioFixBusy || state.subtitleFixBusy || activityPayloadHasRemux();
   }
 
+  function safeRepairLockOverlayEnabled() {
+    return isRepairDefaultsMode() && repairWorkflowBusy() && currentWarningGateSafetyLevel() === 'safe';
+  }
+
+  function updateRepairLockOverlay() {
+    if (!el.repairLockOverlay || !el.previewPage) return;
+    const enabled = safeRepairLockOverlayEnabled();
+    el.repairLockOverlay.hidden = !enabled;
+    if (!enabled) return;
+    closeTrackPopover();
+    const rect = el.previewPage.getBoundingClientRect();
+    const inset = 8;
+    const top = Math.max(Math.round(rect.top - inset), 0);
+    const left = Math.max(Math.round(rect.left - inset), 0);
+    const right = Math.min(Math.round(rect.right + inset), window.innerWidth);
+    const bottom = Math.min(Math.round(rect.bottom + inset), window.innerHeight);
+    el.repairLockOverlay.style.setProperty('--lock-top', `${top}px`);
+    el.repairLockOverlay.style.setProperty('--lock-left', `${left}px`);
+    el.repairLockOverlay.style.setProperty('--lock-right', `${right}px`);
+    el.repairLockOverlay.style.setProperty('--lock-bottom', `${bottom}px`);
+  }
+
   function actionTouchesFamily(action, family) {
     return repairActionConfig(action).families.includes(family);
   }
@@ -1236,8 +1315,25 @@
     return Array.isArray(row?.issue_families) && row.issue_families.includes(family);
   }
 
+  function rowSupportsAudioAction(row) {
+    return rowTouchesFamily(row, 'audio');
+  }
+
+  function rowSupportsSubtitleAction(row) {
+    return rowTouchesFamily(row, 'subtitle');
+  }
+
+  function rowSupportsCombinedRepairAction(row) {
+    return rowSupportsAudioAction(row) && (rowSupportsSubtitleAction(row) || combinedSubtitleWillRun(row?.item));
+  }
+
   function repairRowMatchesAction(row, action = state.repairAction) {
-    return repairActionConfig(action).families.some(family => rowTouchesFamily(row, family));
+    if (actionTouchesAudio(action) && actionTouchesSubtitle(action)) {
+      return rowSupportsCombinedRepairAction(row);
+    }
+    if (actionTouchesAudio(action)) return rowSupportsAudioAction(row);
+    if (actionTouchesSubtitle(action)) return rowSupportsSubtitleAction(row);
+    return false;
   }
 
   function issueFamilyLabel(families) {
@@ -1602,7 +1698,7 @@
       : (canonicalTop500.count != null ? `${canonicalTop500.count}/500` : '—');
     return [
       {
-        label: 'Files removed',
+        label: 'Non-audio files removed',
         value: `${Number(filesRemoved.count || 0).toLocaleString()} · ${formatFileSize(filesRemoved.total_bytes || 0)}`,
       },
       {
@@ -1986,8 +2082,17 @@
   }
 
   function auditSubjectLabel(event) {
-    const subject = Array.isArray(event?.subjects) ? event.subjects[0] : null;
+    const subjects = Array.isArray(event?.subjects) ? event.subjects : [];
+    const subject = subjects[0] || null;
     if (!subject) return '—';
+    if (subjects.length > 1) {
+      if (subject.kind === 'movie' || subject.kind === 'follow_up') {
+        return `Movies · ${subjects.length} titles`;
+      }
+      if (subject.kind === 'file') {
+        return `Files · ${subjects.length} items`;
+      }
+    }
     const movieLabel = subject.title ? (subject.year ? `${subject.title} (${subject.year})` : subject.title) : '';
     if (subject.kind === 'movie' || subject.kind === 'follow_up') {
       if (movieLabel) return `Movie · ${movieLabel}`;
@@ -2022,13 +2127,166 @@
     return '—';
   }
 
+  function auditSubjectTitle(subject) {
+    if (!subject) return '—';
+    if (subject.title) return subject.year ? `${subject.title} (${subject.year})` : subject.title;
+    if (subject.path) return fileNameFromPath(subject.path);
+    return humanProfileLabel(subject.kind || 'item');
+  }
+
+  function auditActionChipMeta(event) {
+    const workflow = String(event?.workflow || '').trim();
+    const action = String(event?.action || '').trim();
+    if (workflow === 'system' && action === 'start') {
+      return { label: 'System Boot', tone: 'is-audit-system-user' };
+    }
+    if (action === 'repair') {
+      return { label: 'Remux Repair', tone: 'is-audit-media-repair' };
+    }
+    if (action === 'delete') {
+      if (workflow === 'junk') return { label: 'Junk Delete', tone: 'is-audit-file' };
+      if (workflow === 'weak_encode') return { label: 'Weak Encode Delete', tone: 'is-audit-file' };
+      return { label: 'File Delete', tone: 'is-audit-file' };
+    }
+    if (action === 'apply') {
+      return { label: 'Normalize Apply', tone: 'is-audit-file' };
+    }
+    if (action === 'scan') {
+      return { label: 'Scan', tone: 'is-audit-system-user' };
+    }
+    if (workflow === 'policy' && action === 'update') {
+      return { label: 'Policy Update', tone: 'is-audit-system-user' };
+    }
+    if (action === 'export') {
+      return { label: 'Catalogue Export', tone: 'is-audit-system-user' };
+    }
+    if (action.startsWith('follow_up_')) {
+      return { label: 'Follow-up', tone: 'is-audit-system-user' };
+    }
+    if (action.startsWith('legacy_')) {
+      return { label: humanProfileLabel(action), tone: 'is-audit-system-background' };
+    }
+    return {
+      label: humanProfileLabel(action || workflow || 'recorded'),
+      tone: workflow === 'system' ? 'is-audit-system-background' : 'is-audit-system-user',
+    };
+  }
+
+  function auditOutcomeLabel(event) {
+    const action = String(event?.action || '').trim();
+    const workflow = String(event?.workflow || '').trim();
+    const effects = Array.isArray(event?.effects) ? event.effects : [];
+    if (workflow === 'system' && action === 'start') return 'System booted';
+    if (action === 'scan') return 'Scan performed';
+    if (workflow === 'policy' && action === 'update') return 'Policy updated';
+    if (action === 'repair') {
+      const fileCount = effects.filter(effect => (effect?.status || '') === 'applied' && (effect?.kind || '') === 'remux_repair').length;
+      return fileCount > 1 ? `Remux completed for ${fileCount} files` : 'Remux completed';
+    }
+    if (action === 'delete') {
+      const deletedCount = effects.filter(effect => (effect?.status || '') === 'applied').length;
+      if (workflow === 'junk') return deletedCount > 1 ? `Deleted ${deletedCount} junk files` : 'Deleted junk file';
+      return deletedCount > 1 ? `Deleted ${deletedCount} files` : 'Deleted file';
+    }
+    if (action.startsWith('follow_up_')) return humanProfileLabel(action);
+    if (!effects.length) return event?.reversal?.capability === 'recorded_only' ? 'Recorded reversal' : 'Recorded';
+    const lead = effects[0];
+    const kind = humanProfileLabel(lead.kind || 'event');
+    const status = humanProfileLabel(lead.status || 'recorded');
+    return `${kind} · ${status}`;
+  }
+
+  function auditRepairFamilyLabels(event) {
+    const workflow = String(event?.workflow || '').trim();
+    const metadata = event?.metadata || {};
+    const labels = [];
+    if (workflow === 'audio_packaging' || metadata.include_audio) labels.push('audio default');
+    if (metadata.drop_foreign_audio) labels.push('foreign-audio prune');
+    if (workflow === 'subtitle_readiness' || metadata.include_subtitle) labels.push('subtitle default');
+    return labels;
+  }
+
+  function auditRepairFamilySummary(event, effect = null) {
+    const labels = auditRepairFamilyLabels(event);
+    const parts = labels.length ? [labels.join(' + ')] : ['remux'];
+    const removedTracks = Number(effect?.details?.removed_audio_tracks || 0);
+    if (removedTracks > 0) {
+      parts.push(`removed ${removedTracks} foreign audio track${removedTracks === 1 ? '' : 's'}`);
+    }
+    return parts.join(' · ');
+  }
+
+  function auditRepairBreakdownRows(event) {
+    const subjects = Array.isArray(event?.subjects) ? event.subjects : [];
+    const effects = Array.isArray(event?.effects) ? event.effects : [];
+    const familyLabels = auditRepairFamilyLabels(event);
+    if (String(event?.action || '').trim() !== 'repair') return [];
+    if (!subjects.length) return [];
+    if (subjects.length <= 1 && familyLabels.length <= 1) return [];
+    return subjects.map(subject => {
+      const subjectPath = String(subject?.path || '').trim();
+      const effect = effects.find(item => String(item?.path || '').trim() === subjectPath) || null;
+      return {
+        title: auditSubjectTitle(subject),
+        summary: auditRepairFamilySummary(event, effect),
+      };
+    });
+  }
+
+  function auditRepairBreakdownMarkup(event) {
+    const rows = auditRepairBreakdownRows(event);
+    if (!rows.length) return '';
+    const eventId = String(event?.event_id || '').trim();
+    const isOpen = eventId && state.auditOpenBreakdowns.has(eventId);
+    return `
+      <button class="lab-audit-summary-toggle" type="button" data-audit-breakdown-toggle="${escapeHtml(eventId)}" aria-expanded="${isOpen ? 'true' : 'false'}">
+        <span class="lab-audit-summary-toggle-copy">${escapeHtml(event.summary || '—')}</span>
+      </button>
+    `;
+  }
+
+  function auditActionChipMarkup(event) {
+    const meta = auditActionChipMeta(event);
+    return `<span class="lab-cell-pill ${escapeHtml(meta.tone || '')}">${escapeHtml(meta.label)}</span>`;
+  }
+
+  function renderAuditSummaryCell(event) {
+    if (auditRepairBreakdownRows(event).length) return auditRepairBreakdownMarkup(event);
+    return `
+      <div class="lab-audit-summary-copy">
+        <span class="lab-cell-text">${escapeHtml(event.summary || '—')}</span>
+      </div>
+    `;
+  }
+
+  function renderAuditRepairChildRows(event) {
+    const rows = auditRepairBreakdownRows(event);
+    const eventId = String(event?.event_id || '').trim();
+    if (!rows.length || !eventId || !state.auditOpenBreakdowns.has(eventId)) return '';
+    return rows.map(row => `
+      <tr class="lab-audit-child-row" data-audit-parent-event-id="${escapeHtml(eventId)}">
+        <td class="lab-audit-child-spacer" aria-hidden="true"></td>
+        <td class="lab-audit-child-spacer" aria-hidden="true"></td>
+        <td class="lab-audit-child-spacer" aria-hidden="true"></td>
+        <td class="lab-cell-anchor lab-audit-child-subject" title="${escapeHtml(row.title)}"><span class="lab-cell-text">${escapeHtml(row.title)}</span></td>
+        <td class="lab-cell-supporting lab-audit-child-outcome"><span class="lab-cell-text">Remux file</span></td>
+        <td class="lab-cell-supporting lab-audit-child-summary" title="${escapeHtml(row.summary)}"><span class="lab-cell-text">${escapeHtml(row.summary)}</span></td>
+      </tr>
+    `).join('');
+  }
+
   function auditEffectLabel(event) {
     const effects = Array.isArray(event?.effects) ? event.effects : [];
     if (!effects.length) return event?.reversal?.capability === 'recorded_only' ? 'Recorded reversal' : 'Recorded only';
     const lead = effects[0];
     const kind = humanProfileLabel(lead.kind || 'event');
     const status = humanProfileLabel(lead.status || 'recorded');
-    return effects.length === 1 ? `${kind} · ${status}` : `${kind} · ${status} +${effects.length - 1}`;
+    if (effects.length === 1) return `${kind} · ${status}`;
+    if (effects.every(effect => (effect?.kind || '') === (lead.kind || '') && (effect?.status || '') === (lead.status || ''))) {
+      const unit = lead.kind === 'remux_repair' ? 'file' : 'item';
+      return `${kind} · ${status} to ${effects.length} ${unit}${effects.length === 1 ? '' : 's'}`;
+    }
+    return `${kind} · ${status} +${effects.length - 1}`;
   }
 
   function auditEventsNewestFirst(events) {
@@ -2044,6 +2302,19 @@
     const event = payload?.latest_system_start;
     if (!event?.recorded_at) return '';
     return `Session started ${formatAuditRecordedAt(event.recorded_at)}`;
+  }
+
+  function bindAuditBreakdownToggleState() {
+    if (!el.auditPanel) return;
+    el.auditPanel.querySelectorAll('button[data-audit-breakdown-toggle]').forEach(button => {
+      button.addEventListener('click', () => {
+        const eventId = String(button.dataset.auditBreakdownToggle || '').trim();
+        if (!eventId) return;
+        if (state.auditOpenBreakdowns.has(eventId)) state.auditOpenBreakdowns.delete(eventId);
+        else state.auditOpenBreakdowns.add(eventId);
+        renderAuditPanel();
+      });
+    });
   }
 
   function renderAuditPanel() {
@@ -2105,31 +2376,41 @@
       ${sessionContextLabel ? `<div class="lab-audit-context">${escapeHtml(sessionContextLabel)}</div>` : ''}
       <div class="lab-audit-table lab-rhythm-surface" data-rhythm-surface="rows">
         <table class="lab-scan-table">
+          <colgroup>
+            <col style="width: 22ch">
+            <col style="width: 14ch">
+            <col style="width: 19ch">
+            <col style="width: 12%">
+            <col style="width: 20ch">
+            <col style="width: 24%">
+          </colgroup>
           <thead>
             <tr>
               <th>Recorded</th>
               <th>Action</th>
               <th>Workflow</th>
               <th>Subject</th>
-              <th>Effect</th>
+              <th>Outcome</th>
               <th>Summary</th>
             </tr>
           </thead>
           <tbody>
             ${events.map(event => `
-              <tr>
+              <tr class="${auditRepairBreakdownRows(event).length ? 'lab-audit-parent-row is-expandable' : 'lab-audit-parent-row'}${state.auditOpenBreakdowns.has(String(event?.event_id || '').trim()) ? ' is-open' : ''}">
                 <td class="lab-cell-supporting lab-cell-mono" title="${escapeHtml(event.recorded_at || '')}"><span class="lab-cell-text">${escapeHtml(formatAuditRecordedAt(event.recorded_at || ''))}</span></td>
-                <td class="lab-cell-status" title="${escapeHtml(event.action || '')}"><span class="lab-cell-pill">${escapeHtml(humanProfileLabel(event.action || 'recorded'))}</span></td>
+                <td class="lab-cell-status" title="${escapeHtml(event.action || '')}">${auditActionChipMarkup(event)}</td>
                 <td class="lab-cell-supporting" title="${escapeHtml(event.workflow || '')}"><span class="lab-cell-text">${escapeHtml(humanProfileLabel(event.workflow || 'audit'))}</span></td>
                 <td class="lab-cell-anchor" title="${escapeHtml(auditSubjectLabel(event))}"><span class="lab-cell-text">${escapeHtml(auditSubjectLabel(event))}</span></td>
-                <td class="lab-cell-supporting" title="${escapeHtml(auditEffectLabel(event))}"><span class="lab-cell-text">${escapeHtml(auditEffectLabel(event))}</span></td>
-                <td class="lab-cell-supporting" title="${escapeHtml(event.summary || '')}"><span class="lab-cell-text">${escapeHtml(event.summary || '—')}</span></td>
+                <td class="lab-cell-supporting" title="${escapeHtml(auditOutcomeLabel(event))}"><span class="lab-cell-text">${escapeHtml(auditOutcomeLabel(event))}</span></td>
+                <td class="lab-cell-supporting" title="${escapeHtml(event.summary || '')}">${renderAuditSummaryCell(event)}</td>
               </tr>
+              ${renderAuditRepairChildRows(event)}
             `).join('')}
           </tbody>
         </table>
       </div>
     `;
+    bindAuditBreakdownToggleState();
   }
 
   function inspectionSummaryForRow(row) {
@@ -2621,15 +2902,15 @@
   }
 
   function selectedRepairPaths() {
-    return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable).map(row => row.path);
+    return state.filteredRows.filter(row => state.selected.has(row.row_id)).map(row => row.path);
   }
 
   function selectedRepairItems() {
-    return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable).map(row => row.item);
+    return state.filteredRows.filter(row => state.selected.has(row.row_id)).map(row => row.item);
   }
 
   function selectedRepairRows() {
-    return state.filteredRows.filter(row => state.selected.has(row.row_id) && row.selectable);
+    return state.filteredRows.filter(row => state.selected.has(row.row_id));
   }
 
   function repairRowsForAction(rows, action = state.repairAction) {
@@ -2676,7 +2957,9 @@
     }
     const selectableRows = usesSimpleSelectionShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
     const filteredCount = selectableRows.length;
-    const selectedVisibleCount = selectableRows.filter(row => state.selected.has(usesSimpleSelectionShell() ? row.row_id : row.result_id)).length;
+    const selectedVisibleCount = usesSimpleSelectionShell()
+      ? state.filteredRows.filter(row => state.selected.has(row.row_id)).length
+      : selectableRows.filter(row => state.selected.has(row.result_id)).length;
     el.selectAllButton.disabled = !filteredCount;
     el.deselectAllButton.disabled = !selectedVisibleCount;
     el.selectAllButton.textContent = filteredCount ? `Select all (${filteredCount})` : 'Select all';
@@ -2812,6 +3095,7 @@
     syncSliverHeight();
     renderConfirmButton();
     renderWorkflowActionControls();
+    updateRepairLockOverlay();
   }
 
   function renderRows() {
@@ -2840,6 +3124,14 @@
     renderTrackPopover();
     renderConfirmButton();
     renderWorkflowActionControls();
+    updateRepairLockOverlay();
+  }
+
+  function simpleSelectionRowClass(rowId) {
+    const classes = [];
+    if (state.selected.has(rowId)) classes.push('is-selected');
+    if (state.activeRowId === rowId) classes.push('active');
+    return classes.join(' ');
   }
 
   function renderNormalizeRow(row) {
@@ -2861,7 +3153,7 @@
       ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
       : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
     return `
-      <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
+      <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
@@ -2886,7 +3178,7 @@
       ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
       : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
     return `
-      <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
+      <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}" data-junk-filename-cell>
           <span class="lab-cell-text" data-junk-filename-full="${escapeHtml(fileNameFromPath(row.current_path))}">${escapeHtml(fileNameFromPath(row.current_path))}</span>
@@ -2935,17 +3227,18 @@
     const disabled = repairDefaultsSelectionLocked() ? 'disabled' : '';
     const hasAudioTracks = audioTracksForRow(row).length > 0;
     const hasSubtitleTracks = subtitleTracksForRow(row).length > 0;
+    const defaultAudioLabel = repairDefaultAudioLabel(row.item, row);
     const audioBitrateMarkup = hasAudioTracks
-      ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
-      : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
+      ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(defaultAudioLabel)}</button>`
+      : `<span class="lab-cell-text">${escapeHtml(defaultAudioLabel)}</span>`;
     const defaultSubtitleMarkup = hasSubtitleTracks
       ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="subtitle" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'subtitle' ? 'true' : 'false'}">${escapeHtml(row.default_subtitle || 'None')}</button>`
       : `<span class="lab-cell-text">${escapeHtml(row.default_subtitle || 'None')}</span>`;
     return `
-      <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
+      <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked} ${disabled}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
-        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(formatBitrate(row.audio_bitrate))}">${audioBitrateMarkup}</td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(defaultAudioLabel)}">${audioBitrateMarkup}</td>
         <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.default_subtitle || 'None')}">${defaultSubtitleMarkup}</td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
         <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.current_default || '—')}"><span class="lab-cell-text">${escapeHtml(row.current_default || '—')}</span></td>
@@ -3065,9 +3358,12 @@
         }
         const id = input.dataset.rowCheck || '';
         if (input.checked) state.selected.add(id);
-        else state.selected.delete(id);
-        state.activeRowId = id;
+        else {
+          state.selected.delete(id);
+          if (usesSimpleSelectionShell() && state.activeRowId === id) state.activeRowId = '';
+        }
         clearDeletePreviewState();
+        renderRows();
         refreshSelectionState();
       });
     });
@@ -3135,9 +3431,8 @@
         <ul class="lab-audio-popover-list">
           ${subtitleTracks.map(track => `
             <li class="lab-audio-popover-row">
-              <span class="lab-audio-popover-lang">${escapeHtml(describeSubtitleStream(track))}</span>
+              ${popoverTrackLanguageMarkup(describeSubtitleStream(track), !!track.is_default)}
               <span class="lab-audio-popover-facts">${escapeHtml(track.is_forced ? 'forced' : 'full')}</span>
-              ${track.is_default ? '<span class="lab-audio-popover-default">default</span>' : ''}
             </li>
           `).join('')}
         </ul>
@@ -3149,7 +3444,7 @@
       });
       return;
     }
-    if (!usesDeletePreviewShell() || !tracks.length) {
+    if (!tracks.length) {
       closeTrackPopover();
       return;
     }
@@ -3158,9 +3453,8 @@
       <ul class="lab-audio-popover-list">
         ${tracks.map(track => `
           <li class="lab-audio-popover-row">
-            <span class="lab-audio-popover-lang">${escapeHtml(displayAudioLanguage(track.language))}</span>
-            <span class="lab-audio-popover-facts">${escapeHtml(`${formatBitrate(track.bitrate_kbps)} · ${audioChannelLayout(track.channels)}`)}</span>
-            ${track.is_default ? '<span class="lab-audio-popover-default">default</span>' : ''}
+            ${popoverTrackLanguageMarkup(displayAudioLanguage(track.language), isEffectiveDefaultAudioTrack(track, row))}
+            <span class="lab-audio-popover-facts">${escapeHtml(describeAudioPopoverFacts(track, row))}</span>
           </li>
         `).join('')}
       </ul>
@@ -3502,7 +3796,9 @@
     }
     if (actionTouchesSubtitle(action) && (subtitleTouched || combinedSubtitleTouched)) {
       const defaultSubtitle = movieDefaultSubtitleStream(row.item);
-      const targetSubtitle = subtitleTouched ? movieSubtitleReadinessRepairTarget(row.item) : movieCombinedSubtitleRepairTarget(row.item);
+      const targetSubtitle = combinedSubtitleTouched
+        ? movieCombinedSubtitleRepairTarget(row.item)
+        : (subtitleTouched ? movieSubtitleReadinessRepairTarget(row.item) : null);
       const hasLandingSubtitleResult = Boolean(targetSubtitle) || Boolean(defaultSubtitle);
       if (defaultSubtitle) addRepairPath(`subtitle/default: ${describeSubtitleStream(defaultSubtitle)} [default cleared]`, { mutated: true, staged: hasLandingSubtitleResult });
       if (targetSubtitle) addRepairPath(`subtitle/default: ${describeSubtitleStream(targetSubtitle)} [becomes default]`, { mutated: true, landing: true });
@@ -3911,6 +4207,7 @@
       throw error;
     } finally {
       state.audioFixBusy = false;
+      await refreshActivityPayload();
       renderRows();
       renderSidePanel();
     }
@@ -3945,6 +4242,7 @@
       throw error;
     } finally {
       state.subtitleFixBusy = false;
+      await refreshActivityPayload();
       renderRows();
       renderSidePanel();
     }
@@ -3988,6 +4286,7 @@
     } finally {
       state.audioFixBusy = false;
       state.subtitleFixBusy = false;
+      await refreshActivityPayload();
       renderRows();
       renderSidePanel();
     }
@@ -4257,10 +4556,12 @@
   window.addEventListener('resize', () => {
     syncSliverHeight();
     if (state.trackPopoverRowId) renderTrackPopover();
+    updateRepairLockOverlay();
   });
 
   window.addEventListener('scroll', () => {
     if (state.trackPopoverRowId) renderTrackPopover();
+    updateRepairLockOverlay();
   }, true);
 
   [el.searchInput, el.bucketFilter, el.workflowStatusFilter, el.canonicalListFilter].forEach(control => {

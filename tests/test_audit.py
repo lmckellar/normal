@@ -251,6 +251,44 @@ class AuditStoreTests(unittest.TestCase):
         self.assertEqual(len(followups), 1)
         self.assertEqual(followups[0].status, "dismissed")
 
+    def test_record_repair_event_extracts_paths_from_fixed_payload_dicts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "movies"
+            source.mkdir()
+            first = source / "First Movie (2001).mkv"
+            second = source / "Second Movie (2002).mkv"
+            first.write_text("video", encoding="utf-8")
+            second.write_text("video", encoding="utf-8")
+            store = AuditStore(
+                ledger_path=root / "audit-ledger.jsonl",
+                replacement_queue_path=root / "missing-replacement-queue.json",
+                subtitle_history_path=root / "missing-subtitle-history.json",
+            )
+            with patch("normal.web.routes_cleanup.AUDIT_STORE", store):
+                from normal.web.routes_cleanup import _record_repair_event
+
+                _record_repair_event(
+                    source,
+                    workflow="repair_defaults",
+                    action="repair",
+                    summary="Repaired audio defaults for 2 titles. Removed 6 foreign audio tracks.",
+                    fixed_paths=[
+                        {"path": str(first.resolve()), "removed_audio_tracks": 1},
+                        {"path": str(second.resolve()), "removed_audio_tracks": 5},
+                    ],
+                    metadata={"audio_tracks_removed": {"count": 6, "total_bytes": 0}},
+                )
+
+            events = store.read_events(source, limit=10)
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].summary, "Repaired audio defaults for 2 titles. Removed 6 foreign audio tracks.")
+        self.assertEqual([subject.path for subject in events[0].subjects], [str(first.resolve()), str(second.resolve())])
+        self.assertEqual([effect.path for effect in events[0].effects], [str(first.resolve()), str(second.resolve())])
+        self.assertEqual(events[0].effects[0].details["removed_audio_tracks"], 1)
+        self.assertEqual(events[0].effects[1].details["removed_audio_tracks"], 5)
+
 
 class AuditRouteTests(unittest.TestCase):
     @contextmanager

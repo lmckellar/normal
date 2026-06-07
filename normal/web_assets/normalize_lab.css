@@ -601,6 +601,26 @@ thead th {
 .lab-cell-pill.is-review { color: #8d5d1d; }
 .lab-cell-pill.is-unchanged { color: var(--muted); }
 .lab-cell-pill.is-actionable { color: var(--accent); }
+.lab-cell-pill.is-audit-system-background {
+  border-color: rgba(85, 92, 104, 0.22);
+  background: rgba(85, 92, 104, 0.08);
+  color: #59606d;
+}
+.lab-cell-pill.is-audit-system-user {
+  border-color: rgba(58, 90, 140, 0.24);
+  background: rgba(58, 90, 140, 0.08);
+  color: #36557f;
+}
+.lab-cell-pill.is-audit-media-repair {
+  border-color: rgba(36, 119, 85, 0.24);
+  background: rgba(36, 119, 85, 0.09);
+  color: #246f54;
+}
+.lab-cell-pill.is-audit-file {
+  border-color: rgba(138, 84, 38, 0.24);
+  background: rgba(138, 84, 38, 0.08);
+  color: #8a5426;
+}
 
 .lab-audio-popover-trigger {
   display: inline-flex;
@@ -624,7 +644,7 @@ thead th {
 .lab-audio-popover {
   position: fixed;
   z-index: 20;
-  inline-size: min(320px, calc(100vw - 24px));
+  inline-size: min(480px, calc(100vw - 24px));
   padding: 10px 12px;
   border: 1px solid var(--accent-line);
   border-radius: 10px;
@@ -662,7 +682,7 @@ thead th {
 
 .lab-audio-popover-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(7ch, 12ch) minmax(0, 1fr);
   gap: 8px;
   align-items: baseline;
   padding: 4px 0;
@@ -676,26 +696,29 @@ thead th {
 
 .lab-audio-popover-lang {
   min-width: 0;
+  display: inline-block;
   color: var(--ink);
   font-weight: 600;
-}
-
-.lab-audio-popover-facts {
-  color: var(--muted);
-  font-family: var(--mono);
-  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.lab-audio-popover-default {
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--accent-wash);
+.lab-audio-popover-lang.is-default {
   color: var(--accent);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.lab-audio-popover-facts {
+  min-width: 0;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 th .sort {
@@ -720,9 +743,17 @@ tbody td {
 
 tbody tr:hover td { background: var(--hover); }
 
+tbody tr.is-selected td { background: rgba(58, 90, 140, 0.12); }
+
+tbody tr.is-selected td:first-child { box-shadow: inset 2px 0 0 rgba(58, 90, 140, 0.78); }
+
 tbody tr.active td { background: var(--accent-wash); }
 
 tbody tr.active td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+
+tbody tr.is-selected.active td {
+  background: linear-gradient(180deg, rgba(58, 90, 140, 0.2), rgba(58, 90, 140, 0.14));
+}
 
 tbody td[colspan] {
   font-family: var(--sans);
@@ -742,6 +773,90 @@ input[type="checkbox"] {
 /* Detail / preview panel -------------------------------------------------- */
 
 .lab-detail { min-width: 0; }
+
+.lab-repair-lock-overlay {
+  --lock-top: 0px;
+  --lock-right: 0px;
+  --lock-bottom: 100vh;
+  --lock-left: 100vw;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.lab-repair-lock-block {
+  position: fixed;
+  background: rgba(246, 245, 242, 0.72);
+  backdrop-filter: blur(1.5px);
+  pointer-events: auto;
+}
+
+.lab-repair-lock-block-top {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--lock-top);
+}
+
+.lab-repair-lock-block-right {
+  top: var(--lock-top);
+  right: 0;
+  bottom: calc(100vh - var(--lock-bottom));
+  width: calc(100vw - var(--lock-right));
+}
+
+.lab-repair-lock-block-bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(100vh - var(--lock-bottom));
+}
+
+.lab-repair-lock-block-left {
+  top: var(--lock-top);
+  left: 0;
+  bottom: calc(100vh - var(--lock-bottom));
+  width: var(--lock-left);
+}
+
+.lab-repair-lock-port-frame {
+  position: fixed;
+  top: var(--lock-top);
+  left: var(--lock-left);
+  width: calc(var(--lock-right) - var(--lock-left));
+  height: calc(var(--lock-bottom) - var(--lock-top));
+  border: 1px solid rgba(58, 90, 140, 0.26);
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+.lab-repair-lock-banner {
+  position: fixed;
+  top: max(14px, calc(var(--lock-top) - 68px));
+  left: 14px;
+  max-width: 34ch;
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid rgba(58, 90, 140, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  box-shadow: 0 10px 30px rgba(28, 29, 31, 0.12);
+  pointer-events: auto;
+}
+
+.lab-repair-lock-banner strong {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.lab-repair-lock-banner span {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+}
 
 .lab-panel {
   position: relative;
@@ -1185,6 +1300,92 @@ input[type="checkbox"] {
 .lab-audit-table td,
 .lab-audit-table th {
   padding-inline: 10px;
+}
+
+.lab-audit-table th:nth-child(2),
+.lab-audit-table td:nth-child(2) {
+  white-space: nowrap;
+}
+
+.lab-audit-summary-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.lab-audit-parent-row.is-expandable td:last-child {
+  padding-block: 0;
+}
+
+.lab-audit-summary-toggle {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.lab-audit-summary-toggle:hover:not(:disabled) {
+  background: transparent;
+}
+
+.lab-audit-summary-toggle-copy {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  position: relative;
+  padding-left: 16px;
+}
+
+.lab-audit-summary-toggle-copy::before {
+  content: ">";
+  display: inline-block;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: rotate(0deg);
+  transition: transform 120ms ease;
+  color: var(--accent);
+  margin-top: -0.55em;
+}
+
+.lab-audit-parent-row.is-open .lab-audit-summary-toggle-copy::before {
+  transform: rotate(90deg);
+}
+
+.lab-audit-child-row td {
+  background: rgba(58, 90, 140, 0.04);
+}
+
+.lab-audit-child-row:hover td {
+  background: rgba(58, 90, 140, 0.06);
+}
+
+.lab-audit-child-spacer {
+  border-bottom-color: rgba(28, 29, 31, 0.04);
+}
+
+.lab-audit-child-subject {
+  position: relative;
+  padding-left: 24px;
+}
+
+.lab-audit-child-subject::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: rgba(58, 90, 140, 0.48);
+}
+
+.lab-audit-child-outcome .lab-cell-text,
+.lab-audit-child-summary .lab-cell-text {
+  color: var(--muted);
 }
 
 @media (max-width: 1180px) {

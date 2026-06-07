@@ -334,12 +334,17 @@ def handle_movies_audio_packaging_fix(ctx: RequestContext, payload: dict[str, An
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
     result["updated_items"] = build_updated_profile_items(source, result["fixed"])
+    removed_audio = _summarize_removed_audio_from_fixed(result.get("fixed", []))
     _record_repair_event(
         source,
         workflow="audio_packaging",
         action="repair",
         summary=(
-            f"Repaired audio defaults for {len(result['fixed'])} title{'s' if len(result['fixed']) != 1 else ''}."
+            _repair_summary(
+                fixed_count=len(result["fixed"]),
+                base_label="audio defaults",
+                removed_audio_tracks=removed_audio["count"] if drop_foreign_audio else 0,
+            )
             if result["fixed"]
             else "Audio defaults repair made no changes."
         ),
@@ -347,10 +352,7 @@ def handle_movies_audio_packaging_fix(ctx: RequestContext, payload: dict[str, An
         metadata={
             "drop_foreign_audio": drop_foreign_audio,
             "skipped": result.get("skipped", []),
-            "audio_tracks_removed": {
-                "count": sum(int(item.get("removed_audio_tracks") or 0) for item in result.get("fixed", []) if isinstance(item, dict)),
-                "total_bytes": sum(int(item.get("removed_audio_bytes") or 0) for item in result.get("fixed", []) if isinstance(item, dict)),
-            },
+            "audio_tracks_removed": removed_audio,
         },
     )
     ctx.respond_json(result)
@@ -421,11 +423,12 @@ def handle_movies_repair_defaults_fix(ctx: RequestContext, payload: dict[str, An
     if result["updated_items"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
+    removed_audio = _summarize_removed_audio_from_fixed(result.get("fixed", []))
     summary_bits = []
     if include_audio:
         summary_bits.append("audio defaults")
     if drop_foreign_audio:
-        summary_bits.append("foreign audio")
+        summary_bits.append("foreign-audio prune")
     if include_subtitle:
         summary_bits.append("subtitle defaults")
     _record_repair_event(
@@ -433,7 +436,11 @@ def handle_movies_repair_defaults_fix(ctx: RequestContext, payload: dict[str, An
         workflow="repair_defaults",
         action="repair",
         summary=(
-            f"Repaired {' + '.join(summary_bits)} for {len(result['fixed'])} title{'s' if len(result['fixed']) != 1 else ''}."
+            _repair_summary(
+                fixed_count=len(result["fixed"]),
+                base_label=_join_repair_labels(summary_bits),
+                removed_audio_tracks=removed_audio["count"] if drop_foreign_audio else 0,
+            )
             if result["fixed"]
             else "Repair defaults action made no changes."
         ),
@@ -443,10 +450,7 @@ def handle_movies_repair_defaults_fix(ctx: RequestContext, payload: dict[str, An
             "include_subtitle": include_subtitle,
             "drop_foreign_audio": drop_foreign_audio,
             "skipped": result.get("skipped", []),
-            "audio_tracks_removed": {
-                "count": sum(int(item.get("removed_audio_tracks") or 0) for item in result.get("fixed", []) if isinstance(item, dict)),
-                "total_bytes": sum(int(item.get("removed_audio_bytes") or 0) for item in result.get("fixed", []) if isinstance(item, dict)),
-            },
+            "audio_tracks_removed": removed_audio,
         },
     )
     ctx.respond_json(result)
@@ -572,7 +576,7 @@ def _record_repair_event(
     fixed_paths: list[Any],
     metadata: dict[str, Any],
 ) -> None:
-    normalized_paths = [str(Path(str(path)).expanduser().resolve()) for path in fixed_paths]
+    normalized_paths = _normalized_repair_paths(fixed_paths)
     if not normalized_paths and not metadata.get("skipped"):
         return
     recorded_at = utc_now_iso()
@@ -584,8 +588,77 @@ def _record_repair_event(
         action=action,
         summary=summary,
         subjects=[normalize_subject_from_path(Path(path), issue_family=workflow) for path in normalized_paths],
-        effects=[AuditEffect(kind="remux_repair", status="applied", path=path, message=summary) for path in normalized_paths],
+        effects=_repair_effects(fixed_paths, summary),
         reversal={"capability": "none"},
         metadata=metadata,
     )
     AUDIT_STORE.append(event)
+
+
+def _normalized_repair_paths(fixed_paths: list[Any]) -> list[str]:
+    normalized_paths: list[str] = []
+    for item in fixed_paths:
+        path_value = item.get("path") if isinstance(item, dict) else item
+        raw_path = str(path_value or "").strip()
+        if not raw_path:
+            continue
+        normalized_paths.append(str(Path(raw_path).expanduser().resolve()))
+    return normalized_paths
+
+
+def _summarize_removed_audio_from_fixed(fixed_items: list[Any]) -> dict[str, int]:
+    count = 0
+    total_bytes = 0
+    for item in fixed_items:
+        if not isinstance(item, dict):
+            continue
+        count += max(int(item.get("removed_audio_tracks") or 0), 0)
+        total_bytes += max(int(item.get("removed_audio_bytes") or 0), 0)
+    return {"count": count, "total_bytes": total_bytes}
+
+
+def _join_repair_labels(labels: list[str]) -> str:
+    active = [str(label).strip() for label in labels if str(label).strip()]
+    if not active:
+        return "repairs"
+    if len(active) == 1:
+        return active[0]
+    if len(active) == 2:
+        return f"{active[0]} and {active[1]}"
+    return f"{', '.join(active[:-1])}, and {active[-1]}"
+
+
+def _repair_summary(*, fixed_count: int, base_label: str, removed_audio_tracks: int = 0) -> str:
+    summary = f"Repaired {base_label} for {fixed_count} title{'s' if fixed_count != 1 else ''}."
+    if removed_audio_tracks > 0:
+        summary += (
+            f" Removed {removed_audio_tracks} foreign audio "
+            f"track{'s' if removed_audio_tracks != 1 else ''}."
+        )
+    return summary
+
+
+def _repair_effects(fixed_paths: list[Any], summary: str) -> list[AuditEffect]:
+    effects: list[AuditEffect] = []
+    for item in fixed_paths:
+        path_value = item.get("path") if isinstance(item, dict) else item
+        raw_path = str(path_value or "").strip()
+        if not raw_path:
+            continue
+        details: dict[str, Any] = {}
+        if isinstance(item, dict):
+            details = {
+                "message": str(item.get("message") or "").strip(),
+                "removed_audio_tracks": max(int(item.get("removed_audio_tracks") or 0), 0),
+                "removed_audio_bytes": max(int(item.get("removed_audio_bytes") or 0), 0),
+            }
+        effects.append(
+            AuditEffect(
+                kind="remux_repair",
+                status="applied",
+                path=str(Path(raw_path).expanduser().resolve()),
+                message=summary,
+                details=details,
+            )
+        )
+    return effects
