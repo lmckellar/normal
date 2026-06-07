@@ -65,7 +65,7 @@ Watching the tool purify a test library for the first time is a good experience.
 
 ## Alpha UI note
 
-`v0.7.0-alpha.4` uses one compact workbench at `http://127.0.0.1:8765/`.
+`v0.7.0-alpha.5` uses one compact workbench at `http://127.0.0.1:8765/`.
 
 Workflow deep links still use the main route with a query string, for example `/?workflow=normalize` or `/?workflow=repair-defaults`.
 

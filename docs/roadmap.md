@@ -12,16 +12,17 @@ shape. Normalize, weak-encode triage, junk cleanup, repair defaults, canonical
 list coverage, and export are materially useful. Recent scan/cache work and the
 new shell pivot mean the product now feels more deliberate than exploratory,
 but it is still pre-1.0 and still best suited to Linux users comfortable with
-alpha software. Present `v0.7.0-alpha.4` is the current tagged cut of that new
-default surface and focuses on restoring auditability, richer inspection, and
-IMDb-first canonical coverage inside the same shell rather than widening the
-release surface again.
+alpha software. Present `v0.7.0-alpha.5` is the current tagged cut of that new
+default surface and focuses on reducing shell ambiguity, keeping preview/apply
+contracts explicit, and continuing to favor one coherent workbench over
+surface sprawl.
 
 ### Concerns
 
 - **UI/UX maturity** — the new default shell is much stronger than the old
-  dashboard, but resurfacing withheld lanes into it without losing coherence is
-  the next real test.
+  dashboard, and alpha.5 removes one more ambiguous control. The next test is
+  resurfacing withheld lanes without reintroducing fuzzy ownership or weak
+  preview semantics.
 - **Main workflow maturity** — movie lanes are credible for real use; TV does
   not exist yet, so the product is still intentionally movie only in practice.
 - **Documentation coherence** — `README`, `CHANGELOG`, and this roadmap are the
@@ -79,7 +80,7 @@ release surface again.
 - Keep public release truth honest without rewriting the whole doc set.
 - Defend concise-only movie normalization and its parser hardening gains.
 - Finish the immediate movie-lane stabilization work that directly affects the
-  alpha.4 default surface.
+  alpha.5 default surface.
 - Keep UI cleanup focused on coherence inside this new shell, not on reviving
   the old dashboard structure.
 - Land the left Policy rail as the sole write owner for library policy and
@@ -148,4 +149,4 @@ analogue.
   `movie_profile.py`; the UI remains hidden until the workflow shape is clear.
 
 ## Disclaimer
-  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, and the current release is `v0.7.0-alpha.4`; both have matching prerelease intent. Earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.
+  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, and the current release is `v0.7.0-alpha.5`; both have matching prerelease intent. Earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.

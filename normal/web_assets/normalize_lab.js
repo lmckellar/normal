@@ -172,7 +172,6 @@
     bucketFilter: document.getElementById('bucketFilter'),
     workflowStatusFilter: document.getElementById('workflowStatusFilter'),
     canonicalListFilter: document.getElementById('canonicalListFilter'),
-    previewScopeLabel: document.getElementById('previewScopeLabel'),
     selectAllButton: document.getElementById('selectAllButton'),
     deselectAllButton: document.getElementById('deselectAllButton'),
     tableColGroup: document.getElementById('tableColGroup'),
@@ -192,7 +191,6 @@
     placeholderDownloadToggle: document.getElementById('placeholderDownloadToggle'),
     policyRail: document.getElementById('policyRail'),
     previewControls: document.getElementById('previewControls'),
-    previewScopeSelect: document.getElementById('previewScopeSelect'),
     repairActionControls: document.getElementById('repairActionControls'),
     repairActionSelect: document.getElementById('repairActionSelect'),
     repairActionButton: document.getElementById('repairActionButton'),
@@ -1436,8 +1434,6 @@
     el.bucketFilter.hidden = weak || repairDefaults || canonical || junk;
     el.workflowStatusFilter.hidden = !(weak || repairDefaults || junk);
     el.canonicalListFilter.hidden = !canonical;
-    el.previewScopeLabel.hidden = canonical;
-    el.previewScopeSelect.hidden = canonical;
     el.selectAllButton.hidden = canonical;
     el.deselectAllButton.hidden = canonical;
     renderWorkflowStatusFilter();
@@ -3090,7 +3086,6 @@
     el.previewControls.hidden = surfaceOpen();
     el.previewPanelKicker.textContent = auditSurfaceOpen() ? 'Audit Context' : (dashboardSurfaceOpen() ? 'Dashboard Context' : 'Downstream Preview');
     el.previewPanelHeading.textContent = auditSurfaceOpen() ? 'Ledger Reading' : (dashboardSurfaceOpen() ? 'Library Overview' : 'Projected Output');
-    el.previewScopeSelect.value = state.previewMode;
     renderShellLayout();
     syncSliverHeight();
     renderConfirmButton();
@@ -3617,43 +3612,8 @@
     `;
   }
 
-  function renderLibraryPreview() {
-    if (!state.normalizePayload) {
-      el.previewPane.textContent = 'Run normalize to inspect projected output.';
-      return;
-    }
-    const rows = state.filteredRows;
-    if (!rows.length) {
-      el.previewPane.textContent = 'No rows match the current filters.';
-      return;
-    }
-    const { operationCounts, visibleMutationCount } = summarizeNormalizeRows(rows);
-    el.previewPane.innerHTML = `
-      <div class="lab-preview-summary">
-        <strong>${visibleMutationCount}</strong> mutated media file${visibleMutationCount === 1 ? '' : 's'}.
-        ${renderNormalizeSummaryChips(operationCounts, visibleMutationCount)}
-      </div>
-      ${buildPreviewTree(rows)}
-    `;
-  }
-
   function weakSelectedPreviewTree(preview) {
     const tree = {};
-    (preview.deleted || []).forEach(path => addPathToTree(tree, relativeToSource(path), { deleted: true, selected: true, markAncestorsSelected: false }));
-    (preview.cleaned_sidecars || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true, markAncestorsSelected: false }));
-    (preview.removed_folders || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true, folder: true, markAncestorsSelected: false }));
-    return renderPreviewTreeMarkup(tree);
-  }
-
-  function weakLibraryPreviewTree(preview) {
-    const tree = {};
-    const deleted = new Set((preview.deleted || []).map(path => relativeToSource(path)));
-    const movies = weakWorkflowItems();
-    movies.forEach(item => {
-      const relPath = relativeToSource(item.path || '');
-      if (!relPath || deleted.has(relPath)) return;
-      addPathToTree(tree, relPath, {});
-    });
     (preview.deleted || []).forEach(path => addPathToTree(tree, relativeToSource(path), { deleted: true, selected: true, markAncestorsSelected: false }));
     (preview.cleaned_sidecars || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true, markAncestorsSelected: false }));
     (preview.removed_folders || []).forEach(path => addPathToTree(tree, relativeToSource(path), { cleanup: true, selected: true, folder: true, markAncestorsSelected: false }));
@@ -3709,7 +3669,7 @@
       return;
     }
     const preview = state.weakPreview || { deleted: [], cleaned_sidecars: [], removed_folders: [], skipped: [] };
-    const tree = state.previewMode === 'library' ? weakLibraryPreviewTree(preview) : weakSelectedPreviewTree(preview);
+    const tree = weakSelectedPreviewTree(preview);
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
         <strong>${preview.deleted.length}</strong> deleted media file${preview.deleted.length === 1 ? '' : 's'}.
@@ -3727,19 +3687,13 @@
     return renderPreviewTreeMarkup(tree);
   }
 
-  function junkLibraryPreviewTree(rows) {
-    const tree = {};
-    rows.forEach(row => addPathToTree(tree, row.item?.relative_path || row.current_path || '', { deleted: true, markAncestorsSelected: false }));
-    return renderPreviewTreeMarkup(tree);
-  }
-
   function renderJunkPreviewPane() {
     const selected = selectedJunkItems();
     if (!state.junkPayload) {
       el.previewPane.textContent = 'Run Remove Junk Files to inspect delete preview.';
       return;
     }
-    if (state.previewMode === 'selected' && !selected.length) {
+    if (!selected.length) {
       el.previewPane.innerHTML = `
         <div class="lab-preview-empty">
           <strong>No rows selected.</strong>
@@ -3748,11 +3702,9 @@
       `;
       return;
     }
-    const previewRows = state.previewMode === 'library'
-      ? state.filteredRows
-      : state.filteredRows.filter(row => state.selected.has(row.row_id));
-    const tree = state.previewMode === 'library' ? junkLibraryPreviewTree(previewRows) : junkSelectedPreviewTree(previewRows);
-    const label = state.previewMode === 'library' ? 'currently filtered junk candidate' : 'selected junk file';
+    const previewRows = state.filteredRows.filter(row => state.selected.has(row.row_id));
+    const tree = junkSelectedPreviewTree(previewRows);
+    const label = 'selected junk file';
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
         <strong>${previewRows.length}</strong> ${label}${previewRows.length === 1 ? '' : 's'} marked as deleted.
@@ -3838,10 +3790,8 @@
     }
     const selection = selectedRepairApplicability();
     const visibleRows = repairRowsForAction(state.filteredRows);
-    const previewRows = state.previewMode === 'library'
-      ? visibleRows
-      : selection.applicableRows;
-    if (state.previewMode === 'selected' && !selection.selectedRows.length) {
+    const previewRows = selection.applicableRows;
+    if (!selection.selectedRows.length) {
       el.previewPane.innerHTML = `
         <div class="lab-preview-empty">
           <strong>No rows selected.</strong>
@@ -3851,13 +3801,10 @@
       return;
     }
     if (!previewRows.length) {
-      const detail = state.previewMode === 'library'
-        ? 'No visible rows support the current action.'
-        : 'The current selection does not support this action.';
       el.previewPane.innerHTML = `
         <div class="lab-preview-empty">
           <strong>No applicable rows.</strong>
-          <div>${escapeHtml(detail)}</div>
+          <div>The current selection does not support this action.</div>
         </div>
       `;
       return;
@@ -3866,8 +3813,8 @@
     const executionDetail = combinedRepairRunsSingleRemux(state.repairAction)
       ? ' One lossless remux runs per file.'
       : '';
-    const summary = `${previewRows.length} ${state.previewMode === 'library' ? `visible ${config.summaryNoun}` : `selected ${config.summaryNoun}`}${previewRows.length === 1 ? '' : 's'} staged for ${config.label.toLowerCase()}.${executionDetail}`;
-    const mixedSelectionLabel = state.previewMode === 'selected' && selection.skippedRows.length
+    const summary = `${previewRows.length} selected ${config.summaryNoun}${previewRows.length === 1 ? '' : 's'} staged for ${config.label.toLowerCase()}.${executionDetail}`;
+    const mixedSelectionLabel = selection.skippedRows.length
       ? `${selection.selectedRows.length} selected, ${selection.applicableRows.length} applicable, ${selection.skippedRows.length} skipped`
       : '';
     el.previewPane.innerHTML = `
@@ -3899,8 +3846,7 @@
       renderJunkPreviewPane();
       return;
     }
-    if (state.previewMode === 'library') renderLibraryPreview();
-    else renderSelectedPreview();
+    renderSelectedPreview();
   }
 
   function renderSidePanel() {
@@ -4631,19 +4577,6 @@
     request.catch(error => {
       el.previewPane.textContent = error.message;
     });
-  });
-
-  el.previewScopeSelect.addEventListener('change', async () => {
-    state.previewMode = el.previewScopeSelect.value === 'library' ? 'library' : 'selected';
-    renderSidePanel();
-    if (isWeakMode() && selectedWeakPaths().length) {
-      try {
-        await ensureWeakPreview();
-        renderPreviewPane();
-      } catch (error) {
-        el.previewPane.textContent = error.message;
-      }
-    }
   });
 
   if (el.dashboardToggle) {

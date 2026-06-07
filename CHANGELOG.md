@@ -6,6 +6,32 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.5] — 2026-06-07
+
+### Added
+
+- A new movie repair planning and execution seam now powers `Fix Audio and Subtitle Defaults`. Repair rows carry explicit audio, subtitle, and combined repair plans, and the backend can execute one combined remux pass when audio-default changes also alter the correct subtitle-default outcome.
+- The web server now exposes `/api/movies/repair-defaults/fix` as a unified repair-defaults mutation route instead of forcing the UI to split ownership awkwardly across older per-family paths.
+- Audit reads now expose ledger revision metadata and the latest system-start context, and the web layer now includes an `/api/audit/stream` SSE route so the workbench can react to ledger changes without polling blindly.
+
+### Changed
+
+- The root workbench is now stricter about consequence ownership. Normalize Naming no longer exposes a `Preview Scope` toggle, and the preview pane no longer implies a distinct full-library preview mode when the meaningful operator action is still row selection.
+- Downstream preview semantics are now more uniform across the shell. Normalize, junk cleanup, weak-encode delete preview, and repair-default flows all lean on the same staged model: select rows, inspect the staged consequence surface, then confirm.
+- `Fix Audio and Subtitle Defaults` was hardened substantially in the UI. Repair action labels, selection handling, applicability reporting, row refresh, combined-action preview wording, and repair-lock behavior were all tightened so mixed audio/subtitle work reads as one coherent lane rather than loosely connected subcases.
+- Subtitle policy moved from the older one-field conservative mode into explicit library policy controls for English-audio and non-English-audio cases. The policy/editor surface now treats language and subtitle defaults as their own playback-policy section.
+- Library policy also now exposes a warning-gate safety level, separating how aggressively the UI should gate user-facing warnings from the core quality and delete defaults.
+- Canonical movie lists were refreshed again: `Animation` and `Documentary` now use 100-title shapes, `Drama / Romance` was added, and IMDb genre matching is stricter for hybrid lists so multi-genre categories do not degrade into loose any-genre buckets.
+- Delete and repair routes now preserve richer downstream metrics. Junk deletion tracks deleted-media size data, repair flows summarize removed foreign-audio tracks and bytes, and updated profile items are rebuilt from the post-fix facts so the shell can refresh mutated rows directly.
+- Resolution breakdown classification now uses a more general display-shape taxonomy across HD and UHD buckets, not just SD-era labels, which gives histogram and profile surfaces cleaner letterbox/anamorphic distinctions.
+- Release truth surfaces were advanced to `alpha.5`, including package metadata, workbench chrome, roadmap status, and the lean release docs set used for prerelease cuts.
+
+### Fixed
+
+- Removed dead frontend wiring for the old preview-scope selector and its library-mode branches, eliminating one more path where the shell could imply behavior that did not materially change the backend mutation contract.
+- Audit-store reads now reuse cached ledger and follow-up state until the ledger changes, reducing unnecessary repeat parsing during repeated workbench reads.
+- Library-improvement totals now continue to count delete effects even when older audit events do not carry the newer `deleted_media` metadata payload, which keeps removal progress coherent across mixed ledger history.
+
 ## [0.7.0-alpha.4] — 2026-06-05
 
 ### Added

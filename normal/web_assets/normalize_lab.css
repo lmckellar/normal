@@ -947,10 +947,6 @@ input[type="checkbox"] {
   justify-self: end;
 }
 
-#previewScopeSelect {
-  min-width: 11ch;
-}
-
 #repairActionSelect {
   min-width: 0;
   max-width: min(100%, 18ch);
