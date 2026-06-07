@@ -143,8 +143,6 @@
     junkDeleteSkipped: [],
     junkFilenameResizeObserver: null,
     junkFilenameResizeFrame: 0,
-    sliverResizeObserver: null,
-    sliverResizeFrame: 0,
     catalogueExportInFlight: false,
     activityPayload: null,
     activityRefreshInFlight: false,
@@ -154,8 +152,6 @@
   const el = {
     shell: document.querySelector('.lab-shell'),
     pages: Array.from(document.querySelectorAll('.lab-page')),
-    sliverSlot: document.querySelector('.lab-sliver-slot'),
-    sliver: document.querySelector('.lab-sliver'),
     workflowButton: document.getElementById('workflowButton'),
     workflowTitle: document.getElementById('workflowTitle'),
     workflowDescription: document.getElementById('workflowDescription'),
@@ -189,7 +185,6 @@
     placeholderToggle: document.getElementById('placeholderToggle'),
     placeholderSettingsToggle: document.getElementById('placeholderSettingsToggle'),
     placeholderDownloadToggle: document.getElementById('placeholderDownloadToggle'),
-    policyRail: document.getElementById('policyRail'),
     previewControls: document.getElementById('previewControls'),
     repairActionControls: document.getElementById('repairActionControls'),
     repairActionSelect: document.getElementById('repairActionSelect'),
@@ -1373,48 +1368,6 @@
     });
   }
 
-  function activePrimarySurface() {
-    if (auditSurfaceOpen() && el.auditPanel && !el.auditPanel.hidden) return el.auditPanel;
-    if (policySurfaceOpen() && el.policyEditorPanel && !el.policyEditorPanel.hidden) return el.policyEditorPanel;
-    if (dashboardSurfaceOpen() && el.dashboardPanel && !el.dashboardPanel.hidden) return el.dashboardPanel;
-    if (el.scanTablePanel && !el.scanTablePanel.hidden) return el.scanTablePanel;
-    return el.scanPage;
-  }
-
-  function primarySurfaceMinHeight() {
-    const value = getComputedStyle(el.shell || document.documentElement).getPropertyValue('--lab-primary-surface-min-height');
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 220;
-  }
-
-  function syncSliverHeight() {
-    if (!el.sliver || !el.sliverSlot) return;
-    if (!surfaceOpen()) {
-      el.sliverSlot.style.height = '';
-      el.sliver.style.height = '';
-      return;
-    }
-    const surface = activePrimarySurface();
-    if (!surface) return;
-    const nextHeight = Math.max(Math.ceil(surface.getBoundingClientRect().height), primarySurfaceMinHeight());
-    el.sliverSlot.style.height = `${nextHeight}px`;
-    el.sliver.style.height = `${nextHeight}px`;
-  }
-
-  function ensureSliverResizeObserver() {
-    if (!window.ResizeObserver || state.sliverResizeObserver) return;
-    state.sliverResizeObserver = new ResizeObserver(() => {
-      if (state.sliverResizeFrame) cancelAnimationFrame(state.sliverResizeFrame);
-      state.sliverResizeFrame = requestAnimationFrame(() => {
-        state.sliverResizeFrame = 0;
-        syncSliverHeight();
-      });
-    });
-    [el.scanPage, el.scanTablePanel, el.dashboardPanel, el.policyEditorPanel, el.auditPanel].forEach(node => {
-      if (node) state.sliverResizeObserver.observe(node);
-    });
-  }
-
   function renderRunButton() {
     const normalize = state.workflow === 'normalize';
     const repairDefaults = state.workflow === 'repair-defaults';
@@ -1641,7 +1594,6 @@
       el.placeholderDownloadToggle.disabled = !sourceReady || exportBusy;
       el.placeholderDownloadToggle.innerHTML = railIconSvg('download');
     }
-    el.policyRail.innerHTML = '';
   }
 
   function formatDashboardRuntime(minutes) {
@@ -3087,7 +3039,6 @@
     el.previewPanelKicker.textContent = auditSurfaceOpen() ? 'Audit Context' : (dashboardSurfaceOpen() ? 'Dashboard Context' : 'Downstream Preview');
     el.previewPanelHeading.textContent = auditSurfaceOpen() ? 'Ledger Reading' : (dashboardSurfaceOpen() ? 'Library Overview' : 'Projected Output');
     renderShellLayout();
-    syncSliverHeight();
     renderConfirmButton();
     renderWorkflowActionControls();
     updateRepairLockOverlay();
@@ -4500,7 +4451,6 @@
   });
 
   window.addEventListener('resize', () => {
-    syncSliverHeight();
     if (state.trackPopoverRowId) renderTrackPopover();
     updateRepairLockOverlay();
   });
@@ -4593,7 +4543,6 @@
   renderRunButton();
   renderTableHeader();
   renderSelectionButtons();
-  ensureSliverResizeObserver();
   renderPanelVisibility();
   renderSidePanel();
   syncWorkflowUrl();

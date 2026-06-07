@@ -313,22 +313,18 @@ button:disabled {
 
 .lab-sliver-slot {
   min-width: 0;
-  min-height: var(--lab-primary-surface-min-height);
 }
 
 .lab-sliver {
   position: sticky;
   top: var(--shell-pad-block);
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto;
   gap: 10px;
   padding: 10px 4px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 241, 234, 0.94));
-  min-height: var(--lab-primary-surface-min-height);
-  height: 100%;
-  overflow: hidden;
 }
 
 .lab-sliver-stack {
@@ -394,13 +390,6 @@ button:disabled {
   background: linear-gradient(180deg, rgba(58, 90, 140, 0.18), rgba(58, 90, 140, 0.1));
 }
 
-.lab-sliver-body {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  min-height: 0;
-}
-
 .lab-sliver-separator {
   width: calc(100% - 8px);
   height: 1px;
@@ -419,10 +408,6 @@ button:disabled {
   justify-self: center;
 }
 
-.lab-shell[data-policy-mode="default"] .lab-sliver-body {
-  display: none;
-}
-
 .lab-shell[data-policy-mode="default"] .lab-sliver {
   grid-template-rows: auto;
   min-height: 0;
@@ -432,49 +417,6 @@ button:disabled {
 .lab-shell[data-policy-mode="default"] .lab-sliver-slot {
   min-height: 0;
   height: auto;
-}
-
-.lab-sliver-note {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.lab-sliver-chip {
-  display: block;
-  padding: 8px;
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-.lab-sliver-chip strong,
-.lab-sliver-chip span {
-  display: block;
-}
-
-.lab-sliver-chip strong {
-  font-size: 11px;
-  margin-bottom: 2px;
-}
-
-.lab-sliver-chip span {
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.35;
-}
-
-.lab-sliver-links {
-  display: grid;
-  gap: 6px;
-}
-
-.lab-sliver-link {
-  width: 100%;
-  padding: 7px 8px;
-  border-radius: 10px;
-  text-align: left;
-  font-size: 11px;
 }
 
 .lab-rhythm-surface[data-rhythm-surface="rows"] {
