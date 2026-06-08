@@ -105,8 +105,10 @@ class WebTests(unittest.TestCase):
         self.assertIn('id="policyToggle"', html)
         self.assertIn('id="placeholderToggle"', html)
         self.assertIn('id="placeholderDownloadToggle"', html)
-        self.assertIn('id="policyRail"', html)
+        self.assertIn('id="settingsToggle"', html)
+        self.assertIn('class="lab-sliver"', html)
         self.assertIn('id="policyEditorPanel"', html)
+        self.assertIn('id="settingsPanel"', html)
         self.assertIn('id="inspectionPane"', html)
         self.assertNotIn('Repair Lane', html)
         self.assertIn('data-layout-mode="2-page-lopsided"', html)
@@ -114,6 +116,49 @@ class WebTests(unittest.TestCase):
         self.assertIn('data-page-role="preview"', html)
         self.assertIn('data-collapse-mode="reflow"', html)
         self.assertIn('data-collapse-mode="anchored-slot"', html)
+
+    def test_settings_keys_read_save_clear_cycle(self) -> None:
+        from normal.web import credentials as credentials_module
+        from normal.web import routes_settings
+
+        class StubContext:
+            def __init__(self) -> None:
+                self.responses: list[dict] = []
+
+            def respond_json(self, payload, status=None) -> None:
+                self.responses.append(payload)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict("os.environ", {"XDG_DATA_HOME": tmp}):
+                store = credentials_module.CredentialStore()
+                with patch.object(routes_settings, "CREDENTIAL_STORE", store):
+                    secrets = credentials_module.secrets_file_path()
+                    self.assertEqual(secrets, Path(tmp) / "normal" / "secrets.env")
+
+                    ctx = StubContext()
+                    routes_settings.handle_settings_read(ctx, {})
+                    self.assertEqual(ctx.responses[-1]["keys"]["omdb"]["present"], False)
+                    self.assertIsNone(ctx.responses[-1]["keys"]["omdb"]["last4"])
+
+                    ctx = StubContext()
+                    routes_settings.handle_settings_keys_update(ctx, {"omdb": "abcd1234SECRET"})
+                    omdb = ctx.responses[-1]["keys"]["omdb"]
+                    self.assertTrue(omdb["present"])
+                    self.assertEqual(omdb["last4"], "CRET")
+                    self.assertEqual(omdb["source"], "saved")
+                    self.assertNotIn("abcd1234SECRET", json.dumps(ctx.responses[-1]))
+
+                    self.assertEqual(oct(secrets.stat().st_mode & 0o777), "0o600")
+                    self.assertIn("OMDB_KEY=abcd1234SECRET", secrets.read_text())
+
+                    ctx = StubContext()
+                    routes_settings.handle_settings_read(ctx, {})
+                    self.assertTrue(ctx.responses[-1]["keys"]["omdb"]["present"])
+
+                    ctx = StubContext()
+                    routes_settings.handle_settings_keys_update(ctx, {"omdb": ""})
+                    self.assertFalse(ctx.responses[-1]["keys"]["omdb"]["present"])
+                    self.assertEqual(secrets.read_text(), "")
 
     def test_deprecated_alt_ui_route_and_assets_are_removed(self) -> None:
         with self.run_test_server() as base_url:
@@ -459,7 +504,13 @@ class WebTests(unittest.TestCase):
         self.assertIn("state.policyPayload?.operator_preferences?.default_source", NORMALIZE_LAB_FRONTEND)
         self.assertIn("source: normalizeSourceKey(el.sourcePath.value),", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"policyToggle\"", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("id=\"policyRail\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("class=\"lab-sliver\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("id=\"settingsToggle\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("id=\"settingsPanel\"", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function renderSettingsPanel()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function settingsSurfaceOpen()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("'/api/settings/read'", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("'/api/settings/keys'", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"dashboardPanel\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"policyEditorPanel\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"inspectionPane\"", NORMALIZE_LAB_FRONTEND)
@@ -468,12 +519,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("function renderPolicyEditor()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function renderInspectionPane()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function togglePolicyEditor()", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("function syncSliverHeight()", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("function ensureSliverResizeObserver()", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("state.sliverResizeObserver = new ResizeObserver(() => {", NORMALIZE_LAB_FRONTEND)
         self.assertIn("if (!surfaceOpen()) {", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("el.sliverSlot.style.height = '';", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("el.sliver.style.height = `${nextHeight}px`;", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"auditToggle\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"auditPanel\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("/api/audit/read", NORMALIZE_LAB_FRONTEND)

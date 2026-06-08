@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
+from normal.movie_plan import parse_movie_name
 from normal.movie_profile import (
     audio_stream_quality_key,
     canonical_audio_language,
@@ -24,8 +26,9 @@ def build_movie_repair_plan(
     *,
     path: str | None = None,
     subtitle_preferences: dict[str, Any] | None = None,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
 ) -> dict[str, Any]:
-    audio = build_audio_repair_plan(facts, path=path)
+    audio = build_audio_repair_plan(facts, path=path, resolve_language=resolve_language)
     subtitle = build_subtitle_repair_plan(
         facts,
         path=path,
@@ -37,6 +40,7 @@ def build_movie_repair_plan(
         subtitle_preferences=subtitle_preferences,
         audio_plan=audio,
         subtitle_plan=subtitle,
+        resolve_language=resolve_language,
     )
     families: list[str] = []
     if audio.get("repairable"):
@@ -51,11 +55,22 @@ def build_movie_repair_plan(
     }
 
 
-def build_audio_repair_plan(facts: MediaFacts, *, path: str | None = None) -> dict[str, Any]:
+def build_audio_repair_plan(
+    facts: MediaFacts,
+    *,
+    path: str | None = None,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
+) -> dict[str, Any]:
     streams = list(facts.audio_streams)
     default_stream = choose_default_audio_stream(streams)
     target_ordinal, target_stream = choose_best_english_audio_stream(streams)
-    issue_code = audio_repair_issue_code(facts)
+    title: str | None = None
+    year: int | None = None
+    if resolve_language is not None and path:
+        parsed = parse_movie_name(Path(path))
+        title = parsed.title
+        year = parsed.year
+    issue_code = audio_repair_issue_code(facts, title=title, year=year, resolve_language=resolve_language)
     return {
         "issue_code": issue_code,
         "repairable": bool(issue_code and target_stream is not None and path_supports_repair(path) and len(streams) >= 2),
@@ -115,8 +130,9 @@ def build_combined_repair_plan(
     subtitle_preferences: dict[str, Any] | None = None,
     audio_plan: dict[str, Any] | None = None,
     subtitle_plan: dict[str, Any] | None = None,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
 ) -> dict[str, Any]:
-    audio = audio_plan or build_audio_repair_plan(facts, path=path)
+    audio = audio_plan or build_audio_repair_plan(facts, path=path, resolve_language=resolve_language)
     subtitle = subtitle_plan or build_subtitle_repair_plan(facts, path=path, subtitle_preferences=subtitle_preferences)
     if not audio.get("repairable"):
         return {
@@ -216,7 +232,13 @@ def choose_non_forced_english_subtitle_stream(streams: list[SubtitleStreamFacts]
     return default_stream or candidates[0]
 
 
-def audio_repair_issue_code(facts: MediaFacts) -> str:
+def audio_repair_issue_code(
+    facts: MediaFacts,
+    *,
+    title: str | None = None,
+    year: int | None = None,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
+) -> str:
     default_stream = choose_default_audio_stream(facts.audio_streams)
     if default_stream is None:
         return ""
@@ -226,6 +248,10 @@ def audio_repair_issue_code(facts: MediaFacts) -> str:
     english_streams = [stream for stream in facts.audio_streams if canonical_audio_language(stream.language) == "english"]
     if not english_streams:
         return ""
+    if resolve_language is not None and title:
+        original_language = resolve_language(title, year)
+        if original_language is not None and original_language != "english":
+            return ""
     best_english = max(english_streams, key=audio_stream_quality_key)
     if english_stream_is_materially_weaker(default_stream, best_english):
         return "default_non_english_audio_with_weak_english"

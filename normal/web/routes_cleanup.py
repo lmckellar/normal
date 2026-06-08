@@ -333,7 +333,7 @@ def handle_movies_audio_packaging_fix(ctx: RequestContext, payload: dict[str, An
     if result["fixed"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
-    result["updated_items"] = build_updated_profile_items(source, result["fixed"])
+    result["updated_items"] = build_updated_profile_items(source, result["fixed"], resolve_language=ctx.language_resolver())
     removed_audio = _summarize_removed_audio_from_fixed(result.get("fixed", []))
     _record_repair_event(
         source,
@@ -370,7 +370,7 @@ def handle_movies_subtitle_readiness_fix(ctx: RequestContext, payload: dict[str,
             probe_media=tracked_probe(source, "ffprobe subtitle readiness fix", cache=PROBE_CACHE),
             progress_callback=lambda update: ctx.handler.activity_tracker.update(activity_id, **update),
         )
-    result["updated_items"] = build_updated_profile_items(source, result["fixed"])
+    result["updated_items"] = build_updated_profile_items(source, result["fixed"], resolve_language=ctx.language_resolver())
     if result["updated_items"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
@@ -419,7 +419,7 @@ def handle_movies_repair_defaults_fix(ctx: RequestContext, payload: dict[str, An
             probe_media=tracked_probe(source, "ffprobe repair defaults fix", cache=PROBE_CACHE),
             progress_callback=lambda update: ctx.handler.activity_tracker.update(activity_id, **update),
         )
-    result["updated_items"] = build_updated_profile_items(source, result["fixed"])
+    result["updated_items"] = build_updated_profile_items(source, result["fixed"], resolve_language=ctx.language_resolver())
     if result["updated_items"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)

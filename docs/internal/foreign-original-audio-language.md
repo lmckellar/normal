@@ -1,5 +1,8 @@
 # Foreign-Original Audio: Suppressing the Wrong-Default Finding
 
+> **Implemented (2026-06-09):** seam B with the sensitive gate, across both the diagnostic and repair-planner detectors. Code is the source of truth; this note is kept only as background on the reasoning.
+
+
 _Deferred design note. Captures the reasoning, the candidate implementations, and
 why each one carries a rough edge — so the trade-off is chosen deliberately rather
 than rediscovered. normal does **not** currently have this; this note is the map._

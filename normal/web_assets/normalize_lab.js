@@ -119,6 +119,9 @@
     dashboardProfileSource: '',
     dashboardRequestedSource: '',
     surfaceMode: 'default',
+    settingsStatus: null,
+    settingsBusy: false,
+    settingsRenderKey: '',
     policyBusy: false,
     policySectionLabel: '',
     policyDrafts: {},
@@ -186,7 +189,8 @@
     dashboardToggle: document.getElementById('dashboardToggle'),
     auditToggle: document.getElementById('auditToggle'),
     placeholderToggle: document.getElementById('placeholderToggle'),
-    placeholderSettingsToggle: document.getElementById('placeholderSettingsToggle'),
+    settingsToggle: document.getElementById('settingsToggle'),
+    settingsPanel: document.getElementById('settingsPanel'),
     placeholderDownloadToggle: document.getElementById('placeholderDownloadToggle'),
     previewControls: document.getElementById('previewControls'),
     repairActionControls: document.getElementById('repairActionControls'),
@@ -301,6 +305,10 @@
 
   function auditSurfaceOpen() {
     return state.surfaceMode === 'audit';
+  }
+
+  function settingsSurfaceOpen() {
+    return state.surfaceMode === 'settings';
   }
 
   function dismissAuditSurface() {
@@ -1001,7 +1009,7 @@
 
   function movieHasPackagingOwnedIssue(item) {
     const diagnostics = item?.profile?.diagnostics || [];
-    return diagnostics.some(diag => diag?.code === 'default_non_english_audio');
+    return diagnostics.some(diag => diag?.code === 'default_non_english_audio' || diag?.code === 'foreign_original_audio_ok');
   }
 
   function movieHasWeakQualityIssue(item) {
@@ -1706,12 +1714,13 @@
       el.placeholderToggle.dataset.active = 'false';
       el.placeholderToggle.innerHTML = railIconSvg('trophy');
     }
-    if (el.placeholderSettingsToggle) {
-      el.placeholderSettingsToggle.setAttribute('aria-label', 'Placeholder');
-      el.placeholderSettingsToggle.setAttribute('title', 'Placeholder');
-      el.placeholderSettingsToggle.setAttribute('aria-pressed', 'false');
-      el.placeholderSettingsToggle.dataset.active = 'false';
-      el.placeholderSettingsToggle.innerHTML = railIconSvg('settings');
+    if (el.settingsToggle) {
+      const settingsLabel = settingsSurfaceOpen() ? 'Close Settings' : 'Open Settings';
+      el.settingsToggle.setAttribute('aria-label', settingsLabel);
+      el.settingsToggle.setAttribute('title', settingsLabel);
+      el.settingsToggle.setAttribute('aria-pressed', settingsSurfaceOpen() ? 'true' : 'false');
+      el.settingsToggle.dataset.active = settingsSurfaceOpen() ? 'true' : 'false';
+      el.settingsToggle.innerHTML = railIconSvg('settings');
     }
     if (el.placeholderDownloadToggle) {
       const sourceReady = Boolean(normalizeSourceKey(el.sourcePath.value));
@@ -2144,6 +2153,142 @@
 
   function handlePolicyToggleError(error) {
     el.inspectionPane.textContent = error.message;
+  }
+
+  const SETTINGS_KEY_FIELDS = [
+    {
+      field: 'omdb',
+      name: 'OMDb API key',
+      summary: 'Enables IMDb rating lookups and original-language detection for foreign-audio defaults. Optional — absence simply disables that enrichment.',
+    },
+    {
+      field: 'tmdb',
+      name: 'TMDb API key',
+      summary: 'Alternate canonical-list provider. Optional — canonical lists otherwise run off the local IMDb dataset.',
+    },
+  ];
+
+  function settingsSourceLabel(source) {
+    if (source === 'env') return 'from environment';
+    if (source === 'saved') return 'from saved file';
+    return '';
+  }
+
+  function settingsKeyStatusLine(status) {
+    if (!status || !status.present) return 'No key set — optional enrichment.';
+    const origin = settingsSourceLabel(status.source);
+    const suffix = origin ? ` (${origin})` : '';
+    return `Key saved ••••${escapeHtml(status.last4 || '')}${suffix}.`;
+  }
+
+  function currentSettingsRenderKey() {
+    return JSON.stringify({ status: state.settingsStatus, busy: state.settingsBusy });
+  }
+
+  function renderSettingsPanel() {
+    if (!settingsSurfaceOpen()) {
+      state.settingsRenderKey = '';
+      el.settingsPanel.innerHTML = '';
+      return;
+    }
+    const renderKey = currentSettingsRenderKey();
+    if (state.settingsRenderKey === renderKey) return;
+    const keys = state.settingsStatus || {};
+    const cards = SETTINGS_KEY_FIELDS.map(spec => {
+      const status = keys[spec.field];
+      const present = Boolean(status && status.present);
+      return `
+        <section class="lab-policy-card is-open">
+          <div class="lab-policy-meta"><span class="lab-kicker">API key</span></div>
+          <h3>${escapeHtml(spec.name)}</h3>
+          <p>${escapeHtml(spec.summary)}</p>
+          <p>${settingsKeyStatusLine(status)}</p>
+          <div class="lab-policy-fields">
+            <div class="lab-policy-field">
+              <label for="settings-field-${spec.field}">${present ? 'Replace key' : 'Paste key'}</label>
+              <input id="settings-field-${spec.field}" data-settings-field="${spec.field}" type="password" autocomplete="off" spellcheck="false" placeholder="Paste new key">
+            </div>
+          </div>
+          <div class="lab-policy-actions">
+            <button class="lab-action-button is-primary" type="button" data-settings-save="${spec.field}" ${state.settingsBusy ? 'disabled' : ''}>Save</button>
+            <button type="button" data-settings-clear="${spec.field}" ${state.settingsBusy || !present ? 'disabled' : ''}>Clear</button>
+          </div>
+        </section>
+      `;
+    }).join('');
+    el.settingsPanel.innerHTML = `
+      <div class="lab-policy-header">
+        <div class="lab-policy-heading">
+          <div class="lab-kicker">Settings</div>
+          <p>Manage optional API keys for remote enrichment. Keys are stored server-side and ingested at launch; only the last four characters are ever shown.</p>
+        </div>
+      </div>
+      <div class="lab-policy-sections">${cards}</div>
+    `;
+    state.settingsRenderKey = renderKey;
+    el.settingsPanel.querySelectorAll('[data-settings-save]').forEach(button => {
+      button.addEventListener('click', () => saveSettingsKey(button.dataset.settingsSave || ''));
+    });
+    el.settingsPanel.querySelectorAll('[data-settings-clear]').forEach(button => {
+      button.addEventListener('click', () => clearSettingsKey(button.dataset.settingsClear || ''));
+    });
+  }
+
+  function applySettingsStatus(status) {
+    state.settingsStatus = status || {};
+    if (state.settingsStatus.omdb) {
+      window.OMDB_AVAILABLE = Boolean(state.settingsStatus.omdb.present);
+    }
+  }
+
+  async function fetchSettings() {
+    const result = await postJson('/api/settings/read', {});
+    applySettingsStatus(result.keys);
+  }
+
+  async function saveSettingsKey(field) {
+    if (!field || state.settingsBusy) return;
+    const input = el.settingsPanel.querySelector(`[data-settings-field="${field}"]`);
+    const value = (input?.value || '').trim();
+    if (!value) return;
+    await commitSettingsKey(field, value);
+  }
+
+  async function clearSettingsKey(field) {
+    if (!field || state.settingsBusy) return;
+    await commitSettingsKey(field, '');
+  }
+
+  async function commitSettingsKey(field, value) {
+    state.settingsBusy = true;
+    state.settingsRenderKey = '';
+    renderSettingsPanel();
+    try {
+      const result = await postJson('/api/settings/keys', { [field]: value });
+      applySettingsStatus(result.keys);
+    } catch (error) {
+      el.inspectionPane.textContent = error.message;
+    } finally {
+      state.settingsBusy = false;
+      state.settingsRenderKey = '';
+      renderSidePanel();
+    }
+  }
+
+  async function toggleSettings() {
+    if (settingsSurfaceOpen()) {
+      state.surfaceMode = 'default';
+      renderFilterVisibility();
+      renderRows();
+      renderSidePanel();
+      return;
+    }
+    await fetchSettings();
+    state.surfaceMode = 'settings';
+    state.settingsRenderKey = '';
+    renderFilterVisibility();
+    renderRows();
+    renderSidePanel();
   }
 
   function formatAuditRecordedAt(value) {
@@ -3163,6 +3308,7 @@
     el.dashboardPanel.hidden = !dashboardSurfaceOpen();
     el.policyEditorPanel.hidden = !policySurfaceOpen();
     el.auditPanel.hidden = !auditSurfaceOpen();
+    if (el.settingsPanel) el.settingsPanel.hidden = !settingsSurfaceOpen();
     el.previewPane.hidden = surfaceOpen();
     el.inspectionPane.hidden = !surfaceOpen();
     el.previewControls.hidden = surfaceOpen();
@@ -4000,6 +4146,7 @@
     renderDashboardPanel();
     renderPolicyEditor();
     renderAuditPanel();
+    renderSettingsPanel();
     if (surfaceOpen()) {
       renderInspectionPane();
       return;
@@ -4744,6 +4891,12 @@
   el.policyToggle.addEventListener('click', () => {
     togglePolicyEditor().catch(handlePolicyToggleError);
   });
+
+  if (el.settingsToggle) {
+    el.settingsToggle.addEventListener('click', () => {
+      toggleSettings().catch(handlePolicyToggleError);
+    });
+  }
 
   el.auditToggle.addEventListener('click', () => {
     (async () => {

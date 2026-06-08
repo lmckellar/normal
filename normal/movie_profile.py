@@ -216,6 +216,7 @@ def scan_movie_profiles(
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
     progress_callback: Callable[[MovieScanProgress], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
 ) -> MovieProfileReport:
     report = MovieProfileReport(source_root=str(source_root.resolve()), generated_at=utc_now_iso())
     standards = load_movie_standards()
@@ -267,7 +268,7 @@ def scan_movie_profiles(
             facts.sample_aspect_ratio,
             facts.display_aspect_ratio,
         )
-        report.movies.append(build_movie_profile_item(source_root, movie_path, facts, standards))
+        report.movies.append(build_movie_profile_item(source_root, movie_path, facts, standards, resolve_language=resolve_language))
         processed = index
         emit_progress(progress_callback, processed, 0, movie_path, started, "running")
 
@@ -291,12 +292,17 @@ def scan_movie_profiles(
     return report
 
 
-def reclassify_report_with_standards(report: MovieProfileReport, standards: dict[str, Any]) -> MovieProfileReport:
+def reclassify_report_with_standards(
+    report: MovieProfileReport,
+    standards: dict[str, Any],
+    *,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
+) -> MovieProfileReport:
     source_root = Path(report.source_root)
     new_report = MovieProfileReport(source_root=report.source_root, generated_at=utc_now_iso())
     new_report.warnings = list(report.warnings)
     for item in report.movies:
-        new_report.movies.append(build_movie_profile_item(source_root, Path(item.path), item.facts, standards))
+        new_report.movies.append(build_movie_profile_item(source_root, Path(item.path), item.facts, standards, resolve_language=resolve_language))
     assign_percentiles(new_report.movies)
     new_report.movies.sort(
         key=lambda m: (total_risk_score(m.profile.diagnostics), m.profile.rank, m.path.lower()),
@@ -310,6 +316,8 @@ def build_movie_profile_item(
     movie_path: Path,
     facts: MediaFacts,
     standards: dict[str, Any] | None = None,
+    *,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
 ) -> MovieProfileItem:
     facts.resolution_bucket = facts.resolution_bucket or classify_resolution(
         facts.width,
@@ -321,7 +329,7 @@ def build_movie_profile_item(
     legacy_label = classify_profile_label(facts)
     domain_results = evaluate_movie_standards(movie_path, facts, active_standards)
     quality_label = classify_quality_stance(movie_path, facts, domain_results, active_standards)
-    diagnostics = detect_plex_diagnostics(movie_path, facts)
+    diagnostics = detect_plex_diagnostics(movie_path, facts, resolve_language=resolve_language)
     weak_candidate = is_replacement_candidate_quality(quality_label, active_standards) and not is_audio_packaging_owned_movie(diagnostics)
     label = classify_standard_label(domain_results, active_standards, weak_candidate=weak_candidate)
     diagnostics.extend(domain_results_to_diagnostics(domain_results))
@@ -1418,7 +1426,12 @@ def profile_sort_key(item: MovieProfileItem) -> tuple[float, int, str]:
     return (bitrate, item.profile.rank, item.path.lower())
 
 
-def detect_plex_diagnostics(path: Path | str, facts: MediaFacts) -> list[DiagnosticFinding]:
+def detect_plex_diagnostics(
+    path: Path | str,
+    facts: MediaFacts,
+    *,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
+) -> list[DiagnosticFinding]:
     findings: list[DiagnosticFinding] = []
     lower_audio = {codec.lower() for codec in facts.audio_codecs}
     lower_subs = {codec.lower() for codec in facts.subtitle_codecs}
@@ -1474,7 +1487,20 @@ def detect_plex_diagnostics(path: Path | str, facts: MediaFacts) -> list[Diagnos
                 remedy="Reset stream default flags so only one audio and one subtitle stream are default.",
             )
         )
-    findings.extend(detect_audio_language_selection_risks(facts))
+    audio_title: str | None = None
+    audio_year: int | None = None
+    if resolve_language is not None:
+        parsed_audio_identity = parse_movie_name(Path(path))
+        audio_title = parsed_audio_identity.title
+        audio_year = parsed_audio_identity.year
+    findings.extend(
+        detect_audio_language_selection_risks(
+            facts,
+            title=audio_title,
+            year=audio_year,
+            resolve_language=resolve_language,
+        )
+    )
     if facts.video_bitrate_kbps is None and facts.total_bitrate_kbps is None:
         findings.append(
             DiagnosticFinding(
@@ -1593,7 +1619,13 @@ def has_compat_audio_track(audio_codecs: set[str]) -> bool:
     return any(codec in {"ac3", "aac", "eac3"} for codec in audio_codecs)
 
 
-def detect_audio_language_selection_risks(facts: MediaFacts) -> list[DiagnosticFinding]:
+def detect_audio_language_selection_risks(
+    facts: MediaFacts,
+    *,
+    title: str | None = None,
+    year: int | None = None,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
+) -> list[DiagnosticFinding]:
     default_stream = choose_default_audio_stream(facts.audio_streams)
     if default_stream is None:
         return []
@@ -1605,6 +1637,22 @@ def detect_audio_language_selection_risks(facts: MediaFacts) -> list[DiagnosticF
     english_streams = [stream for stream in facts.audio_streams if canonical_audio_language(stream.language) == "english"]
     if not english_streams:
         return []
+
+    if resolve_language is not None and title:
+        original_language = resolve_language(title, year)
+        if original_language is not None and original_language != "english":
+            return [
+                DiagnosticFinding(
+                    code="foreign_original_audio_ok",
+                    severity="info",
+                    category="audio_language_ok",
+                    summary=(
+                        f"Default audio is {display_audio_language(default_language)}, which matches the film's original "
+                        "language, so the non-English default is correct."
+                    ),
+                    remedy="No action needed; the original-language track is correctly set as the default.",
+                )
+            ]
 
     best_english = max(english_streams, key=audio_stream_quality_key)
     if english_stream_is_materially_weaker(default_stream, best_english):
@@ -1639,7 +1687,7 @@ def detect_audio_language_selection_risks(facts: MediaFacts) -> list[DiagnosticF
 
 
 def is_audio_packaging_owned_movie(diagnostics: list[DiagnosticFinding]) -> bool:
-    return any(diagnostic.code == "default_non_english_audio" for diagnostic in diagnostics)
+    return any(diagnostic.code in {"default_non_english_audio", "foreign_original_audio_ok"} for diagnostic in diagnostics)
 
 
 def choose_default_audio_stream(streams: list[AudioStreamFacts]) -> AudioStreamFacts | None:
@@ -1755,6 +1803,8 @@ def looks_like_absolute_numbering(path_text: str) -> bool:
 def build_risk_counts(diagnostics: list[DiagnosticFinding]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for finding in diagnostics:
+        if finding.severity == "info":
+            continue
         counts[finding.category] = counts.get(finding.category, 0) + 1
     return counts
 
@@ -1762,6 +1812,8 @@ def build_risk_counts(diagnostics: list[DiagnosticFinding]) -> dict[str, int]:
 def total_risk_score(diagnostics: list[DiagnosticFinding]) -> int:
     score = 0
     for finding in diagnostics:
+        if finding.severity == "info":
+            continue
         score += 3 if finding.severity == "severe" else 1
     return score
 

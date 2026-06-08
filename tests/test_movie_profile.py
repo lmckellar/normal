@@ -19,8 +19,11 @@ from normal.movie_profile import (
     classify_profile_label,
     classify_quality_stance,
     classify_standard_label,
+    detect_audio_language_selection_risks,
     detect_plex_diagnostics,
+    is_audio_packaging_owned_movie,
     looks_like_absolute_numbering,
+    total_risk_score,
     evaluate_movie_standards,
     load_movie_standards,
     library_policy_revision,
@@ -235,6 +238,68 @@ class MovieProfileTests(unittest.TestCase):
         self.assertFalse(item.profile.weak_candidate)
         self.assertEqual(item.profile.label, "meets_minimum")
         self.assertIn("default_non_english_audio", [finding.code for finding in item.profile.diagnostics])
+
+    def _foreign_default_facts(self) -> MediaFacts:
+        return MediaFacts(
+            audio_streams=[
+                AudioStreamFacts(index=1, codec="dts", channels=6, bitrate_kbps=1500, language="jpn", is_default=True),
+                AudioStreamFacts(index=2, codec="ac3", channels=6, bitrate_kbps=640, language="eng", is_default=False),
+            ],
+        )
+
+    def test_detect_audio_language_relabels_foreign_original_and_protects_replacement(self) -> None:
+        findings = detect_audio_language_selection_risks(
+            self._foreign_default_facts(),
+            title="Seven Samurai",
+            year=1954,
+            resolve_language=lambda title, year: "japanese",
+        )
+
+        self.assertEqual([finding.code for finding in findings], ["foreign_original_audio_ok"])
+        self.assertEqual(findings[0].severity, "info")
+        self.assertTrue(is_audio_packaging_owned_movie(findings))
+        self.assertEqual(total_risk_score(findings), 0)
+
+    def test_detect_audio_language_fails_open_to_finding_when_not_confirmed_foreign(self) -> None:
+        facts = self._foreign_default_facts()
+        for resolver in (None, lambda title, year: None, lambda title, year: "english"):
+            findings = detect_audio_language_selection_risks(
+                facts, title="Some Title", year=2000, resolve_language=resolver
+            )
+            codes = [finding.code for finding in findings]
+            self.assertNotIn("foreign_original_audio_ok", codes)
+            self.assertIn(
+                codes[0], {"default_non_english_audio", "default_non_english_audio_with_weak_english"}
+            )
+
+    def test_build_movie_profile_item_threads_resolver_to_relabel_foreign_original(self) -> None:
+        facts = MediaFacts(
+            width=1920,
+            height=1080,
+            video_bitrate_kbps=15000,
+            audio_codec="dts",
+            audio_channels=6,
+            audio_bitrate_kbps=1500,
+            audio_streams=[
+                AudioStreamFacts(index=1, codec="dts", channels=6, bitrate_kbps=1500, language="jpn", is_default=True),
+                AudioStreamFacts(index=2, codec="ac3", channels=6, bitrate_kbps=640, language="eng", is_default=False),
+            ],
+            default_audio_streams=1,
+            default_audio_stream_index=1,
+        )
+
+        item = build_movie_profile_item(
+            Path("/movies"),
+            Path("/movies/Seven Samurai (1954)/Seven Samurai (1954).mkv"),
+            facts,
+            standards=DEFAULT_MOVIE_STANDARDS,
+            resolve_language=lambda title, year: "japanese",
+        )
+
+        codes = [finding.code for finding in item.profile.diagnostics]
+        self.assertIn("foreign_original_audio_ok", codes)
+        self.assertNotIn("default_non_english_audio", codes)
+        self.assertFalse(item.profile.weak_candidate)
 
     def test_build_movie_profile_definitions_exposes_dashboard_owned_controls(self) -> None:
         definitions = build_movie_profile_definitions()

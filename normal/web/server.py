@@ -23,6 +23,7 @@ from .routes_cleanup import (
 )
 from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
 from .routes_normalize import handle_movies_apply, handle_movies_normalize
+from .routes_settings import handle_settings_keys_update, handle_settings_read
 from .routes_profile import (
     handle_movies_canonical_lists,
     handle_movies_canonical_refresh,
@@ -89,7 +90,8 @@ def serve_web_ui(
     omdb_key: str | None = None,
     tmdb_key: str | None = None,
 ) -> None:
-    handler = build_handler(default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
+    state.CREDENTIAL_STORE.seed_from_boot(omdb_key=omdb_key, tmdb_key=tmdb_key)
+    handler = build_handler(default_source=default_source)
     server = ThreadingHTTPServer((host, port), handler)
     source_hint = f" default source {default_source}" if default_source else ""
     print(f"normal web UI listening on http://{host}:{port}/{source_hint}")
@@ -149,6 +151,8 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/movies/canonical-status": handle_movies_canonical_status,
         "/api/movies/canonical-refresh": handle_movies_canonical_refresh,
         "/api/movies/omdb/ratings": handle_movies_omdb_ratings,
+        "/api/settings/read": handle_settings_read,
+        "/api/settings/keys": handle_settings_keys_update,
         "/api/source/scan-warning": handle_source_scan_warning,
         "/api/movies/register": handle_movies_register,
         "/api/movies/inspect": handle_movies_inspect,
@@ -166,8 +170,6 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
 
 def build_handler(
     default_source: Path | None = None,
-    omdb_key: str | None = None,
-    tmdb_key: str | None = None,
 ):
     get_routes = build_get_routes()
     post_routes = build_post_routes()
@@ -179,8 +181,8 @@ def build_handler(
             return RequestContext(
                 handler=self,
                 default_source=default_source,
-                omdb_key=omdb_key,
-                tmdb_key=tmdb_key,
+                omdb_key=state.CREDENTIAL_STORE.omdb_key(),
+                tmdb_key=state.CREDENTIAL_STORE.tmdb_key(),
             )
 
         def do_GET(self) -> None:

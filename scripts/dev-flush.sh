@@ -134,6 +134,17 @@ preflight() {
 start_server() {
   # shellcheck disable=SC1091
   source "$VENV/bin/activate"
+  # Ingest saved plan-B enricher keys (OMDB_KEY / TMDB_KEY) from the UI-managed
+  # secrets file into the environment so the cli picks them up at boot. Absence
+  # stays silent; presence is reported so the key has a visible, durable home.
+  local secrets="$DATA_DIR/secrets.env"
+  if [[ -f "$secrets" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    source "$secrets"
+    set +a
+    say "ingested saved keys from $secrets"
+  fi
   say "starting: normal web --host $HOST --port $PORT --source $SOURCE"
   ( cd "$REPO" && exec python3 -m normal web --host "$HOST" --port "$PORT" --source "$SOURCE" ) \
     >"$LOG" 2>&1 &

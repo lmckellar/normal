@@ -60,10 +60,11 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
     standards = load_movie_standards()
     effective_standards = profile_request_standards(payload, standards)
     floor_overridden = replacement_candidate_quality_floor(effective_standards) != replacement_candidate_quality_floor(standards)
+    resolve_language = ctx.language_resolver()
     cached = MOVIE_PROFILE_CACHE.get(source)
     if cached is not None:
-        response_report = reclassify_report_with_standards(cached, effective_standards) if floor_overridden else cached
-        response = build_profile_response(source, response_report, effective_standards)
+        response_report = reclassify_report_with_standards(cached, effective_standards, resolve_language=resolve_language) if floor_overridden else cached
+        response = build_profile_response(source, response_report, effective_standards, resolve_language=resolve_language)
         response["canonical_summary"] = build_canonical_summary(
             source,
             standards=effective_standards,
@@ -114,10 +115,11 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
                 probe_media=tracked_probe(source, "ffprobe movie metadata", cache=PROBE_CACHE),
                 progress_callback=update_profile_activity,
                 should_cancel=ctx.client_disconnected,
+                resolve_language=resolve_language,
             )
         MOVIE_PROFILE_CACHE.put(source, report)
-        response_report = reclassify_report_with_standards(report, effective_standards) if floor_overridden else report
-        response = build_profile_response(source, response_report, effective_standards)
+        response_report = reclassify_report_with_standards(report, effective_standards, resolve_language=resolve_language) if floor_overridden else report
+        response = build_profile_response(source, response_report, effective_standards, resolve_language=resolve_language)
         response["canonical_summary"] = build_canonical_summary(
             source,
             standards=effective_standards,

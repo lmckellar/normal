@@ -5,9 +5,10 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
+from normal.movie_omdb import resolve_original_language
 from .scan_guard import client_disconnected, resolve_source_path
 
 
@@ -17,6 +18,12 @@ class RequestContext:
     default_source: Path | None = None
     omdb_key: str | None = None
     tmdb_key: str | None = None
+
+    def language_resolver(self) -> Callable[[str, int | None], str | None] | None:
+        omdb_key = self.omdb_key
+        if not omdb_key:
+            return None
+        return lambda title, year: resolve_original_language(title, year, omdb_key)
 
     def read_json_body(self) -> dict[str, Any]:
         length = int(self.handler.headers.get("Content-Length", "0"))

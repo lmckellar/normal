@@ -176,8 +176,8 @@ class WebSerializersTests(unittest.TestCase):
                         updated = build_updated_profile_items(source, items)
 
         media_facts.assert_called_once_with({"video_codec": "h264"})
-        build_item.assert_called_once_with(source, Path("/library/Movie.mkv"), {"parsed": True})
-        repair_plan.assert_called_once_with({"parsed": True}, path="/library/Movie.mkv", subtitle_preferences={"english_audio_subtitles": "forced_english", "foreign_audio_subtitles": "forced_english"})
+        build_item.assert_called_once_with(source, Path("/library/Movie.mkv"), {"parsed": True}, resolve_language=None)
+        repair_plan.assert_called_once_with({"parsed": True}, path="/library/Movie.mkv", subtitle_preferences={"english_audio_subtitles": "forced_english", "foreign_audio_subtitles": "forced_english"}, resolve_language=None)
         self.assertEqual(updated, [{"path": "/library/Movie.mkv", "facts": {"parsed": True}, "status": "ok", "repair_plan": {"audio": {}, "subtitle": {}, "combined": {}, "issue_families": []}}])
 
 

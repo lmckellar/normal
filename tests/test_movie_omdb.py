@@ -4,7 +4,49 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from normal.movie_omdb import lookup_omdb_ratings
+from normal.movie_omdb import lookup_omdb_ratings, primary_language, resolve_original_language
+
+
+class MovieOmdbLanguageTests(unittest.TestCase):
+    def test_primary_language_takes_first_entry_casefolded(self) -> None:
+        self.assertEqual(primary_language("Japanese, English"), "japanese")
+        self.assertEqual(primary_language("English"), "english")
+        self.assertIsNone(primary_language(None))
+        self.assertIsNone(primary_language(""))
+
+    def test_resolve_original_language_returns_primary_and_caches_match(self) -> None:
+        calls: list[dict[str, str]] = []
+
+        def fake_get(params: dict[str, str]) -> dict:
+            calls.append(params)
+            if params.get("t", "").startswith("Seven"):
+                return {"Response": "True", "Title": "Seven Samurai", "Language": "Japanese, English", "imdbRating": "8.6"}
+            return {"Response": "False", "Error": "Movie not found!"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+            # No key: fails open without touching the network.
+            self.assertIsNone(resolve_original_language("Seven Samurai", 1954, None, http_get=fake_get, cache_dir=cache_dir))
+            self.assertEqual(calls, [])
+            # Warm resolve, then a cache hit with no extra network call.
+            self.assertEqual(resolve_original_language("Seven Samurai", 1954, "KEY", http_get=fake_get, cache_dir=cache_dir), "japanese")
+            warmed = len(calls)
+            self.assertEqual(resolve_original_language("Seven Samurai", 1954, "KEY", http_get=fake_get, cache_dir=cache_dir), "japanese")
+            self.assertEqual(len(calls), warmed)
+
+    def test_resolve_original_language_caches_not_found_and_fails_open(self) -> None:
+        calls: list[dict[str, str]] = []
+
+        def fake_get(params: dict[str, str]) -> dict:
+            calls.append(params)
+            return {"Response": "False", "Error": "Movie not found!"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_dir = Path(tmpdir)
+            self.assertIsNone(resolve_original_language("Unknown", 2000, "KEY", http_get=fake_get, cache_dir=cache_dir))
+            resolved = len(calls)
+            self.assertIsNone(resolve_original_language("Unknown", 2000, "KEY", http_get=fake_get, cache_dir=cache_dir))
+            self.assertEqual(len(calls), resolved)
 
 
 class MovieOmdbTests(unittest.TestCase):

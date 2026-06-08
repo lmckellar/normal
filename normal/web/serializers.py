@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from normal.models import ProposedChange, WarningItem
 from normal.movie_plan import parse_movie_name_with_sidecar_fallback
@@ -251,11 +251,17 @@ def dedupe_warning_details(values: list[dict[str, Any]]) -> list[dict[str, Any]]
     return ordered
 
 
-def build_profile_response(source: Path, report: MovieProfileReport, standards: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_profile_response(
+    source: Path,
+    report: MovieProfileReport,
+    standards: dict[str, Any] | None = None,
+    *,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
+) -> dict[str, Any]:
     standards_payload = standards if standards is not None else load_library_policy()
     operator_preferences = load_operator_preferences()
     response = report.to_dict()
-    attach_repair_plans_to_payload_movies(response.get("movies"), standards_payload)
+    attach_repair_plans_to_payload_movies(response.get("movies"), standards_payload, resolve_language=resolve_language)
     response["histogram"] = build_histogram_payload(report)
     response["policy"] = standards_payload
     response["policy_revision"] = library_policy_revision(standards_payload)
@@ -272,7 +278,12 @@ def build_profile_response(source: Path, report: MovieProfileReport, standards: 
     return response
 
 
-def build_updated_profile_items(source: Path, fixed_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_updated_profile_items(
+    source: Path,
+    fixed_items: list[dict[str, Any]],
+    *,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
+) -> list[dict[str, Any]]:
     subtitle_preferences = normalized_subtitle_preferences(load_library_policy().get("subtitle_preferences"))
     updated_items = []
     for item in fixed_items:
@@ -281,18 +292,24 @@ def build_updated_profile_items(source: Path, fixed_items: list[dict[str, Any]])
             continue
         movie_path = Path(str(item["path"]))
         parsed_facts = media_facts_from_dict(raw_facts)
-        profiled = build_movie_profile_item(source, movie_path, parsed_facts)
+        profiled = build_movie_profile_item(source, movie_path, parsed_facts, resolve_language=resolve_language)
         payload = asdict(profiled)
         payload["repair_plan"] = build_movie_repair_plan(
             parsed_facts,
             path=payload.get("path"),
             subtitle_preferences=subtitle_preferences,
+            resolve_language=resolve_language,
         )
         updated_items.append(payload)
     return updated_items
 
 
-def attach_repair_plans_to_payload_movies(movies: Any, standards_payload: dict[str, Any]) -> None:
+def attach_repair_plans_to_payload_movies(
+    movies: Any,
+    standards_payload: dict[str, Any],
+    *,
+    resolve_language: Callable[[str, int | None], str | None] | None = None,
+) -> None:
     if not isinstance(movies, list):
         return
     subtitle_preferences = normalized_subtitle_preferences(standards_payload.get("subtitle_preferences"))
@@ -306,4 +323,5 @@ def attach_repair_plans_to_payload_movies(movies: Any, standards_payload: dict[s
             media_facts_from_dict(raw_facts),
             path=str(item.get("path") or ""),
             subtitle_preferences=subtitle_preferences,
+            resolve_language=resolve_language,
         )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from normal.movie_repair_planner import build_movie_repair_plan
+from normal.movie_repair_planner import audio_repair_issue_code, build_movie_repair_plan
 from normal.quality_review import AudioStreamFacts, MediaFacts, SubtitleStreamFacts
 
 
@@ -41,6 +41,39 @@ def build_facts(
         default_subtitle_stream_index=default_subtitle_index,
         subtitle_streams=subtitle_streams,
     )
+
+
+class MovieRepairPlannerForeignAudioTests(unittest.TestCase):
+    def test_audio_repair_issue_code_suppresses_confirmed_foreign_original(self) -> None:
+        facts = build_facts(default_audio_language="jpn")
+
+        self.assertEqual(audio_repair_issue_code(facts), "default_non_english_audio")
+        self.assertEqual(
+            audio_repair_issue_code(
+                facts, title="Seven Samurai", year=1954, resolve_language=lambda title, year: "japanese"
+            ),
+            "",
+        )
+
+    def test_audio_repair_issue_code_fails_open_when_unknown_or_english(self) -> None:
+        facts = build_facts(default_audio_language="jpn")
+        for resolver in (None, lambda title, year: None, lambda title, year: "english"):
+            self.assertEqual(
+                audio_repair_issue_code(facts, title="Some Title", year=2000, resolve_language=resolver),
+                "default_non_english_audio",
+            )
+
+    def test_build_movie_repair_plan_threads_resolver_to_drop_foreign_from_queue(self) -> None:
+        facts = build_facts(default_audio_language="jpn")
+        plan = build_movie_repair_plan(
+            facts,
+            path="/movies/Seven Samurai (1954)/Seven Samurai (1954).mkv",
+            resolve_language=lambda title, year: "japanese",
+        )
+
+        self.assertEqual(plan["audio"]["issue_code"], "")
+        self.assertFalse(plan["audio"]["repairable"])
+        self.assertNotIn("audio", plan["issue_families"])
 
 
 class MovieRepairPlannerTests(unittest.TestCase):

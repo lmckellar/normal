@@ -51,6 +51,7 @@ class OmdbRatingResult:
     matched_title: str | None = None
     matched_year: str | None = None
     imdb_id: str | None = None
+    language: str | None = None
     error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -157,6 +158,7 @@ def result_from_omdb_payload(key: str, title: str, year: int | None, payload: di
         matched_title=str(payload.get("Title") or ""),
         matched_year=str(payload.get("Year") or ""),
         imdb_id=str(payload.get("imdbID") or ""),
+        language=str(payload.get("Language") or "") or None,
     )
 
 
@@ -290,3 +292,36 @@ def write_cached_rating(result: OmdbRatingResult, *, cache_dir: Path | None = No
         handle.write(payload)
         temp_path = Path(handle.name)
     temp_path.replace(path)
+
+
+LANGUAGE_CACHE_KEY = "original-language"
+
+
+def primary_language(language: str | None) -> str | None:
+    if not language:
+        return None
+    first = language.split(",")[0].strip().casefold()
+    return first or None
+
+
+def resolve_original_language(
+    title: str,
+    year: int | None,
+    omdb_key: str | None,
+    *,
+    http_get: Callable[[dict[str, str]], dict[str, Any]] | None = None,
+    cache_dir: Path | None = None,
+) -> str | None:
+    if not omdb_key or not title:
+        return None
+    cached = load_cached_rating(LANGUAGE_CACHE_KEY, title, year, cache_dir=cache_dir)
+    if cached is not None and "language" in cached:
+        if cached.get("status") == "matched":
+            return primary_language(cached.get("language"))
+        return None
+    result = lookup_one_rating(LANGUAGE_CACHE_KEY, title, year, omdb_key, http_get=http_get)
+    if result.status in {"matched", "not_found"}:
+        write_cached_rating(result, cache_dir=cache_dir)
+    if result.status == "matched":
+        return primary_language(result.language)
+    return None

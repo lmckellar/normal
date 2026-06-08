@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterator
 
 from normal.audit import AuditStore
+from .credentials import CredentialStore
 from normal.movie_canonical_lists import CanonicalListsReport
 from normal.movie_profile import MovieProfileReport
 from normal.probe_cache import ProbeCache
@@ -95,3 +96,4 @@ MOVIE_PROFILE_CACHE = MovieProfileCache()
 MOVIE_CANONICAL_CACHE = MovieCanonicalCache()
 PROBE_CACHE = ProbeCache()
 AUDIT_STORE = AuditStore()
+CREDENTIAL_STORE = CredentialStore()
