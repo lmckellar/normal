@@ -4542,6 +4542,10 @@
     if (currentWarningGateSafetyLevel() !== 'safe') return true;
     const count = applicableRows.length;
     if (!count) return false;
+    // Dropping foreign audio is the sole trigger that turns a repair into a real
+    // ffmpeg remux; every other action is a disposition flip routed through the
+    // mkvpropedit fast lane (milliseconds, in place). Gate only the remux case.
+    if (!repairActionConfig(action).dropForeignAudio) return true;
     const actionLabel = repairActionConfig(action).label.toLowerCase();
     const combinedSinglePass = combinedRepairRunsSingleRemux(action);
     const initialMessage = [
