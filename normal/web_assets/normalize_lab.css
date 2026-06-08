@@ -1110,7 +1110,20 @@ input[type="checkbox"] {
 .lab-preview-item.is-remuxing::before {
   opacity: 1;
   transform: scaleY(0.88);
-  transition: transform var(--remux-eta, 12s) cubic-bezier(0.33, 0.6, 0.5, 1);
+  /* Sustained, near-linear travel with only a soft tail, so the fill keeps moving
+     through the body of the eta and arrives at 0.88 near the end rather than
+     parking at the halfway mark. */
+  transition: transform var(--remux-eta, 12s) cubic-bezier(0.4, 0.2, 0.6, 1);
+}
+
+/* Stage two: once the eta is spent (JS adds .is-remux-finalizing) the cap keeps
+   creeping 0.88 -> 0.96 over a long, steady linear tail. Under an I/O trough the
+   real job runs slower than the 50 MB/s estimate, so without this the bar would
+   dead-stop at 0.88 and feel hung; the slow crawl keeps it visibly alive while the
+   remux catches up, still reserving 0.96 -> 1 for the honest is-remux-done snap. */
+.lab-preview-item.is-remuxing.is-remux-finalizing::before {
+  transform: scaleY(0.96);
+  transition: transform 45s linear;
 }
 
 .lab-preview-item.is-remux-done::before {
@@ -1549,6 +1562,25 @@ input[type="checkbox"] {
   flex: 0 0 auto;
   color: var(--accent);
   font-weight: 700;
+}
+
+.lab-tree-line.is-unresolved {
+  color: #b3541e;
+  font-weight: 600;
+  background: linear-gradient(90deg, rgba(179, 84, 30, 0.08), rgba(179, 84, 30, 0));
+}
+
+.lab-tree-line.is-unresolved::before {
+  content: "unresolved";
+  flex: 0 0 auto;
+  font-size: 0.82em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: #b3541e;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 0 4px;
 }
 
 .lab-indent-0 { padding-left: var(--lab-local-row-inline-pad, var(--lab-rhythm-row-inline-pad)); }

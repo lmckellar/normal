@@ -149,6 +149,7 @@
     activityPollTimer: 0,
     repairPreviewSignature: '',
     activeRemuxPath: '',
+    completedRemuxPaths: new Set(),
   };
 
   const el = {
@@ -1173,6 +1174,101 @@
     return null;
   }
 
+  // Strict current-default subtitle: only a stream the container actually flags
+  // default. Unlike movieDefaultSubtitleStream there is no streams[0] fallback, so
+  // a file with no default subtitle reads as "no default" instead of narrating the
+  // first track as a phantom default in the preview.
+  function strictDefaultSubtitleStream(item) {
+    return (item?.facts?.subtitle_streams || []).find(stream => stream?.is_default) || null;
+  }
+
+  // Resolve which subtitle plan the chosen action will actually act on, and whether
+  // it is second-order (only surfaced because the audio default flips to English in
+  // the same remux). For a combined action with a repairable audio stage we trust
+  // the planner's post-audio evaluation (combined.subtitle_after_audio); otherwise
+  // the first-order top-level subtitle plan governs.
+  function effectiveSubtitleStage(item, action) {
+    const cfg = repairActionConfig(action);
+    if (!cfg.families.includes('subtitle')) return null;
+    const touchesAudio = cfg.families.includes('audio');
+    const audioRepairable = !!repairPlanAudio(item)?.repairable;
+    if (touchesAudio && audioRepairable && repairPlanCombined(item)?.staged) {
+      const sub = repairPlanCombinedSubtitle(item);
+      if (sub?.repairable) {
+        return { plan: sub, secondOrder: !!repairPlanCombined(item)?.second_order_subtitle };
+      }
+      return null;
+    }
+    const sub = repairPlanSubtitle(item);
+    if (sub?.repairable) return { plan: sub, secondOrder: false };
+    return null;
+  }
+
+  // Pure projection of the planner's decision into preview nodes. The renderer is a
+  // dumb consumer of this model: every node resolves to exactly one of three states
+  // — a confident change, an intentional no-op, or an explicit `unresolved` node
+  // when the planner staged a change whose stream descriptor cannot be resolved.
+  // Nothing is silently dropped, so unmodelled edge cases announce themselves.
+  function buildRepairPreviewModel(item, action) {
+    const cfg = repairActionConfig(action);
+    const touchesAudio = cfg.families.includes('audio');
+    const touchesSubtitle = cfg.families.includes('subtitle');
+    const dropForeignAudio = !!cfg.dropForeignAudio;
+    const nodes = [];
+
+    if (touchesAudio) {
+      const audioPlan = repairPlanAudio(item);
+      if (audioPlan?.repairable) {
+        const currentDefault = movieDefaultAudioStream(item);
+        const target = movieAudioPackagingTarget(item);
+        if (currentDefault) {
+          nodes.push({
+            path: `audio/default: ${describeAudioStream(currentDefault)}${dropForeignAudio ? ' [default cleared, stream kept if retained]' : ' [default cleared]'}`,
+            flags: { mutated: true, staged: true },
+          });
+        }
+        if (target) {
+          nodes.push({ path: `audio/default: ${describeAudioStream(target)} [becomes default]`, flags: { mutated: true, landing: true } });
+        } else {
+          nodes.push({ path: 'audio/default: staged English default — track could not be resolved', flags: { unresolved: true } });
+        }
+        if (dropForeignAudio) {
+          (item?.facts?.audio_streams || [])
+            .filter(stream => canonicalAudioLanguageValue(stream.language) && canonicalAudioLanguageValue(stream.language) !== 'english')
+            .forEach(stream => nodes.push({ path: `audio/remove: ${describeAudioStream(stream)}`, flags: { deleted: true } }));
+        }
+      } else {
+        nodes.push({ path: 'audio/no change', flags: {} });
+      }
+    }
+
+    if (touchesSubtitle) {
+      const stage = effectiveSubtitleStage(item, action);
+      if (stage) {
+        const sub = stage.plan;
+        const causal = stage.secondOrder ? ' — after audio flips to English' : '';
+        const currentDefault = strictDefaultSubtitleStream(item);
+        if (currentDefault) {
+          nodes.push({ path: `subtitle/default: ${describeSubtitleStream(currentDefault)} [default cleared]`, flags: { mutated: true, staged: true } });
+        }
+        if (sub.mode === 'clear') {
+          nodes.push({ path: `subtitle/default: no subtitle default${causal}`, flags: { mutated: true, landing: true } });
+        } else {
+          const target = subtitleStreamByIndex(item, sub.target_stream_index);
+          if (target) {
+            nodes.push({ path: `subtitle/default: ${describeSubtitleStream(target)} [becomes default${causal}]`, flags: { mutated: true, landing: true } });
+          } else {
+            nodes.push({ path: `subtitle/default: staged default for track #${sub.target_stream_index} — track could not be resolved${causal}`, flags: { unresolved: true } });
+          }
+        }
+      } else {
+        nodes.push({ path: 'subtitle/no change', flags: {} });
+      }
+    }
+
+    return { nodes };
+  }
+
   function movieSubtitleReadinessIsRepairable(item) {
     const plan = repairPlanSubtitle(item);
     return !!plan?.repairable;
@@ -1281,16 +1377,23 @@
     return remux ? normalizePathKey(remux.current_path) : '';
   }
 
-  // The single remux item's current_path advances file-by-file along the queue.
-  // Hold the last known target across the brief gaps between files so the focus
-  // (and the settled "done" cards behind it) don't flicker mid-chain.
+  // The single remux item's current_path advances file-by-file, but not
+  // necessarily in card order — the backend may walk the queue however it likes.
+  // So we can't infer "done" from a card's position relative to the active one;
+  // instead we record each path as completed once the focus moves off it (and the
+  // last one when the remux item disappears). Hold the last known target across
+  // the brief gaps between files so the focus doesn't flicker mid-chain.
   function updateRemuxFocusPath() {
     if (!activityPayloadHasRemux()) {
+      if (state.activeRemuxPath) state.completedRemuxPaths.add(state.activeRemuxPath);
       state.activeRemuxPath = '';
       return;
     }
     const current = remuxActivityCurrentPath();
-    if (current) state.activeRemuxPath = current;
+    if (current && current !== state.activeRemuxPath) {
+      if (state.activeRemuxPath) state.completedRemuxPaths.add(state.activeRemuxPath);
+      state.activeRemuxPath = current;
+    }
   }
 
   function safeRepairLockOverlayEnabled() {
@@ -3500,6 +3603,7 @@
         cleanup: Boolean(file.cleanup),
         staged: Boolean(file.staged),
         landing: Boolean(file.landing),
+        unresolved: Boolean(file.unresolved),
       });
     });
   }
@@ -3557,7 +3661,7 @@
     return `
       <div class="lab-tree">
         ${lines.map(line => `
-          <div class="lab-tree-line lab-indent-${Math.min(line.depth, 5)} ${line.mutated ? 'is-mutated' : ''} ${line.selected ? 'is-selected' : ''} ${line.deleted ? 'is-deleted' : ''} ${line.cleanup ? 'is-cleanup' : ''} ${line.staged ? 'is-staged' : ''} ${line.landing ? 'is-landing' : ''}">
+          <div class="lab-tree-line lab-indent-${Math.min(line.depth, 5)} ${line.mutated ? 'is-mutated' : ''} ${line.selected ? 'is-selected' : ''} ${line.deleted ? 'is-deleted' : ''} ${line.cleanup ? 'is-cleanup' : ''} ${line.staged ? 'is-staged' : ''} ${line.landing ? 'is-landing' : ''} ${line.unresolved ? 'is-unresolved' : ''}">
             <span class="lab-tree-line-label">${escapeHtml(line.label)}</span>
           </div>
         `).join('')}
@@ -3706,37 +3810,8 @@
       return node[part];
     }, tree);
     let sequence = 0;
-    const addRepairPath = (path, flags) => addPathToTree(containerNode, path, { ...flags, sequence: sequence++ });
-    const audioTouched = rowTouchesFamily(row, 'audio');
-    const subtitleTouched = rowTouchesFamily(row, 'subtitle');
-    const combinedSubtitleTouched = actionTouchesAudio(action) && actionTouchesSubtitle(action) && rowTouchesFamily(row, 'audio') && combinedSubtitleWillRun(row.item);
-    if (actionTouchesAudio(action) && rowTouchesFamily(row, 'audio')) {
-      const defaultAudio = movieDefaultAudioStream(row.item);
-      const targetAudio = movieAudioPackagingTarget(row.item);
-      if (defaultAudio) addRepairPath(`audio/default: ${describeAudioStream(defaultAudio)}${repairActionConfig(action).dropForeignAudio ? ' [default cleared, stream kept if retained]' : ' [default cleared]'}`, { mutated: true, staged: true });
-      if (targetAudio) addRepairPath(`audio/default: ${describeAudioStream(targetAudio)} [becomes default]`, { mutated: true, landing: true });
-      if (repairActionConfig(action).dropForeignAudio) {
-        (row.item?.facts?.audio_streams || [])
-          .filter(stream => canonicalAudioLanguageValue(stream.language) && canonicalAudioLanguageValue(stream.language) !== 'english')
-          .forEach(stream => addRepairPath(`audio/remove: ${describeAudioStream(stream)}`, { deleted: true }));
-      }
-    }
-    if (actionTouchesAudio(action) && !audioTouched) {
-      addRepairPath('audio/no change', {});
-    }
-    if (actionTouchesSubtitle(action) && (subtitleTouched || combinedSubtitleTouched)) {
-      const defaultSubtitle = movieDefaultSubtitleStream(row.item);
-      const targetSubtitle = combinedSubtitleTouched
-        ? movieCombinedSubtitleRepairTarget(row.item)
-        : (subtitleTouched ? movieSubtitleReadinessRepairTarget(row.item) : null);
-      const hasLandingSubtitleResult = Boolean(targetSubtitle) || Boolean(defaultSubtitle);
-      if (defaultSubtitle) addRepairPath(`subtitle/default: ${describeSubtitleStream(defaultSubtitle)} [default cleared]`, { mutated: true, staged: hasLandingSubtitleResult });
-      if (targetSubtitle) addRepairPath(`subtitle/default: ${describeSubtitleStream(targetSubtitle)} [becomes default]`, { mutated: true, landing: true });
-      if (!targetSubtitle) addRepairPath('subtitle/default: no subtitle default', { mutated: true, landing: true });
-    }
-    if (actionTouchesSubtitle(action) && !subtitleTouched && !combinedSubtitleTouched) {
-      addRepairPath('subtitle/no change', {});
-    }
+    const model = buildRepairPreviewModel(row.item, action);
+    model.nodes.forEach(node => addPathToTree(containerNode, node.path, { ...node.flags, sequence: sequence++ }));
     return renderPreviewTreeMarkup(tree);
   }
 
@@ -3774,9 +3849,10 @@
     `).join('');
   }
 
-  // Patch remux focus onto the existing card nodes in place. Cards render in the
-  // same order the backend walks the queue, so the matched card is in flight,
-  // everything above it is done, everything below is still waiting.
+  // Patch remux focus onto the existing card nodes in place. The card matching the
+  // backend's current_path is in flight; any card whose path we've already seen
+  // complete shows done; everything else is still waiting. Completion is tracked by
+  // path, not card order, since the backend doesn't walk the queue top-to-bottom.
   function syncRemuxCardStates() {
     updateRemuxFocusPath();
     const cards = el.previewPane
@@ -3784,18 +3860,25 @@
       : [];
     if (!cards.length) return;
     const focus = state.activeRemuxPath;
-    const activeIndex = focus
-      ? cards.findIndex(card => card.dataset.remuxPath === focus)
-      : -1;
-    cards.forEach((card, index) => {
-      const remuxing = index === activeIndex;
-      const done = activeIndex >= 0 && index < activeIndex;
+    cards.forEach((card) => {
+      const path = card.dataset.remuxPath;
+      const remuxing = !!focus && path === focus;
+      const done = !remuxing && state.completedRemuxPaths.has(path);
       // Set the facade duration only as the card enters the in-flight state, so the
       // CSS fill transition runs once from empty rather than restarting each 2s poll.
+      // Arm a timer for that same eta: when it fires the bar has reached its 0.88 cap,
+      // so we hand off to the finalizing crawl (0.88 -> 0.96) instead of dead-stopping.
       if (remuxing && !card.classList.contains('is-remuxing')) {
-        card.style.setProperty('--remux-eta', `${remuxEtaSeconds(card.dataset.remuxBytes)}s`);
+        const eta = remuxEtaSeconds(card.dataset.remuxBytes);
+        card.style.setProperty('--remux-eta', `${eta}s`);
+        clearRemuxFinalizeTimer(card);
+        card._remuxFinalizeTimer = window.setTimeout(() => {
+          card.classList.add('is-remux-finalizing');
+        }, eta * 1000);
       } else if (!remuxing) {
         card.style.removeProperty('--remux-eta');
+        clearRemuxFinalizeTimer(card);
+        card.classList.remove('is-remux-finalizing');
       }
       card.classList.toggle('is-remuxing', remuxing);
       card.classList.toggle('is-remux-done', done);
@@ -3804,10 +3887,20 @@
       status.classList.toggle('is-active', remuxing);
       status.classList.toggle('is-done', done);
       status.hidden = !remuxing && !done;
-      status.innerHTML = remuxing
-        ? '<span class="lab-remux-dot"></span>remuxing'
-        : (done ? 'done' : '');
+      if (remuxing) {
+        const finalizing = card.classList.contains('is-remux-finalizing');
+        status.innerHTML = `<span class="lab-remux-dot"></span>${finalizing ? 'finalizing lossless mux' : 'remuxing'}`;
+      } else {
+        status.innerHTML = done ? 'done' : '';
+      }
     });
+  }
+
+  function clearRemuxFinalizeTimer(card) {
+    if (card._remuxFinalizeTimer) {
+      window.clearTimeout(card._remuxFinalizeTimer);
+      card._remuxFinalizeTimer = 0;
+    }
   }
 
   function combinedRepairRunsSingleRemux(action = state.repairAction) {
@@ -3867,6 +3960,7 @@
       return;
     }
     state.repairPreviewSignature = signature;
+    state.completedRemuxPaths.clear();
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
         <strong>${summary}</strong>

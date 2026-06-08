@@ -690,12 +690,20 @@ class WebTests(unittest.TestCase):
         self.assertIn("if (workflow === 'system' && action === 'start') return 'System booted';", NORMALIZE_LAB_JS)
         self.assertIn("if (action === 'scan') return 'Scan performed';", NORMALIZE_LAB_JS)
 
-    def test_repair_preview_calls_out_family_noops_for_combined_actions(self) -> None:
+    def test_repair_preview_projects_planner_stages_with_explicit_states(self) -> None:
+        # The preview is a projection of buildRepairPreviewModel; combined actions
+        # resolve their subtitle stage through effectiveSubtitleStage, annotate the
+        # second-order case, and surface unresolved stream lookups instead of
+        # silently collapsing to a no-op.
         self.assertIn("audio/no change", NORMALIZE_LAB_JS)
         self.assertIn("subtitle/no change", NORMALIZE_LAB_JS)
-        self.assertIn("const targetSubtitle = combinedSubtitleTouched", NORMALIZE_LAB_JS)
-        self.assertIn("? movieCombinedSubtitleRepairTarget(row.item)", NORMALIZE_LAB_JS)
-        self.assertIn(": (subtitleTouched ? movieSubtitleReadinessRepairTarget(row.item) : null);", NORMALIZE_LAB_JS)
+        self.assertIn("function buildRepairPreviewModel(item, action)", NORMALIZE_LAB_JS)
+        self.assertIn("function effectiveSubtitleStage(item, action)", NORMALIZE_LAB_JS)
+        self.assertIn("function strictDefaultSubtitleStream(item)", NORMALIZE_LAB_JS)
+        self.assertIn("const causal = stage.secondOrder ? ' — after audio flips to English' : '';", NORMALIZE_LAB_JS)
+        self.assertIn("track could not be resolved", NORMALIZE_LAB_JS)
+        self.assertIn("flags: { unresolved: true }", NORMALIZE_LAB_JS)
+        self.assertIn("is-unresolved", NORMALIZE_LAB_JS)
 
     def test_normalize_lab_selection_refreshes_all_selection_dependent_controls(self) -> None:
         self.assertIn("function refreshSelectionState() {", NORMALIZE_LAB_JS)

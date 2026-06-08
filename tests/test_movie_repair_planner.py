@@ -100,6 +100,52 @@ class MovieRepairPlannerTests(unittest.TestCase):
         self.assertTrue(plan["combined"]["subtitle_after_audio"]["repairable"])
         self.assertEqual(plan["combined"]["subtitle_after_audio"]["target_stream_index"], 3)
 
+    def test_second_order_subtitle_stage_exposes_target_mode_for_preview(self) -> None:
+        # The preview projects subtitle_after_audio.mode/target_stream_index, so the
+        # planner must keep emitting them for the second-order forced-English case.
+        facts = build_facts(default_audio_language="ita", default_subtitle_index=None)
+
+        plan = build_movie_repair_plan(
+            facts,
+            path="/library/Movie.mkv",
+            subtitle_preferences={
+                "foreign_audio_subtitles": "off",
+                "english_audio_subtitles": "forced_english",
+            },
+        )
+
+        sub = plan["combined"]["subtitle_after_audio"]
+        self.assertTrue(sub["repairable"])
+        self.assertEqual(sub["mode"], "target")
+        self.assertEqual(sub["target_stream_index"], 3)
+
+    def test_clear_mode_subtitle_plan_for_unnecessary_default(self) -> None:
+        # English audio with an Italian default subtitle and an "off" policy resolves
+        # to a clear (no target) — the preview renders this as an intentional
+        # "no subtitle default" landing rather than an unresolved node.
+        facts = build_facts(
+            default_audio_language="ita",
+            english_audio_default=True,
+            include_forced_english=False,
+            include_full_english=False,
+            default_subtitle_index=5,
+        )
+
+        plan = build_movie_repair_plan(
+            facts,
+            path="/library/Movie.mkv",
+            subtitle_preferences={
+                "foreign_audio_subtitles": "off",
+                "english_audio_subtitles": "off",
+            },
+        )
+
+        sub = plan["subtitle"]
+        self.assertEqual(sub["issue_code"], "unnecessary_default_subtitle")
+        self.assertTrue(sub["repairable"])
+        self.assertEqual(sub["mode"], "clear")
+        self.assertIsNone(sub["target_stream_index"])
+
     def test_build_plan_preserves_forced_target_when_policy_matches_pre_and_post_audio(self) -> None:
         facts = build_facts(default_audio_language="ita", default_subtitle_index=5)
 
