@@ -6,6 +6,25 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.6] — 2026-06-09
+
+### Added
+
+- A new **Settings** rail surface now manages the optional OMDb/TMDb enricher keys from inside the workbench. Keys are held server-side in a process-wide credential store seeded from the environment at boot and read live per request, so a pasted key takes effect without a restart. The store persists to `~/.local/share/normal/secrets.env` with `0600` permissions, giving keys a durable home; the full key never round-trips to the browser, which only ever sees presence, last-4, and source.
+- Disposition-only repairs now take an **mkvpropedit fast lane**. When a repair's only change is flipping subtitle or audio `default`/`forced` flags — no track drop, no transcode — the header is edited in place in milliseconds instead of rewriting the whole container. ffmpeg remains the path for structural repairs, and the fixers fall back to it if `mkvpropedit` is absent.
+- Repair runs now show **live remux progress**, tracked per file with a finalizing crawl as each container is written, plus forced-subtitle disposition probing so forced tracks are recognized rather than guessed.
+
+### Changed
+
+- The multi-file repair confirmation gate now keys on **whether the selected work will actually remux, not on file count**. Disposition-only batches — the common case — skip the heavy "this is a long ffmpeg job" warning entirely, so flipping defaults across many files is friction-free; the gate fires only when an action genuinely rewrites containers, such as dropping foreign audio.
+- Setting an audio or subtitle default no longer clobbers an existing forced-subtitle flag. Forced disposition is preserved through the remux rather than being silently replaced.
+- Remux queue progress is now tracked by file path instead of card order, so progress stays correct when the selection or card order shifts mid-run.
+
+### Fixed
+
+- Canonical Lists no longer treats the managed IMDb dataset as inactive when `IMDB_DATASET_DIR` is unset. The self-managed dataset under `~/.local/share/normal/imdb-datasets/` is the default-active path; the environment variable is only an override for a custom dataset location, not a gate.
+- Cleaned up rail sliver sizing and removed dead body scaffolding left in the workbench shell.
+
 ## [0.7.0-alpha.5] — 2026-06-07
 
 ### Added

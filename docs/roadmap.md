@@ -12,17 +12,19 @@ shape. Normalize, weak-encode triage, junk cleanup, repair defaults, canonical
 list coverage, and export are materially useful. Recent scan/cache work and the
 new shell pivot mean the product now feels more deliberate than exploratory,
 but it is still pre-1.0 and still best suited to Linux users comfortable with
-alpha software. Present `v0.7.0-alpha.5` is the current tagged cut of that new
-default surface and focuses on reducing shell ambiguity, keeping preview/apply
-contracts explicit, and continuing to favor one coherent workbench over
-surface sprawl.
+alpha software. Present `v0.7.0-alpha.6` is the current tagged cut of that new
+default surface. It folds API-key handling into the product itself through a
+server-side Settings rail, makes disposition-only repairs near-instant via an
+mkvpropedit fast lane, and teaches the repair confirmation gate to key on real
+remux cost rather than file count — continuing to favor one coherent workbench
+that is honest about what each action actually does.
 
 ### Concerns
 
 - **UI/UX maturity** — the new default shell is much stronger than the old
-  dashboard, and alpha.5 removes one more ambiguous control. The next test is
-  resurfacing withheld lanes without reintroducing fuzzy ownership or weak
-  preview semantics.
+  dashboard, and alpha.6 activates the dormant Settings rail and makes the
+  repair gate honest about cost. The next test is resurfacing withheld lanes
+  without reintroducing fuzzy ownership or weak preview semantics.
 - **Main workflow maturity** — movie lanes are credible for real use; TV does
   not exist yet, so the product is still intentionally movie only in practice.
 - **Documentation coherence** — `README`, `CHANGELOG`, and this roadmap are the
@@ -149,4 +151,4 @@ analogue.
   `movie_profile.py`; the UI remains hidden until the workflow shape is clear.
 
 ## Disclaimer
-  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, and the current release is `v0.7.0-alpha.5`; both have matching prerelease intent. Earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.
+  `normal` is pre-1.0. The current version story was retroactively rebuilt from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1`, and the current release is `v0.7.0-alpha.6`; both have matching prerelease intent. Earlier sections in `CHANGELOG.md` remain reconstructed history rather than tagged releases.

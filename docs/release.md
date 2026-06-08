@@ -7,8 +7,8 @@ aligned. Keep it local and lightweight until the first GitHub push is ready.
 
 ## Versioning
 
-The current package version is `0.7.0a5`. Its matching git tag is
-`v0.7.0-alpha.5`, and its matching GitHub release should be published as a
+The current package version is `0.7.0a6`. Its matching git tag is
+`v0.7.0-alpha.6`, and its matching GitHub release should be published as a
 prerelease. Earlier history in `CHANGELOG.md` is still a planning aid rather
 than a set of real tags or GitHub releases.
 

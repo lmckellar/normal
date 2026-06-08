@@ -56,6 +56,8 @@ Two repair flows sit on top of the shared movie profile result:
 
 These are mutation workflows, but they are narrower than normalize or delete flows: they rewrite container metadata and stream layout without renaming the library structure.
 
+Repair execution is split by cost. `build_execution_plan` decides whether a repair is *metadata-only* — a pure `default`/`forced` disposition flip with no track drop and no transcode. Metadata-only repairs route through `mkvpropedit_fix.py`, which edits the MKV header in place in milliseconds (verified by re-probe) rather than rewriting the container. Dropping foreign audio is the only change that forces a structural rewrite, so it is the sole trigger for the full ffmpeg remux path; ffmpeg is also the fallback when `mkvpropedit` is unavailable. This cost split is load-bearing for the UI: the multi-file repair confirmation gate keys on whether the selected work will actually remux, not on file count, so large disposition-only batches stay friction-free.
+
 ### Junk pipeline
 
 `movie_junk.py` runs a separate cleanup scan for junk videos and sidecar spam:
@@ -73,6 +75,8 @@ Two provider-backed support surfaces sit beside the local pipelines:
 - Replacement-history IMDb ratings use OMDb plus a local cache.
 
 These do not drive mutation decisions. They are support surfaces around the local library state.
+
+The optional keys these surfaces use are owned by a process-wide credential store (`normal/web/credentials.py`). It is seeded from the environment at boot and read live per request, so a key pasted into the Settings rail takes effect without a restart. The store persists to `secrets.env` so the key survives restarts, and the read API (`/api/settings/read`, `/api/settings/keys`) deliberately never returns a full key to the browser — only presence, last-4, and source. Key absence is the normal baseline, not a degraded state.
 
 ## Persistent state
 
@@ -95,6 +99,7 @@ Under `~/.local/share/normal/`:
 - `probe-cache.json` stores per-file probe results keyed by resolved path, mtime, and size.
 - `library-roots.json` stores the last active movie root and a short recent-roots list.
 - `audit-ledger.jsonl` stores the unified audit/event ledger for scans, deletes, repairs, exports, policy updates, and follow-up state changes.
+- `secrets.env` stores the optional OMDb/TMDb enricher keys written through the Settings rail, in env-style form with `0600` permissions.
 
 ### User-local caches
 

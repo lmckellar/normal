@@ -65,7 +65,7 @@ Watching the tool purify a test library for the first time is a good experience.
 
 ## Alpha UI note
 
-`v0.7.0-alpha.5` uses one compact workbench at `http://127.0.0.1:8765/`.
+`v0.7.0-alpha.6` uses one compact workbench at `http://127.0.0.1:8765/`.
 
 Workflow deep links still use the main route with a query string, for example `/?workflow=normalize` or `/?workflow=repair-defaults`.
 
@@ -88,7 +88,7 @@ Workflow deep links still use the main route with a query string, for example `/
   - `Compare Against Canonical Lists` cannot run in IMDb mode unless `IMDB_DATASET_DIR` points at the required local files
   - movie pages that can show IMDb ratings simply omit them when no key is present.
 
-  `OMDB_KEY` can be passed either by environment variable or via `normal web --omdb-key ...`. `TMDB_KEY` can still be passed via environment variable or `normal web --tmdb-key ...` when using the TMDb provider.
+  `OMDB_KEY` can be passed either by environment variable or via `normal web --omdb-key ...`. `TMDB_KEY` can still be passed via environment variable or `normal web --tmdb-key ...` when using the TMDb provider. As of `alpha.6` you can also paste these keys into the workbench **Settings** rail; they are stored server-side under `~/.local/share/normal/secrets.env` and take effect live without a restart, so the key has a durable home rather than living only in the launch environment.
 
   `normal` thoughtfully provides internal caching for both canonical-list providers and OMDb lookups to avoid wasteful repeated work.
 
