@@ -80,29 +80,28 @@ python3 -m normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 
 When the user asks to start the web UI, open the app, or provide the localhost link, treat that as a request for a clean launch, not a minimal process spawn.
 
-Preferred path: `scripts/dev-flush.sh warm` — it encodes this entire contract (venv, inherited env keys, stop any old process, restart, verify the port responds). Run it from a shell that already has the env keys exported. Use it to start, and to flush-and-relaunch after a deep change. The tiers also cover stale-cache debugging — see the cache design-decision note below.
+Preferred path: `scripts/dev-flush.sh warm` — it encodes this entire contract (venv, ingest whatever env keys happen to be present, stop any old process, restart, verify the port responds). It runs fine with no keys exported; export them only if the task needs that enrichment. Use it to start, and to flush-and-relaunch after a deep change. The tiers also cover stale-cache debugging — see the cache design-decision note below.
 
 If a change touches `normal/web/` or otherwise requires a server restart to go live, restart the local web UI as part of finishing the task and include the localhost link in the completion report so the user can test immediately.
 
 A clean launch must:
 
 1. use the repo virtual environment
-2. load the canonical local env source before server start
-3. preserve configured API-backed features
-4. verify the localhost page responds before reporting success
+2. ingest any env keys that happen to be present, without depending on them
+3. verify the localhost page responds before reporting success
 
-Current local env posture:
+Current local env posture — two tiers, and the default is *absence*:
 
-- `OMDB_KEY`, `TMDB_KEY`, and any local `IMDB_DATASET_DIR` export should be loaded before launch if the requested workflow depends on those surfaces.
-- If the web UI is started by an agent, do not launch it via a bare venv interpreter path if that bypasses env loading.
+- **`OMDB_KEY` / `TMDB_KEY` are legacy/plan-B remote enrichers** (IMDb ratings; alternate canonical provider). Expect them to be unset. Ingest them silently if they are in the environment; never search for them, never block on them, never warn about their absence. Their absence is the normal baseline, not a degradation worth reporting.
+- **Canonical lists run off a self-managed IMDb dataset.** The app downloads `title.basics.tsv.gz` + `title.ratings.tsv.gz` into `~/.local/share/normal/imdb-datasets/` on its own; `_resolve_imdb_dataset_dir` prefers that managed dir and only falls back to `IMDB_DATASET_DIR` when the managed files are absent. So `IMDB_DATASET_DIR` is just an *override* for a custom dataset location — plan-B, same tier as the keys above — not a gate. Do not treat its absence as "lists inactive": lists are active whenever the managed files are present. Only surface a canonical-lists gap when the requested task involves lists *and* neither the managed dataset nor the override is available, and then as plain information, not a fault.
+- Do not launch via a bare venv interpreter path if that bypasses ingesting env keys that *are* present.
 
 Minimum preflight before reporting success:
 
 - `python3` resolves inside the repo venv
 - required binaries for the requested workflow are present (`ffprobe` for movie workflows)
-- `IMDB_DATASET_DIR` points at the required dataset files if the requested workflow includes default IMDb-backed Canonical Lists
-- `TMDB_KEY` is loaded only if Canonical Lists is explicitly configured to use TMDb
 - localhost responds on the chosen port
+- only if the requested workflow includes canonical lists: confirm the dataset is available — managed files present in `~/.local/share/normal/imdb-datasets/`, or `IMDB_DATASET_DIR` pointing at a dataset (or note plainly that lists will be inactive). `IMDB_DATASET_DIR` alone being unset is not a gap. `OMDB_KEY`/`TMDB_KEY` are never preflight gates.
 
 ## Data models
 

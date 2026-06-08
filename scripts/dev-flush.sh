@@ -117,9 +117,18 @@ flush_disk() {
 preflight() {
   [[ -d "$VENV" ]] || { warn "no venv at $VENV (see docs/install.md)"; exit 1; }
   command -v ffprobe >/dev/null 2>&1 || warn "ffprobe not on PATH; movie workflows will fail"
-  for var in OMDB_KEY TMDB_KEY IMDB_DATASET_DIR; do
-    [[ -n "${!var:-}" ]] || warn "$var not set; API-backed features will be degraded (source your shell env)"
-  done
+  # Two-tier env stance: absence is the baseline, not a fault.
+  #   * OMDB_KEY / TMDB_KEY are legacy/plan-B remote enrichers. Ingested if
+  #     present, silent if not. Never warned about.
+  #   * Canonical lists run off a self-managed IMDb dataset in
+  #     $DATA_DIR/imdb-datasets (the app downloads it on its own). IMDB_DATASET_DIR
+  #     is only an override to point at a custom dataset location, not the gate.
+  #     Lists are active when the managed files are present OR the override is set.
+  local managed_dataset="$DATA_DIR/imdb-datasets"
+  if [[ -z "${IMDB_DATASET_DIR:-}" \
+        && ! ( -e "$managed_dataset/title.basics.tsv.gz" && -e "$managed_dataset/title.ratings.tsv.gz" ) ]]; then
+    say "IMDb dataset not present in $managed_dataset; canonical lists inactive until it downloads or IMDB_DATASET_DIR is set (other workflows unaffected)"
+  fi
 }
 
 start_server() {
