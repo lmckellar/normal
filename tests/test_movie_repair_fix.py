@@ -131,7 +131,7 @@ class MovieRepairFixTests(unittest.TestCase):
             self.assertIn("-0:a:0", commands[0])
             self.assertEqual(commands[0][commands[0].index("-disposition:a:0") + 1], "default")
             self.assertEqual(commands[0][commands[0].index("-disposition:a:1") + 1], "0")
-            self.assertEqual(commands[0][commands[0].index("-disposition:s:0") + 1], "default")
+            self.assertEqual(commands[0][commands[0].index("-disposition:s:0") + 1], "default+forced")
             self.assertEqual(commands[0][commands[0].index("-disposition:s:1") + 1], "0")
             self.assertEqual(commands[0][commands[0].index("-disposition:s:2") + 1], "0")
 

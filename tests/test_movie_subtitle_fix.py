@@ -135,7 +135,9 @@ class MovieSubtitleFixTests(unittest.TestCase):
             self.assertEqual(result.status, "fixed")
             self.assertEqual(result.message, "english_forced_defaulted")
             self.assertEqual(movie.read_text(encoding="utf-8"), "fixed")
-            self.assertEqual(commands[0][commands[0].index("-disposition:s:0") + 1], "default")
+            # Forced English target keeps its forced bit when promoted to default, so a
+            # re-probe still sees a forced track and the issue actually resolves.
+            self.assertEqual(commands[0][commands[0].index("-disposition:s:0") + 1], "default+forced")
             self.assertEqual(commands[0][commands[0].index("-disposition:s:1") + 1], "0")
 
     def test_fixes_mkv_by_clearing_unnecessary_subtitle_defaults(self) -> None:

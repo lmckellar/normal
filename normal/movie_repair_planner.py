@@ -295,6 +295,18 @@ def subtitle_issue_is_repairable(
     return False
 
 
+def subtitle_disposition_value(*, is_default: bool, is_forced: bool) -> str:
+    # ffmpeg's -disposition replaces a stream's whole disposition set, so flipping
+    # `default` would otherwise wipe an existing `forced` bit. Preserve forced so a
+    # re-probe still sees the forced English track the planner targeted.
+    flags = []
+    if is_default:
+        flags.append("default")
+    if is_forced:
+        flags.append("forced")
+    return "+".join(flags) if flags else "0"
+
+
 def simulate_post_audio_default_facts(facts: MediaFacts, *, target_ordinal: int | None) -> MediaFacts:
     if target_ordinal is None:
         return facts

@@ -15,6 +15,7 @@ from normal.movie_profile import (
 from normal.movie_repair_planner import (
     build_subtitle_repair_plan,
     choose_target_subtitle_stream,
+    subtitle_disposition_value,
 )
 from normal.movie_scan import probe_media_facts
 from normal.quality_review import MediaFacts, SubtitleStreamFacts
@@ -121,6 +122,7 @@ def fix_movie_subtitle_default(
             temp_path,
             len(subtitle_streams),
             plan.target_ordinal,
+            forced_ordinals={index for index, stream in enumerate(subtitle_streams) if stream.is_forced},
             input_duration_seconds=original_facts.runtime_seconds,
             progress_callback=progress_callback,
         )
@@ -183,6 +185,7 @@ def run_ffmpeg_subtitle_default_fix(
     target_ordinal: int | None,
     input_duration_seconds: int | None,
     *,
+    forced_ordinals: set[int] = frozenset(),
     progress_callback: ProgressCallback | None = None,
 ) -> None:
     command = [
@@ -209,7 +212,10 @@ def run_ffmpeg_subtitle_default_fix(
         command.extend(
             [
                 f"-disposition:s:{output_ordinal}",
-                "default" if output_ordinal == target_ordinal else "0",
+                subtitle_disposition_value(
+                    is_default=output_ordinal == target_ordinal,
+                    is_forced=output_ordinal in forced_ordinals,
+                ),
             ]
         )
     command.append(str(temp_path))

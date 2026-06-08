@@ -12,7 +12,7 @@ from normal.movie_audio_fix import (
     choose_retained_audio_ordinals,
 )
 from normal.movie_profile import load_library_policy, normalized_subtitle_preferences
-from normal.movie_repair_planner import build_movie_repair_plan
+from normal.movie_repair_planner import build_movie_repair_plan, subtitle_disposition_value
 from normal.movie_scan import probe_media_facts
 from normal.quality_review import MediaFacts
 
@@ -259,7 +259,10 @@ def run_ffmpeg_repair_defaults_fix(
             command.extend(
                 [
                     f"-disposition:s:{output_ordinal}",
-                    "default" if output_ordinal == target_subtitle_ordinal else "0",
+                    subtitle_disposition_value(
+                        is_default=output_ordinal == target_subtitle_ordinal,
+                        is_forced=original_facts.subtitle_streams[output_ordinal].is_forced,
+                    ),
                 ]
             )
     command.append(str(temp_path))
