@@ -22,4 +22,5 @@ venv/
 
 # Local-only agent and runtime output artifacts
 /CLAUDE.md
+/AGENTS.md
 /out/
