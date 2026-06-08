@@ -996,10 +996,19 @@ input[type="checkbox"] {
 }
 
 .lab-preview-item {
+  position: relative;
+  overflow: hidden;
   padding: 10px 12px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
   background: var(--paper);
+  transition: background-color 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease, opacity 0.5s ease;
+}
+
+.lab-preview-item-title,
+.lab-preview-item-body {
+  position: relative;
+  z-index: 1;
 }
 
 .lab-preview-item-title {
@@ -1014,6 +1023,107 @@ input[type="checkbox"] {
 
 .lab-preview-empty { color: var(--muted); }
 .lab-preview-empty strong { display: block; margin-bottom: 4px; color: var(--ink); }
+
+/* Repair queue: the card whose file ffmpeg is currently remuxing wears a steady
+   accent spine and a soft wash; the small dot is the living beat. As the chain
+   advances, the focus glides to the next card and finished cards settle back. */
+.lab-repair-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lab-repair-card-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lab-remux-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.lab-remux-status.is-active { color: var(--accent); }
+.lab-remux-status.is-done {
+  color: var(--faint);
+  font-weight: 500;
+}
+.lab-remux-status.is-done::before {
+  content: "\2713";
+  margin-right: -2px;
+}
+
+.lab-remux-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: labRemuxPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes labRemuxPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.6); }
+}
+
+.lab-preview-item.is-remuxing {
+  background: var(--accent-wash);
+  border-color: var(--accent-line);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.lab-preview-item.is-remux-done {
+  opacity: 0.6;
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 34%, transparent);
+}
+
+/* The progress wash: a vertical fill that creeps down the card while its file is
+   in flight. Pacing is a pure facade — duration comes from a file-size estimate
+   (--remux-eta) and the curve is eased so motion is liveliest early, then plateaus
+   short of full. It never reaches the bottom on its own; only the real remux
+   advancing (is-remux-done) races it home, so the bar can reassure without lying. */
+.lab-preview-item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  transform: scaleY(0);
+  transform-origin: top;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--accent) 10%, transparent),
+    color-mix(in srgb, var(--accent) 20%, transparent)
+  );
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lab-preview-item.is-remuxing::before {
+  opacity: 1;
+  transform: scaleY(0.88);
+  transition: transform var(--remux-eta, 12s) cubic-bezier(0.33, 0.6, 0.5, 1);
+}
+
+.lab-preview-item.is-remux-done::before {
+  opacity: 1;
+  transform: scaleY(1);
+  transition: transform 0.25s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-preview-item { transition: none; }
+  .lab-preview-item::before { display: none; }
+  .lab-remux-dot { animation: none; }
+}
 
 .lab-policy-panel {
   display: grid;

@@ -44,6 +44,42 @@ def build_facts(
 
 
 class MovieRepairPlannerTests(unittest.TestCase):
+    def test_build_plan_repairs_flag_only_forced_english_subtitle(self) -> None:
+        # Forced via the container flag alone — plain "English" title, no "Forced"
+        # text — so this proves the disposition path, not the title regex.
+        audio_streams = [
+            AudioStreamFacts(index=1, codec="ac3", language="eng", channels=6, bitrate_kbps=640, is_default=True),
+        ]
+        subtitle_streams = [
+            SubtitleStreamFacts(index=2, codec="hdmv_pgs_subtitle", language="eng", title="English", is_default=False, is_forced=True),
+            SubtitleStreamFacts(index=3, codec="hdmv_pgs_subtitle", language="eng", title="English", is_default=False, is_forced=False),
+        ]
+        facts = MediaFacts(
+            container="matroska",
+            audio_stream_count=len(audio_streams),
+            default_audio_streams=1,
+            default_audio_stream_index=1,
+            audio_streams=audio_streams,
+            subtitle_stream_count=len(subtitle_streams),
+            default_subtitle_streams=0,
+            default_subtitle_stream_index=None,
+            subtitle_streams=subtitle_streams,
+        )
+
+        plan = build_movie_repair_plan(
+            facts,
+            path="/library/Movie.mkv",
+            subtitle_preferences={
+                "foreign_audio_subtitles": "forced_english",
+                "english_audio_subtitles": "forced_english",
+            },
+        )
+
+        self.assertEqual(plan["subtitle"]["issue_code"], "english_forced_not_default")
+        self.assertTrue(plan["subtitle"]["repairable"])
+        self.assertTrue(plan["subtitle"]["target_forced"])
+        self.assertEqual(plan["subtitle"]["target_stream_index"], 2)
+
     def test_build_plan_marks_second_order_subtitle_when_audio_flip_changes_branch(self) -> None:
         facts = build_facts(default_audio_language="ita", default_subtitle_index=None)
 

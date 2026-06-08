@@ -147,6 +147,8 @@
     activityPayload: null,
     activityRefreshInFlight: false,
     activityPollTimer: 0,
+    repairPreviewSignature: '',
+    activeRemuxPath: '',
   };
 
   const el = {
@@ -1264,6 +1266,31 @@
 
   function repairWorkflowBusy() {
     return state.audioFixBusy || state.subtitleFixBusy || activityPayloadHasRemux();
+  }
+
+  // Scan and activity payloads both carry resolved absolute paths (the source root
+  // is resolve()'d up front and discovery skips symlinks), so card paths and the
+  // remux item's current_path are the same string. Trim only for defensive equality.
+  function normalizePathKey(path) {
+    return String(path || '').trim().replace(/\/+$/, '');
+  }
+
+  function remuxActivityCurrentPath(payload = state.activityPayload) {
+    const appItems = Array.isArray(payload?.app) ? payload.app : [];
+    const remux = appItems.find(item => item?.kind === 'remux' && item?.current_path);
+    return remux ? normalizePathKey(remux.current_path) : '';
+  }
+
+  // The single remux item's current_path advances file-by-file along the queue.
+  // Hold the last known target across the brief gaps between files so the focus
+  // (and the settled "done" cards behind it) don't flicker mid-chain.
+  function updateRemuxFocusPath() {
+    if (!activityPayloadHasRemux()) {
+      state.activeRemuxPath = '';
+      return;
+    }
+    const current = remuxActivityCurrentPath();
+    if (current) state.activeRemuxPath = current;
   }
 
   function safeRepairLockOverlayEnabled() {
@@ -3720,14 +3747,67 @@
     return value;
   }
 
+  // Lossless remux is a stream copy, so wall-clock is I/O-bound and tracks
+  // file_size / throughput. The constant is biased to this drive's slow floor
+  // (~50 MB/s) on purpose: under-promising lets page-cache bursts finish the real
+  // job ahead of the bar and snap it home, which reads as "done early" rather than
+  // "stuck near the end". This only paces the facade; completion stays gated on the
+  // activity focus advancing.
+  const REMUX_BYTES_PER_SECOND = 50 * 1024 * 1024;
+
+  function remuxEtaSeconds(bytes) {
+    const size = Number(bytes) || 0;
+    if (size <= 0) return 12;
+    return Math.max(2, size / REMUX_BYTES_PER_SECOND);
+  }
+
   function buildRepairPreviewPane(rows, action = state.repairAction) {
     if (!rows.length) return '<div class="lab-preview-empty"><strong>No visible items.</strong></div>';
     return rows.map(row => `
-      <div class="lab-preview-item">
-        <div class="lab-preview-item-title">${escapeHtml(fileNameFromPath(row.current_path || row.path || ''))}</div>
+      <div class="lab-preview-item" data-remux-path="${escapeHtml(normalizePathKey(row.current_path || row.path || ''))}" data-remux-bytes="${Number(row.item?.facts?.file_size_bytes) || 0}">
+        <div class="lab-preview-item-title lab-repair-card-head">
+          <span class="lab-repair-card-name">${escapeHtml(fileNameFromPath(row.current_path || row.path || ''))}</span>
+          <span class="lab-remux-status" data-remux-status hidden></span>
+        </div>
         <div class="lab-preview-item-body">${repairPreviewTreeForRow(row, action)}</div>
       </div>
     `).join('');
+  }
+
+  // Patch remux focus onto the existing card nodes in place. Cards render in the
+  // same order the backend walks the queue, so the matched card is in flight,
+  // everything above it is done, everything below is still waiting.
+  function syncRemuxCardStates() {
+    updateRemuxFocusPath();
+    const cards = el.previewPane
+      ? Array.from(el.previewPane.querySelectorAll('.lab-preview-item[data-remux-path]'))
+      : [];
+    if (!cards.length) return;
+    const focus = state.activeRemuxPath;
+    const activeIndex = focus
+      ? cards.findIndex(card => card.dataset.remuxPath === focus)
+      : -1;
+    cards.forEach((card, index) => {
+      const remuxing = index === activeIndex;
+      const done = activeIndex >= 0 && index < activeIndex;
+      // Set the facade duration only as the card enters the in-flight state, so the
+      // CSS fill transition runs once from empty rather than restarting each 2s poll.
+      if (remuxing && !card.classList.contains('is-remuxing')) {
+        card.style.setProperty('--remux-eta', `${remuxEtaSeconds(card.dataset.remuxBytes)}s`);
+      } else if (!remuxing) {
+        card.style.removeProperty('--remux-eta');
+      }
+      card.classList.toggle('is-remuxing', remuxing);
+      card.classList.toggle('is-remux-done', done);
+      const status = card.querySelector('[data-remux-status]');
+      if (!status) return;
+      status.classList.toggle('is-active', remuxing);
+      status.classList.toggle('is-done', done);
+      status.hidden = !remuxing && !done;
+      status.innerHTML = remuxing
+        ? '<span class="lab-remux-dot"></span>remuxing'
+        : (done ? 'done' : '');
+    });
   }
 
   function combinedRepairRunsSingleRemux(action = state.repairAction) {
@@ -3743,6 +3823,7 @@
     const visibleRows = repairRowsForAction(state.filteredRows);
     const previewRows = selection.applicableRows;
     if (!selection.selectedRows.length) {
+      state.repairPreviewSignature = '';
       el.previewPane.innerHTML = `
         <div class="lab-preview-empty">
           <strong>No rows selected.</strong>
@@ -3752,6 +3833,7 @@
       return;
     }
     if (!previewRows.length) {
+      state.repairPreviewSignature = '';
       el.previewPane.innerHTML = `
         <div class="lab-preview-empty">
           <strong>No applicable rows.</strong>
@@ -3768,6 +3850,23 @@
     const mixedSelectionLabel = selection.skippedRows.length
       ? `${selection.selectedRows.length} selected, ${selection.applicableRows.length} applicable, ${selection.skippedRows.length} skipped`
       : '';
+    // Rebuild only when the card set or surrounding copy actually changes. During a
+    // live remux the structure is stable, so the 2s activity poll just patches the
+    // focus onto the persistent card nodes — keeping the heartbeat animation alive
+    // and sparing the pane a full innerHTML churn every tick.
+    const signature = [
+      state.repairAction,
+      summary,
+      mixedSelectionLabel,
+      state.repairActionNotice,
+      previewRows.map(row => normalizePathKey(row.current_path || row.path || '')).join('|'),
+    ].join('::');
+    if (state.repairPreviewSignature === signature
+        && el.previewPane.querySelector('.lab-preview-item[data-remux-path]')) {
+      syncRemuxCardStates();
+      return;
+    }
+    state.repairPreviewSignature = signature;
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
         <strong>${summary}</strong>
@@ -3778,6 +3877,7 @@
         ${buildRepairPreviewPane(previewRows, state.repairAction)}
       </div>
     `;
+    syncRemuxCardStates();
   }
 
   function renderPreviewPane() {

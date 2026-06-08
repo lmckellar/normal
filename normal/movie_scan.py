@@ -183,7 +183,7 @@ def run_ffprobe(path: Path) -> dict[str, Any]:
         "-v",
         "error",
         "-show_entries",
-        "format=duration,size,bit_rate,format_name,start_time:stream=index,codec_type,codec_name,width,height,sample_aspect_ratio,display_aspect_ratio,bit_rate,channels,pix_fmt,profile,level,avg_frame_rate,r_frame_rate:stream_disposition=default:stream_tags",
+        "format=duration,size,bit_rate,format_name,start_time:stream=index,codec_type,codec_name,width,height,sample_aspect_ratio,display_aspect_ratio,bit_rate,channels,pix_fmt,profile,level,avg_frame_rate,r_frame_rate:stream_disposition=default,forced:stream_tags",
         "-of",
         "json",
         str(path),

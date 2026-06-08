@@ -46,6 +46,19 @@ class MovieScanTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "ffprobe timed out"):
                     run_ffprobe(movie_path)
 
+    def test_run_ffprobe_requests_forced_disposition(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.touch()
+
+            completed = subprocess.CompletedProcess(args=[], returncode=0, stdout="{}", stderr="")
+            with patch("normal.movie_scan.subprocess.run", return_value=completed) as mock_run:
+                run_ffprobe(movie_path)
+
+            command = mock_run.call_args.args[0]
+            show_entries = command[command.index("-show_entries") + 1]
+            self.assertIn("stream_disposition=default,forced", show_entries)
+
     def test_media_facts_from_ffprobe_payload_extracts_primary_streams(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             movie_path = Path(tmpdir) / "Movie.mkv"
