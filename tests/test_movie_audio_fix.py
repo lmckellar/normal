@@ -66,7 +66,7 @@ class MovieAudioFixTests(unittest.TestCase):
                 commands.append(command)
                 return FakePopen(command, Path(command[-1]))
 
-            with patch("normal.movie_audio_fix.subprocess.Popen", side_effect=fake_popen):
+            with patch("normal.movie_audio_fix.mkvpropedit_available", return_value=False), patch("normal.movie_audio_fix.subprocess.Popen", side_effect=fake_popen):
                 result = fix_english_audio_default(movie, probe_media=probe_media)
 
             self.assertEqual(result.status, "fixed")
@@ -100,7 +100,7 @@ class MovieAudioFixTests(unittest.TestCase):
                 commands.append(command)
                 return FakePopen(command, Path(command[-1]))
 
-            with patch("normal.movie_audio_fix.subprocess.Popen", side_effect=fake_popen):
+            with patch("normal.movie_audio_fix.mkvpropedit_available", return_value=False), patch("normal.movie_audio_fix.subprocess.Popen", side_effect=fake_popen):
                 result = fix_english_audio_default(movie, probe_media=probe_media, drop_foreign_audio=True)
 
             self.assertEqual(result.status, "fixed")
@@ -158,7 +158,7 @@ class MovieAudioFixTests(unittest.TestCase):
                 del text, stdout, stderr
                 return FakePopen(command, Path(command[-1]))
 
-            with patch("normal.movie_audio_fix.subprocess.Popen", side_effect=fake_popen):
+            with patch("normal.movie_audio_fix.mkvpropedit_available", return_value=False), patch("normal.movie_audio_fix.subprocess.Popen", side_effect=fake_popen):
                 result = fix_english_audio_default(movie, probe_media=probe_media, drop_foreign_audio=True)
 
             self.assertEqual(result.status, "fixed")

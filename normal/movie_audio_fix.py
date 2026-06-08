@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 from typing import Any, Callable
 
+from normal.mkvpropedit_fix import build_mkvpropedit_command, mkvpropedit_available, run_mkvpropedit
 from normal.movie_profile import (
     audio_stream_quality_key,
     canonical_audio_language,
@@ -109,6 +110,26 @@ def fix_english_audio_default(
         and kept_ordinals == list(range(len(audio_streams)))
     ):
         return AudioDefaultFixResult(str(resolved), "skipped", "already_default_english", facts=original_facts)
+
+    if not drop_foreign_audio and mkvpropedit_available():
+        command = build_mkvpropedit_command(
+            resolved,
+            audio_defaults=[index == target_ordinal for index in range(len(audio_streams))],
+        )
+        try:
+            run_mkvpropedit(resolved, command, progress_callback=progress_callback)
+            fixed_facts = probe_media(resolved)
+            verify_fixed_default_stream(
+                fixed_facts.audio_streams,
+                target_ordinal=target_ordinal,
+                drop_foreign_audio=False,
+            )
+        except FileNotFoundError:
+            pass
+        except Exception as exc:
+            return AudioDefaultFixResult(str(resolved), "skipped", f"fix_failed: {exc}")
+        else:
+            return AudioDefaultFixResult(str(resolved), "fixed", "english_default_set", facts=fixed_facts)
 
     with tempfile.NamedTemporaryFile(
         prefix=f"{resolved.stem}.normal-audio-fix.",

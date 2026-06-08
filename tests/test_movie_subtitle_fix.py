@@ -129,7 +129,7 @@ class MovieSubtitleFixTests(unittest.TestCase):
                 commands.append(command)
                 return FakePopen(command, Path(command[-1]))
 
-            with patch("normal.movie_subtitle_fix.subprocess.Popen", side_effect=fake_popen):
+            with patch("normal.movie_subtitle_fix.mkvpropedit_available", return_value=False), patch("normal.movie_subtitle_fix.subprocess.Popen", side_effect=fake_popen):
                 result = fix_movie_subtitle_default(movie, probe_media=probe_media)
 
             self.assertEqual(result.status, "fixed")
@@ -160,7 +160,7 @@ class MovieSubtitleFixTests(unittest.TestCase):
                 commands.append(command)
                 return FakePopen(command, Path(command[-1]))
 
-            with patch("normal.movie_subtitle_fix.subprocess.Popen", side_effect=fake_popen):
+            with patch("normal.movie_subtitle_fix.mkvpropedit_available", return_value=False), patch("normal.movie_subtitle_fix.subprocess.Popen", side_effect=fake_popen):
                 result = fix_movie_subtitle_default(movie, probe_media=probe_media)
 
             self.assertEqual(result.status, "fixed")

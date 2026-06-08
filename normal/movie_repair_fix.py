@@ -11,6 +11,11 @@ from normal.movie_audio_fix import (
     build_ffmpeg_progress_update,
     choose_retained_audio_ordinals,
 )
+from normal.mkvpropedit_fix import (
+    build_mkvpropedit_command,
+    mkvpropedit_available,
+    run_mkvpropedit,
+)
 from normal.movie_profile import load_library_policy, normalized_subtitle_preferences
 from normal.movie_repair_planner import build_movie_repair_plan, subtitle_disposition_value
 from normal.movie_scan import probe_media_facts
@@ -119,6 +124,17 @@ def fix_movie_repair_default(
     if not execution["run_mux"]:
         return RepairDefaultsFixResult(str(resolved), "skipped", "already_repaired", facts=original_facts)
 
+    if execution["metadata_only"] and mkvpropedit_available():
+        fast_result = apply_metadata_only_repair(
+            resolved,
+            original_facts=original_facts,
+            execution=execution,
+            probe_media=probe_media,
+            progress_callback=progress_callback,
+        )
+        if fast_result is not None:
+            return fast_result
+
     with tempfile.NamedTemporaryFile(
         prefix=f"{resolved.stem}.normal-repair-fix.",
         suffix=resolved.suffix,
@@ -161,6 +177,50 @@ def fix_movie_repair_default(
         temp_path.unlink(missing_ok=True)
 
 
+def apply_metadata_only_repair(
+    resolved: Path,
+    *,
+    original_facts: MediaFacts,
+    execution: dict[str, Any],
+    probe_media: Callable[[Path], MediaFacts],
+    progress_callback: ProgressCallback | None,
+) -> RepairDefaultsFixResult | None:
+    audio_defaults: list[bool] | None = None
+    if execution["audio_mutation"]:
+        audio_defaults = [
+            ordinal == execution["target_audio_ordinal"]
+            for ordinal in range(len(original_facts.audio_streams))
+        ]
+    subtitle_defaults: list[bool] | None = None
+    subtitle_forced: list[bool] | None = None
+    if execution["subtitle_mutation"]:
+        subtitle_defaults = [
+            ordinal == execution["target_subtitle_ordinal"]
+            for ordinal in range(len(original_facts.subtitle_streams))
+        ]
+        subtitle_forced = [stream.is_forced for stream in original_facts.subtitle_streams]
+    command = build_mkvpropedit_command(
+        resolved,
+        audio_defaults=audio_defaults,
+        subtitle_defaults=subtitle_defaults,
+        subtitle_forced=subtitle_forced,
+    )
+    try:
+        run_mkvpropedit(resolved, command, progress_callback=progress_callback)
+        fixed_facts = probe_media(resolved)
+        verify_repair_defaults_result(fixed_facts, execution)
+    except FileNotFoundError:
+        return None
+    except Exception as exc:
+        return RepairDefaultsFixResult(str(resolved), "skipped", f"fix_failed: {exc}")
+    return RepairDefaultsFixResult(
+        str(resolved),
+        "fixed",
+        execution_result_message(execution),
+        facts=fixed_facts,
+    )
+
+
 def build_execution_plan(
     facts: MediaFacts,
     repair_plan: dict[str, Any],
@@ -184,8 +244,14 @@ def build_execution_plan(
     subtitle_mutation = bool(include_subtitle and effective_subtitle.get("repairable"))
 
     run_mux = audio_mutation or subtitle_mutation or len(kept_audio_ordinals) != len(facts.audio_streams)
+    metadata_only = bool(
+        run_mux
+        and not apply_drop_foreign_audio
+        and len(kept_audio_ordinals) == len(facts.audio_streams)
+    )
     return {
         "run_mux": run_mux,
+        "metadata_only": metadata_only,
         "audio_mutation": audio_mutation,
         "subtitle_mutation": subtitle_mutation,
         "drop_foreign_audio": apply_drop_foreign_audio,
