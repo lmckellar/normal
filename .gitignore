@@ -24,3 +24,6 @@ venv/
 /CLAUDE.md
 /AGENTS.md
 /out/
+
+# Internal planner notes — surface via the feature drop, not the repo
+/docs/internal/fun-mode-voice-layer.md
