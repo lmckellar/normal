@@ -4,8 +4,6 @@ This changelog was retroactively rebuilt from commit history and diff/change
 logs. Real release history starts at `v0.7.0-alpha.1`, with a matching git tag
 and GitHub prerelease. Earlier sections remain reconstructed history.
 
-## [Unreleased]
-
 ## [0.7.0-alpha.6] — 2026-06-09
 
 ### Added
