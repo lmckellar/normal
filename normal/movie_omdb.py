@@ -301,7 +301,9 @@ def primary_language(language: str | None) -> str | None:
     if not language:
         return None
     first = language.split(",")[0].strip().casefold()
-    return first or None
+    if first in {"", "n/a", "na", "none", "unknown"}:
+        return None
+    return first
 
 
 def resolve_original_language(

@@ -242,6 +242,8 @@ def _display_word(word: str) -> str:
 
     def normalize_fragment(match: re.Match[str]) -> str:
         fragment = match.group(0)
+        if match.start() != 0:
+            return fragment
         if fragment.isupper() and len(fragment) <= 4:
             return fragment.capitalize() if fragment in SHORT_UPPER_WORDS else fragment
         return fragment[0].upper() + fragment[1:].lower()
