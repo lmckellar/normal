@@ -25,5 +25,6 @@ venv/
 /AGENTS.md
 /out/
 
-# Internal planner notes — surface via the feature drop, not the repo
-/docs/internal/fun-mode-voice-layer.md
+# Internal notes — idea dump / planning artefacts / design provenance.
+# Kept local; surfaced via the product and the public docset, not the repo.
+/docs/internal/
