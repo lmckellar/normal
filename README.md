@@ -41,19 +41,19 @@ Reading and writing to a physical hard drive repeatedly is not free. `normal` tr
 
 **Universal Naming Convention**
 
-While preference on the specifics of naming and organisation may vary occasionally in response to obscure user preference, the expectations of downstream clients such as Plex and Jellyfin are explicit and should be targeted with a Universal Naming Convention that translates as freely between media API databases like IMDB/TMBD as it does into other clients like Emby, etc. 
+While preference on the specifics of naming and organisation may vary occasionally in response to obscure user preference, the expectations of downstream clients such as Plex and Jellyfin are explicit and should be targeted with a Universal Naming Convention that translates as freely between media API databases like IMDB/TMDB as it does into other clients like Emby, etc. 
 
 **The Holy Trinity Of Snobby Claims**
 
 1. A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 weak, mediocre and chaotic ones. 
 
-2. A maintenance process of 1,000 concise, respectful drive read/write events is preferable to one of 5,000 less consise ones if it acheives the same downstream shape.
+2. A maintenance process of 1,000 concise, respectful drive read/write events is preferable to one of 5,000 less concise ones if it achieves the same downstream shape.
 
 3. Title (Year)/Title (Year).mkv is The Way.
 
 ## Before You Point It at Your Real Library
 
-`normal` has become confident and efficient enough in flagging to take an aggressive by default stance. It renames, moves, deletes files and folders, uses recursive probe walks to gather metadata where unable to derive useful information via cheaper heuristic methods, calls remuxing workloads via `ffmpeg`, and will seek to move "from A to B" as fast as you let it. It does this by combining workflows while still providing visibility into what is being modified and what its output shape will be, but the net effect is that the tool can feel a little "in a hurry to clean your room" compared to more traditional and stage based implementations of this concept. This accumulates to big savings in terms of drive read/write and time spent tending to the process of maintenance yet does require the user to excercise adequate dilligence. 
+`normal` has become confident and efficient enough in flagging to take an aggressive by default stance. It renames, moves, deletes files and folders, uses recursive probe walks to gather metadata where unable to derive useful information via cheaper heuristic methods, calls remuxing workloads via `ffmpeg`, and will seek to move "from A to B" as fast as you let it. It does this by combining workflows while still providing visibility into what is being modified and what its output shape will be, but the net effect is that the tool can feel a little "in a hurry to clean your room" compared to more traditional and stage based implementations of this concept. This accumulates to big savings in terms of drive read/write and time spent tending to the process of maintenance yet does require the user to exercise adequate diligence. 
 
 While safety has been given primary consideration throughout development, any downstream user must exercise their own judgement on this matter.
 
