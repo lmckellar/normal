@@ -2,8 +2,7 @@
 
 *Authorship: Human authored.*
 
-"The most relevant open source project since Linux"
-- Linus Torvalds
+User consesus is unanimous:
 
 "Better than Filebot.. probably?"
 - You
