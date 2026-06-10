@@ -3573,7 +3573,7 @@
       });
     });
     el.rowsBody.querySelectorAll('input[data-row-check]').forEach(input => {
-      input.addEventListener('change', () => {
+      input.addEventListener('change', async () => {
         if (isRepairDefaultsMode() && repairDefaultsSelectionLocked()) {
           input.checked = state.selected.has(input.dataset.rowCheck || '');
           return;
@@ -3587,6 +3587,14 @@
         clearDeletePreviewState();
         renderRows();
         refreshSelectionState();
+        if (isWeakMode() && selectedWeakPaths().length) {
+          try {
+            await ensureWeakPreview();
+            renderPreviewPane();
+          } catch (error) {
+            el.previewPane.textContent = error.message;
+          }
+        }
       });
     });
     el.rowsBody.querySelectorAll('button[data-track-popover]').forEach(button => {
@@ -3932,10 +3940,11 @@
     }
     const previewRows = state.filteredRows.filter(row => state.selected.has(row.row_id));
     const tree = junkSelectedPreviewTree(previewRows);
-    const label = 'selected junk file';
+    const reclaimedBytes = previewRows.reduce((sum, row) => sum + (Number(row.file_size) || 0), 0);
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
-        <strong>${previewRows.length}</strong> ${label}${previewRows.length === 1 ? '' : 's'} marked as deleted.
+        <strong>${previewRows.length}</strong> junk file${previewRows.length === 1 ? '' : 's'} staged for deletion.
+        ${reclaimedBytes ? `<span class="chip delete">${formatFileSize(reclaimedBytes)} reclaimed</span>` : ''}
         ${state.junkDeleteSkipped.length ? `<span class="chip">${state.junkDeleteSkipped.length} skipped on last delete</span>` : ''}
       </div>
       ${tree}

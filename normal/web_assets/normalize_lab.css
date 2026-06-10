@@ -1533,12 +1533,14 @@ input[type="checkbox"] {
   font-weight: 500;
 }
 
-.lab-tree-line.is-deleted {
+.lab-tree-line.is-deleted,
+.lab-tree-line.is-selected.is-deleted {
   color: #a3312f;
   font-weight: 600;
 }
 
-.lab-tree-line.is-cleanup {
+.lab-tree-line.is-cleanup,
+.lab-tree-line.is-selected.is-cleanup {
   color: #8d5d1d;
   font-weight: 600;
 }
