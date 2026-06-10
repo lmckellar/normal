@@ -60,6 +60,24 @@ class ProbeCacheTests(unittest.TestCase):
             finally:
                 ProbeCache._PATH = original_path
 
+    def test_has_entries_reflects_persisted_cache_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_path = Path(tmpdir) / "probe-cache.json"
+            original_path = ProbeCache._PATH
+            try:
+                ProbeCache._PATH = cache_path
+                cache = ProbeCache()
+                self.assertFalse(cache.has_entries())
+
+                movie_path = Path(tmpdir) / "Movie.mkv"
+                movie_path.write_bytes(b"x")
+                cache.put(movie_path, MediaFacts(width=1920, height=1080))
+
+                fresh_cache = ProbeCache()
+                self.assertTrue(fresh_cache.has_entries())
+            finally:
+                ProbeCache._PATH = original_path
+
 
 if __name__ == "__main__":
     unittest.main()

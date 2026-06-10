@@ -16,6 +16,7 @@ from normal.web import (
     build_handler,
     delete_movie_junk_files,
     read_web_asset_text,
+    read_onboarding_bootstrap,
     render_workbench_html,
 )
 from normal.web.routes_cleanup import delete_mode_for_kind
@@ -55,11 +56,12 @@ class WebTests(unittest.TestCase):
         html = render_workbench_html(Path("/library/movies"), omdb_key="omdb-test", tmdb_key="tmdb-test")
         self.assertIn('<link rel="stylesheet" href="/assets/workbench.css?v=', html)
         self.assertIn('<script src="/assets/workbench.js?v=', html)
-        self.assertLess(html.index("window.OMDB_AVAILABLE"), html.index('<script src="/assets/workbench.js?v='))
-        self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
-        self.assertIn("window.OMDB_AVAILABLE = true;", html)
+        self.assertLess(html.index("window.NORMAL_BOOT"), html.index('<script src="/assets/workbench.js?v='))
+        self.assertIn('window.NORMAL_BOOT = {"defaultSource": "/library/movies"', html)
+        self.assertIn("window.DEFAULT_SOURCE = window.NORMAL_BOOT.defaultSource;", html)
+        self.assertIn("window.OMDB_AVAILABLE = window.NORMAL_BOOT.omdbAvailable;", html)
         self.assertNotIn("omdb-test", html)
-        self.assertIn('window.TMDB_KEY = "tmdb-test";', html)
+        self.assertIn('"tmdbKey": "tmdb-test"', html)
 
     def test_handler_serves_static_assets(self) -> None:
         with self.run_test_server() as base_url:
@@ -101,11 +103,13 @@ class WebTests(unittest.TestCase):
         html = render_workbench_html(Path("/library/movies"))
         self.assertIn('/assets/workbench.css?v=', html)
         self.assertIn('/assets/workbench.js?v=', html)
-        self.assertIn('window.DEFAULT_SOURCE = "/library/movies";', html)
+        self.assertIn('window.NORMAL_BOOT = {"defaultSource": "/library/movies"', html)
         self.assertIn('id="policyToggle"', html)
         self.assertIn('id="placeholderToggle"', html)
         self.assertIn('id="placeholderDownloadToggle"', html)
         self.assertIn('id="settingsToggle"', html)
+        self.assertIn('id="onboardingGate"', html)
+        self.assertIn('id="onboardingGateClose"', html)
         self.assertIn('class="lab-sliver"', html)
         self.assertIn('id="policyEditorPanel"', html)
         self.assertIn('id="settingsPanel"', html)
@@ -116,6 +120,31 @@ class WebTests(unittest.TestCase):
         self.assertIn('data-page-role="preview"', html)
         self.assertIn('data-collapse-mode="reflow"', html)
         self.assertIn('data-collapse-mode="anchored-slot"', html)
+
+    def test_onboarding_bootstrap_reads_cold_state_from_existing_persistence_signals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_path = Path(tmpdir) / "operator-preferences.json"
+            with patch("normal.web.server.OPERATOR_PREFERENCES_PATH", profile_path):
+                with patch("normal.web.server.state.PROBE_CACHE.has_entries", return_value=False):
+                    payload = read_onboarding_bootstrap()
+                    self.assertEqual(payload["temp"], "cold")
+                    self.assertEqual(payload["reasons"]["has_profile"], False)
+                    self.assertEqual(payload["reasons"]["has_probe_cache"], False)
+
+                    profile_path.write_text('{"default_source":"/library"}', encoding="utf-8")
+                    payload = read_onboarding_bootstrap()
+                    self.assertEqual(payload["temp"], "warm")
+                    self.assertEqual(payload["reasons"]["has_profile"], True)
+
+    def test_onboarding_bootstrap_marks_probe_cache_as_warm_even_without_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            profile_path = Path(tmpdir) / "operator-preferences.json"
+            with patch("normal.web.server.OPERATOR_PREFERENCES_PATH", profile_path):
+                with patch("normal.web.server.state.PROBE_CACHE.has_entries", return_value=True):
+                    payload = read_onboarding_bootstrap(omdb_key="omdb-test")
+        self.assertEqual(payload["temp"], "warm")
+        self.assertEqual(payload["reasons"]["has_probe_cache"], True)
+        self.assertEqual(payload["reasons"]["has_omdb_key"], True)
 
     def test_settings_keys_read_save_clear_cycle(self) -> None:
         from normal.web import credentials as credentials_module
@@ -222,6 +251,16 @@ class WebTests(unittest.TestCase):
         self.assertIn("state.policyPayload?.operator_preferences?.default_source", FRONTEND)
         self.assertNotIn("Library Switcher", FRONTEND)
         self.assertNotIn("n_library_roots", FRONTEND)
+
+    def test_onboarding_gate_is_client_owned_and_dismissible(self) -> None:
+        self.assertIn("const ONBOARDING_DISMISS_KEY = 'normal.onboarding.dismissed.cold';", FRONTEND)
+        self.assertIn("function onboardingShouldShow()", FRONTEND)
+        self.assertIn("function showOnboardingGate()", FRONTEND)
+        self.assertIn("function hideOnboardingGate({ remember = false } = {})", FRONTEND)
+        self.assertIn("showOnboardingGate();", FRONTEND)
+        self.assertIn("hideOnboardingGate({ remember: true });", FRONTEND)
+        self.assertIn("window.localStorage.removeItem(ONBOARDING_DISMISS_KEY);", FRONTEND)
+        self.assertIn("window.localStorage.setItem(ONBOARDING_DISMISS_KEY, '1');", FRONTEND)
 
     def test_run_button_becomes_stop_while_scan_runs(self) -> None:
         self.assertIn("state.runInFlight ? 'Running' :", FRONTEND)

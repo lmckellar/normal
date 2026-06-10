@@ -37,6 +37,7 @@
 
   const AUDIT_STREAM_RETRY_MS = 2000;
   const ACTIVITY_POLL_MS = 2000;
+  const ONBOARDING_DISMISS_KEY = 'normal.onboarding.dismissed.cold';
 
   const NORMALIZE_HEADERS = [
     { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
@@ -153,6 +154,7 @@
     repairPreviewSignature: '',
     activeRemuxPath: '',
     completedRemuxPaths: new Set(),
+    onboardingVisible: false,
   };
 
   const el = {
@@ -203,9 +205,50 @@
     inspectionPane: document.getElementById('inspectionPane'),
     trackPopover: document.getElementById('trackPopover'),
     repairLockOverlay: document.getElementById('repairLockOverlay'),
+    onboardingGate: document.getElementById('onboardingGate'),
+    onboardingGateBackdrop: document.getElementById('onboardingGateBackdrop'),
+    onboardingGateClose: document.getElementById('onboardingGateClose'),
   };
 
   el.sourcePath.value = window.DEFAULT_SOURCE || '';
+
+  function normalBoot() {
+    const boot = window.NORMAL_BOOT || {};
+    return typeof boot === 'object' && boot ? boot : {};
+  }
+
+  function onboardingBoot() {
+    const onboarding = normalBoot().onboarding || {};
+    return typeof onboarding === 'object' && onboarding ? onboarding : {};
+  }
+
+  function onboardingTemp() {
+    return onboardingBoot().temp === 'warm' ? 'warm' : 'cold';
+  }
+
+  function onboardingShouldShow() {
+    if (!el.onboardingGate) return false;
+    if (onboardingTemp() === 'warm') {
+      window.localStorage.removeItem(ONBOARDING_DISMISS_KEY);
+      return false;
+    }
+    return window.localStorage.getItem(ONBOARDING_DISMISS_KEY) !== '1';
+  }
+
+  function hideOnboardingGate({ remember = false } = {}) {
+    if (!el.onboardingGate || !state.onboardingVisible) return;
+    state.onboardingVisible = false;
+    el.onboardingGate.hidden = true;
+    document.body.style.removeProperty('overflow');
+    if (remember) window.localStorage.setItem(ONBOARDING_DISMISS_KEY, '1');
+  }
+
+  function showOnboardingGate() {
+    if (!el.onboardingGate || !onboardingShouldShow()) return;
+    state.onboardingVisible = true;
+    el.onboardingGate.hidden = false;
+    document.body.style.setProperty('overflow', 'hidden');
+  }
 
   function workflowFromUrl() {
     const params = new URLSearchParams(window.location.search);
@@ -3943,7 +3986,7 @@
     const reclaimedBytes = previewRows.reduce((sum, row) => sum + (Number(row.file_size) || 0), 0);
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
-        <strong>${previewRows.length}</strong> junk file${previewRows.length === 1 ? '' : 's'} staged for deletion.
+        <strong>${previewRows.length}</strong> selected junk file${previewRows.length === 1 ? '' : 's'} staged for deletion.
         ${reclaimedBytes ? `<span class="chip delete">${formatFileSize(reclaimedBytes)} reclaimed</span>` : ''}
         ${state.junkDeleteSkipped.length ? `<span class="chip">${state.junkDeleteSkipped.length} skipped on last delete</span>` : ''}
       </div>
@@ -4798,10 +4841,18 @@
     ) {
       closeTrackPopover();
     }
+    if (
+      state.onboardingVisible
+      && event.target instanceof Element
+      && event.target.id === 'onboardingGateBackdrop'
+    ) {
+      hideOnboardingGate({ remember: true });
+    }
   });
 
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') closeTrackPopover();
+    if (event.key === 'Escape' && state.onboardingVisible) hideOnboardingGate({ remember: true });
   });
 
   window.addEventListener('resize', () => {
@@ -4900,6 +4951,7 @@
   renderPanelVisibility();
   renderSidePanel();
   syncWorkflowUrl();
+  showOnboardingGate();
 
   el.policyToggle.addEventListener('click', () => {
     togglePolicyEditor().catch(handlePolicyToggleError);
@@ -4964,6 +5016,12 @@
       el.previewPane.textContent = error.message;
     });
   });
+
+  if (el.onboardingGateClose) {
+    el.onboardingGateClose.addEventListener('click', () => {
+      hideOnboardingGate({ remember: true });
+    });
+  }
 
   (async () => {
     try {

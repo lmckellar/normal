@@ -42,6 +42,11 @@ class ProbeCache:
             self._entries[key] = asdict(facts)
             self._save()
 
+    def has_entries(self) -> bool:
+        with self._lock:
+            self._ensure_loaded()
+            return bool(self._entries)
+
     def _key(self, path: Path) -> str | None:
         try:
             st = path.stat()

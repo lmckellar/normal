@@ -8,6 +8,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Callable
 
+from normal.movie_profile import OPERATOR_PREFERENCES_PATH
 from . import state
 from .activity import ActivityTracker
 from .routes_audit import handle_audit_follow_up_update, handle_audit_read, handle_audit_stream, record_system_event
@@ -61,12 +62,36 @@ def versioned_asset_route(route: str, asset_name: str) -> str:
     return f"{route}?v={digest}"
 
 
+def read_onboarding_bootstrap(omdb_key: str | None = None, tmdb_key: str | None = None) -> dict[str, object]:
+    has_probe_cache = state.PROBE_CACHE.has_entries()
+    has_profile = OPERATOR_PREFERENCES_PATH.exists()
+    has_omdb_key = bool(omdb_key or state.CREDENTIAL_STORE.omdb_key())
+    has_tmdb_key = bool(tmdb_key or state.CREDENTIAL_STORE.tmdb_key())
+    temp = "warm" if has_probe_cache or has_profile else "cold"
+    return {
+        "temp": temp,
+        "reasons": {
+            "has_probe_cache": has_probe_cache,
+            "has_profile": has_profile,
+            "has_omdb_key": has_omdb_key,
+            "has_tmdb_key": has_tmdb_key,
+        },
+    }
+
+
 def render_web_bootstrap(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
+    boot = {
+        "defaultSource": str(default_source) if default_source else "",
+        "omdbAvailable": bool(omdb_key),
+        "tmdbKey": tmdb_key or "",
+        "onboarding": read_onboarding_bootstrap(omdb_key=omdb_key, tmdb_key=tmdb_key),
+    }
     return "\n".join(
         (
-            f"window.DEFAULT_SOURCE = {json.dumps(str(default_source) if default_source else '')};",
-            f"window.OMDB_AVAILABLE = {json.dumps(bool(omdb_key))};",
-            f"window.TMDB_KEY = {json.dumps(tmdb_key or '')};",
+            f"window.NORMAL_BOOT = {json.dumps(boot)};",
+            "window.DEFAULT_SOURCE = window.NORMAL_BOOT.defaultSource;",
+            "window.OMDB_AVAILABLE = window.NORMAL_BOOT.omdbAvailable;",
+            "window.TMDB_KEY = window.NORMAL_BOOT.tmdbKey;",
         )
     )
 

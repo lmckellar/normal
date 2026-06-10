@@ -12,7 +12,7 @@ from .scan_guard import (
     resolve_source_path,
 )
 from .serializers import build_movie_normalize_results
-from .server import build_handler, read_web_asset_text, render_workbench_html, serve_web_ui
+from .server import build_handler, read_onboarding_bootstrap, read_web_asset_text, render_workbench_html, serve_web_ui
 from .state import HEAVY_SCAN_REGISTRY, RequestConflictError
 
 ACTIVITY_TRACKER = state.ACTIVITY_TRACKER
@@ -27,6 +27,7 @@ __all__ = [
     "build_activity_payload",
     "build_handler",
     "build_movie_normalize_results",
+    "read_onboarding_bootstrap",
     "build_source_scan_warning",
     "delete_movie_junk_files",
     "find_external_activity",
