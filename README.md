@@ -2,7 +2,10 @@
 
 *Authorship: Human authored.*
 
-Restoring order to your chaotic movie library
+"The most relevant open source project since Linux"
+- Linus Torvalds
+
+"Better than Filebot.. probably?"
 
 `normal` is a throroughly weird and opinionated open source local workbench that fixes a cross section of common issues with messy movie libraries. It seeks to restore calm where there was dissaray and can be useful for organizing, maintaining, improving or expanding your digital film collection.
 
