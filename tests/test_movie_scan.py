@@ -421,6 +421,51 @@ class MovieScanTests(unittest.TestCase):
 
             self.assertFalse(facts.subtitle_streams[0].is_forced)
 
+    def test_media_facts_from_ffprobe_payload_reads_uppercase_language_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x" * 100)
+
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {
+                        "duration": "7200",
+                        "size": "1048576000",
+                        "bit_rate": "6000000",
+                        "format_name": "matroska,webm",
+                    },
+                    "streams": [
+                        {
+                            "index": 0,
+                            "codec_type": "video",
+                            "codec_name": "h264",
+                            "width": 1920,
+                            "height": 1080,
+                            "bit_rate": "5000000",
+                        },
+                        {
+                            "index": 1,
+                            "codec_type": "audio",
+                            "codec_name": "ac3",
+                            "channels": 6,
+                            "disposition": {"default": 1},
+                            "tags": {"title": "Ita Ac3 5.1", "LANGUAGE": "ita"},
+                        },
+                        {
+                            "index": 2,
+                            "codec_type": "subtitle",
+                            "codec_name": "dvd_subtitle",
+                            "disposition": {"default": 1},
+                            "tags": {"title": "Forced", "LANGUAGE": "ita"},
+                        },
+                    ],
+                },
+                movie_path,
+            )
+
+            self.assertEqual(facts.audio_streams[0].language, "ita")
+            self.assertEqual(facts.subtitle_streams[0].language, "ita")
+
     def test_media_facts_from_ffprobe_payload_detects_immersive_audio_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             movie_path = Path(tmpdir) / "Movie.mkv"

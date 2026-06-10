@@ -386,9 +386,7 @@ def parse_stream_bitrate_kbps(stream: dict[str, Any]) -> int | None:
 
 
 def audio_stream_facts_from_ffprobe_stream(stream: dict[str, Any]) -> AudioStreamFacts:
-    tags = stream.get("tags")
-    if not isinstance(tags, dict):
-        tags = {}
+    tags = normalize_tag_keys(stream.get("tags"))
     disposition = stream.get("disposition")
     if not isinstance(disposition, dict):
         disposition = {}
@@ -405,9 +403,7 @@ def audio_stream_facts_from_ffprobe_stream(stream: dict[str, Any]) -> AudioStrea
 
 
 def subtitle_stream_facts_from_ffprobe_stream(stream: dict[str, Any]) -> SubtitleStreamFacts:
-    tags = stream.get("tags")
-    if not isinstance(tags, dict):
-        tags = {}
+    tags = normalize_tag_keys(stream.get("tags"))
     disposition = stream.get("disposition")
     if not isinstance(disposition, dict):
         disposition = {}
@@ -447,6 +443,16 @@ def choose_default_subtitle_stream(streams: list[SubtitleStreamFacts]) -> Subtit
         if stream.is_default:
             return stream
     return streams[0] if streams else None
+
+
+def normalize_tag_keys(tags: Any) -> dict[str, Any]:
+    # Matroska tag names are conventionally case-insensitive and ffprobe forwards
+    # them verbatim, so lowercase every key once at the boundary. Without this a
+    # rip that writes `LANGUAGE` instead of the standard track element reads as an
+    # unknown language for every stream.
+    if not isinstance(tags, dict):
+        return {}
+    return {str(key).casefold(): value for key, value in tags.items()}
 
 
 def normalize_language_tag(value: Any) -> str | None:
