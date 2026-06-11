@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import tempfile
 import threading
 import time
@@ -52,12 +53,8 @@ class MovieCanonicalListsTests(unittest.TestCase):
             (source / "Alien (1979).mkv").write_text("video", encoding="utf-8")
             with tempfile.TemporaryDirectory() as data_home:
                 with tempfile.TemporaryDirectory() as dataset_tmp:
-                    import os
-
-                    previous_data_home = os.environ.get("XDG_DATA_HOME")
-                    previous_dataset_dir = os.environ.get("IMDB_DATASET_DIR")
-                    os.environ["XDG_DATA_HOME"] = data_home
-                    try:
+                    with patch.dict(os.environ):
+                        os.environ["XDG_DATA_HOME"] = data_home
                         dataset_dir = Path(dataset_tmp)
                         os.environ["IMDB_DATASET_DIR"] = str(dataset_dir)
                         rows = [
@@ -81,16 +78,6 @@ class MovieCanonicalListsTests(unittest.TestCase):
                             standards={},
                             tmdb_key=None,
                         )
-                    finally:
-                        if previous_data_home is None:
-                            os.environ.pop("XDG_DATA_HOME", None)
-                        else:
-                            os.environ["XDG_DATA_HOME"] = previous_data_home
-                        if previous_dataset_dir is None:
-                            os.environ.pop("IMDB_DATASET_DIR", None)
-                        else:
-                            os.environ["IMDB_DATASET_DIR"] = previous_dataset_dir
-
         self.assertEqual(report.provider, "imdb")
         self.assertEqual(report.cache_state, "live")
 
@@ -134,23 +121,14 @@ class MovieCanonicalListsTests(unittest.TestCase):
                 raise AssertionError(url)
 
             with tempfile.TemporaryDirectory() as data_home:
-                import os
-
-                previous = os.environ.get("XDG_DATA_HOME")
-                os.environ["XDG_DATA_HOME"] = data_home
-                try:
+                with patch.dict(os.environ):
+                    os.environ["XDG_DATA_HOME"] = data_home
                     report = build_canonical_lists_report(
                         source,
                         standards={"canonical_list_provider": "tmdb"},
                         tmdb_key="test-key",
                         http_get=fake_http_get,
                     )
-                finally:
-                    if previous is None:
-                        os.environ.pop("XDG_DATA_HOME", None)
-                    else:
-                        os.environ["XDG_DATA_HOME"] = previous
-
             self.assertEqual(report.library_summary.owned_movies, 2)
             self.assertEqual(report.library_summary.unparsed_files, 1)
             self.assertEqual(report.library_summary.duplicate_files, 1)
@@ -187,11 +165,8 @@ class MovieCanonicalListsTests(unittest.TestCase):
             (source / "Blade Runner (1982).mkv").write_text("video", encoding="utf-8")
             with tempfile.TemporaryDirectory() as data_home:
                 with tempfile.TemporaryDirectory() as dataset_tmp:
-                    import os
-
-                    previous = os.environ.get("XDG_DATA_HOME")
-                    os.environ["XDG_DATA_HOME"] = data_home
-                    try:
+                    with patch.dict(os.environ):
+                        os.environ["XDG_DATA_HOME"] = data_home
                         dataset_dir = Path(dataset_tmp)
                         rows = [
                             {"tconst": "tt0000001", "title": "Alien", "year": 1979, "rating": 9.9, "votes": 300000, "genres": "Sci-Fi,Thriller"},
@@ -233,12 +208,6 @@ class MovieCanonicalListsTests(unittest.TestCase):
                             tmdb_key=None,
                             imdb_dataset_dir=dataset_dir,
                         )
-                    finally:
-                        if previous is None:
-                            os.environ.pop("XDG_DATA_HOME", None)
-                        else:
-                            os.environ["XDG_DATA_HOME"] = previous
-
             self.assertEqual(report.provider, "imdb")
             self.assertEqual(report.cache_state, "live")
             top_100 = next(item for item in report.list_summaries if item.id == "top_100")
@@ -594,11 +563,8 @@ class MovieCanonicalListsTests(unittest.TestCase):
                 raise AssertionError(url)
 
             with tempfile.TemporaryDirectory() as data_home:
-                import os
-
-                previous = os.environ.get("XDG_DATA_HOME")
-                os.environ["XDG_DATA_HOME"] = data_home
-                try:
+                with patch.dict(os.environ):
+                    os.environ["XDG_DATA_HOME"] = data_home
                     build_canonical_lists_report(
                         source,
                         standards={"canonical_list_provider": "tmdb"},
@@ -613,12 +579,6 @@ class MovieCanonicalListsTests(unittest.TestCase):
                         http_get=lambda _url: (_ for _ in ()).throw(TimeoutError("boom")),
                         now=lambda: 1000.0 + (8 * 24 * 60 * 60),
                     )
-                finally:
-                    if previous is None:
-                        os.environ.pop("XDG_DATA_HOME", None)
-                    else:
-                        os.environ["XDG_DATA_HOME"] = previous
-
             self.assertEqual(stale_report.cache_state, "stale")
 
     def test_build_canonical_lists_report_uses_stale_cache_on_imdb_refresh_failure(self) -> None:
@@ -627,11 +587,8 @@ class MovieCanonicalListsTests(unittest.TestCase):
             (source / "Alien (1979).mkv").write_text("video", encoding="utf-8")
             with tempfile.TemporaryDirectory() as data_home:
                 with tempfile.TemporaryDirectory() as dataset_tmp:
-                    import os
-
-                    previous = os.environ.get("XDG_DATA_HOME")
-                    os.environ["XDG_DATA_HOME"] = data_home
-                    try:
+                    with patch.dict(os.environ):
+                        os.environ["XDG_DATA_HOME"] = data_home
                         dataset_dir = Path(dataset_tmp)
                         rows = [
                             {"tconst": "tt0000001", "title": "Alien", "year": 1979, "rating": 9.9, "votes": 300000, "genres": "Sci-Fi,Thriller"},
@@ -663,12 +620,6 @@ class MovieCanonicalListsTests(unittest.TestCase):
                             imdb_dataset_dir=dataset_dir,
                             now=lambda: 1000.0 + (8 * 24 * 60 * 60),
                         )
-                    finally:
-                        if previous is None:
-                            os.environ.pop("XDG_DATA_HOME", None)
-                        else:
-                            os.environ["XDG_DATA_HOME"] = previous
-
             self.assertEqual(stale_report.cache_state, "stale")
 
     def test_imdb_provider_bootstraps_to_pending_status_without_manual_dataset_config(self) -> None:
@@ -676,41 +627,24 @@ class MovieCanonicalListsTests(unittest.TestCase):
             source = Path(tmpdir)
             (source / "Alien (1979).mkv").write_text("video", encoding="utf-8")
             with tempfile.TemporaryDirectory() as data_home:
-                import os
-
-                previous = os.environ.get("XDG_DATA_HOME")
-                previous_dataset_dir = os.environ.get("IMDB_DATASET_DIR")
-                os.environ["XDG_DATA_HOME"] = data_home
-                os.environ.pop("IMDB_DATASET_DIR", None)
-                try:
+                with patch.dict(os.environ):
+                    os.environ["XDG_DATA_HOME"] = data_home
+                    os.environ.pop("IMDB_DATASET_DIR", None)
                     with patch("normal.movie_canonical_lists._download_managed_imdb_dataset", side_effect=lambda *, now: time.sleep(0.05)):
                         report = build_canonical_lists_report(
                             source,
                             standards={"canonical_list_provider": "imdb"},
                             tmdb_key=None,
                         )
-                finally:
-                    if previous is None:
-                        os.environ.pop("XDG_DATA_HOME", None)
-                    else:
-                        os.environ["XDG_DATA_HOME"] = previous
-                    if previous_dataset_dir is None:
-                        os.environ.pop("IMDB_DATASET_DIR", None)
-                    else:
-                        os.environ["IMDB_DATASET_DIR"] = previous_dataset_dir
         self.assertEqual(report.provider, "imdb")
         self.assertEqual(report.canonical_status["state"], "bootstrapping")
         self.assertEqual(report.library_summary.matched_canonical_titles, 0)
 
     def test_ensure_imdb_dataset_ready_downloads_managed_store(self) -> None:
         with tempfile.TemporaryDirectory() as data_home:
-            import os
-
-            previous = os.environ.get("XDG_DATA_HOME")
-            previous_dataset_dir = os.environ.get("IMDB_DATASET_DIR")
-            os.environ["XDG_DATA_HOME"] = data_home
-            os.environ.pop("IMDB_DATASET_DIR", None)
-            try:
+            with patch.dict(os.environ):
+                os.environ["XDG_DATA_HOME"] = data_home
+                os.environ.pop("IMDB_DATASET_DIR", None)
                 rows = [
                     {"tconst": "tt0000001", "title": "Alien", "year": 1979, "rating": 9.9, "votes": 300000, "genres": "Sci-Fi,Thriller"},
                     {"tconst": "tt0000002", "title": "Blade Runner", "year": 1982, "rating": 9.8, "votes": 250000, "genres": "Sci-Fi,Action"},
@@ -737,15 +671,6 @@ class MovieCanonicalListsTests(unittest.TestCase):
 
                 with patch("normal.movie_canonical_lists._download_managed_imdb_dataset", side_effect=fake_download):
                     status = ensure_imdb_dataset_ready(block=True)
-            finally:
-                if previous is None:
-                    os.environ.pop("XDG_DATA_HOME", None)
-                else:
-                    os.environ["XDG_DATA_HOME"] = previous
-                if previous_dataset_dir is None:
-                    os.environ.pop("IMDB_DATASET_DIR", None)
-                else:
-                    os.environ["IMDB_DATASET_DIR"] = previous_dataset_dir
         self.assertTrue(status["ready"])
         self.assertEqual(status["state"], "ready")
 
@@ -755,11 +680,8 @@ class MovieCanonicalListsTests(unittest.TestCase):
             (source / "Alien (1979).mkv").write_text("video", encoding="utf-8")
             with tempfile.TemporaryDirectory() as data_home:
                 with tempfile.TemporaryDirectory() as dataset_tmp:
-                    import os
-
-                    previous = os.environ.get("XDG_DATA_HOME")
-                    os.environ["XDG_DATA_HOME"] = data_home
-                    try:
+                    with patch.dict(os.environ):
+                        os.environ["XDG_DATA_HOME"] = data_home
                         rows = [
                             {"tconst": "tt0000001", "title": "Alien", "year": 1979, "rating": 9.9, "votes": 300000, "genres": "Sci-Fi,Thriller"},
                         ]
@@ -782,12 +704,6 @@ class MovieCanonicalListsTests(unittest.TestCase):
                             tmdb_key=None,
                             imdb_dataset_dir=dataset_dir,
                         )
-                    finally:
-                        if previous is None:
-                            os.environ.pop("XDG_DATA_HOME", None)
-                        else:
-                            os.environ["XDG_DATA_HOME"] = previous
-
                 imdb_dir = Path(data_home) / "normal" / "canonical_lists" / "v6" / "imdb"
                 tmdb_dir = Path(data_home) / "normal" / "canonical_lists" / "v6" / "tmdb"
                 self.assertTrue(imdb_dir.exists())
@@ -801,11 +717,8 @@ class MovieCanonicalListsTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as data_home:
                 with tempfile.TemporaryDirectory() as dataset_a_tmp:
                     with tempfile.TemporaryDirectory() as dataset_b_tmp:
-                        import os
-
-                        previous = os.environ.get("XDG_DATA_HOME")
-                        os.environ["XDG_DATA_HOME"] = data_home
-                        try:
+                        with patch.dict(os.environ):
+                            os.environ["XDG_DATA_HOME"] = data_home
                             dataset_a = Path(dataset_a_tmp)
                             dataset_b = Path(dataset_b_tmp)
                             rows_a = [
@@ -854,12 +767,6 @@ class MovieCanonicalListsTests(unittest.TestCase):
                                 imdb_dataset_dir=dataset_b,
                                 now=lambda: 1000.0,
                             )
-                        finally:
-                            if previous is None:
-                                os.environ.pop("XDG_DATA_HOME", None)
-                            else:
-                                os.environ["XDG_DATA_HOME"] = previous
-
             top_100_a = next(item for item in report_a.list_summaries if item.id == "top_100")
             top_100_b = next(item for item in report_b.list_summaries if item.id == "top_100")
             self.assertEqual(top_100_a.all_entries[1]["title"], "Top 2")
@@ -872,13 +779,9 @@ class MovieCanonicalListsTests(unittest.TestCase):
             source.mkdir()
             store = AuditStore(ledger_path=root / "audit-ledger.jsonl")
             with tempfile.TemporaryDirectory() as data_home:
-                import os
-
-                previous = os.environ.get("XDG_DATA_HOME")
-                previous_dataset_dir = os.environ.get("IMDB_DATASET_DIR")
-                os.environ["XDG_DATA_HOME"] = data_home
-                os.environ.pop("IMDB_DATASET_DIR", None)
-                try:
+                with patch.dict(os.environ):
+                    os.environ["XDG_DATA_HOME"] = data_home
+                    os.environ.pop("IMDB_DATASET_DIR", None)
                     rows = [
                         {"tconst": "tt0000001", "title": "Alien", "year": 1979, "rating": 9.9, "votes": 300000, "genres": "Sci-Fi,Thriller"},
                     ]
@@ -906,16 +809,6 @@ class MovieCanonicalListsTests(unittest.TestCase):
                             audit_store=store,
                             audit_source_root=source,
                         )
-                finally:
-                    if previous is None:
-                        os.environ.pop("XDG_DATA_HOME", None)
-                    else:
-                        os.environ["XDG_DATA_HOME"] = previous
-                    if previous_dataset_dir is None:
-                        os.environ.pop("IMDB_DATASET_DIR", None)
-                    else:
-                        os.environ["IMDB_DATASET_DIR"] = previous_dataset_dir
-
             actions = [event.action for event in store.read_events(source, limit=10)]
             self.assertEqual(actions, ["imdb_dataset_bootstrap_started", "imdb_dataset_bootstrap_completed"])
 
@@ -926,13 +819,9 @@ class MovieCanonicalListsTests(unittest.TestCase):
             source.mkdir()
             store = AuditStore(ledger_path=root / "audit-ledger.jsonl")
             with tempfile.TemporaryDirectory() as data_home:
-                import os
-
-                previous = os.environ.get("XDG_DATA_HOME")
-                previous_dataset_dir = os.environ.get("IMDB_DATASET_DIR")
-                os.environ["XDG_DATA_HOME"] = data_home
-                os.environ.pop("IMDB_DATASET_DIR", None)
-                try:
+                with patch.dict(os.environ):
+                    os.environ["XDG_DATA_HOME"] = data_home
+                    os.environ.pop("IMDB_DATASET_DIR", None)
                     rows = [
                         {"tconst": "tt0000001", "title": "Alien", "year": 1979, "rating": 9.9, "votes": 300000, "genres": "Sci-Fi,Thriller"},
                     ]
@@ -972,16 +861,6 @@ class MovieCanonicalListsTests(unittest.TestCase):
                             audit_store=store,
                             audit_source_root=source,
                         )
-                finally:
-                    if previous is None:
-                        os.environ.pop("XDG_DATA_HOME", None)
-                    else:
-                        os.environ["XDG_DATA_HOME"] = previous
-                    if previous_dataset_dir is None:
-                        os.environ.pop("IMDB_DATASET_DIR", None)
-                    else:
-                        os.environ["IMDB_DATASET_DIR"] = previous_dataset_dir
-
             actions = [event.action for event in store.read_events(source, limit=10)]
             self.assertEqual(actions, ["imdb_dataset_bootstrap_started", "imdb_dataset_bootstrap_completed"])
 
@@ -1015,23 +894,14 @@ class MovieCanonicalListsTests(unittest.TestCase):
                 raise AssertionError(url)
 
             with tempfile.TemporaryDirectory() as data_home:
-                import os
-
-                previous = os.environ.get("XDG_DATA_HOME")
-                os.environ["XDG_DATA_HOME"] = data_home
-                try:
+                with patch.dict(os.environ):
+                    os.environ["XDG_DATA_HOME"] = data_home
                     report = build_canonical_lists_report(
                         source,
                         standards={"canonical_list_provider": "tmdb"},
                         tmdb_key="test-key",
                         http_get=fake_http_get,
                     )
-                finally:
-                    if previous is None:
-                        os.environ.pop("XDG_DATA_HOME", None)
-                    else:
-                        os.environ["XDG_DATA_HOME"] = previous
-
             top_100 = next(item for item in report.list_summaries if item.id == "top_100")
             self.assertEqual(top_100.covered_count, 3)
             self.assertEqual(top_100.missing_count, 97)
@@ -1073,23 +943,14 @@ class MovieCanonicalListsTests(unittest.TestCase):
                 raise AssertionError(url)
 
             with tempfile.TemporaryDirectory() as data_home:
-                import os
-
-                previous = os.environ.get("XDG_DATA_HOME")
-                os.environ["XDG_DATA_HOME"] = data_home
-                try:
+                with patch.dict(os.environ):
+                    os.environ["XDG_DATA_HOME"] = data_home
                     report = build_canonical_lists_report(
                         source,
                         standards={"canonical_list_provider": "tmdb"},
                         tmdb_key="test-key",
                         http_get=fake_http_get,
                     )
-                finally:
-                    if previous is None:
-                        os.environ.pop("XDG_DATA_HOME", None)
-                    else:
-                        os.environ["XDG_DATA_HOME"] = previous
-
             top_100 = next(item for item in report.list_summaries if item.id == "top_100")
             k19 = next(e for e in top_100.all_entries if e["title"] == "K-19: The Widowmaker")
             self.assertTrue(k19["owned"])
@@ -1119,23 +980,14 @@ class MovieCanonicalListsTests(unittest.TestCase):
                 raise AssertionError(url)
 
             with tempfile.TemporaryDirectory() as data_home:
-                import os
-
-                previous = os.environ.get("XDG_DATA_HOME")
-                os.environ["XDG_DATA_HOME"] = data_home
-                try:
+                with patch.dict(os.environ):
+                    os.environ["XDG_DATA_HOME"] = data_home
                     report = build_canonical_lists_report(
                         source,
                         standards={"canonical_list_provider": "tmdb"},
                         tmdb_key="test-key",
                         http_get=fake_http_get,
                     )
-                finally:
-                    if previous is None:
-                        os.environ.pop("XDG_DATA_HOME", None)
-                    else:
-                        os.environ["XDG_DATA_HOME"] = previous
-
         top_100 = next(item for item in report.list_summaries if item.id == "top_100")
         alien = next(item for item in top_100.all_entries if item["title"] == "Alien")
         self.assertIsNone(alien.get("imdb_id"))
@@ -1186,23 +1038,14 @@ class MovieCanonicalListsTests(unittest.TestCase):
                 raise AssertionError(url)
 
             with tempfile.TemporaryDirectory() as data_home:
-                import os
-
-                previous = os.environ.get("XDG_DATA_HOME")
-                os.environ["XDG_DATA_HOME"] = data_home
-                try:
+                with patch.dict(os.environ):
+                    os.environ["XDG_DATA_HOME"] = data_home
                     report = build_canonical_lists_report(
                         source,
                         standards={"canonical_list_provider": "tmdb"},
                         tmdb_key="test-key",
                         http_get=fake_http_get,
                     )
-                finally:
-                    if previous is None:
-                        os.environ.pop("XDG_DATA_HOME", None)
-                    else:
-                        os.environ["XDG_DATA_HOME"] = previous
-
             top_100 = next(item for item in report.list_summaries if item.id == "top_100")
             la_confidential = next(e for e in top_100.all_entries if e["title"] == "L.A. Confidential")
             self.assertTrue(la_confidential["owned"])
