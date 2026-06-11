@@ -164,10 +164,23 @@
     <div class="lab-repair-lock-block lab-repair-lock-block-bottom"></div>
     <div class="lab-repair-lock-block lab-repair-lock-block-left"></div>
     <div class="lab-repair-lock-port-frame" aria-hidden="true"></div>
-    <div class="lab-repair-lock-banner">
-      <strong>Safe lock active.</strong>
-      <span>ffmpeg remux is in flight. Preview stays open; the rest of the workbench is paused.</span>
-    </div>
+    <section class="lab-repair-lock-explainer" role="status" aria-live="polite">
+      <div class="lab-repair-lock-scroll">
+        <div class="lab-repair-lock-kicker">Safe lock active</div>
+        <h2 class="lab-repair-lock-title">Hands off while ffmpeg works</h2>
+        <div class="lab-repair-lock-body">
+          <p>A remux is rewriting one of your files on disk right now. Until it finishes, the workbench stays locked so nothing — not a second job, not a fresh scan, not a stray click — can touch that file mid-write and leave it half-rebuilt.</p>
+          <p>This is the one moment normal genuinely cannot be interrupted. Almost everything else in the app is preview-only or reversible; an in-flight remux is neither. So we pause the whole surface and let the single job run clean.</p>
+          <ul class="lab-repair-lock-points">
+            <li>The Preview stays live. Watch the progress wash on the file being rebuilt to gauge how far along it is.</li>
+            <li>Scanning, fixes, and settings are paused, not cancelled — they come back exactly as you left them.</li>
+            <li>Nothing else on disk is changing. Only the file inside this remux is being written.</li>
+            <li>The lock lifts on its own the moment ffmpeg reports done. There is nothing here you need to click.</li>
+          </ul>
+          <p class="lab-repair-lock-footnote">Larger files and slower disks make this take longer. It is still working even when the fill looks still.</p>
+        </div>
+      </div>
+    </section>
   </div>
   <script>__NORMAL_BOOTSTRAP__</script>
   <script src="/assets/workbench.js"></script>
