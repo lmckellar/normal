@@ -51,6 +51,17 @@ class MovieProfileTests(unittest.TestCase):
         self.assertEqual(build_audio_summary("dts", 6, "DTS-HD Master Audio")[-1], "DTS-HD MA 5.1")
         self.assertEqual(build_audio_summary("pcm_s16le", 2)[-1], "PCM 2.0")
 
+    def test_build_audio_summary_ignores_atmos_title_on_non_carrier_codec(self) -> None:
+        family, _variant, _layout, immersive, summary = build_audio_summary(
+            "opus",
+            8,
+            None,
+            "Dolby Atmos/TrueHD Audio / 5631 kbps / 7.1-Atmos / 48 kHz / 24-bit",
+        )
+        self.assertEqual(family, "opus")
+        self.assertIsNone(immersive)
+        self.assertEqual(summary, "Opus 7.1")
+
     def test_classify_profile_label_keeps_legacy_bitrate_label_for_compatibility(self) -> None:
         label = classify_profile_label(
             MediaFacts(

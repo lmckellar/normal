@@ -135,14 +135,21 @@ def channel_layout_label(channels: int | None) -> str | None:
     return mapping.get(channels, f"{channels}ch")
 
 
-def detect_audio_immersive_extension(profile: str | None, title: str | None = None) -> str | None:
+_ATMOS_CARRIER_CODECS = {"truehd", "eac3"}
+_DTSX_CARRIER_CODECS = {"dts"}
+
+
+def detect_audio_immersive_extension(
+    profile: str | None, title: str | None = None, codec: str | None = None
+) -> str | None:
+    codec_text = (codec or "").casefold()
     profile_text = (profile or "").casefold()
     title_text = (title or "").casefold()
     combined = f"{profile_text} {title_text}".strip()
     if "atmos" in combined or "dolby atmos" in combined:
-        return "atmos"
+        return "atmos" if codec_text in _ATMOS_CARRIER_CODECS else None
     if any(token in combined for token in ("dts:x", "dts-x", "dtsx")):
-        return "dtsx"
+        return "dtsx" if codec_text in _DTSX_CARRIER_CODECS else None
     return None
 
 
@@ -186,7 +193,7 @@ def build_audio_summary(
 ) -> tuple[str | None, str | None, str | None, str | None, str | None]:
     family, variant, display_name = normalize_audio_format(codec, profile)
     layout = channel_layout_label(channels)
-    immersive = detect_audio_immersive_extension(profile, title)
+    immersive = detect_audio_immersive_extension(profile, title, codec)
 
     if not display_name and not layout:
         return family, variant, layout, immersive, None
