@@ -41,7 +41,12 @@ from normal.movie_profile import (
 from normal.movie_scan import MovieScanProgress, scan_movie_library
 from .activity import tracked_probe
 from .http import RequestContext
-from .routes_audit import record_export_event, record_policy_update_event, record_scan_event
+from .routes_audit import (
+    reconcile_replacement_followups,
+    record_export_event,
+    record_policy_update_event,
+    record_scan_event,
+)
 from .scan_guard import guarded_heavy_scan
 from .serializers import build_profile_response
 from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE, PROBE_CACHE, RequestConflictError
@@ -65,6 +70,7 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
     cached = MOVIE_PROFILE_CACHE.get(source)
     if cached is not None:
         response_report = reclassify_report_with_standards(cached, effective_standards, resolve_language=resolve_language) if floor_overridden else cached
+        reconcile_replacement_followups(source, response_report)
         response = build_profile_response(source, response_report, effective_standards, resolve_language=resolve_language)
         response["canonical_summary"] = build_canonical_summary(
             source,
@@ -120,6 +126,7 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
             )
         MOVIE_PROFILE_CACHE.put(source, report)
         response_report = reclassify_report_with_standards(report, effective_standards, resolve_language=resolve_language) if floor_overridden else report
+        reconcile_replacement_followups(source, response_report)
         response = build_profile_response(source, response_report, effective_standards, resolve_language=resolve_language)
         response["canonical_summary"] = build_canonical_summary(
             source,

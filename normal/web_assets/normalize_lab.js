@@ -2709,6 +2709,15 @@
     });
   }
 
+  function auditFollowupsNewestFirst(followups) {
+    return (Array.isArray(followups) ? followups.slice() : []).sort((left, right) => {
+      const leftKey = `${String(left?.updated_at || '')} ${String(left?.created_at || '')}`;
+      const rightKey = `${String(right?.updated_at || '')} ${String(right?.created_at || '')}`;
+      if (leftKey === rightKey) return String(left?.follow_up_id || '') < String(right?.follow_up_id || '') ? 1 : -1;
+      return leftKey < rightKey ? 1 : -1;
+    });
+  }
+
   function auditSessionContextLabel(payload) {
     const event = payload?.latest_system_start;
     if (!event?.recorded_at) return '';
@@ -2839,7 +2848,7 @@
       return;
     }
     if (auditSurfaceOpen()) {
-      const followups = Array.isArray(state.auditPayload?.active_followups) ? state.auditPayload.active_followups : [];
+      const followups = auditFollowupsNewestFirst(state.auditPayload?.active_followups);
       const events = auditEventsNewestFirst(state.auditPayload?.events).slice(0, 8);
       if (!el.sourcePath.value.trim()) {
         el.inspectionPane.innerHTML = '<div class="lab-preview-empty"><strong>Audit source required.</strong><div>Select a source to open the ledger surface.</div></div>';
@@ -4778,7 +4787,7 @@
         const delResponse = await fetch('/api/movies/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source, paths }),
+        body: JSON.stringify({ source, paths, issue_family: 'audio_packaging' }),
       });
       const delPayload = await delResponse.json();
       if (!delResponse.ok) throw new Error(delPayload.error || 'delete failed');
@@ -4994,7 +5003,7 @@
         const delResponse = await fetch('/api/movies/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ source, paths }),
+          body: JSON.stringify({ source, paths, issue_family: 'weak_encode' }),
         });
         const delPayload = await delResponse.json();
         if (!delResponse.ok) throw new Error(delPayload.error || 'delete failed');

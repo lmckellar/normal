@@ -667,7 +667,7 @@ def build_replacement_candidate_definition(standards: dict[str, Any] | None = No
         "display_name": "Replacement Candidate",
         "scope": "library_policy",
         "group": "Action Based",
-        "summary": "Quality profile at or below the configured cutoff and eligible for delete/replace triage.",
+        "summary": "Quality profile at or below the configured cutoff and eligible for delete/replace triage. A deleted title awaiting replacement is marked replaced the moment a file at that title and year would no longer fall under this same cutoff, threaded into the audit ledger.",
         "rule_summary": f"Current cutoff: {display} and lower.",
         "fields": [
             {

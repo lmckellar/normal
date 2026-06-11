@@ -11,6 +11,8 @@ from normal.audit import (
     AuditEvent,
     AuditFollowUpUpdate,
     AuditSubject,
+    FOLLOW_UP_KIND_REPLACEMENT,
+    FOLLOW_UP_STATUS_ACTIVE,
     FOLLOW_UP_STATUS_DISMISSED,
     FOLLOW_UP_STATUS_RESOLVED,
     SYSTEM_SOURCE_ROOT,
@@ -19,6 +21,7 @@ from normal.audit import (
     normalize_source_root,
 )
 from normal.models import utc_now_iso
+from normal.movie_naming import title_match_key
 
 from .http import RequestContext
 from .state import AUDIT_STORE
@@ -288,6 +291,123 @@ def normalize_subject_from_path(path: Path, *, issue_family: str | None = None) 
         title=parsed.title,
         year=parsed.year,
         issue_family=issue_family,
+    )
+
+
+_RECONCILABLE_FAMILIES = {"weak_encode", "audio_packaging"}
+_AUDIO_PACKAGING_ISSUE_CODES = {
+    "default_non_english_audio",
+    "default_non_english_audio_with_weak_english",
+}
+
+
+def _item_still_has_issue(item: Any, issue_family: str) -> bool:
+    profile = getattr(item, "profile", None)
+    if profile is None:
+        return False
+    if issue_family == "weak_encode":
+        return bool(getattr(profile, "weak_candidate", False))
+    if issue_family == "audio_packaging":
+        codes = {getattr(diag, "code", "") for diag in getattr(profile, "diagnostics", [])}
+        return bool(codes & _AUDIO_PACKAGING_ISSUE_CODES)
+    return False
+
+
+def _present_replacement_identities(report: Any, issue_family: str) -> dict[tuple[str, int], str]:
+    from normal.movie_plan import parse_movie_name
+
+    identities: dict[tuple[str, int], str] = {}
+    for item in getattr(report, "movies", []):
+        if _item_still_has_issue(item, issue_family):
+            continue
+        path = Path(getattr(item, "path", "") or "")
+        parsed = parse_movie_name(path)
+        if parsed.title is None or parsed.year is None:
+            continue
+        identities.setdefault((title_match_key(parsed.title), parsed.year), str(path.resolve()))
+    return identities
+
+
+def reconcile_replacement_followups(source: Path, report: Any) -> list[AuditEvent]:
+    active = AUDIT_STORE.read_followups(
+        source, kind=FOLLOW_UP_KIND_REPLACEMENT, status=FOLLOW_UP_STATUS_ACTIVE
+    )
+    if not active:
+        return []
+    source_root = normalize_source_root(source)
+    identities_by_family: dict[str, dict[tuple[str, int], str]] = {}
+    events: list[AuditEvent] = []
+    for followup in active:
+        issue_family = str(followup.subject.get("issue_family") or "weak_encode")
+        if issue_family not in _RECONCILABLE_FAMILIES:
+            continue
+        title = followup.subject.get("title")
+        year = followup.subject.get("year")
+        if not title or year in (None, ""):
+            continue
+        identities = identities_by_family.get(issue_family)
+        if identities is None:
+            identities = _present_replacement_identities(report, issue_family)
+            identities_by_family[issue_family] = identities
+        matched_path = identities.get((title_match_key(str(title)), int(year)))
+        if matched_path is None:
+            continue
+        events.append(_build_replacement_completed_event(source_root, followup, matched_path))
+    if events:
+        AUDIT_STORE.append_batch(events)
+    return events
+
+
+def _build_replacement_completed_event(source_root: str, followup: Any, matched_path: str) -> AuditEvent:
+    recorded_at = utc_now_iso()
+    title = followup.subject.get("title")
+    year = followup.subject.get("year")
+    previous_path = followup.subject.get("path")
+    issue_family = str(followup.subject.get("issue_family") or "weak_encode")
+    label = f"{title} ({year})" if title and year else (title or Path(previous_path or "").stem or "title")
+    return AuditEvent(
+        event_id=make_event_id(source_root, issue_family, "replacement_completed", recorded_at, salt=followup.follow_up_id),
+        recorded_at=recorded_at,
+        source_root=source_root,
+        workflow=issue_family,
+        action="replacement_completed",
+        summary=f"{label} moved from replacement queue to replaced.",
+        subjects=[
+            AuditSubject(
+                kind="replacement_completed",
+                path=matched_path,
+                title=title,
+                year=int(year) if year not in (None, "") else None,
+                item_id=followup.follow_up_id,
+                issue_family=issue_family,
+            )
+        ],
+        effects=[
+            AuditEffect(
+                kind="replacement_completed",
+                status="applied",
+                path=matched_path,
+                previous_path=previous_path,
+                message="Replacement found above the weak floor.",
+            )
+        ],
+        follow_up_updates=[
+            AuditFollowUpUpdate(
+                follow_up_id=followup.follow_up_id,
+                kind=FOLLOW_UP_KIND_REPLACEMENT,
+                action="resolve",
+                status=FOLLOW_UP_STATUS_RESOLVED,
+                summary=f"Replacement found for {label}.",
+                details={
+                    "completed_by_path": matched_path,
+                    "path": previous_path,
+                    "title": title,
+                    "year": year,
+                    "issue_family": issue_family,
+                },
+            )
+        ],
+        reversal={"capability": "none"},
     )
 
 
