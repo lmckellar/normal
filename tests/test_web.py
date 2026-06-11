@@ -404,7 +404,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("selectedSubtitleRowsFromPayload", FRONTEND)
         self.assertIn("function safeRepairLockOverlayEnabled()", FRONTEND)
         self.assertIn("currentWarningGateSafetyLevel() === 'safe'", FRONTEND)
-        self.assertIn("Preview stays open; the rest of the workbench is paused.", FRONTEND)
+        self.assertIn("Scanning, fixes, and settings are paused, not cancelled", FRONTEND)
 
     def test_policy_editor_render_is_guarded_against_unrelated_side_panel_refreshes(self) -> None:
         self.assertIn("policyEditorRenderKey: ''", NORMALIZE_LAB_JS)
