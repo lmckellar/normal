@@ -231,6 +231,40 @@ def record_scan_event(
     AUDIT_STORE.append(event)
 
 
+def record_immersive_telemetry_event(
+    source: Path,
+    *,
+    added: list[dict[str, Any]],
+) -> None:
+    if not added:
+        return
+    recorded_at = utc_now_iso()
+    source_root = normalize_source_root(source)
+    count = len(added)
+    summary = (
+        f"Recorded {count} new immersive-available title{'s' if count != 1 else ''} from local probe."
+    )
+    event = AuditEvent(
+        event_id=make_event_id(source_root, "immersive", "telemetry_vote", recorded_at, salt=str(count)),
+        recorded_at=recorded_at,
+        source_root=source_root,
+        workflow="immersive",
+        action="telemetry_vote",
+        summary=summary,
+        subjects=[
+            AuditSubject(kind="title", title=record.get("title"), year=record.get("year"))
+            for record in added
+        ],
+        effects=[AuditEffect(kind="immersive_vote", status="recorded", path=source_root, message=summary)],
+        reversal={"capability": "none"},
+        metadata={
+            "source": "local_probe",
+            "titles": [f'{record.get("title")} ({record.get("year")})' for record in added],
+        },
+    )
+    AUDIT_STORE.append(event)
+
+
 def record_policy_update_event(
     source: Path,
     *,

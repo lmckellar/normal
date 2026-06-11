@@ -13,7 +13,7 @@
     'weak-encodes': 'Review low-quality encodes that are better deleted or replaced.',
     'repair-defaults': 'Fix audio and subtitle defaults to improve playback behaviour and keep repair cases visible.',
     'canonical-lists': 'Compare the library against canonical lists and inspect owned copy quality at a glance.',
-    'immersive-audio': 'Review titles that lack immersive object audio and confirm whether an Atmos / DTS:X release is available.',
+    'immersive-audio': 'Titles whose audio is channel-based only — no Atmos / DTS:X object track. Status says whether an object-audio release is known to exist (Available), known not to (Not Available), or has not been assessed yet (Unverified).',
     junk: 'Review obvious junk files and remove them safely.',
   };
 
@@ -101,7 +101,6 @@
     { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '8ch' },
     { key: 'audio_summary', label: 'Audio', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: '24%', tooltip: 'Every row here was probed and carries no Atmos / DTS:X object track — only the channel-based (surround) mix. The codec and layout shown describe that surround track.' },
     { key: 'quality_profile', label: 'Quality Profile', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '18%' },
-    { key: 'verdict', label: 'Verdict', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '24ch' },
   ];
 
   const state = {
@@ -117,7 +116,6 @@
     canonicalSelectedListId: 'top_100',
     immersivePayload: null,
     immersivePayloadSource: '',
-    immersiveVerdicts: {},
     policyPayload: null,
     rows: [],
     filteredRows: [],
@@ -823,12 +821,15 @@
   }
 
   function immersiveInferredVerdict(finding) {
-    return /confirmed available/i.test(finding?.summary || '') ? 'available' : 'unverified';
+    const summary = finding?.summary || '';
+    if (/confirmed available/i.test(summary)) return 'available';
+    if (/confirmed unavailable/i.test(summary)) return 'final_below_target';
+    return 'unverified';
   }
 
   function immersiveVerdictDisplayLabel(verdict) {
     if (verdict === 'available') return 'Available';
-    if (verdict === 'final_below_target') return 'Final';
+    if (verdict === 'final_below_target') return 'Not Available';
     return 'Unverified';
   }
 
@@ -845,12 +846,7 @@
       const finding = immersiveFindingForItem(item);
       if (!finding) return;
       const path = item.path || '';
-      const override = state.immersiveVerdicts[path];
-      if (override === 'final_below_target') return;
-      const inferred = immersiveInferredVerdict(finding);
-      const verdict = override === 'available'
-        ? 'available'
-        : (override === 'unknown' ? 'unverified' : inferred);
+      const verdict = immersiveInferredVerdict(finding);
       const { title, year } = parseTitleYearFromPath(path);
       rows.push({
         row_id: `immersive:${path}`,
@@ -866,27 +862,6 @@
       });
     });
     return rows;
-  }
-
-  async function confirmImmersiveVerdict(path, verdict) {
-    const row = immersiveRows().find(item => item.path === path);
-    const { title, year } = parseTitleYearFromPath(path);
-    if (!title || !year) {
-      el.previewPane.textContent = 'Cannot confirm a verdict without a parseable title and year.';
-      return;
-    }
-    try {
-      await postJson('/api/movies/immersive/confirm', { title, year: Number(year), verdict });
-      state.immersiveVerdicts[path] = verdict;
-      if (verdict === 'final_below_target') {
-        if (state.activeRowId === `immersive:${path}`) state.activeRowId = '';
-      }
-      markAuditLedgerDirty();
-      renderRows();
-      renderSidePanel();
-    } catch (error) {
-      el.previewPane.textContent = error.message;
-    }
   }
 
   function qualityProfileDisplayLabel(label) {
@@ -3715,9 +3690,6 @@
   }
 
   function renderImmersiveRow(row) {
-    const path = escapeHtml(row.path);
-    const isAvailable = row.verdict === 'available';
-    const toggle = `<button class="lab-immersive-verdict-button${isAvailable ? ' is-active' : ''}" type="button" data-immersive-verdict="${isAvailable ? 'unknown' : 'available'}" data-immersive-path="${path}">${isAvailable ? 'Available' : 'Unverified'}</button>`;
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.title || '—')}"><span class="lab-cell-text">${escapeHtml(row.title || '—')}</span></td>
@@ -3725,12 +3697,6 @@
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(String(row.year || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
         <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
         <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.quality_profile || '—')}"><span class="lab-cell-text">${escapeHtml(row.quality_profile || '—')}</span></td>
-        <td class="lab-cell-status" data-priority="essential">
-          <div class="lab-immersive-verdict-controls">
-            ${toggle}
-            <button class="lab-immersive-verdict-button" type="button" data-immersive-verdict="final_below_target" data-immersive-path="${path}">Final</button>
-          </div>
-        </td>
       </tr>
     `;
   }
@@ -3866,18 +3832,8 @@
     el.rowsBody.querySelectorAll('tr[data-row-id]').forEach(rowEl => {
       rowEl.addEventListener('click', event => {
         if (event.target instanceof HTMLInputElement) return;
-        if (event.target instanceof Element && event.target.closest('[data-immersive-verdict]')) return;
         state.activeRowId = rowEl.dataset.rowId || '';
         renderSidePanel();
-      });
-    });
-    el.rowsBody.querySelectorAll('button[data-immersive-verdict]').forEach(button => {
-      button.addEventListener('click', async event => {
-        event.stopPropagation();
-        const verdict = button.dataset.immersiveVerdict || '';
-        const path = button.dataset.immersivePath || '';
-        if (!verdict || !path) return;
-        await confirmImmersiveVerdict(path, verdict);
       });
     });
     el.rowsBody.querySelectorAll('input[data-row-check]').forEach(input => {
@@ -4542,7 +4498,7 @@
 
   function renderImmersivePreviewPane() {
     if (!state.immersivePayload) {
-      el.previewPane.innerHTML = '<div class="lab-preview-empty"><strong>Run Review Immersive Audio Candidates.</strong><div>Scan the source to surface titles that lack immersive object audio.</div></div>';
+      el.previewPane.innerHTML = '<div class="lab-preview-empty"><strong>Run Review Immersive Audio Candidates.</strong><div>Probes the source and lists titles whose audio is channel-based only — no Atmos / DTS:X object track on the file.</div></div>';
       return;
     }
     const activeRow = rowById(state.activeRowId);
@@ -4577,12 +4533,16 @@
       </div>
       <div class="lab-preview-list">
         <div class="lab-preview-item">
-          <div class="lab-preview-item-title">How this list is built</div>
-          <div class="lab-preview-item-body">Confirmed-available titles always appear. ${immersiveCandidateFindingEnabled() ? 'The candidate finding is enabled, so unverified candidates also appear.' : 'Enable the Immersive Audio candidate finding in Policy to surface unverified candidates.'}</div>
+          <div class="lab-preview-item-title">What each row is</div>
+          <div class="lab-preview-item-body">Every title here was probed and carries no object-audio (Atmos / DTS:X) track — only the channel-based mix. The question is whether a better, object-audio release exists for the title elsewhere.</div>
         </div>
         <div class="lab-preview-item">
-          <div class="lab-preview-item-title">Verdicts</div>
-          <div class="lab-preview-item-body">Mark a title <strong>Available</strong> to flag it as an upgrade target, or <strong>Final</strong> to suppress it — Final titles drop off the list on the next scan.</div>
+          <div class="lab-preview-item-title">Status</div>
+          <div class="lab-preview-item-body"><strong>Available</strong> — an object-audio release is known to exist, so this file is an upgrade target. <strong>Not Available</strong> — none exists yet (only bed mixes have shipped); a hard-won fact worth keeping in view. <strong>Unverified</strong> — not yet assessed.</div>
+        </div>
+        <div class="lab-preview-item">
+          <div class="lab-preview-item-title">Where status comes from</div>
+          <div class="lab-preview-item-body">Availability is established automatically: any local file found carrying object audio teaches the system that title has a release. Confirmed Available / Not Available titles always appear. ${immersiveCandidateFindingEnabled() ? 'The candidate finding is enabled, so Unverified titles appear too.' : 'Enable the Immersive Audio candidate finding in Policy to also surface Unverified titles.'}</div>
         </div>
       </div>
     `;

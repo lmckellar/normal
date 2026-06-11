@@ -189,37 +189,35 @@ class WebTests(unittest.TestCase):
                     self.assertFalse(ctx.responses[-1]["keys"]["omdb"]["present"])
                     self.assertEqual(secrets.read_text(), "")
 
-    def test_immersive_confirm_route_persists_verdict(self) -> None:
+    def test_manual_immersive_confirm_route_is_removed(self) -> None:
+        from normal.web import routes_profile, server
+
+        self.assertNotIn("/api/movies/immersive/confirm", server.build_post_routes())
+        self.assertFalse(hasattr(routes_profile, "handle_movies_immersive_confirm"))
+
+    def test_local_probe_harvest_records_available_and_audits(self) -> None:
+        from types import SimpleNamespace
         from normal.web import routes_profile
         from normal import movie_immersive_confirmations as confirmations
 
-        class StubContext:
-            def __init__(self) -> None:
-                self.responses: list[dict] = []
-
-            def respond_json(self, payload, status=None) -> None:
-                self.responses.append(payload)
-
+        report = SimpleNamespace(movies=[
+            SimpleNamespace(path="Sneakers (1992)/Sneakers (1992).mkv", facts=SimpleNamespace(audio_immersive_extension="atmos")),
+            SimpleNamespace(path="Heat (1995)/Heat (1995).mkv", facts=SimpleNamespace(audio_immersive_extension=None)),
+        ])
+        events: list = []
         with tempfile.TemporaryDirectory() as tmp:
             store = Path(tmp) / "immersive-confirmations.json"
-            with patch.object(confirmations, "default_store_path", lambda: store):
-                ctx = StubContext()
-                routes_profile.handle_movies_immersive_confirm(
-                    ctx, {"title": "Dune", "year": 2021, "verdict": "available"}
-                )
-                self.assertEqual(ctx.responses[-1]["verdict"], "available")
+            with patch.object(confirmations, "default_store_path", lambda: store), \
+                 patch.object(routes_profile, "load_operator_preferences", lambda: {"immersive_local_probe_telemetry": True}), \
+                 patch.object(routes_profile.AUDIT_STORE, "append", events.append):
+                routes_profile._harvest_local_immersive_votes(Path(tmp), report)
                 self.assertEqual(
-                    confirmations.confirmation_index(store).get(
-                        confirmations.confirmation_key("Dune", 2021)
-                    ),
+                    confirmations.confirmation_index(store).get(confirmations.confirmation_key("Sneakers", 1992)),
                     "available",
                 )
 
-                ctx = StubContext()
-                with self.assertRaises(ValueError):
-                    routes_profile.handle_movies_immersive_confirm(
-                        ctx, {"title": "Dune", "year": 2021, "verdict": "maybe"}
-                    )
+        self.assertEqual([event.workflow for event in events], ["immersive"])
+        self.assertEqual(events[0].action, "telemetry_vote")
 
     def test_deprecated_alt_ui_route_and_assets_are_removed(self) -> None:
         with self.run_test_server() as base_url:
@@ -702,7 +700,6 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("Why this is", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("detailTab", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("previewTab", NORMALIZE_LAB_FRONTEND)
-        self.assertNotIn("label: 'Status'", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("Replacement History", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("buildReplacementHistoryTable", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn('id="weakFloorSelect"', NORMALIZE_LAB_TEMPLATE)

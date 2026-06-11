@@ -193,6 +193,7 @@ The ledger currently records:
 - repair actions
 - exports
 - policy updates
+- immersive availability telemetry votes (local-probe harvest: titles found carrying object audio recorded as available)
 - follow-up creation, dismissal, and resolution
 
 Legacy files still matter only for migration/back-compat:

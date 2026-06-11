@@ -121,6 +121,33 @@ def seed_index() -> dict[str, str]:
     return {confirmation_key(title, year): SEED_VERDICT for title, year in SEED_TITLES}
 
 
+# --- Not-available seed (temporary) -------------------------------------------
+# Titles editorially asserted to have NO object-based (Atmos / DTS:X) release at
+# present — only channel/bed mixes have ever shipped. Same epistemic status as
+# SEED_TITLES: a title-level claim, not a file claim, and provisional ("for
+# now") — the moment one object-audio copy surfaces anywhere, the available
+# signal must override this (see confirmation_index precedence). This hand seed
+# is a stand-in for the deferred consensus-of-absence engine documented in
+# docs/internal/atmos-availability-and-crowdsource-of-truth.md.
+SEED_NOT_AVAILABLE_VERDICT = "final_below_target"
+SEED_NOT_AVAILABLE: tuple[tuple[str, int], ...] = (
+    ("A Good Day to Die Hard", 2013),
+)
+
+
+def not_available_seed_index() -> dict[str, str]:
+    return {
+        confirmation_key(title, year): SEED_NOT_AVAILABLE_VERDICT
+        for title, year in SEED_NOT_AVAILABLE
+    }
+
+
+# Availability always outranks unavailability: a single proven object-audio
+# observation falsifies any "not available" claim, no matter how much absence
+# evidence accumulated.
+_VERDICT_PRECEDENCE = {"final_below_target": 1, "available": 2}
+
+
 def normalize_verdict(value: Any) -> str:
     verdict = str(value or "").strip().casefold()
     if verdict not in VALID_VERDICTS:
@@ -159,15 +186,68 @@ def save_confirmations(payload: dict[str, Any], state_path: Path | None = None) 
 
 
 def confirmation_index(state_path: Path | None = None) -> dict[str, str]:
-    index = dict(seed_index())
+    index: dict[str, str] = {}
+
+    def consider(key: str, verdict: Any) -> None:
+        if verdict not in _VERDICT_PRECEDENCE:
+            return
+        current = index.get(key)
+        if current is None or _VERDICT_PRECEDENCE[verdict] >= _VERDICT_PRECEDENCE[current]:
+            index[key] = verdict
+
+    for key, verdict in not_available_seed_index().items():
+        consider(key, verdict)
+    for key, verdict in seed_index().items():
+        consider(key, verdict)
     payload = load_confirmations(state_path)
     for key, record in payload["records"].items():
         verdict = record.get("verdict")
         if verdict == "unknown":
             index.pop(key, None)
-        elif verdict in VALID_VERDICTS:
-            index[key] = verdict
+        else:
+            consider(key, verdict)
     return index
+
+
+def record_available_observations(
+    observations: Any,
+    source: str = "local_probe",
+    state_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Record titles observed to carry object audio as immersive-available.
+
+    `observations` is an iterable of (title, year). A single load/save covers
+    the whole batch. Only titles not already resolved to `available` are
+    written; the records newly added are returned (for audit emission).
+    """
+    index = confirmation_index(state_path)
+    payload = load_confirmations(state_path)
+    added: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for title, year in observations:
+        if not str(title or "").strip():
+            continue
+        try:
+            resolved_year = int(year)
+        except (TypeError, ValueError):
+            continue
+        key = confirmation_key(title, resolved_year)
+        if key in seen or index.get(key) == "available":
+            continue
+        seen.add(key)
+        record = {
+            "key": key,
+            "title": title,
+            "year": resolved_year,
+            "verdict": "available",
+            "source": source,
+            "recorded_at": utc_now_iso(),
+        }
+        payload["records"][key] = record
+        added.append(record)
+    if added:
+        save_confirmations(payload, state_path)
+    return added
 
 
 def set_confirmation(

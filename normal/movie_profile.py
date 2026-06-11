@@ -203,6 +203,7 @@ DEFAULT_OPERATOR_PREFERENCES = {
     "delete_mode": "recycle_all",
     "default_source": "",
     "immersive_candidate_finding": False,
+    "immersive_local_probe_telemetry": True,
 }
 REMOVED_QUALITY_STANCE_KEYS = (
     "require_audio_language_hygiene",
@@ -1759,10 +1760,21 @@ def detect_immersive_audio_candidate(
 ) -> list[DiagnosticFinding]:
     if facts.audio_immersive_extension:
         return []
-    if verdict == "final_below_target":
-        return []
-    confirmed = verdict == "available"
-    if not confirmed:
+    if verdict == "available":
+        summary = (
+            "Immersive object audio (Atmos / DTS:X) is confirmed available for this title, but this file does "
+            "not carry it."
+        )
+        remedy = "Source the confirmed Atmos / DTS:X release as an upgrade for this title."
+    elif verdict == "final_below_target":
+        summary = (
+            "No object-audio (Atmos / DTS:X) release exists for this title yet — only channel / bed mixes have "
+            "shipped. Confirmed unavailable for now."
+        )
+        remedy = (
+            "Nothing to source yet: this title is pinned as unavailable until an object-audio release surfaces."
+        )
+    else:
         if not enabled:
             return []
         settings = standards.get("immersive_audio") or {}
@@ -1770,20 +1782,12 @@ def detect_immersive_audio_candidate(
         year = parse_movie_name(Path(path)).year
         if prior and (year is None or year < prior):
             return []
-    if confirmed:
-        summary = (
-            "Immersive object audio (Atmos / DTS:X) is confirmed available for this title, but this file does "
-            "not carry it."
-        )
-        remedy = "Source the confirmed Atmos / DTS:X release as an upgrade for this title."
-    else:
         summary = (
             "No immersive object audio (Atmos / DTS:X) on this file, and the title is recent enough that an "
             "immersive release may exist. Unverified — candidate only."
         )
         remedy = (
-            "Verify whether an Atmos or DTS:X release exists for this title and source it as an upgrade if so; "
-            "otherwise mark the title as final to suppress this candidate."
+            "Verify whether an Atmos or DTS:X release exists for this title and source it as an upgrade if so."
         )
     return [
         DiagnosticFinding(

@@ -1051,11 +1051,14 @@ class ImmersiveAudioCandidateTests(unittest.TestCase):
         )
         self.assertEqual(findings, [])
 
-    def test_final_below_target_verdict_suppresses_finding(self) -> None:
+    def test_final_below_target_verdict_surfaces_as_not_available(self) -> None:
+        # A hard-won "no object-audio release exists" fact is pinned visibly,
+        # regardless of the candidate toggle or year prior — not suppressed.
         findings = detect_immersive_audio_candidate(
-            "Dune (2021)/Dune (2021).mkv", self._facts(), self.STANDARDS, enabled=True, verdict="final_below_target"
+            "Heat (1995)/Heat (1995).mkv", self._facts(), {}, verdict="final_below_target"
         )
-        self.assertEqual(findings, [])
+        self.assertEqual([f.code for f in findings], ["immersive_audio_candidate"])
+        self.assertIn("confirmed unavailable", findings[0].summary.lower())
 
 
 if __name__ == "__main__":

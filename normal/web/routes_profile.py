@@ -13,8 +13,9 @@ from normal.movie_canonical_lists import (
     canonical_status_payload,
     ensure_canonical_provider_ready,
 )
-from normal.movie_immersive_confirmations import set_confirmation
+from normal.movie_immersive_confirmations import record_available_observations
 from normal.movie_inspect import inspect_movie_file
+from normal.movie_plan import parse_movie_name
 from normal.movie_omdb import lookup_omdb_ratings
 from normal.movie_profile import (
     build_default_source_definition,
@@ -44,6 +45,7 @@ from .http import RequestContext
 from .routes_audit import (
     reconcile_replacement_followups,
     record_export_event,
+    record_immersive_telemetry_event,
     record_policy_update_event,
     record_scan_event,
 )
@@ -125,6 +127,7 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
                 resolve_language=resolve_language,
             )
         MOVIE_PROFILE_CACHE.put(source, report)
+        _harvest_local_immersive_votes(source, report)
         response_report = reclassify_report_with_standards(report, effective_standards, resolve_language=resolve_language) if floor_overridden else report
         reconcile_replacement_followups(source, response_report)
         response = build_profile_response(source, response_report, effective_standards, resolve_language=resolve_language)
@@ -391,17 +394,23 @@ def handle_movies_register(ctx: RequestContext, payload: dict[str, Any]) -> None
     )
 
 
-def handle_movies_immersive_confirm(ctx: RequestContext, payload: dict[str, Any]) -> None:
-    title = str(payload.get("title") or "").strip()
-    if not title:
-        raise ValueError("title is required")
-    raw_year = payload.get("year")
-    try:
-        year = int(raw_year)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("year is required") from exc
-    record = set_confirmation(title, year, payload.get("verdict"))
-    ctx.respond_json({"record": record, "verdict": record["verdict"], "key": record["key"]})
+def _harvest_local_immersive_votes(source: Path, report: Any) -> None:
+    """Passive crowd-vote: any locally probed file that carries object audio is a
+    first-party datapoint that the title HAS an immersive release. Record those
+    titles as available (deduped against what is already known) and emit one
+    audit event for the batch. Gated by the telemetry preference."""
+    preferences = load_operator_preferences()
+    if not preferences.get("immersive_local_probe_telemetry", True):
+        return
+    observations: list[tuple[str, int]] = []
+    for item in report.movies:
+        if not getattr(item.facts, "audio_immersive_extension", None):
+            continue
+        identity = parse_movie_name(Path(item.path))
+        if identity.title and identity.year:
+            observations.append((identity.title, identity.year))
+    added = record_available_observations(observations, source="local_probe")
+    record_immersive_telemetry_event(source, added=added)
 
 
 def handle_movies_inspect(ctx: RequestContext, payload: dict[str, Any]) -> None:
