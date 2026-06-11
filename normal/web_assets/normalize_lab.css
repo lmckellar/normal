@@ -564,16 +564,10 @@ thead th {
   color: #8a5426;
 }
 
-.lab-immersive-verdict {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: flex-start;
-}
-
 .lab-immersive-verdict-controls {
   display: inline-flex;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
 }
 
 .lab-immersive-verdict-button {

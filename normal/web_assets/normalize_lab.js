@@ -100,6 +100,7 @@
     { key: 'status', label: 'Status', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '13ch' },
     { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '8ch' },
     { key: 'audio_summary', label: 'Audio', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: '24%', tooltip: 'Every row here was probed and carries no Atmos / DTS:X object track — only the channel-based (surround) mix. The codec and layout shown describe that surround track.' },
+    { key: 'quality_profile', label: 'Quality Profile', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '18%' },
     { key: 'verdict', label: 'Verdict', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '24ch' },
   ];
 
@@ -858,6 +859,7 @@
         title,
         year,
         audio_summary: item?.facts?.audio_summary || '',
+        quality_profile: canonicalQualityProfileLabel(item) || '—',
         verdict,
         remedy: finding.remedy || '',
         summary: finding.summary || '',
@@ -3713,23 +3715,21 @@
   }
 
   function renderImmersiveRow(row) {
-    const options = [
-      ['available', 'Available'],
-      ['final_below_target', 'Final'],
-      ['unknown', 'Unverified'],
-    ];
-    const verdictControl = options.map(([value, label]) => {
-      const isActive = (value === 'unknown' && row.verdict === 'unverified') || value === row.verdict;
-      return `<button class="lab-immersive-verdict-button${isActive ? ' is-active' : ''}" type="button" data-immersive-verdict="${escapeHtml(value)}" data-immersive-path="${escapeHtml(row.path)}">${escapeHtml(label)}</button>`;
-    }).join('');
+    const path = escapeHtml(row.path);
+    const isAvailable = row.verdict === 'available';
+    const toggle = `<button class="lab-immersive-verdict-button${isAvailable ? ' is-active' : ''}" type="button" data-immersive-verdict="${isAvailable ? 'unknown' : 'available'}" data-immersive-path="${path}">${isAvailable ? 'Available' : 'Unverified'}</button>`;
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.title || '—')}"><span class="lab-cell-text">${escapeHtml(row.title || '—')}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${immersiveVerdictPillClass(row.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(row.verdict))}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(String(row.year || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
         <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
+        <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.quality_profile || '—')}"><span class="lab-cell-text">${escapeHtml(row.quality_profile || '—')}</span></td>
         <td class="lab-cell-status" data-priority="essential">
-          <div class="lab-immersive-verdict-controls">${verdictControl}</div>
+          <div class="lab-immersive-verdict-controls">
+            ${toggle}
+            <button class="lab-immersive-verdict-button" type="button" data-immersive-verdict="final_below_target" data-immersive-path="${path}">Final</button>
+          </div>
         </td>
       </tr>
     `;
