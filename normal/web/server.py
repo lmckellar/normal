@@ -24,12 +24,17 @@ from .routes_cleanup import (
 )
 from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
 from .routes_normalize import handle_movies_apply, handle_movies_normalize
-from .routes_settings import handle_settings_keys_update, handle_settings_read
+from .routes_settings import (
+    handle_settings_keys_update,
+    handle_settings_preferences_update,
+    handle_settings_read,
+)
 from .routes_profile import (
     handle_movies_canonical_lists,
     handle_movies_canonical_refresh,
     handle_movies_canonical_status,
     handle_movies_dashboard_histogram,
+    handle_movies_immersive_confirm,
     handle_movies_inspect,
     handle_movies_omdb_ratings,
     handle_movies_profile,
@@ -178,8 +183,10 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/movies/omdb/ratings": handle_movies_omdb_ratings,
         "/api/settings/read": handle_settings_read,
         "/api/settings/keys": handle_settings_keys_update,
+        "/api/settings/preferences": handle_settings_preferences_update,
         "/api/source/scan-warning": handle_source_scan_warning,
         "/api/movies/register": handle_movies_register,
+        "/api/movies/immersive/confirm": handle_movies_immersive_confirm,
         "/api/movies/inspect": handle_movies_inspect,
         "/api/movies/normalize": handle_movies_normalize,
         "/api/movies/apply": handle_movies_apply,

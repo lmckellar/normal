@@ -20,6 +20,7 @@ from normal.movie_profile import (
     classify_quality_stance,
     classify_standard_label,
     detect_audio_language_selection_risks,
+    detect_immersive_audio_candidate,
     detect_plex_diagnostics,
     is_audio_packaging_owned_movie,
     looks_like_absolute_numbering,
@@ -981,6 +982,69 @@ class MovieProfileTests(unittest.TestCase):
             self.assertEqual(calls, 1)
             self.assertEqual(len(report.movies), 1)
             self.assertEqual(report.warnings[0].code, "movie_profile_cancelled")
+
+
+class ImmersiveAudioCandidateTests(unittest.TestCase):
+    STANDARDS = {"immersive_audio": {"availability_year_prior": 2012}}
+
+    def _facts(self, immersive: str | None = None) -> MediaFacts:
+        return MediaFacts(
+            container="matroska",
+            width=3840,
+            height=2160,
+            video_bitrate_kbps=20000,
+            audio_codec="eac3",
+            audio_channels=6,
+            audio_immersive_extension=immersive,
+        )
+
+    def test_disabled_by_default_emits_nothing(self) -> None:
+        findings = detect_immersive_audio_candidate("Dune (2021)/Dune (2021).mkv", self._facts(), {})
+        self.assertEqual(findings, [])
+
+    def test_enabled_recent_non_immersive_flags_candidate(self) -> None:
+        findings = detect_immersive_audio_candidate(
+            "Dune (2021)/Dune (2021).mkv", self._facts(), self.STANDARDS, enabled=True
+        )
+        self.assertEqual([f.code for f in findings], ["immersive_audio_candidate"])
+        self.assertEqual(findings[0].severity, "candidate")
+
+    def test_already_immersive_file_not_flagged(self) -> None:
+        findings = detect_immersive_audio_candidate(
+            "Dune (2021)/Dune (2021).mkv", self._facts(immersive="atmos"), self.STANDARDS, enabled=True
+        )
+        self.assertEqual(findings, [])
+
+    def test_title_below_year_prior_not_flagged(self) -> None:
+        findings = detect_immersive_audio_candidate(
+            "Heat (1995)/Heat (1995).mkv", self._facts(), self.STANDARDS, enabled=True
+        )
+        self.assertEqual(findings, [])
+
+    def test_candidate_severity_excluded_from_risk_score(self) -> None:
+        findings = detect_immersive_audio_candidate(
+            "Dune (2021)/Dune (2021).mkv", self._facts(), self.STANDARDS, enabled=True
+        )
+        self.assertEqual(total_risk_score(findings), 0)
+
+    def test_available_verdict_fires_even_when_disabled_and_old(self) -> None:
+        findings = detect_immersive_audio_candidate(
+            "Heat (1995)/Heat (1995).mkv", self._facts(), {}, verdict="available"
+        )
+        self.assertEqual([f.code for f in findings], ["immersive_audio_candidate"])
+        self.assertIn("confirmed available", findings[0].summary)
+
+    def test_available_verdict_ignored_when_file_already_immersive(self) -> None:
+        findings = detect_immersive_audio_candidate(
+            "Dune (2021)/Dune (2021).mkv", self._facts(immersive="atmos"), {}, verdict="available"
+        )
+        self.assertEqual(findings, [])
+
+    def test_final_below_target_verdict_suppresses_finding(self) -> None:
+        findings = detect_immersive_audio_candidate(
+            "Dune (2021)/Dune (2021).mkv", self._facts(), self.STANDARDS, enabled=True, verdict="final_below_target"
+        )
+        self.assertEqual(findings, [])
 
 
 if __name__ == "__main__":

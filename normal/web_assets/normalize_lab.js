@@ -4,6 +4,7 @@
     'weak-encodes': 'Review Low-Quality Encodes',
     'repair-defaults': 'Fix Audio and Subtitle Defaults',
     'canonical-lists': 'Compare Against Canonical Lists',
+    'immersive-audio': 'Review Immersive Audio Candidates',
     junk: 'Remove Junk Files',
   };
 
@@ -12,6 +13,7 @@
     'weak-encodes': 'Review low-quality encodes that are better deleted or replaced.',
     'repair-defaults': 'Fix audio and subtitle defaults to improve playback behaviour and keep repair cases visible.',
     'canonical-lists': 'Compare the library against canonical lists and inspect owned copy quality at a glance.',
+    'immersive-audio': 'Review titles that lack immersive object audio and confirm whether an Atmos / DTS:X release is available.',
     junk: 'Review obvious junk files and remove them safely.',
   };
 
@@ -51,6 +53,7 @@
     { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
     { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
     { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '22%' },
+    { key: 'triage', label: 'Triage', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '8ch' },
     { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '11%' },
     { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '11ch' },
     { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop', width: '11ch' },
@@ -92,6 +95,13 @@
     { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'desktop', width: '24%' },
   ];
 
+  const IMMERSIVE_HEADERS = [
+    { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
+    { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '8ch' },
+    { key: 'audio_summary', label: 'Audio', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: '24%' },
+    { key: 'verdict', label: 'Verdict', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '24ch' },
+  ];
+
   const state = {
     workflow: workflowFromUrl(),
     layoutMode: LAYOUT_MODES.default,
@@ -103,6 +113,9 @@
     canonicalProfilePayload: null,
     canonicalProfileSource: '',
     canonicalSelectedListId: 'top_100',
+    immersivePayload: null,
+    immersivePayloadSource: '',
+    immersiveVerdicts: {},
     policyPayload: null,
     rows: [],
     filteredRows: [],
@@ -121,6 +134,7 @@
     dashboardRequestedSource: '',
     surfaceMode: 'default',
     settingsStatus: null,
+    settingsImmersive: false,
     settingsBusy: false,
     settingsRenderKey: '',
     policyBusy: false,
@@ -168,6 +182,7 @@
     workflowWeakEncodes: document.getElementById('workflowWeakEncodes'),
     workflowRepairDefaults: document.getElementById('workflowRepairDefaults'),
     workflowCanonicalLists: document.getElementById('workflowCanonicalLists'),
+    workflowImmersive: document.getElementById('workflowImmersive'),
     workflowJunk: document.getElementById('workflowJunk'),
     sourcePath: document.getElementById('sourcePath'),
     runButton: document.getElementById('runButton'),
@@ -253,7 +268,7 @@
   function workflowFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const workflow = params.get('workflow');
-    if (workflow === 'weak-encodes' || workflow === 'junk' || workflow === 'repair-defaults' || workflow === 'canonical-lists') return workflow;
+    if (workflow === 'weak-encodes' || workflow === 'junk' || workflow === 'repair-defaults' || workflow === 'canonical-lists' || workflow === 'immersive-audio') return workflow;
     return 'normalize';
   }
 
@@ -267,6 +282,7 @@
     if (state.workflow === 'weak-encodes') return state.weakPayload;
     if (state.workflow === 'repair-defaults') return state.repairPayload;
     if (state.workflow === 'canonical-lists') return state.canonicalPayload;
+    if (state.workflow === 'immersive-audio') return state.immersivePayload;
     if (state.workflow === 'junk') return state.junkPayload;
     return state.normalizePayload;
   }
@@ -275,6 +291,7 @@
     if (state.workflow === 'weak-encodes') return state.weakPayload;
     if (state.workflow === 'repair-defaults') return state.repairPayload;
     if (state.workflow === 'canonical-lists') return state.canonicalProfilePayload;
+    if (state.workflow === 'immersive-audio') return state.immersivePayload;
     return null;
   }
 
@@ -313,6 +330,9 @@
     }
     if (state.workflow === 'canonical-lists') {
       return { payload: state.canonicalProfilePayload, requestedSource: state.canonicalProfileSource };
+    }
+    if (state.workflow === 'immersive-audio') {
+      return { payload: state.immersivePayload, requestedSource: state.immersivePayloadSource };
     }
     return { payload: null, requestedSource: '' };
   }
@@ -411,6 +431,10 @@
 
   function isCanonicalMode() {
     return state.workflow === 'canonical-lists';
+  }
+
+  function isImmersiveMode() {
+    return state.workflow === 'immersive-audio';
   }
 
   function usesSimpleSelectionShell() {
@@ -780,6 +804,86 @@
   function fileNameFromPath(path) {
     const parts = String(path || '').split('/').filter(Boolean);
     return parts.length ? parts[parts.length - 1] : String(path || '');
+  }
+
+  function parseTitleYearFromPath(path) {
+    const stem = fileNameFromPath(path).replace(/\.[^.]+$/, '');
+    const match = stem.match(/^(.+?)\s*\((\d{4})\)/);
+    if (match) return { title: match[1].trim(), year: match[2] };
+    return { title: stem.trim(), year: '' };
+  }
+
+  const IMMERSIVE_CANDIDATE_CODE = 'immersive_audio_candidate';
+
+  function immersiveFindingForItem(item) {
+    const diagnostics = item?.profile?.diagnostics || [];
+    return diagnostics.find(diag => diag?.code === IMMERSIVE_CANDIDATE_CODE) || null;
+  }
+
+  function immersiveInferredVerdict(finding) {
+    return /confirmed available/i.test(finding?.summary || '') ? 'available' : 'unverified';
+  }
+
+  function immersiveVerdictDisplayLabel(verdict) {
+    if (verdict === 'available') return 'Available';
+    if (verdict === 'final_below_target') return 'Final';
+    return 'Unverified';
+  }
+
+  function immersiveVerdictPillClass(verdict) {
+    if (verdict === 'available') return 'is-safe';
+    if (verdict === 'final_below_target') return 'is-unchanged';
+    return 'is-review';
+  }
+
+  function immersiveRows() {
+    const movies = Array.isArray(state.immersivePayload?.movies) ? state.immersivePayload.movies : [];
+    const rows = [];
+    movies.forEach(item => {
+      const finding = immersiveFindingForItem(item);
+      if (!finding) return;
+      const path = item.path || '';
+      const override = state.immersiveVerdicts[path];
+      if (override === 'final_below_target') return;
+      const inferred = immersiveInferredVerdict(finding);
+      const verdict = override === 'available'
+        ? 'available'
+        : (override === 'unknown' ? 'unverified' : inferred);
+      const { title, year } = parseTitleYearFromPath(path);
+      rows.push({
+        row_id: `immersive:${path}`,
+        path,
+        item,
+        title,
+        year,
+        audio_summary: item?.facts?.audio_summary || '',
+        verdict,
+        remedy: finding.remedy || '',
+        summary: finding.summary || '',
+      });
+    });
+    return rows;
+  }
+
+  async function confirmImmersiveVerdict(path, verdict) {
+    const row = immersiveRows().find(item => item.path === path);
+    const { title, year } = parseTitleYearFromPath(path);
+    if (!title || !year) {
+      el.previewPane.textContent = 'Cannot confirm a verdict without a parseable title and year.';
+      return;
+    }
+    try {
+      await postJson('/api/movies/immersive/confirm', { title, year: Number(year), verdict });
+      state.immersiveVerdicts[path] = verdict;
+      if (verdict === 'final_below_target') {
+        if (state.activeRowId === `immersive:${path}`) state.activeRowId = '';
+      }
+      markAuditLedgerDirty();
+      renderRows();
+      renderSidePanel();
+    } catch (error) {
+      el.previewPane.textContent = error.message;
+    }
   }
 
   function qualityProfileDisplayLabel(label) {
@@ -1529,9 +1633,10 @@
     el.workflowWeakEncodes.classList.toggle('is-active', state.workflow === 'weak-encodes');
     el.workflowRepairDefaults.classList.toggle('is-active', state.workflow === 'repair-defaults');
     el.workflowCanonicalLists.classList.toggle('is-active', state.workflow === 'canonical-lists');
+    el.workflowImmersive.classList.toggle('is-active', state.workflow === 'immersive-audio');
     el.workflowJunk.classList.toggle('is-active', state.workflow === 'junk');
     el.workflowButton.disabled = repairWorkflowBusy();
-    [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowJunk].forEach(button => {
+    [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowImmersive, el.workflowJunk].forEach(button => {
       button.disabled = repairWorkflowBusy();
     });
   }
@@ -1553,8 +1658,9 @@
     const normalize = state.workflow === 'normalize';
     const repairDefaults = state.workflow === 'repair-defaults';
     const canonical = state.workflow === 'canonical-lists';
+    const immersive = state.workflow === 'immersive-audio';
     const junk = state.workflow === 'junk';
-    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize Movie Library Naming' : (repairDefaults ? 'Run Fix Audio and Subtitle Defaults' : (canonical ? 'Run Compare Against Canonical Lists' : (junk ? 'Run Remove Junk Files' : 'Run Review Low-Quality Encodes'))));
+    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize Movie Library Naming' : (repairDefaults ? 'Run Fix Audio and Subtitle Defaults' : (canonical ? 'Run Compare Against Canonical Lists' : (immersive ? 'Run Review Immersive Audio Candidates' : (junk ? 'Run Remove Junk Files' : 'Run Review Low-Quality Encodes')))));
     el.runButton.disabled = state.runInFlight || repairWorkflowBusy();
     el.runButton.classList.toggle('is-running', state.runInFlight);
   }
@@ -1563,13 +1669,14 @@
     const weak = isWeakMode();
     const repairDefaults = isRepairDefaultsMode();
     const canonical = isCanonicalMode();
+    const immersive = isImmersiveMode();
     const junk = isJunkMode();
     if (el.filterBar) el.filterBar.hidden = false;
-    el.bucketFilter.hidden = weak || repairDefaults || canonical || junk;
+    el.bucketFilter.hidden = weak || repairDefaults || canonical || immersive || junk;
     el.workflowStatusFilter.hidden = !(weak || repairDefaults || junk);
     el.canonicalListFilter.hidden = !canonical;
-    el.selectAllButton.hidden = canonical;
-    el.deselectAllButton.hidden = canonical;
+    el.selectAllButton.hidden = canonical || immersive;
+    el.deselectAllButton.hidden = canonical || immersive;
     renderWorkflowStatusFilter();
     renderCanonicalListFilter();
     renderWeakFloorControl();
@@ -2225,7 +2332,11 @@
   }
 
   function currentSettingsRenderKey() {
-    return JSON.stringify({ status: state.settingsStatus, busy: state.settingsBusy });
+    return JSON.stringify({
+      status: state.settingsStatus,
+      immersive: state.settingsImmersive,
+      busy: state.settingsBusy,
+    });
   }
 
   function renderSettingsPanel() {
@@ -2259,6 +2370,18 @@
         </section>
       `;
     }).join('');
+    const immersiveOn = Boolean(state.settingsImmersive);
+    const immersiveCard = `
+      <section class="lab-policy-card is-open">
+        <div class="lab-policy-meta"><span class="lab-kicker">Detection</span></div>
+        <h3>Immersive audio candidates</h3>
+        <p>When on, scans pull non-immersive titles recent enough that an Atmos / DTS:X release may exist into the Review Immersive Audio Candidates workflow. Unverified candidates only.</p>
+        <p>${immersiveOn ? 'Enabled — candidates surface on the next scan.' : 'Disabled — no candidates are surfaced.'}</p>
+        <div class="lab-policy-actions">
+          <button class="lab-action-button${immersiveOn ? '' : ' is-primary'}" type="button" data-settings-immersive="${immersiveOn ? 'off' : 'on'}" ${state.settingsBusy ? 'disabled' : ''}>${immersiveOn ? 'Disable' : 'Enable'}</button>
+        </div>
+      </section>
+    `;
     el.settingsPanel.innerHTML = `
       <div class="lab-policy-header">
         <div class="lab-policy-heading">
@@ -2266,7 +2389,7 @@
           <p>Manage optional API keys for remote enrichment. Keys are stored server-side and ingested at launch; only the last four characters are ever shown.</p>
         </div>
       </div>
-      <div class="lab-policy-sections">${cards}</div>
+      <div class="lab-policy-sections">${cards}${immersiveCard}</div>
     `;
     state.settingsRenderKey = renderKey;
     el.settingsPanel.querySelectorAll('[data-settings-save]').forEach(button => {
@@ -2275,10 +2398,15 @@
     el.settingsPanel.querySelectorAll('[data-settings-clear]').forEach(button => {
       button.addEventListener('click', () => clearSettingsKey(button.dataset.settingsClear || ''));
     });
+    el.settingsPanel.querySelectorAll('[data-settings-immersive]').forEach(button => {
+      button.addEventListener('click', () => saveImmersivePreference(button.dataset.settingsImmersive === 'on'));
+    });
   }
 
-  function applySettingsStatus(status) {
-    state.settingsStatus = status || {};
+  function applySettings(result) {
+    const payload = result || {};
+    state.settingsStatus = payload.keys || {};
+    state.settingsImmersive = Boolean(payload.immersive_candidate_finding);
     if (state.settingsStatus.omdb) {
       window.OMDB_AVAILABLE = Boolean(state.settingsStatus.omdb.present);
     }
@@ -2286,7 +2414,7 @@
 
   async function fetchSettings() {
     const result = await postJson('/api/settings/read', {});
-    applySettingsStatus(result.keys);
+    applySettings(result);
   }
 
   async function saveSettingsKey(field) {
@@ -2308,7 +2436,24 @@
     renderSettingsPanel();
     try {
       const result = await postJson('/api/settings/keys', { [field]: value });
-      applySettingsStatus(result.keys);
+      applySettings(result);
+    } catch (error) {
+      el.inspectionPane.textContent = error.message;
+    } finally {
+      state.settingsBusy = false;
+      state.settingsRenderKey = '';
+      renderSidePanel();
+    }
+  }
+
+  async function saveImmersivePreference(enabled) {
+    if (state.settingsBusy) return;
+    state.settingsBusy = true;
+    state.settingsRenderKey = '';
+    renderSettingsPanel();
+    try {
+      const result = await postJson('/api/settings/preferences', { immersive_candidate_finding: enabled });
+      applySettings(result);
     } catch (error) {
       el.inspectionPane.textContent = error.message;
     } finally {
@@ -2683,6 +2828,7 @@
     if (isWeakMode()) return `${row.issue} · ${row.resolution || '—'}`;
     if (isRepairDefaultsMode()) return `${row.issue_family || 'Issue'} · ${row.issue}`;
     if (isCanonicalMode()) return `${canonicalOwnedStatusLabel(row)} · ${row.quality_profile || '—'}`;
+    if (isImmersiveMode()) return `${immersiveVerdictDisplayLabel(row.verdict)} · ${row.audio_summary || '—'}`;
     if (isJunkMode()) return `${row.issue} · ${row.confidence || 'review'}`;
     return `${row.projected_path || row.current_value} · ${row.confidence || 'review'}`;
   }
@@ -2785,7 +2931,7 @@
       el.inspectionPane.innerHTML = '<div class="lab-preview-empty"><strong>No inspection rows.</strong><div>Run the current workflow or relax the active filters.</div></div>';
       return;
     }
-    const key = (usesSimpleSelectionShell() || isCanonicalMode()) ? 'row_id' : 'result_id';
+    const key = (usesSimpleSelectionShell() || isCanonicalMode() || isImmersiveMode()) ? 'row_id' : 'result_id';
     el.inspectionPane.innerHTML = `
       <div class="lab-inspection-pane">
         <div class="lab-inspection-summary"><strong>${rows.length}</strong> visible inspection row${rows.length === 1 ? '' : 's'} shown in reduced-reading mode while policy editing is active.</div>
@@ -2816,6 +2962,7 @@
     if (isWeakMode()) return WEAK_HEADERS;
     if (isRepairDefaultsMode()) return REPAIR_HEADERS;
     if (isCanonicalMode()) return CANONICAL_HEADERS;
+    if (isImmersiveMode()) return IMMERSIVE_HEADERS;
     if (isJunkMode()) return JUNK_HEADERS;
     return NORMALIZE_HEADERS;
   }
@@ -2947,7 +3094,49 @@
     };
   }
 
+  function weakFloorStanceFields() {
+    const definitions = currentQualityProfileDefinitions();
+    const hasFloors = definition => (definition?.fields || []).some(field => field.key === 'video_1080p_kbps' || field.key === 'audio_bitrate_kbps');
+    const cutoffRank = qualityStanceRank(state.weakFloor);
+    let chosen = definitions.find(entry => entry?.label === state.weakFloor && hasFloors(entry));
+    if (!chosen) {
+      chosen = definitions
+        .filter(entry => hasFloors(entry) && qualityStanceRank(entry.label) >= cutoffRank)
+        .sort((left, right) => qualityStanceRank(left.label) - qualityStanceRank(right.label))[0];
+    }
+    const fields = {};
+    (chosen?.fields || []).forEach(field => { fields[field.key] = field.value; });
+    return fields;
+  }
+
+  const HEALTHY_AUDIO_KBPS_PER_CHANNEL = 107;
+
+  function deficitTriageScore(ratio) {
+    if (ratio == null || !isFinite(ratio) || ratio <= 0) return null;
+    if (ratio >= 1) return 1;
+    return Math.min(10, Math.max(1, Math.ceil((1 - ratio) * 10) + 1));
+  }
+
+  function weakTriageBreakdown(item) {
+    const facts = item?.facts || {};
+    const fields = weakFloorStanceFields();
+    const axes = [];
+    const resolution = String(facts.resolution_bucket || '').toLowerCase();
+    let videoFloor = 0;
+    if (resolution === '2160p' || resolution === '4k') videoFloor = Number(fields.video_2160p_kbps || 0);
+    else if (resolution === '1080p') videoFloor = Number(fields.video_1080p_kbps || 0);
+    const videoBitrate = Number(facts.video_bitrate_kbps || 0);
+    if (videoFloor > 0 && videoBitrate > 0) axes.push({ axis: 'video', ratio: videoBitrate / videoFloor });
+    const audioBitrate = Number(facts.audio_bitrate_kbps || 0);
+    const channels = Number(facts.audio_channels || 0);
+    if (audioBitrate > 0 && channels > 0) axes.push({ axis: 'audio', ratio: (audioBitrate / channels) / HEALTHY_AUDIO_KBPS_PER_CHANNEL });
+    if (!axes.length) return { score: null, offender: null };
+    const worst = axes.reduce((left, right) => (right.ratio < left.ratio ? right : left));
+    return { score: deficitTriageScore(worst.ratio), offender: worst.axis };
+  }
+
   function weakRowForItem(item) {
+    const triage = weakTriageBreakdown(item);
     return {
       row_id: item.path || '',
       path: item.path || '',
@@ -2955,6 +3144,8 @@
       selectable: isStrictWeakMovie(item),
       current_path: item.path || '',
       issue: movieProfileInlineSummary(item) || humanProfileLabel(item?.profile?.label || ''),
+      triage: triage.score,
+      triageOffender: triage.offender,
       resolution: item?.facts?.resolution_bucket || '',
       video_bitrate: item?.facts?.video_bitrate_kbps || 0,
       audio_bitrate: item?.facts?.audio_bitrate_kbps || 0,
@@ -3035,6 +3226,7 @@
         .map(repairRowForItem);
     }
     if (isCanonicalMode()) return canonicalRows();
+    if (isImmersiveMode()) return immersiveRows();
     if (isJunkMode()) return (state.junkPayload?.junk || []).map(junkRowForItem);
     return normalizeRows();
   }
@@ -3116,6 +3308,14 @@
         }
         return true;
       });
+    } else if (isImmersiveMode()) {
+      rows = rows.filter(row => {
+        if (query) {
+          const haystack = `${row.title} ${row.year} ${row.audio_summary} ${immersiveVerdictDisplayLabel(row.verdict)}`.toLowerCase();
+          if (!haystack.includes(query)) return false;
+        }
+        return true;
+      });
     } else {
       const bucket = el.bucketFilter.value;
       rows = rows.filter(row => {
@@ -3146,9 +3346,18 @@
       const bv = read(b);
       return av < bv ? -1 * mult : av > bv ? 1 * mult : 0;
     }
+    if (isImmersiveMode()) {
+      const read = row => {
+        if (key === 'year') return Number(row.year || 0);
+        return String(row[key] || '').toLowerCase();
+      };
+      const av = read(a);
+      const bv = read(b);
+      return av < bv ? -1 * mult : av > bv ? 1 * mult : 0;
+    }
     if (usesSimpleSelectionShell()) {
       const read = row => {
-        if (key === 'video_bitrate' || key === 'audio_bitrate' || key === 'channels' || key === 'file_size') return Number(row[key] || 0);
+        if (key === 'video_bitrate' || key === 'audio_bitrate' || key === 'channels' || key === 'file_size' || key === 'triage') return Number(row[key] || 0);
         return String(row[key] || '').toLowerCase();
       };
       const av = read(a);
@@ -3214,7 +3423,7 @@
   }
 
   function renderSelectionButtons() {
-    if (isCanonicalMode()) {
+    if (isCanonicalMode() || isImmersiveMode()) {
       el.selectAllButton.disabled = true;
       el.deselectAllButton.disabled = true;
       el.selectAllButton.textContent = 'Select all';
@@ -3306,7 +3515,7 @@
 
   function renderConfirmButton() {
     el.confirmButton.hidden = false;
-    if (isCanonicalMode()) {
+    if (isCanonicalMode() || isImmersiveMode()) {
       el.confirmButton.hidden = true;
       el.confirmButton.disabled = true;
       el.confirmButton.classList.remove('is-danger');
@@ -3370,7 +3579,14 @@
     if (!state.filteredRows.length) {
       closeTrackPopover();
       const colspan = String(currentHeaders().length);
-      el.rowsBody.innerHTML = `<tr><td colspan="${colspan}">No rows for the active filters.</td></tr>`;
+      const emptyMessage = isImmersiveMode()
+        ? (state.immersivePayload
+          ? (immersiveCandidateFindingEnabled()
+            ? 'No immersive audio candidates for this source.'
+            : 'No confirmed-available titles yet. Enable the Immersive Audio candidate finding in Policy to surface unverified candidates.')
+          : 'Run Review Immersive Audio Candidates to surface titles that lack immersive object audio.')
+        : 'No rows for the active filters.';
+      el.rowsBody.innerHTML = `<tr><td colspan="${colspan}">${escapeHtml(emptyMessage)}</td></tr>`;
       renderConfirmButton();
       renderWorkflowActionControls();
       return;
@@ -3381,9 +3597,11 @@
         ? state.filteredRows.map(renderRepairRow).join('')
         : (isCanonicalMode()
           ? state.filteredRows.map(renderCanonicalRow).join('')
+          : (isImmersiveMode()
+          ? state.filteredRows.map(renderImmersiveRow).join('')
           : (isJunkMode()
           ? state.filteredRows.map(renderJunkRow).join('')
-          : state.filteredRows.map(renderNormalizeRow).join(''))));
+          : state.filteredRows.map(renderNormalizeRow).join('')))));
     attachRowHandlers();
     renderJunkFilenameCells();
     renderTrackPopover();
@@ -3417,16 +3635,19 @@
     const audioBitrateMarkup = hasAudioTracks
       ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(formatBitrate(row.audio_bitrate))}</button>`
       : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
+    const flagVideo = row.triageOffender === 'video' ? ' lab-triage-flag' : '';
+    const flagAudio = row.triageOffender === 'audio' ? ' lab-triage-flag' : '';
     return `
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
-        <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-text">${escapeHtml(row.resolution || '—')}</span></td>
-        <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(formatBitrate(row.video_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.video_bitrate))}</span></td>
-        <td class="lab-cell-signal lab-cell-mono" data-priority="desktop" title="${escapeHtml(formatBitrate(row.audio_bitrate))}">${audioBitrateMarkup}</td>
-        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${row.channels ? escapeHtml(String(row.channels)) : '—'}"><span class="lab-cell-text">${row.channels ? escapeHtml(String(row.channels)) : '—'}</span></td>
-        <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${row.triage == null ? 'No measurable bitrate deficit against the quality floor' : `Triage score ${row.triage} of 10`}"><span class="lab-cell-text">${row.triage == null ? '—' : escapeHtml(String(row.triage))}</span></td>
+        <td class="lab-cell-supporting${flagVideo}" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-text">${escapeHtml(row.resolution || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono${flagVideo}" data-priority="essential" title="${escapeHtml(formatBitrate(row.video_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.video_bitrate))}</span></td>
+        <td class="lab-cell-signal lab-cell-mono${flagAudio}" data-priority="desktop" title="${escapeHtml(formatBitrate(row.audio_bitrate))}">${audioBitrateMarkup}</td>
+        <td class="lab-cell-signal lab-cell-mono${flagAudio}" data-priority="medium" title="${row.channels ? escapeHtml(String(row.channels)) : '—'}"><span class="lab-cell-text">${row.channels ? escapeHtml(String(row.channels)) : '—'}</span></td>
+        <td class="lab-cell-supporting${flagAudio}" data-priority="desktop" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(formatFileSize(row.file_size))}"><span class="lab-cell-text">${escapeHtml(formatFileSize(row.file_size))}</span></td>
       </tr>
     `;
@@ -3476,6 +3697,31 @@
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${canonicalStatusClass(row)}">${escapeHtml(canonicalOwnedStatusLabel(row))}</span></td>
         <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.quality_profile || '—')}">${qualityMarkup}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="desktop" title="${escapeHtml(row.current_path || '—')}"><span class="lab-cell-text">${escapeHtml(row.current_path ? fileNameFromPath(row.current_path) : '—')}</span></td>
+      </tr>
+    `;
+  }
+
+  function renderImmersiveRow(row) {
+    const options = [
+      ['available', 'Available'],
+      ['final_below_target', 'Final'],
+      ['unknown', 'Unverified'],
+    ];
+    const verdictControl = options.map(([value, label]) => {
+      const isActive = (value === 'unknown' && row.verdict === 'unverified') || value === row.verdict;
+      return `<button class="lab-immersive-verdict-button${isActive ? ' is-active' : ''}" type="button" data-immersive-verdict="${escapeHtml(value)}" data-immersive-path="${escapeHtml(row.path)}">${escapeHtml(label)}</button>`;
+    }).join('');
+    return `
+      <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.title || '—')}"><span class="lab-cell-text">${escapeHtml(row.title || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(String(row.year || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
+        <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
+        <td class="lab-cell-status" data-priority="essential">
+          <div class="lab-immersive-verdict">
+            <span class="lab-cell-pill ${immersiveVerdictPillClass(row.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(row.verdict))}</span>
+            <div class="lab-immersive-verdict-controls">${verdictControl}</div>
+          </div>
+        </td>
       </tr>
     `;
   }
@@ -3594,7 +3840,7 @@
   }
 
   function synchronizeSelectionWithRows() {
-    const key = usesSimpleSelectionShell() ? 'row_id' : 'result_id';
+    const key = (usesSimpleSelectionShell() || isImmersiveMode()) ? 'row_id' : 'result_id';
     const available = new Set(state.rows.map(row => row[key]).filter(Boolean));
     state.selected = new Set([...state.selected].filter(id => available.has(id)));
     if (state.activeRowId && !available.has(state.activeRowId)) state.activeRowId = '';
@@ -3611,8 +3857,18 @@
     el.rowsBody.querySelectorAll('tr[data-row-id]').forEach(rowEl => {
       rowEl.addEventListener('click', event => {
         if (event.target instanceof HTMLInputElement) return;
+        if (event.target instanceof Element && event.target.closest('[data-immersive-verdict]')) return;
         state.activeRowId = rowEl.dataset.rowId || '';
         renderSidePanel();
+      });
+    });
+    el.rowsBody.querySelectorAll('button[data-immersive-verdict]').forEach(button => {
+      button.addEventListener('click', async event => {
+        event.stopPropagation();
+        const verdict = button.dataset.immersiveVerdict || '';
+        const path = button.dataset.immersivePath || '';
+        if (!verdict || !path) return;
+        await confirmImmersiveVerdict(path, verdict);
       });
     });
     el.rowsBody.querySelectorAll('input[data-row-check]').forEach(input => {
@@ -3764,7 +4020,7 @@
   }
 
   function rowById(rowId) {
-    const key = (usesSimpleSelectionShell() || isCanonicalMode()) ? 'row_id' : 'result_id';
+    const key = (usesSimpleSelectionShell() || isCanonicalMode() || isImmersiveMode()) ? 'row_id' : 'result_id';
     return state.rows.find(item => item[key] === rowId) || state.filteredRows.find(item => item[key] === rowId) || null;
   }
 
@@ -4185,6 +4441,10 @@
       renderCanonicalPreviewPane();
       return;
     }
+    if (isImmersiveMode()) {
+      renderImmersivePreviewPane();
+      return;
+    }
     if (isJunkMode()) {
       renderJunkPreviewPane();
       return;
@@ -4261,6 +4521,77 @@
         ` : ''}
       </div>
     `;
+  }
+
+  function immersiveCandidateFindingEnabled() {
+    const definitions = currentQualityProfileDefinitions();
+    const block = definitions.find(item => item?.label === 'immersive_audio');
+    if (block && typeof block.candidate_finding_enabled === 'boolean') return block.candidate_finding_enabled;
+    const standards = activeProfilePayload()?.movie_standards?.immersive_audio;
+    return !!standards?.candidate_finding_enabled;
+  }
+
+  function renderImmersivePreviewPane() {
+    if (!state.immersivePayload) {
+      el.previewPane.innerHTML = '<div class="lab-preview-empty"><strong>Run Review Immersive Audio Candidates.</strong><div>Scan the source to surface titles that lack immersive object audio.</div></div>';
+      return;
+    }
+    const activeRow = rowById(state.activeRowId);
+    if (activeRow && isImmersiveMode()) {
+      el.previewPane.innerHTML = `
+        <div class="lab-preview-summary">
+          <strong>${escapeHtml(activeRow.title || '—')}${activeRow.year ? ` (${escapeHtml(String(activeRow.year))})` : ''}</strong>
+          <span class="chip ${immersiveVerdictPillClass(activeRow.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(activeRow.verdict))}</span>
+        </div>
+        <div class="lab-preview-list">
+          <div class="lab-preview-item">
+            <div class="lab-preview-item-title">Current Audio</div>
+            <div class="lab-preview-item-body">${escapeHtml(activeRow.audio_summary || '—')}</div>
+          </div>
+          <div class="lab-preview-item">
+            <div class="lab-preview-item-title">Finding</div>
+            <div class="lab-preview-item-body">${escapeHtml(activeRow.summary || '')}</div>
+          </div>
+          <div class="lab-preview-item">
+            <div class="lab-preview-item-title">Remedy</div>
+            <div class="lab-preview-item-body">${escapeHtml(activeRow.remedy || '')}</div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+    const rows = immersiveRows();
+    el.previewPane.innerHTML = `
+      <div class="lab-preview-summary">
+        <strong>Immersive Audio Candidates</strong>
+        <span class="chip">${rows.length} candidate${rows.length === 1 ? '' : 's'}</span>
+      </div>
+      <div class="lab-preview-list">
+        <div class="lab-preview-item">
+          <div class="lab-preview-item-title">How this list is built</div>
+          <div class="lab-preview-item-body">Confirmed-available titles always appear. ${immersiveCandidateFindingEnabled() ? 'The candidate finding is enabled, so unverified candidates also appear.' : 'Enable the Immersive Audio candidate finding in Policy to surface unverified candidates.'}</div>
+        </div>
+        <div class="lab-preview-item">
+          <div class="lab-preview-item-title">Verdicts</div>
+          <div class="lab-preview-item-body">Mark a title <strong>Available</strong> to flag it as an upgrade target, or <strong>Final</strong> to suppress it — Final titles drop off the list on the next scan.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  async function runImmersive() {
+    const source = el.sourcePath.value.trim();
+    const payload = await postJson('/api/movies/profile', { source });
+    state.immersivePayload = payload;
+    markAuditLedgerDirty();
+    state.immersivePayloadSource = normalizeSourceKey(source);
+    applyPolicyPayload(payload);
+    updateDashboardPayload(payload, source);
+    state.selected = new Set();
+    state.activeRowId = '';
+    state.previewMode = 'selected';
+    renderRows();
+    renderSidePanel();
   }
 
   async function runNormalize() {
@@ -4397,6 +4728,7 @@
       if (isWeakMode()) await runWeakEncodes();
       else if (isRepairDefaultsMode()) await runRepairDefaults();
       else if (isCanonicalMode()) await runCanonicalLists();
+      else if (isImmersiveMode()) await runImmersive();
       else if (isJunkMode()) await runJunk();
       else await runNormalize();
     } finally {
@@ -4751,7 +5083,7 @@
 
   function setWorkflow(workflow) {
     dismissAuditSurface();
-    state.workflow = ['weak-encodes', 'repair-defaults', 'canonical-lists', 'junk'].includes(workflow) ? workflow : 'normalize';
+    state.workflow = ['weak-encodes', 'repair-defaults', 'canonical-lists', 'immersive-audio', 'junk'].includes(workflow) ? workflow : 'normalize';
     state.layoutMode = LAYOUT_MODES.default;
     state.surfaceMode = 'default';
     state.selected = new Set();
@@ -4761,7 +5093,11 @@
     state.repairActionNotice = '';
     state.sort = isCanonicalMode()
       ? { key: 'rank', dir: 'asc' }
-      : (usesSimpleSelectionShell() ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' });
+      : (isImmersiveMode()
+        ? { key: 'title', dir: 'asc' }
+        : (isWeakMode()
+          ? { key: 'triage', dir: 'desc' }
+          : (usesSimpleSelectionShell() ? { key: 'current_path', dir: 'asc' } : { key: 'current_value', dir: 'asc' })));
     clearDeletePreviewState();
     closeTrackPopover();
     syncWorkflowUrl();
@@ -4818,7 +5154,7 @@
     el.workflowButton.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 
-  [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowJunk].forEach(button => {
+  [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowImmersive, el.workflowJunk].forEach(button => {
     button.addEventListener('click', async () => {
       if (repairWorkflowBusy()) return;
       el.workflowMenu.hidden = true;

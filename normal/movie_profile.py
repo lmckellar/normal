@@ -13,6 +13,7 @@ import time
 from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
+from normal.movie_immersive_confirmations import confirmation_index, confirmation_key
 from normal.movie_plan import concise_movie_base, parse_movie_name, path_has_normalized_movie_shape
 from normal.movie_scan import (
     MovieScanProgress,
@@ -120,6 +121,9 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
         "minimum_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
         "reference_codecs": ["truehd", "dtshd", "flac", "pcm"],
     },
+    "immersive_audio": {
+        "availability_year_prior": 2012,
+    },
     "subtitle_setup": {"mode": "conservative"},
     "folder_hygiene": {
         "require_normalized_naming": True,
@@ -198,6 +202,7 @@ WARNING_GATE_SAFETY_LEVELS = ("safe", "confident", "yolo")
 DEFAULT_OPERATOR_PREFERENCES = {
     "delete_mode": "recycle_all",
     "default_source": "",
+    "immersive_candidate_finding": False,
 }
 REMOVED_QUALITY_STANCE_KEYS = (
     "require_audio_language_hygiene",
@@ -220,6 +225,8 @@ def scan_movie_profiles(
 ) -> MovieProfileReport:
     report = MovieProfileReport(source_root=str(source_root.resolve()), generated_at=utc_now_iso())
     standards = load_movie_standards()
+    immersive_confirmations = confirmation_index()
+    immersive_candidate_enabled = immersive_candidate_finding_enabled()
     cancelled = False
     movie_files = iter_video_files(source_root, should_cancel=should_cancel)
     first_movie = next(movie_files, None)
@@ -268,7 +275,17 @@ def scan_movie_profiles(
             facts.sample_aspect_ratio,
             facts.display_aspect_ratio,
         )
-        report.movies.append(build_movie_profile_item(source_root, movie_path, facts, standards, resolve_language=resolve_language))
+        report.movies.append(
+            build_movie_profile_item(
+                source_root,
+                movie_path,
+                facts,
+                standards,
+                resolve_language=resolve_language,
+                immersive_confirmations=immersive_confirmations,
+                immersive_candidate_enabled=immersive_candidate_enabled,
+            )
+        )
         processed = index
         emit_progress(progress_callback, processed, 0, movie_path, started, "running")
 
@@ -301,8 +318,20 @@ def reclassify_report_with_standards(
     source_root = Path(report.source_root)
     new_report = MovieProfileReport(source_root=report.source_root, generated_at=utc_now_iso())
     new_report.warnings = list(report.warnings)
+    immersive_confirmations = confirmation_index()
+    immersive_candidate_enabled = immersive_candidate_finding_enabled()
     for item in report.movies:
-        new_report.movies.append(build_movie_profile_item(source_root, Path(item.path), item.facts, standards, resolve_language=resolve_language))
+        new_report.movies.append(
+            build_movie_profile_item(
+                source_root,
+                Path(item.path),
+                item.facts,
+                standards,
+                resolve_language=resolve_language,
+                immersive_confirmations=immersive_confirmations,
+                immersive_candidate_enabled=immersive_candidate_enabled,
+            )
+        )
     assign_percentiles(new_report.movies)
     new_report.movies.sort(
         key=lambda m: (total_risk_score(m.profile.diagnostics), m.profile.rank, m.path.lower()),
@@ -318,6 +347,8 @@ def build_movie_profile_item(
     standards: dict[str, Any] | None = None,
     *,
     resolve_language: Callable[[str, int | None], str | None] | None = None,
+    immersive_confirmations: dict[str, str] | None = None,
+    immersive_candidate_enabled: bool | None = None,
 ) -> MovieProfileItem:
     facts.resolution_bucket = facts.resolution_bucket or classify_resolution(
         facts.width,
@@ -329,7 +360,14 @@ def build_movie_profile_item(
     legacy_label = classify_profile_label(facts)
     domain_results = evaluate_movie_standards(movie_path, facts, active_standards)
     quality_label = classify_quality_stance(movie_path, facts, domain_results, active_standards)
-    diagnostics = detect_plex_diagnostics(movie_path, facts, resolve_language=resolve_language)
+    diagnostics = detect_plex_diagnostics(
+        movie_path,
+        facts,
+        active_standards,
+        resolve_language=resolve_language,
+        immersive_confirmations=immersive_confirmations,
+        immersive_candidate_enabled=immersive_candidate_enabled,
+    )
     weak_candidate = is_replacement_candidate_quality(quality_label, active_standards) and not is_audio_packaging_owned_movie(diagnostics)
     label = classify_standard_label(domain_results, active_standards, weak_candidate=weak_candidate)
     diagnostics.extend(domain_results_to_diagnostics(domain_results))
@@ -439,6 +477,11 @@ def load_operator_preferences() -> dict[str, Any]:
     if not isinstance(payload, dict):
         return preferences
     return deep_merge_dicts(preferences, payload)
+
+
+def immersive_candidate_finding_enabled(preferences: dict[str, Any] | None = None) -> bool:
+    active = preferences or load_operator_preferences()
+    return bool(active.get("immersive_candidate_finding"))
 
 
 def operator_preferences_revision(preferences: dict[str, Any] | None = None) -> str:
@@ -1429,10 +1472,18 @@ def profile_sort_key(item: MovieProfileItem) -> tuple[float, int, str]:
 def detect_plex_diagnostics(
     path: Path | str,
     facts: MediaFacts,
+    standards: dict[str, Any] | None = None,
     *,
     resolve_language: Callable[[str, int | None], str | None] | None = None,
+    immersive_confirmations: dict[str, str] | None = None,
+    immersive_candidate_enabled: bool | None = None,
 ) -> list[DiagnosticFinding]:
     findings: list[DiagnosticFinding] = []
+    candidate_enabled = (
+        immersive_candidate_finding_enabled()
+        if immersive_candidate_enabled is None
+        else bool(immersive_candidate_enabled)
+    )
     lower_audio = {codec.lower() for codec in facts.audio_codecs}
     lower_subs = {codec.lower() for codec in facts.subtitle_codecs}
     path_text = str(path)
@@ -1499,6 +1550,18 @@ def detect_plex_diagnostics(
             title=audio_title,
             year=audio_year,
             resolve_language=resolve_language,
+        )
+    )
+    immersive_verdict: str | None = None
+    if immersive_confirmations:
+        immersive_identity = parse_movie_name(Path(path))
+        if immersive_identity.title and immersive_identity.year:
+            immersive_verdict = immersive_confirmations.get(
+                confirmation_key(immersive_identity.title, immersive_identity.year)
+            )
+    findings.extend(
+        detect_immersive_audio_candidate(
+            path, facts, standards or {}, verdict=immersive_verdict, enabled=candidate_enabled
         )
     )
     if facts.video_bitrate_kbps is None and facts.total_bitrate_kbps is None:
@@ -1686,6 +1749,53 @@ def detect_audio_language_selection_risks(
     ]
 
 
+def detect_immersive_audio_candidate(
+    path: Path | str,
+    facts: MediaFacts,
+    standards: dict[str, Any],
+    *,
+    verdict: str | None = None,
+    enabled: bool = False,
+) -> list[DiagnosticFinding]:
+    if facts.audio_immersive_extension:
+        return []
+    if verdict == "final_below_target":
+        return []
+    confirmed = verdict == "available"
+    if not confirmed:
+        if not enabled:
+            return []
+        settings = standards.get("immersive_audio") or {}
+        prior = int(settings.get("availability_year_prior") or 0)
+        year = parse_movie_name(Path(path)).year
+        if prior and (year is None or year < prior):
+            return []
+    if confirmed:
+        summary = (
+            "Immersive object audio (Atmos / DTS:X) is confirmed available for this title, but this file does "
+            "not carry it."
+        )
+        remedy = "Source the confirmed Atmos / DTS:X release as an upgrade for this title."
+    else:
+        summary = (
+            "No immersive object audio (Atmos / DTS:X) on this file, and the title is recent enough that an "
+            "immersive release may exist. Unverified — candidate only."
+        )
+        remedy = (
+            "Verify whether an Atmos or DTS:X release exists for this title and source it as an upgrade if so; "
+            "otherwise mark the title as final to suppress this candidate."
+        )
+    return [
+        DiagnosticFinding(
+            code="immersive_audio_candidate",
+            severity="candidate",
+            category="immersive_audio_candidate",
+            summary=summary,
+            remedy=remedy,
+        )
+    ]
+
+
 def is_audio_packaging_owned_movie(diagnostics: list[DiagnosticFinding]) -> bool:
     return any(diagnostic.code in {"default_non_english_audio", "foreign_original_audio_ok"} for diagnostic in diagnostics)
 
@@ -1803,7 +1913,7 @@ def looks_like_absolute_numbering(path_text: str) -> bool:
 def build_risk_counts(diagnostics: list[DiagnosticFinding]) -> dict[str, int]:
     counts: dict[str, int] = {}
     for finding in diagnostics:
-        if finding.severity == "info":
+        if finding.severity in {"info", "candidate"}:
             continue
         counts[finding.category] = counts.get(finding.category, 0) + 1
     return counts
@@ -1812,7 +1922,7 @@ def build_risk_counts(diagnostics: list[DiagnosticFinding]) -> dict[str, int]:
 def total_risk_score(diagnostics: list[DiagnosticFinding]) -> int:
     score = 0
     for finding in diagnostics:
-        if finding.severity == "info":
+        if finding.severity in {"info", "candidate"}:
             continue
         score += 3 if finding.severity == "severe" else 1
     return score

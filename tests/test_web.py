@@ -189,6 +189,38 @@ class WebTests(unittest.TestCase):
                     self.assertFalse(ctx.responses[-1]["keys"]["omdb"]["present"])
                     self.assertEqual(secrets.read_text(), "")
 
+    def test_immersive_confirm_route_persists_verdict(self) -> None:
+        from normal.web import routes_profile
+        from normal import movie_immersive_confirmations as confirmations
+
+        class StubContext:
+            def __init__(self) -> None:
+                self.responses: list[dict] = []
+
+            def respond_json(self, payload, status=None) -> None:
+                self.responses.append(payload)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp) / "immersive-confirmations.json"
+            with patch.object(confirmations, "default_store_path", lambda: store):
+                ctx = StubContext()
+                routes_profile.handle_movies_immersive_confirm(
+                    ctx, {"title": "Dune", "year": 2021, "verdict": "available"}
+                )
+                self.assertEqual(ctx.responses[-1]["verdict"], "available")
+                self.assertEqual(
+                    confirmations.confirmation_index(store).get(
+                        confirmations.confirmation_key("Dune", 2021)
+                    ),
+                    "available",
+                )
+
+                ctx = StubContext()
+                with self.assertRaises(ValueError):
+                    routes_profile.handle_movies_immersive_confirm(
+                        ctx, {"title": "Dune", "year": 2021, "verdict": "maybe"}
+                    )
+
     def test_deprecated_alt_ui_route_and_assets_are_removed(self) -> None:
         with self.run_test_server() as base_url:
             for path in (

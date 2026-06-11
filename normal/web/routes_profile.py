@@ -13,6 +13,7 @@ from normal.movie_canonical_lists import (
     canonical_status_payload,
     ensure_canonical_provider_ready,
 )
+from normal.movie_immersive_confirmations import set_confirmation
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_omdb import lookup_omdb_ratings
 from normal.movie_profile import (
@@ -381,6 +382,19 @@ def handle_movies_register(ctx: RequestContext, payload: dict[str, Any]) -> None
         content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         content_disposition='attachment; filename="movie-catalogue.xlsx"',
     )
+
+
+def handle_movies_immersive_confirm(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    title = str(payload.get("title") or "").strip()
+    if not title:
+        raise ValueError("title is required")
+    raw_year = payload.get("year")
+    try:
+        year = int(raw_year)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("year is required") from exc
+    record = set_confirmation(title, year, payload.get("verdict"))
+    ctx.respond_json({"record": record, "verdict": record["verdict"], "key": record["key"]})
 
 
 def handle_movies_inspect(ctx: RequestContext, payload: dict[str, Any]) -> None:

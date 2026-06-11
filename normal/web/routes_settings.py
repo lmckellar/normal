@@ -2,15 +2,25 @@ from __future__ import annotations
 
 from typing import Any
 
+from normal.movie_profile import load_operator_preferences, save_operator_preferences
+
 from .http import RequestContext
 from .state import CREDENTIAL_STORE
 
 _FIELD_TO_ENV = {"omdb": "OMDB_KEY", "tmdb": "TMDB_KEY"}
 
 
+def _settings_payload() -> dict[str, Any]:
+    preferences = load_operator_preferences()
+    return {
+        "keys": CREDENTIAL_STORE.status(),
+        "immersive_candidate_finding": bool(preferences.get("immersive_candidate_finding")),
+    }
+
+
 def handle_settings_read(ctx: RequestContext, payload: dict[str, Any]) -> None:
     del payload
-    ctx.respond_json({"keys": CREDENTIAL_STORE.status()})
+    ctx.respond_json(_settings_payload())
 
 
 def handle_settings_keys_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
@@ -21,4 +31,13 @@ def handle_settings_keys_update(ctx: RequestContext, payload: dict[str, Any]) ->
         value = payload[field]
         if value is None or isinstance(value, str):
             updates[env_key] = value
-    ctx.respond_json({"keys": CREDENTIAL_STORE.set_keys(updates)})
+    CREDENTIAL_STORE.set_keys(updates)
+    ctx.respond_json(_settings_payload())
+
+
+def handle_settings_preferences_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    preferences = load_operator_preferences()
+    if "immersive_candidate_finding" in payload:
+        preferences["immersive_candidate_finding"] = bool(payload["immersive_candidate_finding"])
+    save_operator_preferences(preferences)
+    ctx.respond_json(_settings_payload())

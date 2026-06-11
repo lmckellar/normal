@@ -564,6 +564,41 @@ thead th {
   color: #8a5426;
 }
 
+.lab-immersive-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.lab-immersive-verdict-controls {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.lab-immersive-verdict-button {
+  padding: 2px 8px;
+  border: 1px solid var(--line, #d6d3cc);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78em;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.lab-immersive-verdict-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.lab-immersive-verdict-button.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
 .lab-audio-popover-trigger {
   display: inline-flex;
   align-items: center;
@@ -1705,4 +1740,9 @@ input[type="checkbox"] {
 @media (max-width: 760px) {
   .lab-scan-table th.lab-col-anchor { width: 48%; }
   .lab-scan-table th.lab-col-issue { width: 34%; }
+}
+
+.lab-triage-flag .lab-cell-text,
+.lab-triage-flag .lab-audio-popover-trigger {
+  color: #a3312f;
 }
