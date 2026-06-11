@@ -97,8 +97,9 @@
 
   const IMMERSIVE_HEADERS = [
     { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
+    { key: 'status', label: 'Status', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '13ch' },
     { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '8ch' },
-    { key: 'audio_summary', label: 'Audio', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: '24%' },
+    { key: 'audio_summary', label: 'Audio', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: '24%', tooltip: 'Every row here was probed and carries no Atmos / DTS:X object track — only the channel-based (surround) mix. The codec and layout shown describe that surround track.' },
     { key: 'verdict', label: 'Verdict', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '24ch' },
   ];
 
@@ -3724,13 +3725,11 @@
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.title || '—')}"><span class="lab-cell-text">${escapeHtml(row.title || '—')}</span></td>
+        <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${immersiveVerdictPillClass(row.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(row.verdict))}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(String(row.year || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
         <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
         <td class="lab-cell-status" data-priority="essential">
-          <div class="lab-immersive-verdict">
-            <span class="lab-cell-pill ${immersiveVerdictPillClass(row.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(row.verdict))}</span>
-            <div class="lab-immersive-verdict-controls">${verdictControl}</div>
-          </div>
+          <div class="lab-immersive-verdict-controls">${verdictControl}</div>
         </td>
       </tr>
     `;
