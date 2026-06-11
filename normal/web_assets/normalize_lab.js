@@ -53,7 +53,7 @@
     { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
     { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
     { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '22%' },
-    { key: 'triage', label: 'Triage', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '8ch' },
+    { key: 'triage', label: 'Triage', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '8ch', tooltip: 'Triage = quality deficit × replacement priority. Higher is worse: the larger the score, the more this encode underperforms its tier and the stronger the case to replace or delete it.' },
     { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '11%' },
     { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '11ch' },
     { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop', width: '11ch' },
@@ -2987,7 +2987,8 @@
       const classAttr = header.columnClass ? ` class="${header.columnClass}"` : '';
       const priorityAttr = header.priority ? ` data-priority="${header.priority}"` : '';
       if (header.key === 'select') return `<th${classAttr}${priorityAttr}></th>`;
-      return `<th${classAttr}${priorityAttr}><button class="sort" data-sort="${escapeHtml(header.key)}">${escapeHtml(header.label)}</button></th>`;
+      const titleAttr = header.tooltip ? ` title="${escapeHtml(header.tooltip)}"` : '';
+      return `<th${classAttr}${priorityAttr}><button class="sort" data-sort="${escapeHtml(header.key)}"${titleAttr}>${escapeHtml(header.label)}</button></th>`;
     }).join('');
     el.tableHeaderRow.querySelectorAll('.sort').forEach(button => {
       button.addEventListener('click', () => {
