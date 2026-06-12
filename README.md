@@ -35,9 +35,9 @@ All packaged with a clean web GUI, minimal dependencies and all core features ar
 
 `normal` recognises all common video containers — **MKV, MP4, M4V, AVI, MOV, WMV, MPG/MPEG, TS, M2TS, and WebM**. Normalize, quality profiling, weak-encode and junk triage, inspect, and export all work across every one of them.
 
-Audio- and subtitle-default repair (the lossless `mkvpropedit` / `ffmpeg` remux lane) is **MKV only** — other containers are still scanned and reported, just not remuxed.
+Audio- and subtitle-default repair (the lossless `mkvpropedit` / `ffmpeg` remux feature) is **MKV only** — other containers are still scanned and reported, just not remuxed.
 
-Disc images (`.iso`) and raw disc rips are **not supported**. Remux them to MKV first (e.g. with MakeMKV) and `normal` will pick them up.
+Disc images (`.iso`) and raw disc rips are **not supported** at this stage.
 
 ## 🚀 Get Started [1]
 
