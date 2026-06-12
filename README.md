@@ -110,7 +110,7 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 macOS and Windows aren't hardened yet. They may already work, but they haven't been validated, and other mount and filesystem types are similarly untested. Treat them as "help wanted," not "you're on your own."
 
-**Requirements:** `ffprobe` for media-probing workflows (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`); `ffmpeg` for remux repairs; and `mkvpropedit` (from `mkvtoolnix`) for the fast disposition-only repair lane, falling back to `ffmpeg` when absent. These are external binaries — install them from your distro's packages. The sole Python dependency, `openpyxl`, installs automatically with `pip install -e .` and powers the XLSX export.
+**Requirements:** `ffprobe` for media-probing workflows (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`); `ffmpeg` for remux repairs; and `mkvpropedit` (from `mkvtoolnix`) for the light touch subtitle swaps, falling back to `ffmpeg` when absent. These are external binaries — install them from your distro's packages. The sole Python dependency, `openpyxl`, installs automatically with `pip install -e .` and powers the XLSX export.
 
 ## 🙌 Get Involved
 
