@@ -2549,6 +2549,9 @@
     if (action === 'export') {
       return { label: 'Catalogue Export', tone: 'is-audit-system-user' };
     }
+    if (action === 'telemetry_vote') {
+      return { label: 'Telemetry Vote', tone: 'is-audit-telemetry' };
+    }
     if (action.startsWith('follow_up_')) {
       return { label: 'Follow-up', tone: 'is-audit-system-user' };
     }

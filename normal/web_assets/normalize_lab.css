@@ -565,6 +565,11 @@ thead th {
   background: rgba(138, 84, 38, 0.08);
   color: #8a5426;
 }
+.lab-cell-pill.is-audit-telemetry {
+  border-color: #d9c6a0;
+  background: #f5efe2;
+  color: #7f5718;
+}
 
 .lab-audio-popover-trigger {
   display: inline-flex;
