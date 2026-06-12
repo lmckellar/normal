@@ -680,6 +680,61 @@ class MovieProfileTests(unittest.TestCase):
         self.assertIn('"english_audio_subtitles": "forced_english"', saved)
         self.assertIn('"foreign_audio_subtitles": "off"', saved)
 
+    def test_update_policy_definition_persists_lopsided_encode_with_clamps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            policy_path = Path(tmpdir) / "movie_standards.json"
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", policy_path):
+                policy, _preferences = update_policy_definition(
+                    "lopsided_encode",
+                    {
+                        "audio_kbps_per_channel": 200,
+                        "audio_efficient_kbps_per_channel": 999,
+                        "starved_ratio": 0.05,
+                        "min_spread": 99,
+                    },
+                    expected_policy_revision=library_policy_revision(load_movie_standards()),
+                )
+                saved = policy_path.read_text(encoding="utf-8")
+
+        block = policy["lopsided_encode"]
+        self.assertEqual(block["audio_kbps_per_channel"], 160.0)
+        self.assertEqual(block["audio_efficient_kbps_per_channel"], 160.0)
+        self.assertEqual(block["starved_ratio"], 0.2)
+        self.assertEqual(block["min_spread"], 5.0)
+        self.assertIn('"audio_kbps_per_channel": 160', saved)
+
+    def test_update_policy_definition_lopsided_encode_round_trips_and_caps_efficient(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            policy_path = Path(tmpdir) / "movie_standards.json"
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", policy_path):
+                policy, _preferences = update_policy_definition(
+                    "lopsided_encode",
+                    {
+                        "audio_kbps_per_channel": 96,
+                        "audio_efficient_kbps_per_channel": 120,
+                        "starved_ratio": 0.45,
+                        "min_spread": 3.0,
+                    },
+                    expected_policy_revision=library_policy_revision(load_movie_standards()),
+                )
+
+        block = policy["lopsided_encode"]
+        self.assertEqual(block["audio_kbps_per_channel"], 96.0)
+        self.assertEqual(block["audio_efficient_kbps_per_channel"], 96.0)
+        self.assertEqual(block["starved_ratio"], 0.45)
+        self.assertEqual(block["min_spread"], 3.0)
+
+    def test_update_policy_definition_lopsided_encode_rejects_stale_revision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            policy_path = Path(tmpdir) / "movie_standards.json"
+            with patch("normal.movie_profile.MOVIE_STANDARDS_PATH", policy_path):
+                with self.assertRaises(MovieStandardsConflictError):
+                    update_policy_definition(
+                        "lopsided_encode",
+                        {"audio_efficient_kbps_per_channel": 90},
+                        expected_policy_revision="stale-revision",
+                    )
+
     def test_update_policy_definition_persists_operator_preferences_with_revision_check(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             policy_path = Path(tmpdir) / "movie_standards.json"

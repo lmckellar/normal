@@ -194,6 +194,9 @@
     activeRemuxPath: '',
     completedRemuxPaths: new Set(),
     onboardingVisible: false,
+    lopsidedDraft: null,
+    lopsidedView: 'registers',
+    lopsidedBusy: false,
   };
 
   const el = {
@@ -2131,6 +2134,10 @@
       busy: state.policyBusy,
       drafts: state.policyDrafts,
       definitions,
+      lopsidedDraft: state.lopsidedDraft,
+      lopsidedView: state.lopsidedView,
+      lopsidedBusy: state.lopsidedBusy,
+      lopsidedRev: lopsidedRevision(),
     });
   }
 
@@ -2185,7 +2192,7 @@
           <p>Define global policies for your media library that will be enforced by the repair workflows.</p>
         </div>
       </div>
-      <div class="lab-policy-sections">${sections}</div>
+      <div class="lab-policy-sections">${sections}${lopsidedPolicySection()}</div>
     `;
     state.policyEditorRenderKey = renderKey;
     el.policyEditorPanel.querySelectorAll('[data-policy-section]').forEach(section => {
@@ -2218,6 +2225,7 @@
         });
       });
     });
+    wireLopsidedPolicySection();
   }
 
   function policyEditorValues(label) {
@@ -4429,6 +4437,524 @@
       </div>
     `;
     syncRemuxCardStates();
+  }
+
+  const LOPSIDED_DEFAULTS = {
+    audio_kbps_per_channel: 107,
+    audio_efficient_kbps_per_channel: 85,
+    starved_ratio: 0.5,
+    min_spread: 2.5,
+  };
+  const LOPSIDED_CLAMPS = {
+    audio_kbps_per_channel: [40, 160],
+    audio_efficient_kbps_per_channel: [40, 160],
+    starved_ratio: [0.2, 0.8],
+    min_spread: [1.5, 5.0],
+  };
+  const LOPSIDED_FALLBACK_EFFICIENT = ['aac', 'eac3'];
+  const LOPSIDED_FALLBACK_LOSSLESS = ['truehd', 'dtshd', 'flac', 'pcm'];
+  const LOPSIDED_HEALTHY_RATIO = 1.0;
+  const LOPSIDED_VB_W = 600;
+  const LOPSIDED_VB_H = 168;
+  const LOPSIDED_PLOT = { left: 12, right: 14, top: 14, bottom: 26 };
+  const LOPSIDED_MAX_DOTS = 600;
+
+  function lopsidedClamp(key, value) {
+    const [low, high] = LOPSIDED_CLAMPS[key];
+    let n = Number(value);
+    if (!isFinite(n)) n = LOPSIDED_DEFAULTS[key];
+    return Math.max(low, Math.min(high, n));
+  }
+
+  function lopsidedStandards() {
+    return activeProfilePayload()?.movie_standards || currentPolicyPayload()?.movie_standards || {};
+  }
+
+  function lopsidedRevision() {
+    return activeProfilePayload()?.movie_standards_revision
+      || currentPolicyPayload()?.movie_standards_revision
+      || '';
+  }
+
+  function lopsidedSavedConfig() {
+    const block = lopsidedStandards().lopsided_encode || {};
+    const base = lopsidedClamp('audio_kbps_per_channel', block.audio_kbps_per_channel ?? LOPSIDED_DEFAULTS.audio_kbps_per_channel);
+    const efficient = lopsidedClamp('audio_efficient_kbps_per_channel', block.audio_efficient_kbps_per_channel ?? LOPSIDED_DEFAULTS.audio_efficient_kbps_per_channel);
+    return {
+      audio_kbps_per_channel: base,
+      audio_efficient_kbps_per_channel: Math.min(efficient, base),
+      starved_ratio: lopsidedClamp('starved_ratio', block.starved_ratio ?? LOPSIDED_DEFAULTS.starved_ratio),
+      min_spread: lopsidedClamp('min_spread', block.min_spread ?? LOPSIDED_DEFAULTS.min_spread),
+      efficient_audio_codecs: (block.efficient_audio_codecs || LOPSIDED_FALLBACK_EFFICIENT).map(c => String(c).toLowerCase()),
+      lossless_audio_codecs: (block.lossless_audio_codecs || LOPSIDED_FALLBACK_LOSSLESS).map(c => String(c).toLowerCase()),
+      healthy_ratio: Number(block.healthy_ratio ?? LOPSIDED_HEALTHY_RATIO) || LOPSIDED_HEALTHY_RATIO,
+    };
+  }
+
+  function lopsidedDraftConfig() {
+    const cfg = lopsidedSavedConfig();
+    const draft = state.lopsidedDraft || {};
+    ['audio_kbps_per_channel', 'audio_efficient_kbps_per_channel', 'starved_ratio', 'min_spread'].forEach(key => {
+      if (draft[key] != null) cfg[key] = lopsidedClamp(key, draft[key]);
+    });
+    cfg.audio_efficient_kbps_per_channel = Math.min(cfg.audio_efficient_kbps_per_channel, cfg.audio_kbps_per_channel);
+    return cfg;
+  }
+
+  function lopsidedDirty() {
+    const saved = lopsidedSavedConfig();
+    const draft = lopsidedDraftConfig();
+    return ['audio_kbps_per_channel', 'audio_efficient_kbps_per_channel', 'starved_ratio', 'min_spread']
+      .some(key => Math.abs(saved[key] - draft[key]) > 1e-9);
+  }
+
+  function lopsidedSetDraft(key, value) {
+    const draft = { ...(state.lopsidedDraft || {}) };
+    draft[key] = lopsidedClamp(key, value);
+    if (key === 'audio_kbps_per_channel') {
+      const cap = draft[key];
+      const eff = draft.audio_efficient_kbps_per_channel != null
+        ? draft.audio_efficient_kbps_per_channel
+        : lopsidedSavedConfig().audio_efficient_kbps_per_channel;
+      if (eff > cap) draft.audio_efficient_kbps_per_channel = cap;
+    }
+    if (key === 'audio_efficient_kbps_per_channel') {
+      const cap = draft.audio_kbps_per_channel != null
+        ? draft.audio_kbps_per_channel
+        : lopsidedSavedConfig().audio_kbps_per_channel;
+      if (draft[key] > cap) draft[key] = cap;
+    }
+    state.lopsidedDraft = draft;
+  }
+
+  function lopsidedBuildFacts() {
+    const movies = currentDashboardPayload()?.movies || activeProfilePayload()?.movies || [];
+    const cfg = lopsidedSavedConfig();
+    const standards = lopsidedStandards();
+    const facts = [];
+    movies.forEach((item, index) => {
+      const f = item?.facts || {};
+      const channels = Number(f.audio_channels || 0);
+      const audioBitrate = Number(f.audio_bitrate_kbps || 0);
+      const videoBitrate = Number(f.video_bitrate_kbps || 0);
+      const resolution = String(f.resolution_bucket || '').toLowerCase();
+      const videoCfg = (standards.video || {})[resolution] || {};
+      const videoReference = Number(videoCfg.reference_kbps || 0) || Number(videoCfg.minimum_kbps || 0);
+      if (!channels || !audioBitrate || !videoBitrate || !videoReference) return;
+      const codec = String(f.audio_format_family || f.audio_codec || '').toLowerCase();
+      let codecClass = 'baseline';
+      if (cfg.lossless_audio_codecs.includes(codec)) codecClass = 'lossless';
+      else if (cfg.efficient_audio_codecs.includes(codec)) codecClass = 'efficient';
+      facts.push({
+        index,
+        title: fileNameFromPath(item.relative_path || item.path || '') || 'Untitled',
+        audioPerCh: audioBitrate / channels,
+        videoRatio: videoBitrate / videoReference,
+        codec,
+        codecClass,
+        channels,
+        audioBitrate,
+        videoBitrate,
+        estimated: !!(f.audio_bitrate_estimated || f.video_bitrate_approximate),
+      });
+    });
+    return facts;
+  }
+
+  function lopsidedFacts() {
+    const movies = currentDashboardPayload()?.movies || activeProfilePayload()?.movies || [];
+    const signature = `${lopsidedRevision()}|${movies.length}`;
+    if (!state._lopsidedFactsCache || state._lopsidedFactsCache.signature !== signature) {
+      state._lopsidedFactsCache = { signature, facts: lopsidedBuildFacts() };
+    }
+    return state._lopsidedFactsCache.facts;
+  }
+
+  function lopsidedVerdict(f, cfg) {
+    const perChannel = f.codecClass === 'efficient'
+      ? cfg.audio_efficient_kbps_per_channel
+      : cfg.audio_kbps_per_channel;
+    if (perChannel <= 0) return null;
+    const audioRatio = f.audioPerCh / perChannel;
+    const videoRatio = f.videoRatio;
+    const high = Math.max(videoRatio, audioRatio);
+    const low = Math.min(videoRatio, audioRatio);
+    if (low <= 0 || high < cfg.healthy_ratio || low > cfg.starved_ratio) return null;
+    const spread = high / low;
+    if (spread < cfg.min_spread) return null;
+    if (audioRatio <= videoRatio) {
+      if (f.codecClass === 'lossless') return null;
+      return { side: 'audio', spread, confidence: f.estimated ? 'review' : 'fail' };
+    }
+    return { side: 'video', spread, confidence: f.estimated ? 'review' : 'fail' };
+  }
+
+  function lopsidedHitCount(facts, cfg) {
+    let n = 0;
+    for (const f of facts) if (lopsidedVerdict(f, cfg)) n++;
+    return n;
+  }
+
+  function lopsidedAudioPerChDomainMax(facts) {
+    let max = 160;
+    for (const f of facts) if (f.audioPerCh > max) max = f.audioPerCh;
+    return Math.min(max * 1.02, 400);
+  }
+
+  function lopsidedXToPx(value, domainMax) {
+    const span = LOPSIDED_VB_W - LOPSIDED_PLOT.left - LOPSIDED_PLOT.right;
+    return LOPSIDED_PLOT.left + (Math.max(0, value) / domainMax) * span;
+  }
+
+  function lopsidedPxToX(px, domainMax) {
+    const span = LOPSIDED_VB_W - LOPSIDED_PLOT.left - LOPSIDED_PLOT.right;
+    return Math.max(0, ((px - LOPSIDED_PLOT.left) / span) * domainMax);
+  }
+
+  function lopsidedJitterY(index) {
+    const top = LOPSIDED_PLOT.top + 4;
+    const bottom = LOPSIDED_VB_H - LOPSIDED_PLOT.bottom - 4;
+    const pseudo = (Math.sin(index * 12.9898) * 43758.5453) % 1;
+    const frac = pseudo < 0 ? pseudo + 1 : pseudo;
+    return top + frac * (bottom - top);
+  }
+
+  function lopsidedSampleFacts(facts) {
+    if (facts.length <= LOPSIDED_MAX_DOTS) return facts;
+    const step = facts.length / LOPSIDED_MAX_DOTS;
+    const sampled = [];
+    for (let i = 0; i < LOPSIDED_MAX_DOTS; i += 1) sampled.push(facts[Math.floor(i * step)]);
+    return sampled;
+  }
+
+  function lopsidedFloorSvg(facts, cfg) {
+    const domainMax = lopsidedAudioPerChDomainMax(facts);
+    const baseX = lopsidedXToPx(cfg.audio_kbps_per_channel, domainMax);
+    const effX = lopsidedXToPx(cfg.audio_efficient_kbps_per_channel, domainMax);
+    const starvedX = lopsidedXToPx(cfg.audio_kbps_per_channel * cfg.starved_ratio, domainMax);
+    const yTop = LOPSIDED_PLOT.top;
+    const yBottom = LOPSIDED_VB_H - LOPSIDED_PLOT.bottom;
+    const dots = lopsidedSampleFacts(facts).map(f => {
+      const cx = lopsidedXToPx(f.audioPerCh, domainMax).toFixed(1);
+      const cy = lopsidedJitterY(f.index).toFixed(1);
+      return `<circle class="lab-lopsided-dot is-${f.codecClass}" cx="${cx}" cy="${cy}" r="2.4"></circle>`;
+    }).join('');
+    const ticks = [0, 40, 85, 107, Math.round(domainMax)].filter((v, i, arr) => arr.indexOf(v) === i && v <= domainMax)
+      .map(v => {
+        const x = lopsidedXToPx(v, domainMax).toFixed(1);
+        return `<line class="lab-lopsided-tick" x1="${x}" y1="${yBottom}" x2="${x}" y2="${yBottom + 4}"></line>`
+          + `<text class="lab-lopsided-axis" x="${x}" y="${yBottom + 15}" text-anchor="middle">${v}</text>`;
+      }).join('');
+    const line = (knob, x, klass, label) => `
+      <g class="lab-lopsided-line ${klass}" data-lopsided-knob="${knob}" tabindex="0" role="slider">
+        <rect class="lab-lopsided-grab" x="${(x - 7).toFixed(1)}" y="${yTop - 2}" width="14" height="${yBottom - yTop + 6}"></rect>
+        <line x1="${x.toFixed(1)}" y1="${yTop}" x2="${x.toFixed(1)}" y2="${yBottom}"></line>
+        <polygon class="lab-lopsided-handle" points="${(x - 4).toFixed(1)},${yTop - 6} ${(x + 4).toFixed(1)},${yTop - 6} ${x.toFixed(1)},${yTop}"></polygon>
+        <text class="lab-lopsided-line-label" x="${x.toFixed(1)}" y="${yTop - 9}" text-anchor="middle">${label}</text>
+      </g>`;
+    return `
+      <svg class="lab-lopsided-floor" viewBox="0 0 ${LOPSIDED_VB_W} ${LOPSIDED_VB_H}" preserveAspectRatio="none" data-lopsided-domain-max="${domainMax}">
+        <rect class="lab-lopsided-starved-zone" x="${LOPSIDED_PLOT.left}" y="${yTop}" width="${(starvedX - LOPSIDED_PLOT.left).toFixed(1)}" height="${yBottom - yTop}"></rect>
+        <line class="lab-lopsided-baseline-axis" x1="${LOPSIDED_PLOT.left}" y1="${yBottom}" x2="${LOPSIDED_VB_W - LOPSIDED_PLOT.right}" y2="${yBottom}"></line>
+        ${ticks}
+        ${dots}
+        ${line('starved', starvedX, 'is-starved', '½')}
+        ${line('audio_efficient_kbps_per_channel', effX, 'is-efficient', 'eff')}
+        ${line('audio_kbps_per_channel', baseX, 'is-base', 'base')}
+      </svg>`;
+  }
+
+  function lopsidedMiniHist(values, lo, hi, marker, klass) {
+    const bins = 24;
+    const counts = new Array(bins).fill(0);
+    values.forEach(v => {
+      if (v < lo || v > hi) return;
+      let idx = Math.floor(((v - lo) / (hi - lo)) * bins);
+      if (idx >= bins) idx = bins - 1;
+      if (idx < 0) idx = 0;
+      counts[idx] += 1;
+    });
+    const max = Math.max(1, ...counts);
+    const w = 220;
+    const h = 40;
+    const bw = w / bins;
+    const bars = counts.map((c, i) => {
+      const bh = (c / max) * (h - 2);
+      return `<rect class="lab-lopsided-hist-bar" x="${(i * bw).toFixed(1)}" y="${(h - bh).toFixed(1)}" width="${(bw - 0.6).toFixed(1)}" height="${bh.toFixed(1)}"></rect>`;
+    }).join('');
+    const mx = (((Math.max(lo, Math.min(hi, marker)) - lo) / (hi - lo)) * w).toFixed(1);
+    return `
+      <svg class="lab-lopsided-hist ${klass}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+        ${bars}
+        <line class="lab-lopsided-hist-marker" x1="${mx}" y1="0" x2="${mx}" y2="${h}"></line>
+      </svg>`;
+  }
+
+  function lopsidedFormatValue(knob, value) {
+    if (knob === 'min_spread' || knob === 'starved_ratio') return `${value.toFixed(2)}×`;
+    return `${Math.round(value)} kbps`;
+  }
+
+  function lopsidedKnobsView(facts, cfg) {
+    const perChValues = facts.map(f => f.audioPerCh);
+    const lowValues = [];
+    const spreadValues = [];
+    facts.forEach(f => {
+      const perChannel = f.codecClass === 'efficient' ? cfg.audio_efficient_kbps_per_channel : cfg.audio_kbps_per_channel;
+      const audioRatio = perChannel > 0 ? f.audioPerCh / perChannel : 0;
+      const high = Math.max(f.videoRatio, audioRatio);
+      const low = Math.min(f.videoRatio, audioRatio);
+      lowValues.push(low);
+      if (low > 0 && high >= cfg.healthy_ratio) spreadValues.push(high / low);
+    });
+    const register = (knob, klass, label, value, step, spark) => {
+      const [min, max] = LOPSIDED_CLAMPS[knob];
+      return `
+        <div class="lab-lopsided-register is-${klass}">
+          <div class="lab-lopsided-register-label">
+            <span class="lab-lopsided-register-name">${label}</span>
+            <span class="lab-lopsided-register-value" data-lopsided-value="${knob}">${lopsidedFormatValue(knob, value)}</span>
+          </div>
+          <input class="lab-lopsided-slider" type="range" data-lopsided-slider="${knob}"
+            min="${min}" max="${max}" step="${step}" value="${value}">
+          <div class="lab-lopsided-spark">${spark}</div>
+        </div>`;
+    };
+    return `
+      <div class="lab-lopsided-registers">
+        ${register('audio_efficient_kbps_per_channel', 'efficient', 'AAC / EAC3 FLOOR', cfg.audio_efficient_kbps_per_channel, 1, lopsidedMiniHist(perChValues, 0, 200, cfg.audio_efficient_kbps_per_channel, 'is-efficient'))}
+        ${register('audio_kbps_per_channel', 'base', 'AC3 / DTS FLOOR', cfg.audio_kbps_per_channel, 1, lopsidedMiniHist(perChValues, 0, 200, cfg.audio_kbps_per_channel, 'is-base'))}
+        ${register('starved_ratio', 'starved', 'STARVED RATIO', cfg.starved_ratio, 0.01, lopsidedMiniHist(lowValues, 0, 1.5, cfg.starved_ratio, 'is-starved'))}
+        ${register('min_spread', 'spread', 'MIN SPREAD (HIGH ÷ LOW)', cfg.min_spread, 0.1, lopsidedMiniHist(spreadValues, 1, 5, cfg.min_spread, 'is-spread'))}
+      </div>`;
+  }
+
+  function lopsidedTunerBody(facts) {
+    const saved = lopsidedSavedConfig();
+    const cfg = lopsidedDraftConfig();
+    const savedHits = lopsidedHitCount(facts, saved);
+    const draftHits = lopsidedHitCount(facts, cfg);
+    const dirty = lopsidedDirty();
+    const view = state.lopsidedView === 'scatter' ? 'scatter' : 'registers';
+    const viewMarkup = view === 'scatter'
+      ? `${lopsidedFloorSvg(facts, cfg)}
+        <div class="lab-lopsided-legend">
+          <span class="is-efficient">● efficient</span>
+          <span class="is-base">● baseline</span>
+          <span class="is-lossless">● lossless</span>
+          <span class="is-starved-key">░ starved</span>
+        </div>`
+      : lopsidedKnobsView(facts, cfg);
+    return `
+      <div class="lab-lopsided-body">
+        <div class="lab-lopsided-toggle" role="tablist">
+          <button type="button" data-lopsided-view="registers" class="${view === 'registers' ? 'is-active' : ''}">registers</button>
+          <button type="button" data-lopsided-view="scatter" class="${view === 'scatter' ? 'is-active' : ''}">scatter</button>
+        </div>
+        ${viewMarkup}
+        <div class="lab-lopsided-footer">
+          <div class="lab-lopsided-anchor">lopsided hits: <strong>${savedHits}</strong> → <strong class="${draftHits === savedHits ? '' : 'is-changed'}" data-lopsided-draft-hits>${draftHits}</strong>
+            <span class="lab-lopsided-count-note">${facts.length} files scored</span></div>
+          <div class="lab-lopsided-actions">
+            <button type="button" class="lab-lopsided-reset" data-lopsided-reset ${dirty ? '' : 'disabled'}>Reset</button>
+            <button type="button" class="lab-lopsided-save lab-action-button is-primary" data-lopsided-save ${dirty && !state.lopsidedBusy ? '' : 'disabled'}>${state.lopsidedBusy ? 'Saving…' : 'Save'}</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function lopsidedPolicySection() {
+    const isOpen = state.policySectionLabel === 'lopsided_encode';
+    const facts = lopsidedFacts();
+    const draftHits = facts.length ? lopsidedHitCount(facts, lopsidedDraftConfig()) : 0;
+    const body = !isOpen
+      ? ''
+      : (facts.length
+        ? lopsidedTunerBody(facts)
+        : `<div class="lab-lopsided-empty">Run a profile-bearing scan for this source (Review Low-Quality Encodes) to load the dot cloud, then tune the floor against your own files.</div>`);
+    return `
+      <section class="lab-policy-card lab-lopsided-card ${isOpen ? 'is-open' : ''}">
+        <div class="lab-policy-section-header" data-policy-section="lopsided_encode" role="button" tabindex="0" aria-expanded="${isOpen ? 'true' : 'false'}">
+          <div class="lab-policy-meta">
+            <span class="lab-kicker">Detector</span>
+            ${facts.length ? `<span class="lab-lopsided-headhits">${draftHits} hit${draftHits === 1 ? '' : 's'}</span>` : ''}
+          </div>
+          <h3>Lopsided encode thresholds</h3>
+          <p>Tune the audio baselines, starved gate, and spread gate against your own library. Saved values apply on the next scan.</p>
+        </div>
+        ${body}
+      </section>`;
+  }
+
+  function wireLopsidedPolicySection() {
+    const host = el.policyEditorPanel;
+    if (!host || state.policySectionLabel !== 'lopsided_encode') return;
+    const facts = lopsidedFacts();
+    if (!facts.length) return;
+    wireLopsidedTuner(host, facts);
+  }
+
+  function lopsidedUpdateReadout(host, facts) {
+    const cfg = lopsidedDraftConfig();
+    const saved = lopsidedSavedConfig();
+    const draftHits = lopsidedHitCount(facts, cfg);
+    const savedHits = lopsidedHitCount(facts, saved);
+    const draftEl = host.querySelector('[data-lopsided-draft-hits]');
+    if (draftEl) {
+      draftEl.textContent = draftHits;
+      draftEl.classList.toggle('is-changed', draftHits !== savedHits);
+    }
+    const headHits = host.querySelector('.lab-lopsided-headhits');
+    if (headHits) headHits.textContent = `${draftHits} hit${draftHits === 1 ? '' : 's'}`;
+    const dirty = lopsidedDirty();
+    const resetBtn = host.querySelector('[data-lopsided-reset]');
+    if (resetBtn) resetBtn.disabled = !dirty;
+    const saveBtn = host.querySelector('[data-lopsided-save]');
+    if (saveBtn) saveBtn.disabled = !dirty || state.lopsidedBusy;
+    host.querySelectorAll('[data-lopsided-value]').forEach(node => {
+      const knob = node.dataset.lopsidedValue;
+      node.textContent = lopsidedFormatValue(knob, cfg[knob]);
+    });
+    host.querySelectorAll('.lab-lopsided-headhits').forEach(node => {
+      node.textContent = `${draftHits} hit${draftHits === 1 ? '' : 's'}`;
+    });
+  }
+
+  function lopsidedMoveFloorLines(host, facts) {
+    const svg = host.querySelector('.lab-lopsided-floor');
+    if (!svg) return;
+    const cfg = lopsidedDraftConfig();
+    const domainMax = Number(svg.dataset.lopsidedDomainMax) || lopsidedAudioPerChDomainMax(facts);
+    const yTop = LOPSIDED_PLOT.top;
+    const yBottom = LOPSIDED_VB_H - LOPSIDED_PLOT.bottom;
+    const place = (knob, value) => {
+      const group = svg.querySelector(`[data-lopsided-knob="${knob}"]`);
+      if (!group) return;
+      const x = lopsidedXToPx(value, domainMax);
+      group.querySelector('rect').setAttribute('x', (x - 7).toFixed(1));
+      const ln = group.querySelector('line');
+      ln.setAttribute('x1', x.toFixed(1));
+      ln.setAttribute('x2', x.toFixed(1));
+      group.querySelector('polygon').setAttribute('points', `${(x - 4).toFixed(1)},${yTop - 6} ${(x + 4).toFixed(1)},${yTop - 6} ${x.toFixed(1)},${yTop}`);
+      group.querySelector('text').setAttribute('x', x.toFixed(1));
+    };
+    place('audio_kbps_per_channel', cfg.audio_kbps_per_channel);
+    place('audio_efficient_kbps_per_channel', cfg.audio_efficient_kbps_per_channel);
+    place('starved', cfg.audio_kbps_per_channel * cfg.starved_ratio);
+    const zone = svg.querySelector('.lab-lopsided-starved-zone');
+    if (zone) {
+      const starvedX = lopsidedXToPx(cfg.audio_kbps_per_channel * cfg.starved_ratio, domainMax);
+      zone.setAttribute('width', Math.max(0, starvedX - LOPSIDED_PLOT.left).toFixed(1));
+    }
+  }
+
+  function wireLopsidedTuner(host, facts) {
+    host.querySelectorAll('[data-lopsided-view]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        state.lopsidedView = button.dataset.lopsidedView;
+        renderPolicyEditor();
+      });
+    });
+    host.querySelectorAll('[data-lopsided-reset]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        state.lopsidedDraft = null;
+        renderPolicyEditor();
+      });
+    });
+    host.querySelectorAll('[data-lopsided-save]').forEach(button => {
+      button.addEventListener('click', event => {
+        event.stopPropagation();
+        saveLopsidedDraft();
+      });
+    });
+    host.querySelectorAll('[data-lopsided-slider]').forEach(input => {
+      input.addEventListener('input', () => {
+        lopsidedSetDraft(input.dataset.lopsidedSlider, input.value);
+        lopsidedUpdateReadout(host, facts);
+      });
+      input.addEventListener('change', () => renderPolicyEditor());
+    });
+    const svg = host.querySelector('.lab-lopsided-floor');
+    if (svg) {
+      const domainMax = Number(svg.dataset.lopsidedDomainMax) || lopsidedAudioPerChDomainMax(facts);
+      svg.querySelectorAll('[data-lopsided-knob]').forEach(group => {
+        const knob = group.dataset.lopsidedKnob;
+        const apply = clientX => {
+          const rect = svg.getBoundingClientRect();
+          const px = ((clientX - rect.left) / rect.width) * LOPSIDED_VB_W;
+          const domainValue = lopsidedPxToX(px, domainMax);
+          if (knob === 'starved') {
+            const base = lopsidedDraftConfig().audio_kbps_per_channel;
+            lopsidedSetDraft('starved_ratio', base > 0 ? domainValue / base : 0.5);
+          } else {
+            lopsidedSetDraft(knob, domainValue);
+          }
+          lopsidedMoveFloorLines(host, facts);
+          lopsidedUpdateReadout(host, facts);
+        };
+        group.addEventListener('pointerdown', event => {
+          event.preventDefault();
+          group.setPointerCapture(event.pointerId);
+          group.classList.add('is-dragging');
+          apply(event.clientX);
+        });
+        group.addEventListener('pointermove', event => {
+          if (!group.hasPointerCapture(event.pointerId)) return;
+          apply(event.clientX);
+        });
+        const release = event => {
+          if (!group.hasPointerCapture?.(event.pointerId)) return;
+          group.releasePointerCapture(event.pointerId);
+          group.classList.remove('is-dragging');
+          renderPolicyEditor();
+        };
+        group.addEventListener('pointerup', release);
+        group.addEventListener('pointercancel', release);
+      });
+    }
+  }
+
+  async function saveLopsidedDraft() {
+    if (!lopsidedDirty() || state.lopsidedBusy) return;
+    const cfg = lopsidedDraftConfig();
+    state.lopsidedBusy = true;
+    renderPolicyEditor();
+    try {
+      const result = await postJson('/api/movies/standards/update', {
+        label: 'lopsided_encode',
+        source: normalizeSourceKey(el.sourcePath.value),
+        revision: lopsidedRevision(),
+        values: {
+          audio_kbps_per_channel: cfg.audio_kbps_per_channel,
+          audio_efficient_kbps_per_channel: cfg.audio_efficient_kbps_per_channel,
+          starved_ratio: cfg.starved_ratio,
+          min_spread: cfg.min_spread,
+        },
+      });
+      applyLopsidedSaveResult(result);
+      state.lopsidedDraft = null;
+      markAuditLedgerDirty();
+    } catch (error) {
+      window.alert?.(`Could not save lopsided thresholds: ${error.message}`);
+    } finally {
+      state.lopsidedBusy = false;
+      renderPolicyEditor();
+    }
+  }
+
+  function applyLopsidedSaveResult(result) {
+    const standards = result?.movie_standards;
+    const revision = result?.movie_standards_revision;
+    if (!standards) return;
+    [state.weakPayload, state.repairPayload, state.canonicalProfilePayload, state.immersivePayload, state.dashboardProfilePayload, state.policyPayload]
+      .forEach(payload => {
+        if (!payload) return;
+        payload.movie_standards = standards;
+        if (revision != null) payload.movie_standards_revision = revision;
+      });
+    state._lopsidedFactsCache = null;
   }
 
   function renderPreviewPane() {
