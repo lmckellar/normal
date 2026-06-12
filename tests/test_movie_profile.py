@@ -22,6 +22,7 @@ from normal.movie_profile import (
     detect_audio_language_selection_risks,
     detect_immersive_audio_candidate,
     detect_plex_diagnostics,
+    evaluate_lopsided_encode,
     is_audio_packaging_owned_movie,
     looks_like_absolute_numbering,
     total_risk_score,
@@ -1059,6 +1060,91 @@ class ImmersiveAudioCandidateTests(unittest.TestCase):
         )
         self.assertEqual([f.code for f in findings], ["immersive_audio_candidate"])
         self.assertIn("confirmed unavailable", findings[0].summary.lower())
+
+
+class LopsidedEncodeTests(unittest.TestCase):
+    def _facts(self, **overrides) -> MediaFacts:
+        base = dict(
+            resolution_bucket="1080p",
+            width=1920,
+            height=1080,
+            video_bitrate_kbps=16000,
+            audio_codec="eac3",
+            audio_channels=6,
+            audio_bitrate_kbps=4000,
+        )
+        base.update(overrides)
+        return MediaFacts(**base)
+
+    def test_reference_video_with_starved_audio_flags_audio_starved(self) -> None:
+        facts = self._facts(audio_bitrate_kbps=96)
+        result = evaluate_lopsided_encode(facts, DEFAULT_MOVIE_STANDARDS)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["code"], "encode_lopsided_audio_starved")
+        self.assertEqual(result["status"], "fail")
+
+    def test_reference_audio_with_starved_video_flags_video_starved(self) -> None:
+        facts = self._facts(video_bitrate_kbps=4000, audio_codec="truehd")
+        result = evaluate_lopsided_encode(facts, DEFAULT_MOVIE_STANDARDS)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["code"], "encode_lopsided_video_starved")
+        self.assertEqual(result["status"], "fail")
+
+    def test_uniformly_weak_is_not_lopsided(self) -> None:
+        facts = self._facts(video_bitrate_kbps=2000, audio_bitrate_kbps=96)
+        self.assertIsNone(evaluate_lopsided_encode(facts, DEFAULT_MOVIE_STANDARDS))
+
+    def test_uniformly_strong_is_not_lopsided(self) -> None:
+        facts = self._facts(audio_codec="truehd", audio_bitrate_kbps=4000)
+        self.assertIsNone(evaluate_lopsided_encode(facts, DEFAULT_MOVIE_STANDARDS))
+
+    def test_estimated_starved_axis_drops_to_review(self) -> None:
+        facts = self._facts(audio_bitrate_kbps=96, audio_bitrate_estimated=True)
+        result = evaluate_lopsided_encode(facts, DEFAULT_MOVIE_STANDARDS)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["status"], "review_low_confidence")
+        self.assertEqual(result["confidence"], "low")
+
+    def test_missing_axis_yields_no_verdict(self) -> None:
+        self.assertIsNone(evaluate_lopsided_encode(self._facts(audio_bitrate_kbps=0), DEFAULT_MOVIE_STANDARDS))
+        self.assertIsNone(evaluate_lopsided_encode(self._facts(video_bitrate_kbps=0), DEFAULT_MOVIE_STANDARDS))
+
+    def test_efficient_codec_gets_grace_baseline(self) -> None:
+        # Strong video (1.5x reference) drags the spread past the gate. At the flat
+        # baseline an AC3 6ch @ 320 reads as starved audio; the efficient EAC3
+        # baseline spares the identical bitrate.
+        ac3 = self._facts(video_bitrate_kbps=24000, audio_codec="ac3", audio_bitrate_kbps=320)
+        result = evaluate_lopsided_encode(ac3, DEFAULT_MOVIE_STANDARDS)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["code"], "encode_lopsided_audio_starved")
+        eac3 = self._facts(video_bitrate_kbps=24000, audio_codec="eac3", audio_bitrate_kbps=320)
+        self.assertIsNone(evaluate_lopsided_encode(eac3, DEFAULT_MOVIE_STANDARDS))
+
+    def test_lossless_audio_never_flagged_starved(self) -> None:
+        # A thin/estimated lossless read must never count as the starved axis.
+        facts = self._facts(video_bitrate_kbps=24000, audio_codec="truehd", audio_bitrate_kbps=200)
+        self.assertIsNone(evaluate_lopsided_encode(facts, DEFAULT_MOVIE_STANDARDS))
+
+    def test_efficiency_baseline_is_config_driven(self) -> None:
+        facts = self._facts(video_bitrate_kbps=24000, audio_codec="eac3", audio_bitrate_kbps=320)
+        self.assertIsNone(evaluate_lopsided_encode(facts, DEFAULT_MOVIE_STANDARDS))
+        tightened = json.loads(json.dumps(DEFAULT_MOVIE_STANDARDS))
+        tightened["lopsided_encode"]["audio_efficient_kbps_per_channel"] = 107
+        result = evaluate_lopsided_encode(facts, tightened)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["code"], "encode_lopsided_audio_starved")
+
+    def test_lopsided_marks_item_weak_candidate(self) -> None:
+        facts = self._facts(audio_bitrate_kbps=96)
+        item = build_movie_profile_item(
+            Path("/movies"),
+            Path("/movies/The Matrix (1999)/The Matrix (1999).mkv"),
+            facts,
+            standards=DEFAULT_MOVIE_STANDARDS,
+        )
+        self.assertTrue(item.profile.weak_candidate)
+        codes = {diag.code for diag in item.profile.diagnostics}
+        self.assertIn("encode_lopsided_audio_starved", codes)
 
 
 if __name__ == "__main__":

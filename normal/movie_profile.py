@@ -121,6 +121,15 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
         "minimum_codecs": ["aac", "ac3", "eac3", "dts", "dtshd", "truehd", "flac", "pcm"],
         "reference_codecs": ["truehd", "dtshd", "flac", "pcm"],
     },
+    "lopsided_encode": {
+        "audio_kbps_per_channel": 107,
+        "audio_efficient_kbps_per_channel": 85,
+        "efficient_audio_codecs": ["aac", "eac3"],
+        "lossless_audio_codecs": ["truehd", "dtshd", "flac", "pcm"],
+        "healthy_ratio": 1.0,
+        "starved_ratio": 0.5,
+        "min_spread": 2.5,
+    },
     "immersive_audio": {
         "availability_year_prior": 2012,
     },
@@ -360,6 +369,9 @@ def build_movie_profile_item(
     active_standards = standards or load_movie_standards()
     legacy_label = classify_profile_label(facts)
     domain_results = evaluate_movie_standards(movie_path, facts, active_standards)
+    lopsided_result = evaluate_lopsided_encode(facts, active_standards)
+    if lopsided_result is not None:
+        domain_results.append(lopsided_result)
     quality_label = classify_quality_stance(movie_path, facts, domain_results, active_standards)
     diagnostics = detect_plex_diagnostics(
         movie_path,
@@ -370,6 +382,8 @@ def build_movie_profile_item(
         immersive_candidate_enabled=immersive_candidate_enabled,
     )
     weak_candidate = is_replacement_candidate_quality(quality_label, active_standards) and not is_audio_packaging_owned_movie(diagnostics)
+    if lopsided_result is not None:
+        weak_candidate = True
     label = classify_standard_label(domain_results, active_standards, weak_candidate=weak_candidate)
     diagnostics.extend(domain_results_to_diagnostics(domain_results))
     confidence = "low" if any(result["confidence"] == "low" for result in domain_results) else "high"
@@ -1311,6 +1325,60 @@ def evaluate_audio_domain(facts: MediaFacts, standards: dict[str, Any]) -> dict[
     if reference_codecs and codec in reference_codecs and channels >= minimum_channels and bitrate >= minimum_bitrate:
         return standard_result("audio_minimum", "pass", "audio_reference", "Main audio meets the configured reference standard.", "high")
     return standard_result("audio_minimum", "pass", "audio_meets_minimum", "Main audio meets the configured minimum standard.", "high")
+
+
+LOPSIDED_HEALTHY_RATIO = 1.0
+LOPSIDED_STARVED_RATIO = 0.5
+LOPSIDED_MIN_SPREAD = 2.5
+LOPSIDED_AUDIO_KBPS_PER_CHANNEL = 107
+
+
+def evaluate_lopsided_encode(facts: MediaFacts, standards: dict[str, Any]) -> dict[str, Any] | None:
+    config = standards.get("lopsided_encode") or {}
+    healthy_ratio = float(config.get("healthy_ratio", LOPSIDED_HEALTHY_RATIO))
+    starved_ratio = float(config.get("starved_ratio", LOPSIDED_STARVED_RATIO))
+    min_spread = float(config.get("min_spread", LOPSIDED_MIN_SPREAD))
+    base_per_channel = float(config.get("audio_kbps_per_channel", LOPSIDED_AUDIO_KBPS_PER_CHANNEL))
+    efficient_per_channel = float(config.get("audio_efficient_kbps_per_channel", base_per_channel))
+    efficient_codecs = {str(c).casefold() for c in config.get("efficient_audio_codecs") or []}
+    lossless_codecs = {str(c).casefold() for c in config.get("lossless_audio_codecs") or []}
+    resolution = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    ) or "unknown"
+    video_config = (standards.get("video") or {}).get(resolution) or {}
+    video_reference = int(video_config.get("reference_kbps") or 0) or int(video_config.get("minimum_kbps") or 0)
+    video_bitrate = facts.video_bitrate_kbps or 0
+    channels = facts.audio_channels or 0
+    audio_bitrate = facts.audio_bitrate_kbps or 0
+    if not video_bitrate or not video_reference or not channels or not audio_bitrate:
+        return None
+    codec = (facts.audio_format_family or facts.audio_codec or "").casefold()
+    per_channel = efficient_per_channel if codec in efficient_codecs else base_per_channel
+    video_ratio = video_bitrate / video_reference
+    audio_ratio = (audio_bitrate / channels) / per_channel
+    high = max(video_ratio, audio_ratio)
+    low = min(video_ratio, audio_ratio)
+    if low <= 0 or high < healthy_ratio or low > starved_ratio:
+        return None
+    spread = high / low
+    if spread < min_spread:
+        return None
+    if audio_ratio <= video_ratio:
+        if codec in lossless_codecs:
+            return None
+        code = "encode_lopsided_audio_starved"
+        summary = f"Reference video welded to starved audio ({audio_bitrate:,} kbps across {channels} channels, {spread:.1f}× spread)."
+        estimated = facts.audio_bitrate_estimated
+    else:
+        code = "encode_lopsided_video_starved"
+        summary = f"Reference audio over starved video ({video_bitrate:,} kbps, {spread:.1f}× spread)."
+        estimated = facts.video_bitrate_approximate
+    if estimated:
+        return standard_result("lopsided_encode", "review_low_confidence", code, summary, "low")
+    return standard_result("lopsided_encode", "fail", code, summary, "high")
 
 
 def path_matches_normalized_shape(path: Path) -> bool:
