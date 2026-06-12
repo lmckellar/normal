@@ -167,6 +167,32 @@ SEED_NOT_AVAILABLE: tuple[tuple[str, int], ...] = (
     ("Bound", 1996),
     ("The Fisher King", 1991),
     ("The Sting", 1973),
+    # 2000–2010: prestige/dialogue catalogue left on channel-based mixes.
+    ("The Score", 2001),
+    ("The Royal Tenenbaums", 2001),
+    ("Catch Me If You Can", 2002),
+    ("Minority Report", 2002),
+    ("Signs", 2002),
+    ("The Ring", 2002),
+    ("Collateral", 2004),
+    ("The Life Aquatic with Steve Zissou", 2004),
+    ("No Country for Old Men", 2007),
+    ("The Darjeeling Limited", 2007),
+    ("In Bruges", 2008),
+    ("The Town", 2010),
+    # 2010-on: modern titles that still never received an object-audio mix.
+    ("Moneyball", 2011),
+    ("The Tree of Life", 2011),
+    ("The Master", 2012),
+    ("Argo", 2012),
+    ("Her", 2013),
+    ("The Wolf of Wall Street", 2013),
+    ("The Grand Budapest Hotel", 2014),
+    ("Bridge of Spies", 2015),
+    ("Spotlight", 2015),
+    ("The Shape of Water", 2017),
+    ("Three Billboards Outside Ebbing, Missouri", 2017),
+    ("The Post", 2017),
 )
 
 
