@@ -3338,8 +3338,10 @@
       return av < bv ? -1 * mult : av > bv ? 1 * mult : 0;
     }
     if (isImmersiveMode()) {
+      const verdictRank = { available: 0, final_below_target: 1 };
       const read = row => {
         if (key === 'year') return Number(row.year || 0);
+        if (key === 'status') return verdictRank[row.verdict] ?? 2;
         return String(row[key] || '').toLowerCase();
       };
       const av = read(a);
