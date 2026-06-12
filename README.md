@@ -32,6 +32,7 @@ User consensus is unanimous:
   - IMDB Top 100 Action
   - IMDB Top 100 Animation
   - …and more
+- 🔥 It does other stuff too
 
 All packaged with a clean web GUI, minimal dependencies and all core features are local only.
 
