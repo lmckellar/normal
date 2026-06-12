@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+from importlib import resources
 import json
 from pathlib import Path
 import tempfile
@@ -21,179 +23,54 @@ def confirmation_key(title: str, year: int) -> str:
     return f"{title_match_key(title)}|{int(year)}"
 
 
-# --- Booster seed (temporary) -------------------------------------------------
-# Titles known to ship an object-based (Dolby Atmos / DTS:X) release. These are
-# title-level facts, not claims about any local file: the seed only corroborates
-# a candidate, the file-level probe still does the confirming. Merged *under* the
-# user store in confirmation_index() and overridable by it, so this whole block
-# can be deleted once crowdsourced confirmations cover the library. Swap
-# SEED_TITLES for a bundled JSON load when the real list lands.
-SEED_VERDICT = "available"
-SEED_TITLES: tuple[tuple[str, int], ...] = (
-    ("Mission: Impossible - Fallout", 2018),
-    ("Mad Max: Fury Road", 2015),
-    ("Blade Runner 2049", 2017),
-    ("Dune", 2021),
-    ("Top Gun: Maverick", 2022),
-    ("John Wick: Chapter 4", 2023),
-    ("1917", 2019),
-    ("A Quiet Place", 2018),
-    ("A Quiet Place Part II", 2020),
-    ("Alien: Romulus", 2024),
-    ("Aliens", 1986),
-    ("Alita: Battle Angel", 2019),
-    ("Apollo 13", 1995),
-    ("Aquaman", 2018),
-    ("Atomic Blonde", 2017),
-    ("Avatar", 2009),
-    ("Avatar: The Way of Water", 2022),
-    ("Avengers: Endgame", 2019),
-    ("Avengers: Infinity War", 2018),
-    ("Batman v Superman: Dawn of Justice", 2016),
-    ("Black Hawk Down", 2001),
-    ("Black Panther", 2018),
-    ("Blade Runner", 1982),
-    ("Bohemian Rhapsody", 2018),
-    ("Bram Stoker's Dracula", 1992),
-    ("Braveheart", 1995),
-    ("Captain Marvel", 2019),
-    ("Casino", 1995),
-    ("Crouching Tiger, Hidden Dragon", 2000),
-    ("Deadpool", 2016),
-    ("Deadpool 2", 2018),
-    ("Doctor Strange", 2016),
-    ("Edge of Tomorrow", 2014),
-    ("First Man", 2018),
-    ("Ford v Ferrari", 2019),
-    ("Fury", 2014),
-    ("Gladiator", 2000),
-    ("Godzilla", 2014),
-    ("Godzilla vs. Kong", 2021),
-    ("Godzilla: King of the Monsters", 2019),
-    ("Gravity", 2013),
-    ("Guardians of the Galaxy", 2014),
-    ("Guardians of the Galaxy Vol. 2", 2017),
-    ("Guardians of the Galaxy Vol. 3", 2023),
-    ("Hacksaw Ridge", 2016),
-    ("Harry Potter and the Sorcerer's Stone", 2001),
-    ("It", 2017),
-    ("Jaws", 1975),
-    ("John Wick", 2014),
-    ("John Wick: Chapter 2", 2017),
-    ("John Wick: Chapter 3 - Parabellum", 2019),
-    ("Joker", 2019),
-    ("Jurassic Park", 1993),
-    ("Jurassic Park III", 2001),
-    ("Jurassic World", 2015),
-    ("Knives Out", 2019),
-    ("Kong: Skull Island", 2017),
-    ("La La Land", 2016),
-    ("Logan", 2017),
-    ("Man of Steel", 2013),
-    ("Pacific Rim", 2013),
-    ("Ready Player One", 2018),
-    ("Saving Private Ryan", 1998),
-    ("Spider-Man", 2002),
-    ("Spider-Man: Across the Spider-Verse", 2023),
-    ("Spider-Man: Far from Home", 2019),
-    ("Spider-Man: Homecoming", 2017),
-    ("Spider-Man: Into the Spider-Verse", 2018),
-    ("Spider-Man: No Way Home", 2021),
-    ("The Abyss", 1989),
-    ("The Batman", 2022),
-    ("The Fifth Element", 1997),
-    ("The Great Wall", 2016),
-    ("The Lord of the Rings: The Fellowship of the Ring", 2001),
-    ("The Lord of the Rings: The Return of the King", 2003),
-    ("The Lord of the Rings: The Two Towers", 2002),
-    ("The Matrix", 1999),
-    ("The Matrix Reloaded", 2003),
-    ("The Matrix Revolutions", 2003),
-    ("The Super Mario Bros. Movie", 2023),
-    ("Thor: Ragnarok", 2017),
-    ("Titanic", 1997),
-    ("True Lies", 1994),
-    ("Wonder Woman", 2017),
-)
+# --- Bundled seed lists (temporary) -------------------------------------------
+# Title-level object-audio (Dolby Atmos / DTS:X) availability seeds, loaded from
+# the versioned, provenance-carrying data file rather than inlined here. Each
+# entry is a title-level claim, not a claim about any local file: the seed only
+# corroborates a candidate; the file-level probe still does the confirming. Both
+# lists are merged *under* the user store in confirmation_index() and overridable
+# by it, so they can be retired once crowdsourced confirmations cover the library
+# (see docs/internal/atmos-availability-and-crowdsource-of-truth.md).
+SEED_DATA_RESOURCE = ("normal", "data", "immersive_seeds.json")
+SEED_DATA_VERSION = 1
+
+
+@functools.lru_cache(maxsize=1)
+def _load_seed_data() -> dict[str, Any]:
+    package, *parts = SEED_DATA_RESOURCE
+    raw = resources.files(package).joinpath(*parts).read_text(encoding="utf-8")
+    payload = json.loads(raw)
+    version = payload.get("version")
+    if version != SEED_DATA_VERSION:
+        raise ValueError(f"unsupported immersive seed data version: {version}")
+    return payload
+
+
+def _seed_list(list_name: str) -> dict[str, Any]:
+    return _load_seed_data()["lists"][list_name]
+
+
+def _seed_entries(list_name: str) -> tuple[tuple[str, int], ...]:
+    return tuple((entry["title"], int(entry["year"])) for entry in _seed_list(list_name)["entries"])
+
+
+def seed_provenance(list_name: str) -> dict[str, Any]:
+    """Provenance metadata (source, reference, asserted_on, note, verdict) for a
+    seed list, for audit/UI surfacing of where a seed claim came from."""
+    info = _seed_list(list_name)
+    keys = ("verdict", "source", "reference", "asserted_on", "note")
+    return {key: info[key] for key in keys if key in info}
+
+
+SEED_VERDICT = _seed_list("available")["verdict"]
+SEED_TITLES: tuple[tuple[str, int], ...] = _seed_entries("available")
+
+SEED_NOT_AVAILABLE_VERDICT = _seed_list("not_available")["verdict"]
+SEED_NOT_AVAILABLE: tuple[tuple[str, int], ...] = _seed_entries("not_available")
 
 
 def seed_index() -> dict[str, str]:
     return {confirmation_key(title, year): SEED_VERDICT for title, year in SEED_TITLES}
-
-
-# --- Not-available seed (temporary) -------------------------------------------
-# Titles editorially asserted to have NO object-based (Atmos / DTS:X) release at
-# present — only channel/bed mixes have ever shipped. Same epistemic status as
-# SEED_TITLES: a title-level claim, not a file claim, and provisional ("for
-# now") — the moment one object-audio copy surfaces anywhere, the available
-# signal must override this (see confirmation_index precedence). This hand seed
-# is a stand-in for the deferred consensus-of-absence engine documented in
-# docs/internal/atmos-availability-and-crowdsource-of-truth.md.
-SEED_NOT_AVAILABLE_VERDICT = "final_below_target"
-SEED_NOT_AVAILABLE: tuple[tuple[str, int], ...] = (
-    ("A Good Day to Die Hard", 2013),
-    ("Election", 1999),
-    ("The Firm", 1993),
-    ("Vanilla Sky", 2001),
-    ("Mission: Impossible", 1996),
-    ("Mission: Impossible II", 2000),
-    ("Days of Thunder", 1990),
-    ("Beverly Hills Cop", 1984),
-    ("Beverly Hills Cop II", 1987),
-    ("Beverly Hills Cop III", 1994),
-    ("Ferris Bueller's Day Off", 1986),
-    ("Flashdance", 1983),
-    ("Footloose", 1984),
-    ("Planes, Trains & Automobiles", 1987),
-    ("Scrooged", 1988),
-    ("Indecent Proposal", 1993),
-    ("Saturday Night Fever", 1977),
-    ("Trading Places", 1983),
-    ("Chinatown", 1974),
-    ("The Italian Job", 1969),
-    ("The Naked Gun: From the Files of Police Squad!", 1988),
-    ("The Hunt for Red October", 1990),
-    ("Patriot Games", 1992),
-    ("Clear and Present Danger", 1994),
-    ("The Sum of All Fears", 2002),
-    ("Coming to America", 1988),
-    ("The War of the Worlds", 1953),
-    ("Blood Simple", 1984),
-    ("Lone Star", 1996),
-    ("The Piano", 1993),
-    ("The Last Picture Show", 1971),
-    ("Raging Bull", 1980),
-    ("Trainspotting", 1996),
-    ("Bound", 1996),
-    ("The Fisher King", 1991),
-    ("The Sting", 1973),
-    # 2000–2010: prestige/dialogue catalogue left on channel-based mixes.
-    ("The Score", 2001),
-    ("The Royal Tenenbaums", 2001),
-    ("Catch Me If You Can", 2002),
-    ("Minority Report", 2002),
-    ("Signs", 2002),
-    ("The Ring", 2002),
-    ("Collateral", 2004),
-    ("The Life Aquatic with Steve Zissou", 2004),
-    ("No Country for Old Men", 2007),
-    ("The Darjeeling Limited", 2007),
-    ("In Bruges", 2008),
-    ("The Town", 2010),
-    # 2010-on: modern titles that still never received an object-audio mix.
-    ("Moneyball", 2011),
-    ("The Tree of Life", 2011),
-    ("The Master", 2012),
-    ("Argo", 2012),
-    ("Her", 2013),
-    ("The Wolf of Wall Street", 2013),
-    ("The Grand Budapest Hotel", 2014),
-    ("Bridge of Spies", 2015),
-    ("Spotlight", 2015),
-    ("The Shape of Water", 2017),
-    ("Three Billboards Outside Ebbing, Missouri", 2017),
-    ("The Post", 2017),
-)
 
 
 def not_available_seed_index() -> dict[str, str]:

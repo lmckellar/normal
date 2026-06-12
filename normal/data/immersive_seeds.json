@@ -1,0 +1,600 @@
+{
+  "version": 1,
+  "_comment": "Title-level object-audio (Dolby Atmos / DTS:X) availability seeds. Each entry is a claim about a title's best available release, not about any local file; the file-level probe still confirms. Merged under the user confirmation store and overridable by it.",
+  "lists": {
+    "available": {
+      "verdict": "available",
+      "source": "editorial_seed",
+      "reference": "docs/internal/atmos-availability-and-crowdsource-of-truth.md",
+      "asserted_on": "2026-06-13",
+      "note": "Titles known to ship an object-based (Atmos / DTS:X) release.",
+      "entries": [
+        {
+          "title": "Mission: Impossible - Fallout",
+          "year": 2018
+        },
+        {
+          "title": "Mad Max: Fury Road",
+          "year": 2015
+        },
+        {
+          "title": "Blade Runner 2049",
+          "year": 2017
+        },
+        {
+          "title": "Dune",
+          "year": 2021
+        },
+        {
+          "title": "Top Gun: Maverick",
+          "year": 2022
+        },
+        {
+          "title": "John Wick: Chapter 4",
+          "year": 2023
+        },
+        {
+          "title": "1917",
+          "year": 2019
+        },
+        {
+          "title": "A Quiet Place",
+          "year": 2018
+        },
+        {
+          "title": "A Quiet Place Part II",
+          "year": 2020
+        },
+        {
+          "title": "Alien: Romulus",
+          "year": 2024
+        },
+        {
+          "title": "Aliens",
+          "year": 1986
+        },
+        {
+          "title": "Alita: Battle Angel",
+          "year": 2019
+        },
+        {
+          "title": "Apollo 13",
+          "year": 1995
+        },
+        {
+          "title": "Aquaman",
+          "year": 2018
+        },
+        {
+          "title": "Atomic Blonde",
+          "year": 2017
+        },
+        {
+          "title": "Avatar",
+          "year": 2009
+        },
+        {
+          "title": "Avatar: The Way of Water",
+          "year": 2022
+        },
+        {
+          "title": "Avengers: Endgame",
+          "year": 2019
+        },
+        {
+          "title": "Avengers: Infinity War",
+          "year": 2018
+        },
+        {
+          "title": "Batman v Superman: Dawn of Justice",
+          "year": 2016
+        },
+        {
+          "title": "Black Hawk Down",
+          "year": 2001
+        },
+        {
+          "title": "Black Panther",
+          "year": 2018
+        },
+        {
+          "title": "Blade Runner",
+          "year": 1982
+        },
+        {
+          "title": "Bohemian Rhapsody",
+          "year": 2018
+        },
+        {
+          "title": "Bram Stoker's Dracula",
+          "year": 1992
+        },
+        {
+          "title": "Braveheart",
+          "year": 1995
+        },
+        {
+          "title": "Captain Marvel",
+          "year": 2019
+        },
+        {
+          "title": "Casino",
+          "year": 1995
+        },
+        {
+          "title": "Crouching Tiger, Hidden Dragon",
+          "year": 2000
+        },
+        {
+          "title": "Deadpool",
+          "year": 2016
+        },
+        {
+          "title": "Deadpool 2",
+          "year": 2018
+        },
+        {
+          "title": "Doctor Strange",
+          "year": 2016
+        },
+        {
+          "title": "Edge of Tomorrow",
+          "year": 2014
+        },
+        {
+          "title": "First Man",
+          "year": 2018
+        },
+        {
+          "title": "Ford v Ferrari",
+          "year": 2019
+        },
+        {
+          "title": "Fury",
+          "year": 2014
+        },
+        {
+          "title": "Gladiator",
+          "year": 2000
+        },
+        {
+          "title": "Godzilla",
+          "year": 2014
+        },
+        {
+          "title": "Godzilla vs. Kong",
+          "year": 2021
+        },
+        {
+          "title": "Godzilla: King of the Monsters",
+          "year": 2019
+        },
+        {
+          "title": "Gravity",
+          "year": 2013
+        },
+        {
+          "title": "Guardians of the Galaxy",
+          "year": 2014
+        },
+        {
+          "title": "Guardians of the Galaxy Vol. 2",
+          "year": 2017
+        },
+        {
+          "title": "Guardians of the Galaxy Vol. 3",
+          "year": 2023
+        },
+        {
+          "title": "Hacksaw Ridge",
+          "year": 2016
+        },
+        {
+          "title": "Harry Potter and the Sorcerer's Stone",
+          "year": 2001
+        },
+        {
+          "title": "It",
+          "year": 2017
+        },
+        {
+          "title": "Jaws",
+          "year": 1975
+        },
+        {
+          "title": "John Wick",
+          "year": 2014
+        },
+        {
+          "title": "John Wick: Chapter 2",
+          "year": 2017
+        },
+        {
+          "title": "John Wick: Chapter 3 - Parabellum",
+          "year": 2019
+        },
+        {
+          "title": "Joker",
+          "year": 2019
+        },
+        {
+          "title": "Jurassic Park",
+          "year": 1993
+        },
+        {
+          "title": "Jurassic Park III",
+          "year": 2001
+        },
+        {
+          "title": "Jurassic World",
+          "year": 2015
+        },
+        {
+          "title": "Knives Out",
+          "year": 2019
+        },
+        {
+          "title": "Kong: Skull Island",
+          "year": 2017
+        },
+        {
+          "title": "La La Land",
+          "year": 2016
+        },
+        {
+          "title": "Logan",
+          "year": 2017
+        },
+        {
+          "title": "Man of Steel",
+          "year": 2013
+        },
+        {
+          "title": "Pacific Rim",
+          "year": 2013
+        },
+        {
+          "title": "Ready Player One",
+          "year": 2018
+        },
+        {
+          "title": "Saving Private Ryan",
+          "year": 1998
+        },
+        {
+          "title": "Spider-Man",
+          "year": 2002
+        },
+        {
+          "title": "Spider-Man: Across the Spider-Verse",
+          "year": 2023
+        },
+        {
+          "title": "Spider-Man: Far from Home",
+          "year": 2019
+        },
+        {
+          "title": "Spider-Man: Homecoming",
+          "year": 2017
+        },
+        {
+          "title": "Spider-Man: Into the Spider-Verse",
+          "year": 2018
+        },
+        {
+          "title": "Spider-Man: No Way Home",
+          "year": 2021
+        },
+        {
+          "title": "The Abyss",
+          "year": 1989
+        },
+        {
+          "title": "The Batman",
+          "year": 2022
+        },
+        {
+          "title": "The Fifth Element",
+          "year": 1997
+        },
+        {
+          "title": "The Great Wall",
+          "year": 2016
+        },
+        {
+          "title": "The Lord of the Rings: The Fellowship of the Ring",
+          "year": 2001
+        },
+        {
+          "title": "The Lord of the Rings: The Return of the King",
+          "year": 2003
+        },
+        {
+          "title": "The Lord of the Rings: The Two Towers",
+          "year": 2002
+        },
+        {
+          "title": "The Matrix",
+          "year": 1999
+        },
+        {
+          "title": "The Matrix Reloaded",
+          "year": 2003
+        },
+        {
+          "title": "The Matrix Revolutions",
+          "year": 2003
+        },
+        {
+          "title": "The Super Mario Bros. Movie",
+          "year": 2023
+        },
+        {
+          "title": "Thor: Ragnarok",
+          "year": 2017
+        },
+        {
+          "title": "Titanic",
+          "year": 1997
+        },
+        {
+          "title": "True Lies",
+          "year": 1994
+        },
+        {
+          "title": "Wonder Woman",
+          "year": 2017
+        }
+      ]
+    },
+    "not_available": {
+      "verdict": "final_below_target",
+      "source": "editorial_seed",
+      "reference": "docs/internal/atmos-availability-and-crowdsource-of-truth.md",
+      "asserted_on": "2026-06-13",
+      "note": "Titles editorially asserted to have no object-based release at present; provisional, overridden the moment one object-audio copy surfaces.",
+      "entries": [
+        {
+          "title": "A Good Day to Die Hard",
+          "year": 2013
+        },
+        {
+          "title": "Election",
+          "year": 1999
+        },
+        {
+          "title": "The Firm",
+          "year": 1993
+        },
+        {
+          "title": "Vanilla Sky",
+          "year": 2001
+        },
+        {
+          "title": "Mission: Impossible",
+          "year": 1996
+        },
+        {
+          "title": "Mission: Impossible II",
+          "year": 2000
+        },
+        {
+          "title": "Days of Thunder",
+          "year": 1990
+        },
+        {
+          "title": "Beverly Hills Cop",
+          "year": 1984
+        },
+        {
+          "title": "Beverly Hills Cop II",
+          "year": 1987
+        },
+        {
+          "title": "Beverly Hills Cop III",
+          "year": 1994
+        },
+        {
+          "title": "Ferris Bueller's Day Off",
+          "year": 1986
+        },
+        {
+          "title": "Flashdance",
+          "year": 1983
+        },
+        {
+          "title": "Footloose",
+          "year": 1984
+        },
+        {
+          "title": "Planes, Trains & Automobiles",
+          "year": 1987
+        },
+        {
+          "title": "Scrooged",
+          "year": 1988
+        },
+        {
+          "title": "Indecent Proposal",
+          "year": 1993
+        },
+        {
+          "title": "Saturday Night Fever",
+          "year": 1977
+        },
+        {
+          "title": "Trading Places",
+          "year": 1983
+        },
+        {
+          "title": "Chinatown",
+          "year": 1974
+        },
+        {
+          "title": "The Italian Job",
+          "year": 1969
+        },
+        {
+          "title": "The Naked Gun: From the Files of Police Squad!",
+          "year": 1988
+        },
+        {
+          "title": "The Hunt for Red October",
+          "year": 1990
+        },
+        {
+          "title": "Patriot Games",
+          "year": 1992
+        },
+        {
+          "title": "Clear and Present Danger",
+          "year": 1994
+        },
+        {
+          "title": "The Sum of All Fears",
+          "year": 2002
+        },
+        {
+          "title": "Coming to America",
+          "year": 1988
+        },
+        {
+          "title": "The War of the Worlds",
+          "year": 1953
+        },
+        {
+          "title": "Blood Simple",
+          "year": 1984
+        },
+        {
+          "title": "Lone Star",
+          "year": 1996
+        },
+        {
+          "title": "The Piano",
+          "year": 1993
+        },
+        {
+          "title": "The Last Picture Show",
+          "year": 1971
+        },
+        {
+          "title": "Raging Bull",
+          "year": 1980
+        },
+        {
+          "title": "Trainspotting",
+          "year": 1996
+        },
+        {
+          "title": "Bound",
+          "year": 1996
+        },
+        {
+          "title": "The Fisher King",
+          "year": 1991
+        },
+        {
+          "title": "The Sting",
+          "year": 1973
+        },
+        {
+          "title": "The Score",
+          "year": 2001
+        },
+        {
+          "title": "The Royal Tenenbaums",
+          "year": 2001
+        },
+        {
+          "title": "Catch Me If You Can",
+          "year": 2002
+        },
+        {
+          "title": "Minority Report",
+          "year": 2002
+        },
+        {
+          "title": "Signs",
+          "year": 2002
+        },
+        {
+          "title": "The Ring",
+          "year": 2002
+        },
+        {
+          "title": "Collateral",
+          "year": 2004
+        },
+        {
+          "title": "The Life Aquatic with Steve Zissou",
+          "year": 2004
+        },
+        {
+          "title": "No Country for Old Men",
+          "year": 2007
+        },
+        {
+          "title": "The Darjeeling Limited",
+          "year": 2007
+        },
+        {
+          "title": "In Bruges",
+          "year": 2008
+        },
+        {
+          "title": "The Town",
+          "year": 2010
+        },
+        {
+          "title": "Moneyball",
+          "year": 2011
+        },
+        {
+          "title": "The Tree of Life",
+          "year": 2011
+        },
+        {
+          "title": "The Master",
+          "year": 2012
+        },
+        {
+          "title": "Argo",
+          "year": 2012
+        },
+        {
+          "title": "Her",
+          "year": 2013
+        },
+        {
+          "title": "The Wolf of Wall Street",
+          "year": 2013
+        },
+        {
+          "title": "The Grand Budapest Hotel",
+          "year": 2014
+        },
+        {
+          "title": "Bridge of Spies",
+          "year": 2015
+        },
+        {
+          "title": "Spotlight",
+          "year": 2015
+        },
+        {
+          "title": "The Shape of Water",
+          "year": 2017
+        },
+        {
+          "title": "Three Billboards Outside Ebbing, Missouri",
+          "year": 2017
+        },
+        {
+          "title": "The Post",
+          "year": 2017
+        }
+      ]
+    }
+  }
+}

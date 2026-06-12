@@ -26,11 +26,15 @@ _COPY_IGNORE = shutil.ignore_patterns(
 # `web_assets` package-data still fails.
 _VERIFY_SCRIPT = """
 import normal.web.server as server
+import normal.movie_immersive_confirmations as immersive
 
 html = server.read_web_asset_text("normalize_lab.html")
 assert html.strip(), "normalize_lab.html shipped empty"
 for _route, (asset_name, _mime) in server.WEB_STATIC_ASSETS.items():
     assert server.read_web_asset_text(asset_name).strip(), asset_name + " missing/empty"
+
+# Bundled data/*.json package-data must ship too (immersive seed lists).
+assert immersive.SEED_TITLES, "immersive seed data missing from wheel"
 print("WHEEL_SMOKE_OK")
 """
 

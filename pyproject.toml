@@ -48,4 +48,4 @@ normal = "normal.cli:main"
 include = ["normal*"]
 
 [tool.setuptools.package-data]
-normal = ["web_assets/*"]
+normal = ["web_assets/*", "data/*.json"]
