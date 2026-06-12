@@ -548,7 +548,7 @@ thead th {
 
 .lab-moron-badge {
   margin-left: 4px;
-  cursor: help;
+  cursor: default;
   font-style: normal;
 }
 .lab-moron-badge.is-review { opacity: 0.6; }
