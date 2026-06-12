@@ -8,13 +8,13 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 ### Added
 
-- **Immersive Audio workflow.** Crowdsources whether a title is available in an object-based immersive mix (Dolby Atmos / DTS:X) — a fact no scanner or enricher can read off a library. Pairs local-probe facts (carrier codec, channel layout) with a seeded, extendable corpus of titles known to have or lack an immersive release, framing each row as an upgrade candidate. A tri-state **Status** column (available / not available / unknown) backed by local-probe telemetry replaces manual per-title voting. Atmos/DTS:X crediting is gated on the actual carrier codec so a lossy core can't masquerade as the object track. Verdict surface split into **Status**, **Audio**, and **Quality Profile** columns. Sits ahead of Canonical Lists in the menu, flags non-normalized rows with normalization tooltips, and emits coloured Telemetry Vote audit events.
-- Cold-start onboarding gate: a first-run surface holds the workbench until library context is established instead of dropping the operator into an empty shell.
-- Weak-encode triage score: low-quality encodes carry a composite score that highlights the offending axis (resolution, bitrate, codec), with a hover explainer on the Triage column header.
+- **Immersive Audio workflow.** Crowdsources whether a title is available in an object-based immersive mix (Dolby Atmos / DTS:X) — a fact no scanner or enricher can read off a library. Pairs local-probe facts (carrier codec, channel layout) with a seeded, extendable corpus of titles known to have or lack an immersive release, framing each row as an upgrade candidate. A tri-state **Status** column (available / not available / unknown) backed by local-probe telemetry replaces manual per-title voting. Atmos/DTS:X crediting is gated on the actual carrier codec so a lossy core can't masquerade as the object track. Verdict surface split into Status, *udio, and Quality Profile columns. Sits ahead of Canonical Lists in the menu, flags non-normalized rows with normalization tooltips, and emits coloured Telemetry Vote audit events.
+- **Cold-start onboarding gate:** a first-run surface holds the workbench until library context is established instead of dropping the operator into an empty shell.
+- **Weak-encode triage score:** low-quality encodes carry a composite score that highlights the offending axis (resolution, bitrate, codec), with a hover explainer on the Triage column header.
 
 ### Changed
 
-- Replacement queue is back online and integrated with the unified audit ledger. Weak-encode and audio deletes flow into the queue and reconcile against it as "deleted, awaiting replacement" items under the same ledger as the rest of the workbench. Pre-merge replacement lists are migrated forward in place.
+- **Replacement queue** is back online and integrated with the unified audit ledger. Weak-encode and audio deletes flow into the queue and reconcile against it as "deleted, awaiting replacement" items under the same ledger as the rest of the workbench. Pre-merge replacement lists are migrated forward in place.
 - Title-key canonicalization is stronger: key folding normalizes accents and `&`/`and` and bridges roman/arabic numerals, so a film matches across edition and numbering variants. (Seed match-safety round-trip verification still outstanding.)
 
 ### Fixed
