@@ -13,7 +13,7 @@
     'weak-encodes': 'Review low-quality encodes that are better deleted or replaced.',
     'repair-defaults': 'Fix audio and subtitle defaults to improve playback behaviour and keep repair cases visible.',
     'canonical-lists': 'Compare the library against canonical lists and inspect owned copy quality at a glance.',
-    'immersive-audio': 'Titles whose audio is channel-based only — no Atmos / DTS:X object track. Status says whether an object-audio release is known to exist (Available), known not to (Not Available), or has not been assessed yet (Unverified).',
+    'immersive-audio': 'Review Object Based Audio Replacement Candidates for files that may be eligible for upgrade',
     junk: 'Review obvious junk files and remove them safely.',
   };
 
