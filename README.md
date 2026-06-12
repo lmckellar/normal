@@ -8,7 +8,7 @@
 
 User consensus is unanimous:
 
-> "Better than Filebot.. probably?"
+> "Better than Filebot... probably?"
 > — You
 
 `normal` is a thoroughly weird and opinionated open source local workbench that fixes a cross section of common issues with messy movie libraries. It seeks to restore calm where there was disarray and can be useful for organizing, maintaining, improving or expanding your digital film collection.
@@ -53,10 +53,6 @@ Then open `http://127.0.0.1:8765` in your browser.
 
 <placeholder awaiting gif>
 
-### 🖥️ Alpha UI note
-
-`v0.7.0-alpha.7` uses one compact workbench at `http://127.0.0.1:8765/`. Workflow deep links still use the main route with a query string, for example `/?workflow=normalize` or `/?workflow=repair-defaults`.
-
 ## 🤓 Safety
 
 `normal` is aggressive by default. It renames, moves, deletes and remuxes files, and it tries to get from mess to clean in as few drive read/write passes as possible. That's the whole point — but it also means you should not aim it at your real library cold.
@@ -71,7 +67,7 @@ All core workflows — normalize, profile scans, weak-encode and junk triage, re
 
 An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list views. Paste it into the workbench **Settings** rail or pass it on launch (`normal web --omdb-key ...` or the environment); either way it is stored locally under `~/.local/share/normal/secrets.env` and takes effect live without a restart. A free key is available at <https://www.omdbapi.com/apikey.aspx>.
 
-(`TMDB_KEY` is only needed if you switch Compare Against Canonical Lists back to the TMDb provider. See [docs/movies.md](docs/movies.md) for where these surface in the UI.)
+(`TMDB_KEY` is only offered as alternative if you switch Compare Against Canonical Lists back to the TMDb provider. See [docs/movies.md](docs/movies.md) for where these surface in the UI.)
 
 ## 🔥 The Opinionated Part
 
@@ -97,7 +93,7 @@ While preference on the specifics of naming and organisation may vary occasional
 
 2. A maintenance process of 1,000 concise, respectful drive read/write events is preferable to one of 5,000 less concise ones if it achieves the same downstream shape.
 
-3. Title (Year)/Title (Year).mkv is The Way.
+3. Title (Year)/Title (Year).mkv is **The Way**.
 
 The fuller stance on why these choices are adopted is in [docs/statement.md](docs/statement.md).
 
