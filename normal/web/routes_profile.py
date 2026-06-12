@@ -126,6 +126,7 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
                 should_cancel=ctx.client_disconnected,
                 resolve_language=resolve_language,
             )
+        PROBE_CACHE.flush()
         MOVIE_PROFILE_CACHE.put(source, report)
         _harvest_local_immersive_votes(source, report)
         response_report = reclassify_report_with_standards(report, effective_standards, resolve_language=resolve_language) if floor_overridden else report

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -95,5 +96,7 @@ HEAVY_SCAN_REGISTRY = HeavyScanRegistry()
 MOVIE_PROFILE_CACHE = MovieProfileCache()
 MOVIE_CANONICAL_CACHE = MovieCanonicalCache()
 PROBE_CACHE = ProbeCache()
+# Persist any trailing batched probe writes when the long-lived server exits.
+atexit.register(PROBE_CACHE.flush)
 AUDIT_STORE = AuditStore()
 CREDENTIAL_STORE = CredentialStore()

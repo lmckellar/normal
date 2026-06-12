@@ -72,11 +72,41 @@ class ProbeCacheTests(unittest.TestCase):
                 movie_path = Path(tmpdir) / "Movie.mkv"
                 movie_path.write_bytes(b"x")
                 cache.put(movie_path, MediaFacts(width=1920, height=1080))
+                cache.flush()
 
                 fresh_cache = ProbeCache()
                 self.assertTrue(fresh_cache.has_entries())
             finally:
                 ProbeCache._PATH = original_path
+
+    def test_put_batches_writes_until_flush(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cache_path = Path(tmpdir) / "probe-cache.json"
+            original_path = ProbeCache._PATH
+            original_every = ProbeCache._FLUSH_EVERY
+            original_interval = ProbeCache._FLUSH_INTERVAL_S
+            try:
+                ProbeCache._PATH = cache_path
+                # Force pure count-based batching, well above the writes below.
+                ProbeCache._FLUSH_EVERY = 1000
+                ProbeCache._FLUSH_INTERVAL_S = 3600.0
+                cache = ProbeCache()
+                for index in range(3):
+                    movie_path = Path(tmpdir) / f"Movie{index}.mkv"
+                    movie_path.write_bytes(b"x")
+                    cache.put(movie_path, MediaFacts(width=1920, height=1080))
+
+                # Below the flush threshold: nothing on disk yet, but readable in-memory.
+                self.assertFalse(cache_path.exists())
+                self.assertFalse(ProbeCache().has_entries())
+
+                cache.flush()
+                self.assertTrue(cache_path.exists())
+                self.assertTrue(ProbeCache().has_entries())
+            finally:
+                ProbeCache._PATH = original_path
+                ProbeCache._FLUSH_EVERY = original_every
+                ProbeCache._FLUSH_INTERVAL_S = original_interval
 
 
 if __name__ == "__main__":
