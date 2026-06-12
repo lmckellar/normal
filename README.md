@@ -76,9 +76,15 @@ An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list vi
 
 (`TMDB_KEY` is only offered as alternative if you switch Compare Against Canonical Lists back to the TMDb provider. See [docs/movies.md](docs/movies.md) for where these surface in the UI.)
 
-## 🔥 The Opinionated Part
+## 🔥 User F.A.Q's
+
+❓ Q: How do you get access to the internet from the Asylum, and why did you make this application?
+
+✅ A: Those are great questions.
 
 `normal` is built around the following principles that lead to some loud claims:
+
+## 🔥 The Opinionated Part
 
 **🪙 Physical Storage Economics**
 
