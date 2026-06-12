@@ -24,7 +24,7 @@ User consensus is unanimous:
 - 🎯 Surgically removes Foreign Audio files(s) from within .mkv packages
 - 🔊 Enforces logical subtitle and audio defaults across the board with `ffmpeg` remuxing and `mkvpropedit` subtitle swapping
 - 📊 Lets you compare your collection directly against canonical movie lists:
--    (IMDB Top 100 All Time, Top 250 All Time, Top 100 Action, Top 100 Animation etc.) and identify what's missing
+(IMDB Top 100 All Time, Top 250 All Time, Top 100 Action, Top 100 Animation etc.) and identify what's missing
 - 📤 One Click Export your entire library as a cleanly organized spreadsheet for a quick 💪
 - 🤝 Removes downstream frustrations with clients like Plex, Emby and Jellyfin and their oddly conflicting naming requirements
 - 🦀 Conceals its deep shame and embarrassment for being agent-coded in 2026 but not written in Rust
