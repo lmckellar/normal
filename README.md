@@ -19,10 +19,12 @@ User consensus is unanimous:
 
 - 🎬 Normalises movie files and parent folders into `Title (Year)/Title (Year)` naming convention
 - 🔍 Inspects the library and arranges it into a cross section of user editable quality profiles
-- 🗑️ Bulk Deletes shortlisted weak movie encodes and saves them in a text based replacement queue, freeing space immediately
-- 🎯 Surgically removes Samples, Featurettes, Extras, Foreign Audio, promotional `.txt` spam and other junk ephemera from within the .mkv packages or folders
+- 🗑️ Bulk Deletes shortlisted weak encodes, Samples, Featurettes, Extras, `.txt` spam and other junk ephemera freeing space immediately 
+- 📑 Creates and manages a local Universal Ledger & Replacement Queue that centralizes all deleted items and checks for a replacement 
+- 🎯 Surgically removes Foreign Audio files(s) from within .mkv packages
 - 🔊 Enforces logical subtitle and audio defaults across the board with `ffmpeg` remuxing and `mkvpropedit` subtitle swapping
-- 📊 Lets you compare your collection directly against canonical movie lists (TMDB Top 100 All Time, Top 250 All Time, Top 100 Action, etc.) and identify what's missing
+- 📊 Lets you compare your collection directly against canonical movie lists:
+-    (IMDB Top 100 All Time, Top 250 All Time, Top 100 Action, Top 100 Animation etc.) and identify what's missing
 - 📤 One Click Export your entire library as a cleanly organized spreadsheet for a quick 💪
 - 🤝 Removes downstream frustrations with clients like Plex, Emby and Jellyfin and their oddly conflicting naming requirements
 - 🦀 Conceals its deep shame and embarrassment for being agent-coded in 2026 but not written in Rust
