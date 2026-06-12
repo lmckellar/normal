@@ -542,6 +542,8 @@ thead th {
 .lab-cell-pill.is-safe { color: #2d6a4f; }
 .lab-cell-pill.is-review { color: #8d5d1d; }
 .lab-cell-pill.is-unchanged { color: var(--muted); }
+.lab-cell-pill.is-not-available,
+.chip.is-not-available { color: #a3312f; }
 .lab-cell-pill.is-actionable { color: var(--accent); }
 .lab-cell-pill.is-audit-system-background {
   border-color: rgba(85, 92, 104, 0.22);

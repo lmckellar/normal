@@ -835,7 +835,7 @@
 
   function immersiveVerdictPillClass(verdict) {
     if (verdict === 'available') return 'is-safe';
-    if (verdict === 'final_below_target') return 'is-unchanged';
+    if (verdict === 'final_below_target') return 'is-not-available';
     return 'is-review';
   }
 
