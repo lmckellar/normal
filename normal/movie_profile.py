@@ -212,6 +212,7 @@ WARNING_GATE_SAFETY_LEVELS = ("safe", "confident", "yolo")
 DEFAULT_OPERATOR_PREFERENCES = {
     "delete_mode": "recycle_all",
     "default_source": "",
+    "fun_mode": False,
     "immersive_candidate_finding": False,
     "immersive_local_probe_telemetry": True,
 }

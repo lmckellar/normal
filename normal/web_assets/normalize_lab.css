@@ -552,16 +552,6 @@ thead th {
   font-style: normal;
 }
 .lab-moron-badge.is-review { opacity: 0.6; }
-
-.lab-fun-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.85em;
-  color: var(--muted);
-  cursor: pointer;
-  user-select: none;
-}
 .lab-cell-pill.is-audit-system-background {
   border-color: rgba(85, 92, 104, 0.22);
   background: rgba(85, 92, 104, 0.08);

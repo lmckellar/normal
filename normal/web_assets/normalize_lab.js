@@ -223,8 +223,6 @@
     bucketFilter: document.getElementById('bucketFilter'),
     workflowStatusFilter: document.getElementById('workflowStatusFilter'),
     canonicalListFilter: document.getElementById('canonicalListFilter'),
-    funModeToggle: document.getElementById('funModeToggle'),
-    funModeToggleLabel: document.getElementById('funModeToggleLabel'),
     selectAllButton: document.getElementById('selectAllButton'),
     deselectAllButton: document.getElementById('deselectAllButton'),
     tableColGroup: document.getElementById('tableColGroup'),
@@ -1101,6 +1099,13 @@
   function applyPolicyPayload(payload) {
     if (!payload) return;
     state.policyPayload = payload;
+    const preferences = payload.operator_preferences || {};
+    if (Object.prototype.hasOwnProperty.call(preferences, 'fun_mode')) {
+      state.funMode = Boolean(preferences.fun_mode);
+    }
+    if (Object.prototype.hasOwnProperty.call(preferences, 'immersive_candidate_finding')) {
+      state.settingsImmersive = Boolean(preferences.immersive_candidate_finding);
+    }
     if (payload?.replacement_candidate_definition?.fields?.[0]?.value) {
       state.weakFloor = payload.replacement_candidate_definition.fields[0].value;
     }
@@ -1741,7 +1746,6 @@
     el.bucketFilter.hidden = weak || repairDefaults || canonical || immersive || junk;
     el.workflowStatusFilter.hidden = !(weak || repairDefaults || junk);
     el.canonicalListFilter.hidden = !canonical;
-    if (el.funModeToggleLabel) el.funModeToggleLabel.hidden = !weak;
     el.selectAllButton.hidden = canonical || immersive;
     el.deselectAllButton.hidden = canonical || immersive;
     renderWorkflowStatusFilter();
@@ -2406,6 +2410,7 @@
   function currentSettingsRenderKey() {
     return JSON.stringify({
       status: state.settingsStatus,
+      funMode: state.funMode,
       immersive: state.settingsImmersive,
       busy: state.settingsBusy,
     });
@@ -2442,6 +2447,18 @@
         </section>
       `;
     }).join('');
+    const funModeOn = Boolean(state.funMode);
+    const funModeCard = `
+      <section class="lab-policy-card is-open">
+        <div class="lab-policy-meta"><span class="lab-kicker">Presentation</span></div>
+        <h3>Fun Mode</h3>
+        <p>Use the louder, less formal copy where the workbench provides it. The current first slice changes the Weak Encodes critter explanations without changing any diagnosis or action.</p>
+        <p>${funModeOn ? 'Enabled globally.' : 'Disabled — standard copy is used.'}</p>
+        <div class="lab-policy-actions">
+          <button class="lab-action-button${funModeOn ? '' : ' is-primary'}" type="button" data-settings-preference="fun_mode" data-settings-value="${funModeOn ? 'off' : 'on'}" ${state.settingsBusy ? 'disabled' : ''}>${funModeOn ? 'Disable' : 'Enable'}</button>
+        </div>
+      </section>
+    `;
     const immersiveOn = Boolean(state.settingsImmersive);
     const immersiveCard = `
       <section class="lab-policy-card is-open">
@@ -2450,7 +2467,7 @@
         <p>When on, scans pull non-immersive titles recent enough that an Atmos / DTS:X release may exist into the Review Immersive Audio Candidates workflow. Unverified candidates only.</p>
         <p>${immersiveOn ? 'Enabled — candidates surface on the next scan.' : 'Disabled — no candidates are surfaced.'}</p>
         <div class="lab-policy-actions">
-          <button class="lab-action-button${immersiveOn ? '' : ' is-primary'}" type="button" data-settings-immersive="${immersiveOn ? 'off' : 'on'}" ${state.settingsBusy ? 'disabled' : ''}>${immersiveOn ? 'Disable' : 'Enable'}</button>
+          <button class="lab-action-button${immersiveOn ? '' : ' is-primary'}" type="button" data-settings-preference="immersive_candidate_finding" data-settings-value="${immersiveOn ? 'off' : 'on'}" ${state.settingsBusy ? 'disabled' : ''}>${immersiveOn ? 'Disable' : 'Enable'}</button>
         </div>
       </section>
     `;
@@ -2458,10 +2475,10 @@
       <div class="lab-policy-header">
         <div class="lab-policy-heading">
           <div class="lab-kicker">Settings</div>
-          <p>Manage optional API keys for remote enrichment. Keys are stored server-side and ingested at launch; only the last four characters are ever shown.</p>
+          <p>Manage workbench-wide preferences and optional API keys. Preferences and keys are stored server-side; only the last four key characters are ever shown.</p>
         </div>
       </div>
-      <div class="lab-policy-sections">${cards}${immersiveCard}</div>
+      <div class="lab-policy-sections">${funModeCard}${immersiveCard}${cards}</div>
     `;
     state.settingsRenderKey = renderKey;
     el.settingsPanel.querySelectorAll('[data-settings-save]').forEach(button => {
@@ -2470,15 +2487,28 @@
     el.settingsPanel.querySelectorAll('[data-settings-clear]').forEach(button => {
       button.addEventListener('click', () => clearSettingsKey(button.dataset.settingsClear || ''));
     });
-    el.settingsPanel.querySelectorAll('[data-settings-immersive]').forEach(button => {
-      button.addEventListener('click', () => saveImmersivePreference(button.dataset.settingsImmersive === 'on'));
+    el.settingsPanel.querySelectorAll('[data-settings-preference]').forEach(button => {
+      button.addEventListener('click', () => {
+        saveSettingsPreference(
+          button.dataset.settingsPreference || '',
+          button.dataset.settingsValue === 'on',
+        );
+      });
     });
   }
 
   function applySettings(result) {
     const payload = result || {};
     state.settingsStatus = payload.keys || {};
+    state.funMode = Boolean(payload.fun_mode);
     state.settingsImmersive = Boolean(payload.immersive_candidate_finding);
+    if (state.policyPayload && payload.operator_preferences) {
+      state.policyPayload.operator_preferences = {
+        ...(state.policyPayload.operator_preferences || {}),
+        ...payload.operator_preferences,
+      };
+      state.policyPayload.operator_preferences_revision = payload.operator_preferences_revision || '';
+    }
     if (state.settingsStatus.omdb) {
       window.OMDB_AVAILABLE = Boolean(state.settingsStatus.omdb.present);
     }
@@ -2518,14 +2548,15 @@
     }
   }
 
-  async function saveImmersivePreference(enabled) {
-    if (state.settingsBusy) return;
+  async function saveSettingsPreference(field, enabled) {
+    if (!field || state.settingsBusy) return;
     state.settingsBusy = true;
     state.settingsRenderKey = '';
     renderSettingsPanel();
     try {
-      const result = await postJson('/api/settings/preferences', { immersive_candidate_finding: enabled });
+      const result = await postJson('/api/settings/preferences', { [field]: enabled });
       applySettings(result);
+      renderRows();
     } catch (error) {
       el.inspectionPane.textContent = error.message;
     } finally {
@@ -5799,14 +5830,6 @@
       });
     }
   });
-
-  if (el.funModeToggle) {
-    el.funModeToggle.addEventListener('change', () => {
-      state.funMode = el.funModeToggle.checked;
-      renderRows();
-      renderSidePanel();
-    });
-  }
 
   el.selectAllButton.addEventListener('click', async () => {
     const rows = usesSimpleSelectionShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
