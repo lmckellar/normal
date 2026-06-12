@@ -448,6 +448,18 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("repo-local <span class=\"lab-cell-mono\">movie_standards.json</span>", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("user-local delete posture", NORMALIZE_LAB_FRONTEND)
 
+    def test_lopsided_threshold_tuner_card_is_wired(self) -> None:
+        self.assertIn("function lopsidedPolicySection()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn('data-policy-section="lopsided_encode"', NORMALIZE_LAB_FRONTEND)
+        self.assertIn("${sections}${lopsidedPolicySection()}", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function lopsidedVerdict(f, cfg)", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function saveLopsidedDraft()", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("label: 'lopsided_encode'", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("'/api/movies/standards/update'", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("lopsided hits:", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("lab-lopsided-register", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("<h3>Lopsided encode thresholds</h3>", NORMALIZE_LAB_FRONTEND)
+
     def test_movie_canonical_lists_page_is_wired(self) -> None:
         self.assertIn("Compare Against Canonical Lists", FRONTEND)
         self.assertIn("'/api/movies/canonical-lists'", FRONTEND)

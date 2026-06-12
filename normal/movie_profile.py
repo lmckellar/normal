@@ -970,6 +970,38 @@ def update_policy_definition(
             subtitle_preferences.get("foreign_audio_subtitles"),
         )
         return save_library_policy(active_policy), active_preferences
+    if label == "lopsided_encode":
+        if expected_policy_revision and expected_policy_revision != library_policy_revision(active_policy):
+            raise MovieStandardsConflictError("Library policy changed since this view loaded. Refresh and retry.")
+        block = active_policy.setdefault("lopsided_encode", {})
+        defaults = DEFAULT_MOVIE_STANDARDS["lopsided_encode"]
+        base = clamp_float(
+            values.get("audio_kbps_per_channel"),
+            block.get("audio_kbps_per_channel", defaults["audio_kbps_per_channel"]),
+            40.0,
+            160.0,
+        )
+        efficient = clamp_float(
+            values.get("audio_efficient_kbps_per_channel"),
+            block.get("audio_efficient_kbps_per_channel", defaults["audio_efficient_kbps_per_channel"]),
+            40.0,
+            160.0,
+        )
+        block["audio_kbps_per_channel"] = base
+        block["audio_efficient_kbps_per_channel"] = min(efficient, base)
+        block["starved_ratio"] = clamp_float(
+            values.get("starved_ratio"),
+            block.get("starved_ratio", defaults["starved_ratio"]),
+            0.2,
+            0.8,
+        )
+        block["min_spread"] = clamp_float(
+            values.get("min_spread"),
+            block.get("min_spread", defaults["min_spread"]),
+            1.5,
+            5.0,
+        )
+        return save_library_policy(active_policy), active_preferences
     return (
         update_movie_profile_definition(
             label,
@@ -1016,6 +1048,16 @@ def normalize_positive_int(value: Any, default: int) -> int:
     except (TypeError, ValueError):
         return default
     return parsed if parsed > 0 else default
+
+
+def clamp_float(value: Any, default: float, low: float, high: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        parsed = float(default)
+    if parsed != parsed:  # NaN
+        parsed = float(default)
+    return max(low, min(high, parsed))
 
 
 def normalize_codec_list(value: Any, default: list[str]) -> list[str]:
