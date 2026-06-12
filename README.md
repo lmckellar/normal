@@ -46,10 +46,10 @@ cd normal
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-normal web --host 127.0.0.1 --port 8765 --source /path/to/Test\ Movies
+normal web --host 127.0.0.1 --port 8765
 ```
 
-Then open `http://127.0.0.1:8765` in your browser.
+Then open `http://127.0.0.1:8765` in your browser. On first run, point `normal` at your library folder in the UI — it's saved for next time, so you only do it once. (You *can* still pass `--source /path/to/Movies` on launch if you prefer, but you don't need to.)
 
 <placeholder awaiting gif>
 
@@ -99,13 +99,20 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 ## 🧰 Support [1]
 
-`normal` currently supports Python 3.12 and newer.
+`normal` runs on Python 3.12+ and is Linux-first — developed and daily-driven on Ubuntu, where it has been dead stable: no crashes, no hangs, no garbled or botched muxes. That stability isn't really ours to take credit for. Under the hood `normal` leans on a small set of bulletproof, battle-tested open-source libraries (`ffmpeg`, `ffprobe`, `mkvtoolnix`, `openpyxl`) and works hard to stay out of their way.
 
-Platform support is Linux-first. The project is developed and tested on Linux. macOS and Windows may work, but they are not explicitly supported before `1.0`.
+macOS and Windows aren't hardened yet. They may already work, but they haven't been validated, and other mount and filesystem types are similarly untested. Treat them as "help wanted," not "you're on your own."
 
-`ffprobe` is required for media-probing workflows such as `movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, and `web`. `ffmpeg` carries out the remux repairs, and `mkvpropedit` (from `mkvtoolnix`) is used for the fast disposition-only repair lane when present, falling back to `ffmpeg` otherwise. These are external binaries — install them from your distro's packages.
+**Requirements:** `ffprobe` for media-probing workflows (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`); `ffmpeg` for remux repairs; and `mkvpropedit` (from `mkvtoolnix`) for the fast disposition-only repair lane, falling back to `ffmpeg` when absent. These are external binaries — install them from your distro's packages. The sole Python dependency, `openpyxl`, installs automatically with `pip install -e .` and powers the XLSX export.
 
-The one Python dependency, `openpyxl`, installs automatically with `pip install -e .` and powers the XLSX spreadsheet export.
+## 🙌 Get Involved
+
+The project is genuinely open to participation now, and a few kinds of help are worth their weight in gold:
+
+- **You speak a language other than English.** This is the big one. `normal`'s subtitle and audio-default logic has a heavy English bias baked deep into it, and I honestly don't know how a multilingual viewer actually wants their films configured — which audio track should win, which subtitles, and when. If you watch films across several languages and have a view on what "correct" defaults look like, please tell me. It is the single most valuable feedback this tool can get.
+- **You have a filthy library.** Huge, ugly, inconsistently-named collections are perfect material for corpus regression study and edge-case hardening. Real mess beats synthetic test data every time.
+- **You're on macOS or Windows.** Theoretical deployment hardening for both as real targets is being set up — the boring machinery around packaging, paths, mounts, and bundled binaries. Validation from people actually running those platforms would move it along far faster.
+- **You found an edge case, hit a wall, or have feedback.** Open an issue. Anything that wants to test, poke at, or break the tool is welcome.
 
 ## 📚 Docs
 

@@ -57,10 +57,12 @@ The CLI is report-only. Deletion happens in the web UI, after selection and conf
 
 ```bash
 source .venv/bin/activate
-normal web --host 127.0.0.1 --port 8765 --source /path/to/Example\ Movies
+normal web --host 127.0.0.1 --port 8765
 ```
 
-Open `http://127.0.0.1:8765`. Workflow deep links use the main route:
+Open `http://127.0.0.1:8765` and point `normal` at your test library folder in the UI on first run — it's saved for next time. (Passing `--source /path/to/Example\ Movies` on launch still works if you'd rather.)
+
+Workflow deep links use the main route:
 
 - `http://127.0.0.1:8765/?workflow=normalize`
 - `http://127.0.0.1:8765/?workflow=weak-encodes`
