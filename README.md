@@ -111,7 +111,7 @@ macOS and Windows aren't hardened yet. They may already work, but they haven't b
 The project is genuinely open to participation now, and a few kinds of help are worth their weight in gold:
 
 - **You speak a language other than English.** This is the big one. `normal`'s subtitle and audio-default logic has a heavy English bias baked deep into it, and I honestly don't know how a multilingual viewer actually wants their films configured — which audio track should win, which subtitles, and when. If you watch films across several languages and have a view on what "correct" defaults look like, please tell me. It is the single most valuable feedback this tool can get.
-- **You have a filthy library.** Huge, ugly, inconsistently-named collections are perfect material for corpus regression study and edge-case hardening. Real mess beats synthetic test data every time.
+- **You have a filthy library.** Huge, ugly, inconsistently-named collections are perfect material for corpus regression study and edge-case hardening. My library is now as pure as the driven snow so I lack new crud to harden the parser against. 
 - **You're on macOS or Windows.** Theoretical deployment hardening for both as real targets is being set up — the boring machinery around packaging, paths, mounts, and bundled binaries. Validation from people actually running those platforms would move it along far faster.
 - **You found an edge case, hit a wall, or have feedback.** Open an issue. Anyone who wants to test, poke at, or break the tool is welcome.
 
