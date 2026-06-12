@@ -1,6 +1,6 @@
 # Agent reference
 
-For AI agents and developers working in this codebase. Covers repo structure, module ownership, data models, API routes, safety constraints, and intentional design decisions.
+For AI agents and developers working in this codebase — repo structure, module ownership, data models, API routes, safety constraints, and the design decisions that are deliberate rather than accidental.
 
 ## Repo map
 
@@ -51,12 +51,12 @@ docs/                            # User and agent documentation
 
 ## Current backend posture
 
-Two backend themes matter to current agent work:
+Two themes drive current agent work:
 
-- normalize is now more evidence-driven end to end
-- scan economics are now a first-class architectural constraint
+- **normalize is evidence-driven end to end**
+- **scan economics are a first-class architectural constraint**
 
-That means agents should treat planner evidence, serializer shape, and scan execution cost as linked concerns rather than separate cleanup tasks.
+Treat planner evidence, serializer shape, and scan execution cost as linked concerns, not separate cleanup tasks.
 
 ## Entry points
 
@@ -307,3 +307,7 @@ These are deliberate choices, not gaps:
 - **Shared movie naming is now a first-class seam.** `movie_naming.py` owns display-title normalization, punctuation reconstruction for the narrow settled families (`K-19` including compact `K19`, ordinals, `Mr.`/`Dr.`/`L.A.`), provider lookup title candidates, token cleanup, and edge-only tracker/domain credit stripping. Reuse that module instead of reimplementing title cleanup in parser, matching, or provider code.
 - **Configured canonical lists (in order):** `top_100` (Top 100, top_rated, 75%), `top_250` (Top 250, top_rated, 65%), `top_500` (Top 500, top_rated, 55%), `animation` (Animation, genre 16, 60%), `sci_fi` (Sci-Fi, genre 878, 60%), `fantasy` (Fantasy, genre 14, 60%), `action` (Action, genre 28, 60%), `thriller_mystery` (Thriller / Mystery, genres 53+9648, 60%), `drama_romance` (Drama / Romance, genres 18+10749, 60%), `documentary` (Documentary, genre 99, 60%), `comedy` (Comedy, genre 35, 60%). IMDb-backed ranking is consensus-weighted locally: all-time lists use a `100000` vote floor, genre lists prefer `50000` and fall back to `25000` only when needed to fill the list. Badge threshold is the unlock percentage. `anime` is UI-only disabled placeholder text, not a backend canonical list, until a source can distinguish it from generic animation. Do not reinstate `top_1000` or `suspense_horror` — both were removed as poor fits for this library.
 - **Canonical list inspector View button is always shown**, including for 0/x lists. Clicking View on a 0/x list shows all N titles in the list as "Missing" — this is intentional so the user can see what to acquire. The profile inspector suppresses View at count 0; the canonical list inspector does not. If `all_entries` is absent (stale cache from before this field was added), the inspector shows a "Re-run to load N titles" prompt with a back button instead of a table. Browser localStorage cache key is `n_movie_canonical_lists_cache_v3`; old v2 caches (without `all_entries`) are discarded on first page load.
+
+---
+
+<sub>Authorship: **Agent-written** — see the [authorship policy](writing.md).</sub>

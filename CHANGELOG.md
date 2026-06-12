@@ -14,7 +14,7 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 ### Changed
 
-- **Weak-encode and audio deletes now flow through the audit replacement queue.** Destructive removals are wired into the replacement queue and reconciled against it, so a deleted weak encode is tracked as something to replace rather than just vanishing from the ledger.
+- **The replacement queue is back online and now integrated with the unified global audit ledger.** Weak-encode and audio deletes flow straight into the replacement queue and reconcile against it, so every removal is tracked as a concrete "deleted, awaiting replacement" item under the same ledger that records the rest of the workbench. Replacement lists created before the ledger merge are migrated forward and adopted in place, so legacy queues keep working without a rebuild.
 - **Title keys are canonicalized harder.** Key folding now normalizes accents and `&`/`and`, and bridges roman/arabic numerals, so the same film matches across edition and numbering variants. (See the deferred seed match-safety note for round-trip verification still outstanding.)
 
 ### Fixed
@@ -405,3 +405,7 @@ Initial release.
   Packaging, Delete Junk Videos, Delete Junk Sidecar & Spam Files, Export Catalogue.
 - Per-page ETA estimation persisted in localStorage.
 - Abort support for in-flight scans.
+
+---
+
+<sub>Authorship: **Agent-written** — see the [authorship policy](docs/writing.md).</sub>

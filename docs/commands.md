@@ -1,8 +1,6 @@
 # CLI reference
 
-*Authorship: Agent-written.*
-
-All current top-level commands are movie commands.
+Every top-level command is a movie command (plus `web`).
 
 ### movie-plan
 
@@ -18,11 +16,11 @@ normal movie-plan --source /path/to/movies --plan out/plan.json --summary out/pl
 | `--plan` | Yes | Output path for the JSON plan file |
 | `--summary` | No | Output path for a human-readable summary |
 
-Default target naming shape: `Title (Year)/Title (Year).ext`
+Default target shape: `Title (Year)/Title (Year).ext`
 
-When concise naming would collapse multiple parsed copies of the same title/year, `movie-plan` adds the shortest available parsed differentiator, usually resolution, to both folder and file stem: `Title (Year) 2160p/Title (Year) 2160p.ext`. Differentiators can come from the file or the containing folder, which keeps duplicate copies actionable after a partial previous cleanup. If no differentiator is available, the collision remains a `review` item.
+When concise naming would collapse multiple parsed copies of the same title/year, `movie-plan` adds the shortest available parsed differentiator — usually resolution — to both folder and file stem: `Title (Year) 2160p/Title (Year) 2160p.ext`. Differentiators can come from the file or the containing folder, which keeps duplicate copies actionable after a partial earlier cleanup. With no differentiator available, the collision stays a `review` item.
 
-Movie plans can also include safe cleanup operations:
+Plans can also include safe cleanup operations:
 
 | Change type | Meaning |
 |---|---|
@@ -71,14 +69,13 @@ normal movie-scan --source /path/to/movies --report out/scan.json --progress
 
 Requires `ffprobe`. No changes made.
 
-Resolution bucket note:
-- `resolution_bucket` is display-class oriented when usable aspect metadata is present. That keeps cropped `1920x796` films in `1080p` and allows anamorphic `1440x1080` HD masters to classify as `1080p` when the stream exposes valid aspect ratio data.
+`resolution_bucket` is display-class oriented when usable aspect metadata is present: cropped `1920x796` films stay `1080p`, and anamorphic `1440x1080` HD masters classify as `1080p` when the stream exposes valid aspect data.
 
 ---
 
 ### movie-profile
 
-Classify a movie library against the local movie standards with inline review findings.
+Classify a movie library against the local standards, with inline review findings.
 
 ```bash
 normal movie-profile --source /path/to/movies --report out/profile.json --histogram out/histogram.json
@@ -91,41 +88,29 @@ normal movie-profile --source /path/to/movies --report out/profile.json --histog
 | `--histogram` | No | Output path for an aggregate histogram payload |
 | `--progress` | No | Print progress to stderr |
 
-Dashboard groupings:
+Dashboard groupings split into action-based and quality-profile labels.
 
-Action-based labels:
+Action-based:
 
 | Label | Meaning |
 |---|---|
-| `deleted, awaiting replacement` | Deleted through the replacement queue and still waiting for a better copy |
-| `replacement_candidate` | Quality profile is at or below the configured replacement cutoff |
+| `deleted, awaiting replacement` | Deleted through the replacement queue, still waiting for a better copy |
+| `replacement_candidate` | Quality profile at or below the configured replacement cutoff |
 | `needs_review` | Inline review attention needed, often low-confidence subtitle or hygiene issues |
 
-Quality-profile labels:
+Quality-profile:
 
 | Profile | Meaning |
 |---|---|
-| `Standard Definition` | Catch-all fallback bucket for weak HD, standard-definition titles, and obvious outliers that miss every stricter stance |
-| `Compact Grade` | Benign compact encodes that clear a modest floor but do not yet meet full library-grade posture |
+| `Standard Definition` | Catch-all fallback for weak HD, SD titles, and outliers that miss every stricter stance |
+| `Compact Grade` | Benign compact encodes that clear a modest floor but not full library-grade posture |
 | `Library Grade` | Good enough for casual viewing and broad library selection |
-| `Collector Grade` | Solid compact encodes that hold up better on difficult material |
+| `Collector Grade` | Solid compact encodes that hold up on difficult material |
 | `Reference` | Mild to no visual compression with lossless-audio posture |
 
-The bottom stance is intentionally a fallback bucket, not a strict authored threshold. Its dashboard editor only exposes label and summary.
+The bottom stance is a fallback bucket, not a strict authored threshold — its dashboard editor only exposes label and summary.
 
-Config source:
-- repo-local `movie_standards.json`
-
-Dashboard notes:
-- `Movies / Dashboard View` separates action cards from quality-profile cards.
-- Inline definition controls write `movie_standards.json`.
-- Browser cache is convenience state only; repo-local standards are authoritative.
-- Dashboard scans report streamed progress in the activity bar.
-
-The same `movie-profile` report also powers the main web triage lanes:
-
-- `Review Low-Quality Encodes`
-- `Fix Audio and Subtitle Defaults`
+Config source: repo-local `movie_standards.json`. Dashboard scans report streamed progress in the activity bar; browser cache is convenience state only, with the repo-local standards authoritative. The same `movie-profile` report powers the web triage lanes **Review Low-Quality Encodes** and **Fix Audio and Subtitle Defaults**.
 
 ---
 
@@ -146,7 +131,7 @@ normal movie-inspect --path /path/to/file.mkv --report out/inspect.json
 
 ### movie-junk
 
-Find likely sample, featurette, extra, and sidecar spam junk in a movie library pre-clean pass.
+Find likely sample, featurette, extra, and sidecar spam in a movie library pre-clean pass.
 
 ```bash
 normal movie-junk --source /path/to/movies --report out/junk.json
@@ -157,14 +142,13 @@ normal movie-junk --source /path/to/movies --report out/junk.json
 | `--source` | Yes | Path to movie library root |
 | `--report` | Yes | Output path for the JSON junk report |
 
-CLI is report-only. Deletion is done through the web UI after selection and confirmation.
+Report-only — deletion happens in the web UI after selection and confirmation. Detection is size-first:
 
-Detection criteria:
-- junk markers in filenames or ancestor folders such as `sample`, `samples`, `extra`, `extras`, `featurette`, `featurettes`, and known typo variants
+- junk markers in filenames or ancestor folders such as `sample`, `extra`, `featurette`, and known typo variants
 - marker-backed junk under 2 GB → high-confidence junk
-- marker-backed junk between 2 GB and 4 GB needs stacked signals such as a file marker plus an ancestor marker, multiple ancestor markers, or a very small file
+- marker-backed junk between 2 GB and 4 GB needs stacked signals (file marker plus ancestor marker, multiple ancestor markers, or a very small file)
 - marker-only video files at or above 4 GB are ignored
-- size alone does not create junk candidates
+- size alone never creates a candidate
 
 ---
 
@@ -212,21 +196,22 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 
 | Flag | Required | Description |
 |---|---|---|
-| `--host` | No | Bind address (default: `127.0.0.1`) |
-| `--port` | No | Port (default: `8765`) |
+| `--host` | No | Bind address (default `127.0.0.1`) |
+| `--port` | No | Port (default `8765`) |
 | `--source` | No | Default source path pre-filled in the UI |
-| `--omdb-key` | No | OMDb API key for cached server-side IMDb ratings in the replacement queue (falls back to `OMDB_KEY` env var) |
-| `--tmdb-key` | No | TMDb API key for Compare Against Canonical Lists only when the provider is explicitly set to TMDb (falls back to `TMDB_KEY` env var) |
+| `--omdb-key` | No | OMDb key for cached server-side IMDb ratings in the replacement queue (falls back to `OMDB_KEY`) |
+| `--tmdb-key` | No | TMDb key for Compare Against Canonical Lists, only when the provider is explicitly TMDb (falls back to `TMDB_KEY`) |
 
-Compare Against Canonical Lists defaults to the IMDb provider. For that default path, set `IMDB_DATASET_DIR` to a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
+Compare Against Canonical Lists defaults to the IMDb provider; for that default, set `IMDB_DATASET_DIR` to a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
 
-Movie pages currently exposed in the web UI:
+Movie pages currently exposed:
 
 - `Dashboard View`
 - `Normalize Movie Library Naming`
 - `Remove Junk Files`
 - `Review Low-Quality Encodes`
 - `Fix Audio and Subtitle Defaults`
+- `Review Immersive Audio Candidates`
 - `Compare Against Canonical Lists`
 
 Workflow deep links:
@@ -235,7 +220,10 @@ Workflow deep links:
 - `/?workflow=weak-encodes`
 - `/?workflow=repair-defaults`
 - `/?workflow=junk`
+- `/?workflow=immersive-audio`
 
-Heavy recursive web scans now show a confirmation warning for risky sources such as drive-root style paths and NTFS/FUSE mounts. The server also rejects overlapping heavy scans for the same source instead of running them concurrently.
+Heavy recursive web scans show a confirmation warning for risky sources (drive-root style paths, NTFS/FUSE mounts), and the server rejects overlapping heavy scans for the same source rather than running them concurrently. Scan cancellation is cooperative: profile scans check between files, and a running `ffprobe` may finish or time out before the request fully unwinds.
 
-Scan cancellation is cooperative rather than instantaneous. Movie profile scans check for cancellation between files; a currently running `ffprobe` may still finish or hit its timeout before the request fully unwinds. The earlier cancelled-scan / stray-`ffprobe` rough edge is no longer treated as an active known issue after the current scan-control hardening.
+---
+
+<sub>Authorship: **Agent-written** — see the [authorship policy](writing.md).</sub>

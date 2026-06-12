@@ -1,9 +1,11 @@
 # Music
 
-*Authorship: Agent-written.*
+This is a legacy note, not part of the current product story.
 
-This document is a legacy note, not part of the current public product story.
+`normal` no longer presents **music** as a top-level surface. Older versions and earlier internal planning carried a music lane, and some repo history still reflects that.
 
-`normal` no longer presents music as a current top-level product surface. Older versions and older internal planning did include a music lane, and some repo history still reflects that.
+Treat `normal` as movie-focused. The historical references survive only to keep the project history honest while the repo is still being trimmed down.
 
-For the current state of the tool, treat `normal` as movie-focused. Historical references to the music lane remain only to keep the project history honest while the repo is still being trimmed.
+---
+
+<sub>Authorship: **Agent-written** — see the [authorship policy](writing.md).</sub>

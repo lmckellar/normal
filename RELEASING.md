@@ -28,3 +28,7 @@ Internal-only release policy for the pre-`1.0` phase.
 - Clarity matters more than frequency.
 - If release notes start to feel noisy, cut less often.
 - If testing or external use needs clearer checkpoints, cut more often.
+
+---
+
+<sub>Authorship: **Agent-written** — see the [authorship policy](docs/writing.md).</sub>

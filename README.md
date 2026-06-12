@@ -1,105 +1,110 @@
 # normal
 
-*Authorship: Human authored.*
+![Status](https://img.shields.io/badge/status-alpha-orange)
+![Version](https://img.shields.io/badge/version-0.7.0--alpha.7-blue)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue)
+![Platform](https://img.shields.io/badge/platform-Linux--first-lightgrey)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 User consensus is unanimous:
 
-"Better than Filebot.. probably?"
-- You
+> "Better than Filebot.. probably?"
+> — You
 
 `normal` is a thoroughly weird and opinionated open source local workbench that fixes a cross section of common issues with messy movie libraries. It seeks to restore calm where there was disarray and can be useful for organizing, maintaining, improving or expanding your digital film collection.
 
-Documentation authorship policy: [docs/writing.md](docs/writing.md).
+<placeholder awaiting gif>
 
-## What It Does
+## 🎯 What It Does
 
-- Normalises movie files and parent folders into `Title (Year)/Title (Year)` naming convention
-- Inspects the library and arranges it into a cross section of user editable quality profiles and shortlists what doesn't make the cut
-- Deletes the shortlisted weak movie encodes (looking at you, YIFY) from disk and then saves them in a text based replacement queue, freeing space immediately while recording what needs replacing
-- Deletes Samples, Featurettes, Extras, Foreign Audio, promotional `.txt` spam and other junk ephemera
-- Enforces logical subtitle and audio defaults across the board with `ffmpeg` remuxing
-- Lets you compare your collection directly against canonical movie lists (TMDB Top 100, 250, etc.) and identify what's missing
-- One Click Export your entire library as a cleanly organized spreadsheet
+- 🎬 Normalises movie files and parent folders into `Title (Year)/Title (Year)` naming convention
+- 🔍 Inspects the library and arranges it into a cross section of user editable quality profiles and shortlists what doesn't make the cut
+- 🗑️ Deletes the shortlisted weak movie encodes (looking at you, YIFY) from disk and then saves them in a text based replacement queue, freeing space immediately while recording what needs replacing
+- 🧹 Deletes Samples, Featurettes, Extras, Foreign Audio, promotional `.txt` spam and other junk ephemera
+- 🔊 Enforces logical subtitle and audio defaults across the board with `ffmpeg` remuxing
+- 📊 Lets you compare your collection directly against canonical movie lists (TMDB Top 100, 250, etc.) and identify what's missing
+- 📤 One Click Export your entire library as a cleanly organized spreadsheet
 
-All packaged with a focused local Web workbench, minimal dependencies and all core features are local only. 
+All packaged with a focused local Web workbench, minimal dependencies and all core features are local only.
+
+<placeholder awaiting screenshot>
 
 The fuller stance on why these choices are adopted is in [docs/statement.md](docs/statement.md).
 
-## The Opinionated Part
+## 🔥 The Opinionated Part
 
 `normal` is built around the following principles that lead to some loud claims:
 
-**Physical Storage Economics**
+**🪙 Physical Storage Economics**
 
 The bigger a file gets, the stronger the case it has to make for existing.
 
-Conversely, beneath a certain perceptual threshold even small files are objectively not worth existing. 
+Conversely, beneath a certain perceptual threshold even small files are objectively not worth existing.
 
-**Physical Scan Economics** 
+**💽 Physical Scan Economics**
 
 Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
 
-**Universal Naming Convention**
+**🧭 Universal Naming Convention**
 
-While preference on the specifics of naming and organisation may vary occasionally in response to obscure user preference, the expectations of downstream clients such as Plex and Jellyfin are explicit and should be targeted with a Universal Naming Convention that translates as freely between media API databases like IMDB/TMDB as it does into other clients like Emby, etc. 
+While preference on the specifics of naming and organisation may vary occasionally in response to obscure user preference, the expectations of downstream clients such as Plex and Jellyfin are explicit and should be targeted with a Universal Naming Convention that translates as freely between media API databases like IMDB/TMDB as it does into other clients like Emby, etc.
 
-**The Holy Trinity Of Snobby Claims**
+**😤 The Holy Trinity Of Snobby Claims**
 
-1. A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 weak, mediocre and chaotic ones. 
+1. A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 weak, mediocre and chaotic ones.
 
 2. A maintenance process of 1,000 concise, respectful drive read/write events is preferable to one of 5,000 less concise ones if it achieves the same downstream shape.
 
 3. Title (Year)/Title (Year).mkv is The Way.
 
-## Before You Point It at Your Real Library
+## ⚠️ Before You Point It at Your Real Library
 
-`normal` has become confident and efficient enough in flagging to take an aggressive by default stance. It renames, moves, deletes files and folders, uses recursive probe walks to gather metadata where unable to derive useful information via cheaper heuristic methods, calls remuxing workloads via `ffmpeg`, and will seek to move "from A to B" as fast as you let it. It does this by combining workflows while still providing visibility into what is being modified and what its output shape will be, but the net effect is that the tool can feel a little "in a hurry to clean your room" compared to more traditional and stage based implementations of this concept. This accumulates to big savings in terms of drive read/write and time spent tending to the process of maintenance yet does require the user to exercise adequate diligence. 
+`normal` has become confident and efficient enough in flagging to take an aggressive by default stance. It renames, moves, deletes files and folders, uses recursive probe walks to gather metadata where unable to derive useful information via cheaper heuristic methods, calls remuxing workloads via `ffmpeg`, and will seek to move "from A to B" as fast as you let it. It does this by combining workflows while still providing visibility into what is being modified and what its output shape will be, but the net effect is that the tool can feel a little "in a hurry to clean your room" compared to more traditional and stage based implementations of this concept. This accumulates to big savings in terms of drive read/write and time spent tending to the process of maintenance yet does require the user to exercise adequate diligence.
 
 While safety has been given primary consideration throughout development, any downstream user must exercise their own judgement on this matter.
 
 Before it touches anything you care about, copy + paste a small test directory with a representative cross-section of your actual naming and folder conventions, a Noah's Ark of your current mess, and run everything there first.
 
-Nothing is deleted without two explicit approval actions from you. All planned changes are shown before they run. 
+> **🛡️ Nothing is deleted without two explicit approval actions from you. All planned changes are shown before they run.**
 
-`Human/AI-authored`
-Recommended testing process is in [docs/quickstart.md](docs/quickstart.md) and [docs/safety.md](docs/safety.md). 
+<placeholder awaiting screenshot>
+
+Recommended testing process is in [docs/quickstart.md](docs/quickstart.md) and [docs/safety.md](docs/safety.md).
 
 Watching the tool purify a test library for the first time is a good experience. Watching it touch your real library before you're ready is not.
 
-## Alpha UI note
+## 🖥️ Alpha UI note
 
-`v0.7.0-alpha.6` uses one compact workbench at `http://127.0.0.1:8765/`.
+`v0.7.0-alpha.7` uses one compact workbench at `http://127.0.0.1:8765/`.
 
 Workflow deep links still use the main route with a query string, for example `/?workflow=normalize` or `/?workflow=repair-defaults`.
 
-## Optional API Keys
+## 🔑 Optional API Keys
 
-  `normal` works without external API keys for its core local workflows: movie normalize, profile scans, junk detection, repair defaults, inspect, and exports all run against local files.
+`normal` works without external API keys for its core local workflows: movie normalize, profile scans, junk detection, repair defaults, inspect, and exports all run against local files.
 
-  `Movies / Compare Against Canonical Lists` is now IMDb-first and does not require an API key, but it does require local IMDb dataset files. The IMDb-backed rankings are consensus-weighted locally so broadly validated films outrank niche high-average outliers:
+`Movies / Compare Against Canonical Lists` is now IMDb-first and does not require an API key, but it does require local IMDb dataset files. The IMDb-backed rankings are consensus-weighted locally so broadly validated films outrank niche high-average outliers:
 
-  - `IMDB_DATASET_DIR` should point at a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
+- `IMDB_DATASET_DIR` should point at a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
 
-  One web feature still uses an optional third-party API:
+One web feature still uses an optional third-party API:
 
-  - `OMDB_KEY` enables IMDb ratings in movie list views that still surface ratings.
-  - `TMDB_KEY` remains optional if you explicitly switch Compare Against Canonical Lists back to the TMDb provider.
+- `OMDB_KEY` enables IMDb ratings in movie list views that still surface ratings.
+- `TMDB_KEY` remains optional if you explicitly switch Compare Against Canonical Lists back to the TMDb provider.
 
-  If you do not provide these settings:
+If you do not provide these settings:
 
-  - the app still launches and the main movie workflows still work as you would expect
-  - `Compare Against Canonical Lists` cannot run in IMDb mode unless `IMDB_DATASET_DIR` points at the required local files
-  - movie pages that can show IMDb ratings simply omit them when no key is present.
+- the app still launches and the main movie workflows still work as you would expect
+- `Compare Against Canonical Lists` cannot run in IMDb mode unless `IMDB_DATASET_DIR` points at the required local files
+- movie pages that can show IMDb ratings simply omit them when no key is present.
 
-  `OMDB_KEY` can be passed either by environment variable or via `normal web --omdb-key ...`. `TMDB_KEY` can still be passed via environment variable or `normal web --tmdb-key ...` when using the TMDb provider. As of `alpha.6` you can also paste these keys into the workbench **Settings** rail; they are stored server-side under `~/.local/share/normal/secrets.env` and take effect live without a restart, so the key has a durable home rather than living only in the launch environment.
+`OMDB_KEY` can be passed either by environment variable or via `normal web --omdb-key ...`. `TMDB_KEY` can still be passed via environment variable or `normal web --tmdb-key ...` when using the TMDb provider. As of `alpha.6` you can also paste these keys into the workbench **Settings** rail; they are stored server-side under `~/.local/share/normal/secrets.env` and take effect live without a restart, so the key has a durable home rather than living only in the launch environment.
 
-  `normal` thoughtfully provides internal caching for both canonical-list providers and OMDb lookups to avoid wasteful repeated work.
+`normal` thoughtfully provides internal caching for both canonical-list providers and OMDb lookups to avoid wasteful repeated work.
 
-  See [docs/safety.md](docs/safety.md#networking-behaviour) for the networking posture and [docs/movies.md](docs/movies.md) for where these features appear in the UI.
+See [docs/safety.md](docs/safety.md#networking-behaviour) for the networking posture and [docs/movies.md](docs/movies.md) for where these features appear in the UI.
 
-
-## Get Started
-`Agent-written`
+## 🚀 Get Started [1]
 
 ```bash
 git clone https://github.com/lmckellar/normal.git
@@ -112,8 +117,9 @@ normal web --host 127.0.0.1 --port 8765 --source /path/to/Test\ Movies
 
 Then open `http://127.0.0.1:8765` in your browser.
 
-## Support
-`Agent-written`
+<placeholder awaiting gif>
+
+## 🧰 Support [1]
 
 `normal` currently supports Python 3.12 and newer.
 
@@ -121,21 +127,25 @@ Platform support is Linux-first. The project is developed and tested on Linux. m
 
 `ffprobe` is required for media-probing workflows such as `movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, and `web`.
 
-## Docs
+## 📚 Docs
 
-- [Statement](docs/statement.md)
-- [Install](docs/install.md)
-- [Quick start](docs/quickstart.md)
-- [Movies](docs/movies.md)
-- [Safety](docs/safety.md)
-- [CLI reference](docs/commands.md)
-- [Documentation authorship](docs/writing.md)
-- [Roadmap](docs/roadmap.md)
-
-Architecture overview (`Agent-written` support doc): [docs/architecture.md](docs/architecture.md).
+- 📜 [Statement](docs/statement.md)
+- 🔧 [Install](docs/install.md)
+- ⚡ [Quick start](docs/quickstart.md)
+- 🎬 [Movies](docs/movies.md)
+- 🛡️ [Safety](docs/safety.md)
+- ⌨️ [CLI reference](docs/commands.md)
+- ✍️ [Documentation authorship](docs/writing.md)
+- 🗺️ [Roadmap](docs/roadmap.md)
+- 🏗️ [Architecture overview](docs/architecture.md)
 
 For contributors and agents working in the codebase: [docs/agent.md](docs/agent.md), [CONTRIBUTING.md](CONTRIBUTING.md), [CHANGELOG.md](CHANGELOG.md).
 
-## License
+## 📄 License
 
 MIT — see [LICENSE](LICENSE).
+
+---
+
+<sub>Authorship: **Human/AI-authored** — see the [authorship policy](docs/writing.md).</sub>
+<sub>[1] *Get Started* and *Support*: **Agent-written**.</sub>

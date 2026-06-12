@@ -20,3 +20,7 @@ python3 -m unittest discover -s tests
 - No new dependencies without discussion
 - CLI commands are report-only by default; mutations are always opt-in
 - Do not relax the safety constraints in `docs/safety.md`
+
+---
+
+<sub>Authorship: **Agent-written** — see the [authorship policy](docs/writing.md).</sub>

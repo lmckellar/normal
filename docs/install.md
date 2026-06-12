@@ -1,27 +1,25 @@
 # Install
 
-*Authorship: Agent-written.*
-
 ## Requirements
 
 - **Python 3.12 or later**
-- **ffprobe** — required for commands that probe media files (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`)
+- **ffprobe** — required by every command that probes media: `movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, and `web`
 
-### Installing ffprobe
+### Getting ffprobe
 
-ffprobe ships with ffmpeg:
+ffprobe ships with **ffmpeg**:
 
 | Platform | Command |
 |---|---|
 | Debian / Ubuntu | `sudo apt install ffmpeg` |
 | macOS | `brew install ffmpeg` |
-| Windows | Download from ffmpeg.org and add to PATH |
+| Windows | Download from ffmpeg.org and add it to `PATH` |
 
-Verify: `ffprobe -version`
+Confirm it resolves: `ffprobe -version`
 
 ## Install normal
 
-Clone and install:
+Clone and install into a virtual environment — recommended, and the path everything else assumes:
 
 ```bash
 git clone https://github.com/lmckellar/normal.git
@@ -31,23 +29,9 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-Or non-editable from inside the cloned repo:
+For a non-editable install from inside the cloned repo, use `pip install .` instead.
 
-```bash
-pip install .
-```
-
-A virtual environment is recommended:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-Local API keys should be stored in a durable shell env source such as `~/.bashrc`, `~/.zshrc`, or a separate local env file that is sourced before launch. Do not store project API keys in `.venv/bin/activate`; recreating the venv can wipe them.
-
-Example:
+**Keep API keys out of `.venv/bin/activate`.** Recreating the venv wipes them. Store them in a durable shell source — `~/.bashrc`, `~/.zshrc`, or a separate env file you source before launch:
 
 ```bash
 export TMDB_KEY=your_tmdb_key
@@ -61,15 +45,15 @@ export IMDB_DATASET_DIR=/path/to/imdb-datasets
 normal --help
 ```
 
-Expected output: top-level command list including `scan`, `plan`, `apply`, `movie-scan`, `web`, etc.
+Expected: the movie commands (`movie-plan`, `movie-apply`, `movie-scan`, `movie-profile`, `movie-inspect`, `movie-junk`, `movie-output`, `movie-register`) plus `web`.
 
 ```bash
 ffprobe -version
 ```
 
-Both must succeed before running `normal`.
+Both must succeed before you run `normal`.
 
-If you plan to use `Movies / Canonical Lists`, also verify:
+If you plan to use **Compare Against Canonical Lists**, also confirm the dataset:
 
 ```bash
 printf '%s\n' "${IMDB_DATASET_DIR:+IMDB_DATASET_DIR loaded}"
@@ -78,8 +62,12 @@ test -f "$IMDB_DATASET_DIR/title.basics.tsv.gz" && test -f "$IMDB_DATASET_DIR/ti
 
 ## Platform notes
 
-`normal` is developed and tested on Linux. macOS and Windows are not explicitly supported before 1.0. Rough edges are expected, particularly around:
+`normal` is developed and tested on **Linux**. macOS and Windows are not explicitly supported before `1.0`, and rough edges are expected — particularly around:
 
 - file path handling on Windows
-- `ffprobe` PATH resolution
-- `~/.local/share/normal/` replacement queue storage location
+- `ffprobe` resolution on `PATH`
+- the `~/.local/share/normal/` state and replacement-queue location
+
+---
+
+<sub>Authorship: **Agent-written** — see the [authorship policy](writing.md).</sub>
