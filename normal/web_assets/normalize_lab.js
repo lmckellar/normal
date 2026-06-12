@@ -3699,11 +3699,14 @@
     const audioSummaryMarkup = hasAudioTracks
       ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(row.audio_summary || '—')}</button>`
       : `<span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span>`;
+    const needsNormalization = !row.year;
+    const titleTooltip = needsNormalization ? 'File name needs normalization!' : (row.title || '—');
+    const yearTooltip = needsNormalization ? 'Year requires file normalization to display!' : String(row.year || '—');
     return `
       <tr data-row-id="${escapeHtml(row.row_id)}">
-        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.title || '—')}"><span class="lab-cell-text">${escapeHtml(row.title || '—')}</span></td>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(titleTooltip)}"><span class="lab-cell-text">${escapeHtml(row.title || '—')}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${immersiveVerdictPillClass(row.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(row.verdict))}</span></td>
-        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(String(row.year || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(yearTooltip)}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
         <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(row.audio_summary || '—')}">${audioSummaryMarkup}</td>
         <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.quality_profile || '—')}"><span class="lab-cell-text">${escapeHtml(row.quality_profile || '—')}</span></td>
       </tr>
