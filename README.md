@@ -90,9 +90,9 @@ While preference on the specifics of naming and organisation may vary occasional
 
 **😤 The Holy Trinity Of Snobby Claims**
 
-1. A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 weak, mediocre and chaotic ones.
+1. A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 shit ones.
 
-2. A maintenance process of 1,000 concise, respectful drive read/write events is preferable to one of 5,000 less concise ones *if it achieves the same downstream shape.*
+2. A maintenance process of 1,000 concise and respectful drive read/write events is preferable to one of 5,000 less concise ones *if it achieves the same downstream shape.*
 
 3. Title (Year)/Title (Year).mkv is **The Way**.
 
