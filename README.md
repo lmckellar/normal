@@ -78,7 +78,7 @@ An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list vi
 
 ## 🙋 User F.A.Q's
 
-❓ Q: How do you get access to the internet from the Asylum, and why did you make this application?
+❓ Q: How do you get internet access from the Asylum, and why did you make this application?
 
 ✅ A: Those are great questions.
 
