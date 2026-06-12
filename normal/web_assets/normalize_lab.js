@@ -31,6 +31,20 @@
     { id: 'comedy', label: 'Comedy' },
   ];
 
+  // Known-moron encoder badges. Presentation over the existing diagnosis codes
+  // emitted server-side (see weak-encode-badge-taxonomy.md) — never a detector.
+  // Fun Mode is stubbed here and scoped purely to these two codes for now: it
+  // swaps the sober tooltip for the louder register, nothing else.
+  const MORON_BADGES = {
+    known_moron_encoder: { glyph: '🤡', tierClass: 'is-not-available' },
+    suspect_encoder: { glyph: '🎲', tierClass: 'is-review' },
+  };
+
+  const MORON_FUN_TOOLTIPS = {
+    known_moron_encoder: name => `${name} signed this one. Reigning king of WTF encodes — every drop is the wettest fart of a file. Bin this filth without a second thought.`,
+    suspect_encoder: name => `${name} again. Flips a coin for its settings — might be fine, might be sludge. Open it before you trust it.`,
+  };
+
   const LAYOUT_MODES = {
     default: '2-page-lopsided',
     book: '3-page-book',
@@ -126,6 +140,7 @@
     previewMode: 'selected',
     applyInFlight: false,
     weakFloor: 'standard_definition',
+    funMode: false,
     weakPreview: null,
     weakPreviewKey: '',
     weakPreviewLoading: false,
@@ -194,6 +209,8 @@
     bucketFilter: document.getElementById('bucketFilter'),
     workflowStatusFilter: document.getElementById('workflowStatusFilter'),
     canonicalListFilter: document.getElementById('canonicalListFilter'),
+    funModeToggle: document.getElementById('funModeToggle'),
+    funModeToggleLabel: document.getElementById('funModeToggleLabel'),
     selectAllButton: document.getElementById('selectAllButton'),
     deselectAllButton: document.getElementById('deselectAllButton'),
     tableColGroup: document.getElementById('tableColGroup'),
@@ -1102,7 +1119,40 @@
     return match ? match[1] : '';
   }
 
+  function isFunMode() {
+    return !!state.funMode;
+  }
+
+  function moronEncoderFinding(item) {
+    const diagnostics = item?.profile?.diagnostics || [];
+    return diagnostics.find(diag => diag?.code === 'known_moron_encoder')
+      || diagnostics.find(diag => diag?.code === 'suspect_encoder')
+      || null;
+  }
+
+  function moronEncoderName(summary) {
+    return String(summary || '').split(' — ')[0].trim();
+  }
+
+  function moronBadgeMarkup(moron) {
+    if (!moron) return '';
+    const badge = MORON_BADGES[moron.code];
+    if (!badge) return '';
+    const sober = moron.summary || '';
+    const funBuilder = MORON_FUN_TOOLTIPS[moron.code];
+    const tip = isFunMode() && funBuilder ? funBuilder(moron.name) : sober;
+    return ` <span class="lab-moron-badge ${badge.tierClass}" title="${escapeHtml(tip)}" aria-label="${escapeHtml(moron.name)}">${badge.glyph}</span>`;
+  }
+
   function humanMovieProfileIssueLabel(code, summary = '') {
+    if (code === 'known_moron_encoder') {
+      const name = moronEncoderName(summary);
+      return name ? `Known Moron (${name})` : 'Known Moron';
+    }
+    if (code === 'suspect_encoder') {
+      const name = moronEncoderName(summary);
+      return name ? `Suspect Encoder (${name})` : 'Suspect Encoder';
+    }
     if (code === 'video_below_minimum') return 'Below Min. Video Bitrate';
     if (code === 'video_signal_missing') return 'Video Signal Missing';
     if (code === 'audio_channels_below_minimum') {
@@ -1129,6 +1179,8 @@
   }
 
   function movieProfileInlineSummary(item) {
+    const moron = moronEncoderFinding(item);
+    if (moron) return humanMovieProfileIssueLabel(moron.code || '', moron.summary || '');
     const issue = firstMovieProfileIssueResult(item);
     if (issue) return humanMovieProfileIssueLabel(issue.code || '', issue.summary || '');
     if (item?.profile?.legacy_bitrate_label) return `Legacy ${item.profile.legacy_bitrate_label.replaceAll('_', ' ')}`;
@@ -1656,6 +1708,7 @@
     el.bucketFilter.hidden = weak || repairDefaults || canonical || immersive || junk;
     el.workflowStatusFilter.hidden = !(weak || repairDefaults || junk);
     el.canonicalListFilter.hidden = !canonical;
+    if (el.funModeToggleLabel) el.funModeToggleLabel.hidden = !weak;
     el.selectAllButton.hidden = canonical || immersive;
     el.deselectAllButton.hidden = canonical || immersive;
     renderWorkflowStatusFilter();
@@ -3136,6 +3189,7 @@
 
   function weakRowForItem(item) {
     const triage = weakTriageBreakdown(item);
+    const moron = moronEncoderFinding(item);
     return {
       row_id: item.path || '',
       path: item.path || '',
@@ -3143,6 +3197,7 @@
       selectable: isStrictWeakMovie(item),
       current_path: item.path || '',
       issue: movieProfileInlineSummary(item) || humanProfileLabel(item?.profile?.label || ''),
+      moron: moron ? { code: moron.code, summary: moron.summary || '', name: moronEncoderName(moron.summary || '') } : null,
       triage: triage.score,
       triageOffender: triage.offender,
       resolution: item?.facts?.resolution_bucket || '',
@@ -3642,7 +3697,7 @@
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
-        <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
+        <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span>${moronBadgeMarkup(row.moron)}</td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${row.triage == null ? 'No measurable bitrate deficit against the quality floor' : `Triage score ${row.triage} of 10`}"><span class="lab-cell-text">${row.triage == null ? '—' : escapeHtml(String(row.triage))}</span></td>
         <td class="lab-cell-supporting${flagVideo}" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-text">${escapeHtml(row.resolution || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono${flagVideo}" data-priority="essential" title="${escapeHtml(formatBitrate(row.video_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.video_bitrate))}</span></td>
@@ -3682,7 +3737,7 @@
   }
 
   function canonicalStatusClass(row) {
-    return row.owned ? 'is-safe' : 'is-unchanged';
+    return row.owned ? 'is-safe' : 'is-not-available';
   }
 
   function renderCanonicalRow(row) {
@@ -5712,6 +5767,14 @@
       });
     }
   });
+
+  if (el.funModeToggle) {
+    el.funModeToggle.addEventListener('change', () => {
+      state.funMode = el.funModeToggle.checked;
+      renderRows();
+      renderSidePanel();
+    });
+  }
 
   el.selectAllButton.addEventListener('click', async () => {
     const rows = usesSimpleSelectionShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;

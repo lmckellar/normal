@@ -27,6 +27,7 @@ _COPY_IGNORE = shutil.ignore_patterns(
 _VERIFY_SCRIPT = """
 import normal.web.server as server
 import normal.movie_immersive_confirmations as immersive
+import normal.movie_moron_encoders as moron
 
 html = server.read_web_asset_text("normalize_lab.html")
 assert html.strip(), "normalize_lab.html shipped empty"
@@ -35,6 +36,7 @@ for _route, (asset_name, _mime) in server.WEB_STATIC_ASSETS.items():
 
 # Bundled data/*.json package-data must ship too (immersive seed lists).
 assert immersive.SEED_TITLES, "immersive seed data missing from wheel"
+assert moron.lookup_moron_encoder("YIFY"), "moron encoder seed data missing from wheel"
 print("WHEEL_SMOKE_OK")
 """
 

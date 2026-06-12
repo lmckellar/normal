@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "_comment": "Seed corpus of release groups / uploaders whose encodes are reliably bad. These names get scrawled across torrent filenames and are normally scrubbed out by movie_naming; here we keep them so a file can carry a 'who did this' verdict. Each entry is an editorial claim about a group's track record, not a measurement of any single local file — the badge it drives is presentation over the existing diagnosis, never a detector of its own. Tiers: 'punt' = punt on sight, every drop is the wettest fart of a file; 'warn' = hit-or-miss, inspect before trusting.",
+  "source": "editorial_seed",
+  "reference": "docs/internal/weak-encode-badge-taxonomy.md",
+  "asserted_on": "2026-06-13",
+  "tiers": {
+    "punt": {
+      "code": "known_moron_encoder",
+      "severity": "severe",
+      "category": "standards_failure",
+      "label": "Known moron",
+      "note": "This group signs its name to reliably bad encodes. Punt without thinking."
+    },
+    "warn": {
+      "code": "suspect_encoder",
+      "severity": "review",
+      "category": "standards_review",
+      "label": "Suspect encoder",
+      "note": "Hit-or-miss group. Some drops are fine, many are not — inspect before trusting it."
+    }
+  },
+  "encoders": [
+    {
+      "name": "YIFY",
+      "tier": "punt",
+      "aliases": ["YIFY", "YTS", "YTS.MX", "YTS.AG", "YTS.LT", "YIFY-TORRENTS"],
+      "note": "The undisputed, reigning king of WTF encoding decisions. Tiny files dressed up as HD, crushed bitrates, 2.0 audio welded to everything — and it top-seeds every public tracker, so a big seed count means nothing. Signs every release; punt on sight."
+    },
+    {
+      "name": "MkvCage",
+      "tier": "punt",
+      "aliases": ["MKVCAGE", "MKVCINEMAS", "MKVHUB"],
+      "note": "Serial re-encoder that keeps rebranding to dodge its own reputation. Same crushed re-encodes under a fresh name each time."
+    },
+    {
+      "name": "moviesbyrizzo",
+      "tier": "warn",
+      "aliases": ["MOVIESBYRIZZO"],
+      "note": "Roughly 75% baffling, 25% surprisingly considered, as if the settings are picked by coin flip. Earns a softer warning than an outright punt because it covers genuinely niche titles no one else touches."
+    },
+    {
+      "name": "Ganool",
+      "tier": "warn",
+      "aliases": ["GANOOL"],
+      "note": "Legacy mass re-encoder. Mostly small lossy rips, but occasionally the only copy of an otherwise-unavailable title."
+    },
+    {
+      "name": "PSA",
+      "tier": "warn",
+      "aliases": ["PSA", "PSARIPS"],
+      "note": "Small x265 rips with a devoted following. Genuinely efficient when they land, mushy and over-compressed when they don't — inspect before trusting."
+    }
+  ]
+}
