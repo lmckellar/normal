@@ -19,7 +19,7 @@ User consensus is unanimous:
 
 - 🎬 Normalises movie files and parent folders into `Title (Year)/Title (Year)` naming convention
 - 🔍 Inspects the library and arranges it into a cross section of user editable quality profiles
-- 🗑️ Bulk Deletes shortlisted weak movie encodes from saves them in a text based replacement queue, freeing space immediately while permanently recording what needs replacing
+- 🗑️ Bulk Deletes shortlisted weak movie encodes and saves them in a text based replacement queue, freeing space immediately
 - 🧹 Deletes Samples, Featurettes, Extras, Foreign Audio, promotional `.txt` spam and other junk ephemera from within the .mkv package or folders
 - 🔊 Enforces logical subtitle and audio defaults across the board with `ffmpeg` remuxing and `mkvpropedit` subtitle swapping
 - 📊 Lets you compare your collection directly against canonical movie lists (TMDB Top 100 All Time, Top 250 All Time, Top 100 Action, etc.) and identify what's missing
