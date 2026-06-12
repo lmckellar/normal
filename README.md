@@ -103,7 +103,9 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 Platform support is Linux-first. The project is developed and tested on Linux. macOS and Windows may work, but they are not explicitly supported before `1.0`.
 
-`ffprobe` is required for media-probing workflows such as `movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, and `web`.
+`ffprobe` is required for media-probing workflows such as `movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, and `web`. `ffmpeg` carries out the remux repairs, and `mkvpropedit` (from `mkvtoolnix`) is used for the fast disposition-only repair lane when present, falling back to `ffmpeg` otherwise. These are external binaries — install them from your distro's packages.
+
+Python dependencies install automatically with `pip install -e .`. Worth knowing which work they back: `openpyxl` powers the XLSX spreadsheet export, and `Pillow` handles the image work behind artwork repair.
 
 ## 📚 Docs
 
