@@ -562,8 +562,73 @@ def dedupe_preserve_order(tokens: list[str]) -> list[str]:
     return ordered
 
 
+def canonicalize_match_text(value: str) -> str:
+    """Fold cross-source spelling noise before the destructive match key.
+
+    Two unambiguous, symmetric transforms that are safe to bake into the
+    primary key: accent folding (so ``Café`` and ``Cafe`` agree instead of the
+    former collapsing to the mangled ``caf``) and ``&`` -> ``and`` (so the
+    ampersand survives as the same token a filename would spell out).
+    """
+    decomposed = unicodedata.normalize("NFKD", value)
+    stripped = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    return stripped.replace("&", " and ")
+
+
 def title_match_key(title: str) -> str:
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", title.casefold()).split())
+    text = canonicalize_match_text(title)
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", text.casefold()).split())
+
+
+# Roman <-> arabic bridging is intentionally *not* folded into the primary key:
+# it is ambiguous (``V for Vendetta``, ``Malcolm X``), so it lives in the
+# additive alias layer where year still gates the match and ambiguous aliases
+# are nulled. Variants are emitted only in sequel position — a trailing numeral
+# token, or one right after a sequel keyword — to keep over-generation tight.
+_ROMAN_NUMERALS = (
+    "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
+    "xi", "xii", "xiii", "xiv", "xv", "xvi", "xvii", "xviii", "xix", "xx",
+)
+_ROMAN_TO_ARABIC = {roman: index for index, roman in enumerate(_ROMAN_NUMERALS, start=1)}
+_ARABIC_TO_ROMAN = {str(value): roman for roman, value in _ROMAN_TO_ARABIC.items()}
+_AMBIGUOUS_ROMAN = {"i", "v", "x", "l", "c", "d", "m"}
+_SEQUEL_KEYWORDS = {"part", "chapter", "episode", "vol", "volume", "book", "act", "season"}
+
+
+def numeral_variant_keys(match_key: str) -> list[str]:
+    """Emit alternate keys with one sequel-position numeral swapped roman<->arabic.
+
+    Operates on an already-normalized space-token key, so it composes with both
+    the full match key and the article-stripped similarity key.
+    """
+    tokens = match_key.split()
+    variants: list[str] = []
+    for index, token in enumerate(tokens):
+        after_keyword = index > 0 and tokens[index - 1] in _SEQUEL_KEYWORDS
+        is_trailing = index == len(tokens) - 1
+        if not (after_keyword or is_trailing):
+            continue
+        swapped: str | None = None
+        if token in _ROMAN_TO_ARABIC:
+            # Bare single-letter romans are too ambiguous to expand on position
+            # alone; require an explicit sequel keyword for those.
+            if token in _AMBIGUOUS_ROMAN and not after_keyword:
+                continue
+            swapped = str(_ROMAN_TO_ARABIC[token])
+        elif token in _ARABIC_TO_ROMAN:
+            swapped = _ARABIC_TO_ROMAN[token]
+        if swapped:
+            variants.append(" ".join(tokens[:index] + [swapped] + tokens[index + 1 :]))
+    return variants
+
+
+def match_variant_keys(title: str) -> list[str]:
+    """The full set of match keys a title can legitimately equal at the
+    cross-source boundary: its canonical key plus numeral variants."""
+    base = title_match_key(title)
+    if not base:
+        return []
+    return unique_nonempty([base, *numeral_variant_keys(base)])
 
 
 def title_similarity_key(title: str) -> str:
@@ -577,6 +642,7 @@ def title_alias_keys(title: str) -> list[str]:
     if full_key:
         aliases.append(full_key)
         aliases.extend(CANONICAL_TITLE_ALIAS_EQUIVALENTS.get(full_key, ()))
+        aliases.extend(numeral_variant_keys(full_key))
     if ":" in title:
         subtitle = title.split(":", 1)[1].strip()
         subtitle_key = title_match_key(subtitle)

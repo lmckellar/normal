@@ -6,7 +6,7 @@ import tempfile
 from typing import Any
 
 from normal.models import utc_now_iso
-from normal.movie_naming import title_match_key
+from normal.movie_naming import match_variant_keys, title_match_key
 
 
 STORE_VERSION = 1
@@ -170,8 +170,21 @@ def load_confirmations(state_path: Path | None = None) -> dict[str, Any]:
         records = {}
     normalized: dict[str, Any] = {}
     for key, record in records.items():
-        if isinstance(record, dict) and record.get("verdict") in VALID_VERDICTS:
-            normalized[str(key)] = record
+        if not (isinstance(record, dict) and record.get("verdict") in VALID_VERDICTS):
+            continue
+        # Self-migrate: re-key from the record's stored title/year so records
+        # written under an older title_match_key (e.g. before accent/& folding)
+        # are looked up under the current key without a one-shot migration.
+        resolved_key = str(key)
+        title = record.get("title")
+        year = record.get("year")
+        if title is not None and year is not None:
+            try:
+                resolved_key = confirmation_key(str(title), int(year))
+            except (TypeError, ValueError):
+                resolved_key = str(key)
+        record = {**record, "key": resolved_key}
+        normalized[resolved_key] = record
     return {"version": STORE_VERSION, "records": normalized}
 
 
@@ -207,6 +220,22 @@ def confirmation_index(state_path: Path | None = None) -> dict[str, str]:
         else:
             consider(key, verdict)
     return index
+
+
+def lookup_verdict(index: dict[str, str], title: str, year: int) -> str | None:
+    """Resolve a title/year against a confirmation index, bridging numeral
+    spelling. Accents and ``&`` are already folded by ``title_match_key``; this
+    additionally tries roman/arabic variants so ``Part II`` finds a ``Part 2``
+    seed and vice versa."""
+    try:
+        resolved_year = int(year)
+    except (TypeError, ValueError):
+        return None
+    for variant in match_variant_keys(title):
+        verdict = index.get(f"{variant}|{resolved_year}")
+        if verdict is not None:
+            return verdict
+    return None
 
 
 def record_available_observations(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -8,6 +9,7 @@ from normal.movie_immersive_confirmations import (
     SEED_NOT_AVAILABLE,
     confirmation_index,
     confirmation_key,
+    lookup_verdict,
     not_available_seed_index,
     record_available_observations,
     seed_index,
@@ -85,6 +87,34 @@ class ImmersiveConfirmationStoreTests(unittest.TestCase):
         )
         # Already-available titles produce no new records.
         self.assertEqual(record_available_observations([("Heat", 1995)], state_path=self.path), [])
+
+    def test_lookup_verdict_bridges_numeral_and_accent_spelling(self) -> None:
+        set_confirmation("Die Hard 2", 1990, "final_below_target", state_path=self.path)
+        set_confirmation("Amélie", 2001, "available", state_path=self.path)
+        index = confirmation_index(self.path)
+        self.assertEqual(lookup_verdict(index, "Die Hard II", 1990), "final_below_target")
+        self.assertEqual(lookup_verdict(index, "Amelie", 2001), "available")
+        # Year still gates the match.
+        self.assertIsNone(lookup_verdict(index, "Amelie", 1999))
+
+    def test_legacy_record_self_migrates_to_current_key(self) -> None:
+        # A record written under the pre-accent-folding key resolves under the
+        # current key without any one-shot migration step.
+        legacy = {
+            "version": 1,
+            "records": {
+                "caf|2001": {
+                    "key": "caf|2001",
+                    "title": "Café",
+                    "year": 2001,
+                    "verdict": "available",
+                }
+            },
+        }
+        self.path.write_text(json.dumps(legacy), encoding="utf-8")
+        index = confirmation_index(self.path)
+        self.assertEqual(index.get(confirmation_key("Café", 2001)), "available")
+        self.assertEqual(lookup_verdict(index, "Cafe", 2001), "available")
 
 
 if __name__ == "__main__":

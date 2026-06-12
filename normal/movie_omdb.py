@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from normal.movie_naming import provider_title_candidates, title_similarity_key
+from normal.movie_naming import numeral_variant_keys, provider_title_candidates, title_similarity_key
 
 
 OMDB_API_ROOT = "https://www.omdbapi.com/"
@@ -238,6 +238,14 @@ def title_similarity(a: str, b: str) -> float:
     b_key = normalized_title_key(b)
     if not a_key or not b_key:
         return 0.0
+    # Compare across numeral variants so "Part II" and "Part 2" score as equal;
+    # accents and "&" are already folded by the underlying match key.
+    a_keys = [a_key, *numeral_variant_keys(a_key)]
+    b_keys = [b_key, *numeral_variant_keys(b_key)]
+    return max(_key_similarity(x, y) for x in a_keys for y in b_keys)
+
+
+def _key_similarity(a_key: str, b_key: str) -> float:
     a_tokens = set(a_key.split())
     b_tokens = set(b_key.split())
     token_overlap = len(a_tokens & b_tokens) / max(len(a_tokens), len(b_tokens), 1)

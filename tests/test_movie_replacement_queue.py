@@ -111,7 +111,8 @@ class MovieReplacementQueueTests(unittest.TestCase):
         self.assertEqual(history_title_key("*batteries Not Included"), "batteries not included")
         self.assertEqual(history_title_key("\uf021batteries Not Included"), "batteries not included")
         self.assertEqual(history_title_key("Top Secret!"), "top secret")
-        self.assertEqual(history_title_key("Robot & Frank"), "robot frank")
+        # "&" normalizes to the word "and" so it matches a spelled-out filename.
+        self.assertEqual(history_title_key("Robot & Frank"), "robot and frank")
 
     def test_load_queue_keeps_identity_locked_title(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

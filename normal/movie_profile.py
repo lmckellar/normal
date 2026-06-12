@@ -13,7 +13,7 @@ import time
 from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
-from normal.movie_immersive_confirmations import confirmation_index, confirmation_key
+from normal.movie_immersive_confirmations import confirmation_index, lookup_verdict
 from normal.movie_plan import concise_movie_base, parse_movie_name, path_has_normalized_movie_shape
 from normal.movie_scan import (
     MovieScanProgress,
@@ -1557,8 +1557,8 @@ def detect_plex_diagnostics(
     if immersive_confirmations:
         immersive_identity = parse_movie_name(Path(path))
         if immersive_identity.title and immersive_identity.year:
-            immersive_verdict = immersive_confirmations.get(
-                confirmation_key(immersive_identity.title, immersive_identity.year)
+            immersive_verdict = lookup_verdict(
+                immersive_confirmations, immersive_identity.title, immersive_identity.year
             )
     findings.extend(
         detect_immersive_audio_candidate(
