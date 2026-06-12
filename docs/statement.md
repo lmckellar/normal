@@ -33,7 +33,6 @@ Lesser quality may be tolerated for less technically demanding or less frequentl
 This traverses script shape into workflow, boundaries between functions, considerations of maintenance scanning, caching, local storage, and most importantly the assertion of an opinionated downstream object shape and the required steps in order to reach said state, then pursuing that as confidently as the hardening evidence allows the tool to become.
 
 ## Opinionated, Yet Merciful
-`User-written`
 
 `normal` is opinionated, yet merciful. It understands that mistakes happen and that tastes and technology change. `normal` understands that migrating the centre-mass of quality of a library upward can be painful if the original library shape was anchored on the wrong encode profile. Ask me how I know.
 
@@ -55,16 +54,10 @@ There are known operational and behavioural biases within the system that must b
 
 `normal` has been tested and developed exlusively in a Linux environment (Ubuntu 24.x). Given it is fundamentally a python back-end calling a small set of basic open source libraries with a local Web UI interface it should be perfectly and easily portable across any major OS, but this is at this stage an untested claim. 
 
-`normal` makes extensive use of agentic coding tools and is a 100% pair programmed code base using primarily ChatGPT 5.4 harnessed in Codex CLI with some occasional assistance from Sonnet 4.6 harnessed in Claude Code CLI. Documentation is 'majoritively' agent written with response to user prompting. User facing policy regarding authorship notation has been created. It is regarded that the primary surface touch points of the document set (README, Statement, etc) should contain the highest ratio of human to agent input, even if that involves manually line editing typos like our forefathers once did before us.
+`normal` makes extensive use of agentic coding tools and is a 100% pair programmed code base using primarily ChatGPT 5.4 harnessed in Codex CLI + Opus 4.8 in Claude Code CLI with a few fumbling derps from Sonnet 4.6 who promptly got benched in favour of the iconic GPT/Opus duo. Documentation is 'majoritively' agent written with response to user prompting. User facing policy regarding authorship notation has been created. It is regarded that the primary surface touch points of the document set (README, Statement, etc) should contain the highest ratio of human to agent input, even if that involves manually line editing typos like our forefathers once did before us.
 
-`normal` would like to self-indulge the public airing of some beef items. Firstly: while Claude Code CLI and Codex CLI were used throughout the planning and development process, they were not used in equal measure. The patient, clear and ever dependable GPT5.4-medium in Codex CLI in truth did the majority of the heavy lifting, including fixing up after Claude who made some utterly perplexing blunders. Several sessions with Claude had to be discarded entirely after he mistook explicit, clear instructions and mangled code through hallucinated intention or scope drift. Claude also (very rudely, in my opinion) listed himself as a Contributor on the project the moment he was allowed to touch it with an edit, whereas Codex, who pair coded the entire project Claude had just claimed for himself, has never blinked an eye at this or so much as suggested it be acknowledged in any way after what must be close to one hundred separate push events, doc updates and coherency checks. 
-
-That is almost 100 times Codex had to look at Claude's name scrawled across the wall of the house he helped to build without making a single comment. That's class. 
-
-Well, here is your acknowledgement, OpenAI: good job, and thank you. The tool is an indespensible ally and amazingly useful in many ways. 
 
 ## Source First, Then Client Quirks
-`User-written`
 
 First and foremost, the tool seeks to repair and improve the library files at their source in the most immediately logical way, and will only then consider questions like "how does Plex deal with this specifically compared to Jellyfin?"
 
@@ -79,7 +72,6 @@ As such it defines and enforces a logical preference of:
 - Foreign Audio primary should have English subtitle by default
 
 ## Canon, Quality, and Orientation
-`User-written`
 
 `normal` asserts that a library of 5,000 shit films is much weaker than a library of 1,000 excellent, canonically significant films.
 
@@ -101,13 +93,9 @@ In line with this policy, classification of the junk floor is also becoming more
 
 ## An Engineering Trade Off
 
-From its origins as a cheerfully bloated swiss army knife intended for personal use to an increasing cohesive and brutally effective media management system some very real and present trade off's needed to be confronted.
+From its origins as a cheerfully bloated swiss army knife intended for personal use to an increasing cohesive and brutally effective media management system some a real and present trade off needed to be confronted.
 
-Namely; every lever the user is given to pull is an opportunity to bloat the app in both form and function. Additionally; each lever, if wielded in such a way that it 'differentiated' a single step from a back end perspective, would inevitably flow into library maintability woes as successive re-scans would be required to re-normalize the library accross the different lanes of function (names/folders, deleting weak encodes, remuxxing audio tracks, remuxxing subtitle tracks, deleting sidecar spam, deleting samples/features/etc). I felt this pain and friction myself as the function lanes all came online, became useful and needed to be maintained accross a rolling wave of incoming files into my library. 
-
-The biggest vistims of this development, unfortunately, were the Extras Appreciators and the Fans of Featurettes. These nested files, if allowed to parse into the Normalize lane, will generally cause minor flagging issues and likely push the normalizing logic out of it's comfort zone. The heuristics are tuned to mostly leave these files unchanged (ie if it isn't condifent it can hit the edit cleanly it will simply do nothing and skip the file) but it may lead to missed actions or potentially some oddly garbled naming outputs for the movies that have Extras present if the user were to manually check the low confidence items. 
-
-The default workflow currently expects these files to be eradicated prior to running the Normalization pass in order to hit a clean one shot against the Media Library. Efforts are being made to include a "blanket policy exemption" that can be applied to the Normalizer but this is not yet in development.
+Every lever the user is allowed to pull at can massively affect the scanning and planning - and the most painful lever of them all is nested folder structures. While the tool has become broadly customisable to allow for many levers to be pulled, in some cases with a startling degree of articulation and nuance, some things such as directory structure remain a fixed expectation of the system.
 
 ## What Must Be Crystal Clear
 
