@@ -3695,12 +3695,16 @@
   }
 
   function renderImmersiveRow(row) {
+    const hasAudioTracks = audioTracksForRow(row).length > 0;
+    const audioSummaryMarkup = hasAudioTracks
+      ? `<button class="lab-audio-popover-trigger" type="button" data-track-popover="${escapeHtml(row.row_id)}" data-track-popover-kind="audio" aria-expanded="${state.trackPopoverRowId === row.row_id && state.trackPopoverKind === 'audio' ? 'true' : 'false'}">${escapeHtml(row.audio_summary || '—')}</button>`
+      : `<span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span>`;
     return `
-      <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
+      <tr data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.title || '—')}"><span class="lab-cell-text">${escapeHtml(row.title || '—')}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${immersiveVerdictPillClass(row.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(row.verdict))}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(String(row.year || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
-        <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(row.audio_summary || '—')}"><span class="lab-cell-text">${escapeHtml(row.audio_summary || '—')}</span></td>
+        <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(row.audio_summary || '—')}">${audioSummaryMarkup}</td>
         <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.quality_profile || '—')}"><span class="lab-cell-text">${escapeHtml(row.quality_profile || '—')}</span></td>
       </tr>
     `;
@@ -3837,6 +3841,7 @@
     el.rowsBody.querySelectorAll('tr[data-row-id]').forEach(rowEl => {
       rowEl.addEventListener('click', event => {
         if (event.target instanceof HTMLInputElement) return;
+        if (isImmersiveMode()) return;
         state.activeRowId = rowEl.dataset.rowId || '';
         renderSidePanel();
       });
@@ -4506,30 +4511,6 @@
       el.previewPane.innerHTML = '<div class="lab-preview-empty"><strong>Run Review Immersive Audio Candidates.</strong><div>Probes the source and lists titles whose audio is channel-based only — no Atmos / DTS:X object track on the file.</div></div>';
       return;
     }
-    const activeRow = rowById(state.activeRowId);
-    if (activeRow && isImmersiveMode()) {
-      el.previewPane.innerHTML = `
-        <div class="lab-preview-summary">
-          <strong>${escapeHtml(activeRow.title || '—')}${activeRow.year ? ` (${escapeHtml(String(activeRow.year))})` : ''}</strong>
-          <span class="chip ${immersiveVerdictPillClass(activeRow.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(activeRow.verdict))}</span>
-        </div>
-        <div class="lab-preview-list">
-          <div class="lab-preview-item">
-            <div class="lab-preview-item-title">Current Audio</div>
-            <div class="lab-preview-item-body">${escapeHtml(activeRow.audio_summary || '—')}</div>
-          </div>
-          <div class="lab-preview-item">
-            <div class="lab-preview-item-title">Finding</div>
-            <div class="lab-preview-item-body">${escapeHtml(activeRow.summary || '')}</div>
-          </div>
-          <div class="lab-preview-item">
-            <div class="lab-preview-item-title">Remedy</div>
-            <div class="lab-preview-item-body">${escapeHtml(activeRow.remedy || '')}</div>
-          </div>
-        </div>
-      `;
-      return;
-    }
     const rows = immersiveRows();
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
@@ -4540,6 +4521,10 @@
         <div class="lab-preview-item">
           <div class="lab-preview-item-title">What each row is</div>
           <div class="lab-preview-item-body">Every title here was probed and carries no object-audio (Atmos / DTS:X) track — only the channel-based mix. The question is whether a better, object-audio release exists for the title elsewhere.</div>
+        </div>
+        <div class="lab-preview-item">
+          <div class="lab-preview-item-title">Why a title is listed</div>
+          <div class="lab-preview-item-body">A title appears only when the local file has no object-audio track and one of: an object-audio release is confirmed to exist (an upgrade target), the title is confirmed to have none yet (worth pinning), or — when the candidate finding is on — it is recent enough that a release may exist but hasn't been assessed. Files that already carry Atmos / DTS:X are never listed.</div>
         </div>
         <div class="lab-preview-item">
           <div class="lab-preview-item-title">Status</div>
