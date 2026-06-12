@@ -27,7 +27,7 @@ User consensus is unanimous:
 - 🤝 Removes downstream frustrations with clients like Plex, Emby and Jellyfin and their oddly conflicting naming requirements
 - 🦀 Conceals its deep shame and embarrassment for being agent-coded in 2026 but not written in Rust
 
-All packaged with a focused local Web workbench, minimal dependencies and all core features are local only.
+All packaged with a clean web GUI, minimal dependencies and all core features are local only.
 
 <placeholder awaiting screenshot>
 
