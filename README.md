@@ -99,7 +99,7 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 ## 🧰 Support [1]
 
-`normal` runs on Python 3.12+ and is Linux-first — developed and daily-driven on Ubuntu, where it has been dead stable: no crashes, no hangs, no garbled or botched muxes. That stability isn't really ours to take credit for. Under the hood `normal` leans on a small set of bulletproof, battle-tested open-source libraries (`ffmpeg`, `ffprobe`, `mkvtoolnix`, `openpyxl`) and works hard to stay out of their way.
+`normal` runs on Python 3.12+ and is Linux-first — developed and daily-driven on Ubuntu, where it has been perfectly stable through 200+ scans. Under the hood `normal` leans on a small set of bulletproof, battle-tested open-source libraries (`ffmpeg`, `ffprobe`, `mkvtoolnix`, `openpyxl`) and works hard to stay out of their way.
 
 macOS and Windows aren't hardened yet. They may already work, but they haven't been validated, and other mount and filesystem types are similarly untested. Treat them as "help wanted," not "you're on your own."
 
