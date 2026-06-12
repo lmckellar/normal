@@ -4,6 +4,25 @@ This changelog was retroactively rebuilt from commit history and diff/change
 logs. Real release history starts at `v0.7.0-alpha.1`, with a matching git tag
 and GitHub prerelease. Earlier sections remain reconstructed history.
 
+## [0.7.0-alpha.7] — 2026-06-12
+
+### Added
+
+- **A new Immersive Audio workflow that crowdsources a diagnostic the source metadata never carried.** Whether a film is even *available* in an object-based immersive mix (Dolby Atmos / DTS:X) is not a fact any scanner or enricher can read off a library — the upstream catalogues simply don't expose it. The workflow turns that gap into a shared dataset: it pairs what the local container *does* probe (carrier codec, channel layout) with a seeded, expandable corpus of titles known to have — or to lack — an immersive release, so the workbench can frame each row as a concrete upgrade candidate rather than guessing. Manual per-title voting was retired in favour of a tri-state **Status** (immersive available / not available / unknown) backed by local-probe telemetry, and the "not available" corpus ships seeded with researched titles that the community can extend and share internally. Immersive Atmos/DTS:X crediting is gated on the actual carrier codec so a lossy core can't masquerade as the object track, and the verdict surface was split into a **Status** column and a separate **Audio** explainer alongside a new **Quality Profile** column. The workflow sits ahead of Canonical Lists in the menu, flags non-normalized rows with normalization tooltips, and emits distinctly-coloured Telemetry Vote audit events.
+- **A cold-start onboarding gate.** A first-run surface holds the workbench until the library context it needs is established, rather than dropping a new operator into an empty, ambiguous shell.
+- **A weak-encodes triage score with offending-axis highlighting.** Low-quality encodes now carry a composite triage score that calls out which axis (resolution, bitrate, codec) dragged the row down, with a hover explainer on the Triage column header.
+
+### Changed
+
+- **Weak-encode and audio deletes now flow through the audit replacement queue.** Destructive removals are wired into the replacement queue and reconciled against it, so a deleted weak encode is tracked as something to replace rather than just vanishing from the ledger.
+- **Title keys are canonicalized harder.** Key folding now normalizes accents and `&`/`and`, and bridges roman/arabic numerals, so the same film matches across edition and numbering variants. (See the deferred seed match-safety note for round-trip verification still outstanding.)
+
+### Fixed
+
+- **N/A language and digit-infix title morphs no longer suppress audio repair.** A title carrying an `N/A` language or a digit-infix morph was short-circuiting the audio-repair path; both cases now resolve correctly.
+- **ffprobe tag keys are read case-insensitively**, so tags that differ only in case are no longer missed.
+- **Weak-delete preview now refreshes correctly**, and junk-preview destructive grammar was unified with the rest of the delete surfaces.
+
 ## [0.7.0-alpha.6] — 2026-06-09
 
 ### Added
