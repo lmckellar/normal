@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+has_blocked_trailer() {
+  git log --format=%B "$@" | grep -Eiq '^[[:space:]]*Co-Authored-By:[[:space:]]*Claude\b|^[[:space:]]*Co-authored-by:[[:space:]]*Claude\b|^[[:space:]]*Co-Authored-By:.*<[^>]*@anthropic\.com>|^[[:space:]]*Co-authored-by:.*<[^>]*@anthropic\.com>'
+}
+
+zero_oid=0000000000000000000000000000000000000000
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+  if [[ -z "${local_ref:-}" ]]; then
+    continue
+  fi
+
+  if [[ "$local_oid" == "$zero_oid" ]]; then
+    continue
+  fi
+
+  if [[ "$remote_oid" == "$zero_oid" ]]; then
+    if has_blocked_trailer "$local_oid" --not --remotes; then
+      echo "Blocked push: outgoing commits include Anthropic AI co-author trailers." >&2
+      echo "Remove the Claude/Anthropic Co-authored-by line before pushing." >&2
+      exit 1
+    fi
+  else
+    if has_blocked_trailer "$remote_oid..$local_oid"; then
+      echo "Blocked push: outgoing commits include Anthropic AI co-author trailers." >&2
+      echo "Remove the Claude/Anthropic Co-authored-by line before pushing." >&2
+      exit 1
+    fi
+  fi
+done

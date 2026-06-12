@@ -11,6 +11,7 @@ Contributions are welcome — happy to have them.
 ## Running tests
 
 ```bash
+git config core.hooksPath .githooks
 python3 -m unittest discover -s tests
 ```
 
@@ -20,6 +21,7 @@ python3 -m unittest discover -s tests
 - No new dependencies without discussion
 - CLI commands are report-only by default; mutations are always opt-in
 - Do not relax the safety constraints in `docs/safety.md`
+- Do not add AI co-author commit trailers such as `Co-authored-by: Claude ...`; repo hooks reject them
 
 ---
 

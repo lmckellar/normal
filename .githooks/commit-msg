@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+message_file=${1:?commit message path required}
+
+if grep -Eiq '^[[:space:]]*Co-Authored-By:[[:space:]]*Claude\b|^[[:space:]]*Co-authored-by:[[:space:]]*Claude\b|^[[:space:]]*Co-Authored-By:.*<[^>]*@anthropic\.com>|^[[:space:]]*Co-authored-by:.*<[^>]*@anthropic\.com>' "$message_file"; then
+  echo "Blocked commit: Anthropic AI co-author trailers are not allowed in this repo." >&2
+  echo "Remove the Claude/Anthropic Co-authored-by line and commit again." >&2
+  exit 1
+fi
