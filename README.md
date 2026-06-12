@@ -24,12 +24,54 @@ User consensus is unanimous:
 - 🔊 Enforces logical subtitle and audio defaults across the board with `ffmpeg` remuxing
 - 📊 Lets you compare your collection directly against canonical movie lists (TMDB Top 100, 250, etc.) and identify what's missing
 - 📤 One Click Export your entire library as a cleanly organized spreadsheet
+- 🤝 Removes downstream frustrations with clients like Plex, Emby and Jellyfin and their oddly conflicting naming requirements
 
 All packaged with a focused local Web workbench, minimal dependencies and all core features are local only.
 
 <placeholder awaiting screenshot>
 
-The fuller stance on why these choices are adopted is in [docs/statement.md](docs/statement.md).
+## 📦 Supported Formats
+
+`normal` recognises the common video containers — **MKV, MP4, M4V, AVI, MOV, WMV, MPG/MPEG, TS, M2TS, and WebM**. Normalize, quality profiling, weak-encode and junk triage, inspect, and export all work across every one of them.
+
+Audio- and subtitle-default repair (the lossless `mkvpropedit` / `ffmpeg` remux lane) is **MKV only** — other containers are still scanned and reported, just not remuxed.
+
+Disc images (`.iso`) and raw disc rips are **not supported**. Remux them to MKV first (e.g. with MakeMKV) and `normal` will pick them up.
+
+## 🚀 Get Started [1]
+
+```bash
+git clone https://github.com/lmckellar/normal.git
+cd normal
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+normal web --host 127.0.0.1 --port 8765 --source /path/to/Test\ Movies
+```
+
+Then open `http://127.0.0.1:8765` in your browser.
+
+<placeholder awaiting gif>
+
+### 🖥️ Alpha UI note
+
+`v0.7.0-alpha.7` uses one compact workbench at `http://127.0.0.1:8765/`. Workflow deep links still use the main route with a query string, for example `/?workflow=normalize` or `/?workflow=repair-defaults`.
+
+## 🤓 Safety
+
+`normal` is aggressive by default. It renames, moves, deletes and remuxes files, and it tries to get from mess to clean in as few drive read/write passes as possible. That's the whole point — but it also means you should not aim it at your real library cold.
+
+Before it touches anything you care about, copy a small test directory with a representative cross-section of your actual naming and folder conventions — a Noah's Ark of your current mess — and run everything there first. Watching the tool purify a test library for the first time is a good experience. Watching it touch your real library before you're ready is not.
+
+The full safety posture, the approval gates, and networking behaviour live in [docs/safety.md](docs/safety.md). Recommended first-run process is in [docs/quickstart.md](docs/quickstart.md).
+
+## 🔑 Optional API Keys
+
+All core workflows — normalize, profile scans, weak-encode and junk triage, repair defaults, inspect, export, and Compare Against Canonical Lists — run entirely on local files with **no API key required**.
+
+An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list views. Paste it into the workbench **Settings** rail or pass it on launch (`normal web --omdb-key ...` or the environment); either way it is stored locally under `~/.local/share/normal/secrets.env` and takes effect live without a restart. A free key is available at <https://www.omdbapi.com/apikey.aspx>.
+
+(`TMDB_KEY` is only needed if you switch Compare Against Canonical Lists back to the TMDb provider. See [docs/movies.md](docs/movies.md) for where these surface in the UI.)
 
 ## 🔥 The Opinionated Part
 
@@ -57,67 +99,7 @@ While preference on the specifics of naming and organisation may vary occasional
 
 3. Title (Year)/Title (Year).mkv is The Way.
 
-## ⚠️ Before You Point It at Your Real Library
-
-`normal` has become confident and efficient enough in flagging to take an aggressive by default stance. It renames, moves, deletes files and folders, uses recursive probe walks to gather metadata where unable to derive useful information via cheaper heuristic methods, calls remuxing workloads via `ffmpeg`, and will seek to move "from A to B" as fast as you let it. It does this by combining workflows while still providing visibility into what is being modified and what its output shape will be, but the net effect is that the tool can feel a little "in a hurry to clean your room" compared to more traditional and stage based implementations of this concept. This accumulates to big savings in terms of drive read/write and time spent tending to the process of maintenance yet does require the user to exercise adequate diligence.
-
-While safety has been given primary consideration throughout development, any downstream user must exercise their own judgement on this matter.
-
-Before it touches anything you care about, copy + paste a small test directory with a representative cross-section of your actual naming and folder conventions, a Noah's Ark of your current mess, and run everything there first.
-
-> **🛡️ Nothing is deleted without two explicit approval actions from you. All planned changes are shown before they run.**
-
-<placeholder awaiting screenshot>
-
-Recommended testing process is in [docs/quickstart.md](docs/quickstart.md) and [docs/safety.md](docs/safety.md).
-
-Watching the tool purify a test library for the first time is a good experience. Watching it touch your real library before you're ready is not.
-
-## 🖥️ Alpha UI note
-
-`v0.7.0-alpha.7` uses one compact workbench at `http://127.0.0.1:8765/`.
-
-Workflow deep links still use the main route with a query string, for example `/?workflow=normalize` or `/?workflow=repair-defaults`.
-
-## 🔑 Optional API Keys
-
-`normal` works without external API keys for its core local workflows: movie normalize, profile scans, junk detection, repair defaults, inspect, and exports all run against local files.
-
-`Movies / Compare Against Canonical Lists` is now IMDb-first and does not require an API key, but it does require local IMDb dataset files. The IMDb-backed rankings are consensus-weighted locally so broadly validated films outrank niche high-average outliers:
-
-- `IMDB_DATASET_DIR` should point at a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz`.
-
-One web feature still uses an optional third-party API:
-
-- `OMDB_KEY` enables IMDb ratings in movie list views that still surface ratings.
-- `TMDB_KEY` remains optional if you explicitly switch Compare Against Canonical Lists back to the TMDb provider.
-
-If you do not provide these settings:
-
-- the app still launches and the main movie workflows still work as you would expect
-- `Compare Against Canonical Lists` cannot run in IMDb mode unless `IMDB_DATASET_DIR` points at the required local files
-- movie pages that can show IMDb ratings simply omit them when no key is present.
-
-`OMDB_KEY` can be passed either by environment variable or via `normal web --omdb-key ...`. `TMDB_KEY` can still be passed via environment variable or `normal web --tmdb-key ...` when using the TMDb provider. As of `alpha.6` you can also paste these keys into the workbench **Settings** rail; they are stored server-side under `~/.local/share/normal/secrets.env` and take effect live without a restart, so the key has a durable home rather than living only in the launch environment.
-
-`normal` thoughtfully provides internal caching for both canonical-list providers and OMDb lookups to avoid wasteful repeated work.
-
-See [docs/safety.md](docs/safety.md#networking-behaviour) for the networking posture and [docs/movies.md](docs/movies.md) for where these features appear in the UI.
-
-## 🚀 Get Started [1]
-
-```bash
-git clone https://github.com/lmckellar/normal.git
-cd normal
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-normal web --host 127.0.0.1 --port 8765 --source /path/to/Test\ Movies
-```
-
-Then open `http://127.0.0.1:8765` in your browser.
-
-<placeholder awaiting gif>
+The fuller stance on why these choices are adopted is in [docs/statement.md](docs/statement.md).
 
 ## 🧰 Support [1]
 
