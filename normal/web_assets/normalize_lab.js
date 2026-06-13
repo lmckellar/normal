@@ -4308,9 +4308,13 @@
     }
     const preview = state.weakPreview || { deleted: [], cleaned_sidecars: [], removed_folders: [], skipped: [] };
     const tree = weakSelectedPreviewTree(preview);
+    const reclaimedBytes = state.filteredRows
+      .filter(row => state.selected.has(row.row_id) && row.selectable)
+      .reduce((sum, row) => sum + (Number(row.file_size) || 0), 0);
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
         <strong>${preview.deleted.length}</strong> deleted media file${preview.deleted.length === 1 ? '' : 's'}.
+        ${reclaimedBytes ? `<span class="chip delete">${formatFileSize(reclaimedBytes)} reclaimed</span>` : ''}
         <span class="chip delete">${preview.cleaned_sidecars.length} cleaned sidecar${preview.cleaned_sidecars.length === 1 ? '' : 's'}</span>
         <span class="chip">${preview.removed_folders.length} removed folder${preview.removed_folders.length === 1 ? '' : 's'}</span>
       </div>
@@ -4464,6 +4468,26 @@
     return actionTouchesAudio(action) && actionTouchesSubtitle(action);
   }
 
+  function repairReclaimedBytes(rows, action) {
+    const cfg = repairActionConfig(action);
+    if (!cfg.dropForeignAudio) return 0;
+    return rows.reduce((sum, row) => {
+      const streams = row.item?.facts?.audio_streams || [];
+      const dropped = streams
+        .filter(stream => {
+          const lang = canonicalAudioLanguageValue(stream.language);
+          return lang && lang !== 'english';
+        })
+        .reduce((bits, stream) => bits + (Number(stream.bitrate_kbps) || 0), 0);
+      if (!dropped) return sum;
+      const audioBits = streams.reduce((bits, stream) => bits + (Number(stream.bitrate_kbps) || 0), 0);
+      const totalBits = (Number(row.item?.facts?.video_bitrate_kbps) || 0) + audioBits;
+      const fileSize = Number(row.item?.facts?.file_size_bytes) || 0;
+      if (!totalBits || !fileSize) return sum;
+      return sum + fileSize * (dropped / totalBits);
+    }, 0);
+  }
+
   function renderRepairPreviewPane() {
     if (!state.repairPayload) {
       el.previewPane.textContent = 'Run Fix Audio and Subtitle Defaults to inspect repair consequences.';
@@ -4518,9 +4542,11 @@
     }
     state.repairPreviewSignature = signature;
     state.completedRemuxPaths.clear();
+    const reclaimedBytes = repairReclaimedBytes(previewRows, state.repairAction);
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
         <strong>${summary}</strong>
+        ${reclaimedBytes ? `<span class="chip delete">~${formatFileSize(reclaimedBytes)} reclaimed</span>` : ''}
         ${mixedSelectionLabel ? `<span class="chip">${escapeHtml(mixedSelectionLabel)}</span>` : ''}
         ${state.repairActionNotice ? `<span class="chip">${escapeHtml(state.repairActionNotice)}</span>` : ''}
       </div>
