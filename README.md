@@ -82,9 +82,9 @@ An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list vi
 
 ✅ A: Those are both fair questions.
 
-`normal` is built around the following principles that lead to some loud claims:
-
 ## 🔥 The Opinionated Part
+
+`normal` is built around the following principles that lead to some loud claims:
 
 **🪙 Physical Storage Economics**
 
@@ -96,9 +96,9 @@ Conversely, beneath a certain perceptual threshold even small files are objectiv
 
 Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
 
-**🧭 Universal Naming Convention**
+**🤲 Universal Naming Convention**
 
-While preference on the specifics of naming and organisation may vary occasionally in response to obscure user preference, the expectations of downstream clients such as Plex and Jellyfin are explicit and should be targeted with a Universal Naming Convention that translates as freely between media API databases like IMDB/TMDB as it does into other clients like Emby, etc.
+The Fi... erm, The Best Solution to resolving the conflicting expectations of downstream clients such as Plex and Jellyfin is to define a Universal Naming Convention  that translates as freely between media API databases like IMDB/TMDB as it does into other clients like Emby, etc.
 
 **😤 The Holy Trinity Of Snobby Claims**
 
@@ -106,7 +106,7 @@ While preference on the specifics of naming and organisation may vary occasional
 
 2. A maintenance process of 1,000 concise and respectful drive read/write events is preferable to one of 5,000 less concise ones *if it achieves the same downstream shape.*
 
-3. Title (Year)/Title (Year).mkv is **The Way**.
+3. Title (Year)/Title (Year).mkv is **The Way** 🧭.
 
 The fuller stance on why these choices are adopted is in [docs/statement.md](docs/statement.md).
 
