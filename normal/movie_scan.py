@@ -183,7 +183,7 @@ def run_ffprobe(path: Path) -> dict[str, Any]:
         "-v",
         "error",
         "-show_entries",
-        "format=duration,size,bit_rate,format_name,start_time:stream=index,codec_type,codec_name,width,height,sample_aspect_ratio,display_aspect_ratio,bit_rate,channels,pix_fmt,profile,level,avg_frame_rate,r_frame_rate:stream_disposition=default,forced:stream_tags",
+        "format=duration,size,bit_rate,format_name,start_time:stream=index,codec_type,codec_name,codec_tag_string,width,height,sample_aspect_ratio,display_aspect_ratio,bit_rate,channels,pix_fmt,profile,level,avg_frame_rate,r_frame_rate,color_range,color_space,color_transfer,color_primaries:stream_disposition=default,forced:stream_tags:stream_side_data",
         "-of",
         "json",
         str(path),
@@ -296,6 +296,7 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
     primary_audio_codec = display_audio_stream.codec if display_audio_stream else audio_stream.get("codec_name")
     primary_audio_channels = display_audio_stream.channels if display_audio_stream else parse_int(audio_stream.get("channels"))
     primary_audio_profile = display_audio_stream.profile if display_audio_stream else (audio_stream.get("profile") or None)
+    video_side_data_types, dolby_vision_profile = dolby_vision_from_ffprobe_stream(video_stream)
 
     return MediaFacts(
         runtime_seconds=parse_seconds(format_payload.get("duration")),
@@ -325,6 +326,12 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         video_profile=video_stream.get("profile"),
         video_level=parse_int(video_stream.get("level")),
         pixel_format=video_stream.get("pix_fmt"),
+        color_range=video_stream.get("color_range"),
+        color_space=video_stream.get("color_space"),
+        color_transfer=video_stream.get("color_transfer"),
+        color_primaries=video_stream.get("color_primaries"),
+        dolby_vision_profile=dolby_vision_profile,
+        video_side_data_types=video_side_data_types,
         frame_rate=parse_ratio(video_stream.get("r_frame_rate")),
         average_frame_rate=parse_ratio(video_stream.get("avg_frame_rate")),
         video_stream_count=len(video_streams),
@@ -340,6 +347,33 @@ def media_facts_from_ffprobe_payload(payload: dict[str, Any], path: Path) -> Med
         audio_streams=detailed_audio_streams,
         subtitle_streams=detailed_subtitle_streams,
     )
+
+
+def dolby_vision_from_ffprobe_stream(stream: dict[str, Any]) -> tuple[list[str], int | None]:
+    raw_side_data = stream.get("side_data_list")
+    if not isinstance(raw_side_data, list):
+        raw_side_data = stream.get("side_data")
+    entries = raw_side_data if isinstance(raw_side_data, list) else []
+    side_data_types: list[str] = []
+    profile: int | None = None
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        side_type = first_text(entry.get("side_data_type"), entry.get("type"))
+        if side_type:
+            side_data_types.append(side_type)
+        text = " ".join(str(value) for value in entry.values()).casefold()
+        if "dovi" not in text and "dolby vision" not in text:
+            continue
+        for key in ("dv_profile", "profile"):
+            parsed = parse_int(entry.get(key))
+            if parsed is not None:
+                profile = parsed
+                break
+    codec_tag = str(stream.get("codec_tag_string") or "").casefold()
+    if profile is None and codec_tag.startswith(("dvhe", "dvh1")):
+        profile = 0
+    return side_data_types, profile
 
 
 def parse_seconds(value: Any) -> int | None:

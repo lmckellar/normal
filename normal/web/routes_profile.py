@@ -45,6 +45,7 @@ from .http import RequestContext
 from .routes_audit import (
     reconcile_replacement_followups,
     record_export_event,
+    record_trait_observation_event,
     record_immersive_telemetry_event,
     record_policy_update_event,
     record_scan_event,
@@ -128,7 +129,7 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
             )
         PROBE_CACHE.flush()
         MOVIE_PROFILE_CACHE.put(source, report)
-        _harvest_local_immersive_votes(source, report)
+        record_trait_observation_event(source, added=report.trait_observations)
         response_report = reclassify_report_with_standards(report, effective_standards, resolve_language=resolve_language) if floor_overridden else report
         reconcile_replacement_followups(source, response_report)
         response = build_profile_response(source, response_report, effective_standards, resolve_language=resolve_language)
@@ -396,10 +397,7 @@ def handle_movies_register(ctx: RequestContext, payload: dict[str, Any]) -> None
 
 
 def _harvest_local_immersive_votes(source: Path, report: Any) -> None:
-    """Passive crowd-vote: any locally probed file that carries object audio is a
-    first-party datapoint that the title HAS an immersive release. Record those
-    titles as available (deduped against what is already known) and emit one
-    audit event for the batch. Gated by the telemetry preference."""
+    """Legacy compatibility hook; the active profile path uses generic traits."""
     preferences = load_operator_preferences()
     if not preferences.get("immersive_local_probe_telemetry", True):
         return

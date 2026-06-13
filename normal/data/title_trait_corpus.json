@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "evidence": [
+    {
+      "evidence_id": "uhd-dune-2021",
+      "title": "Dune",
+      "year": 2021,
+      "trait": "uhd",
+      "direction": "present",
+      "basis": "curated_research",
+      "reliability": "confirmed",
+      "source": "Warner Bros.",
+      "reference": "https://www.warnerbros.com/movies/dune",
+      "reviewed_at": "2026-06-14"
+    },
+    {
+      "evidence_id": "dv-dune-2021",
+      "title": "Dune",
+      "year": 2021,
+      "trait": "dolby_vision",
+      "direction": "present",
+      "basis": "curated_research",
+      "reliability": "confirmed",
+      "source": "Dolby",
+      "reference": "https://www.dolby.com/experience/dune/",
+      "reviewed_at": "2026-06-14"
+    },
+    {
+      "evidence_id": "uhd-top-gun-maverick-2022",
+      "title": "Top Gun: Maverick",
+      "year": 2022,
+      "trait": "uhd",
+      "direction": "present",
+      "basis": "curated_research",
+      "reliability": "confirmed",
+      "source": "Paramount Pictures",
+      "reference": "https://www.paramountmovies.com/movies/top-gun-maverick",
+      "reviewed_at": "2026-06-14"
+    },
+    {
+      "evidence_id": "dv-top-gun-maverick-2022",
+      "title": "Top Gun: Maverick",
+      "year": 2022,
+      "trait": "dolby_vision",
+      "direction": "present",
+      "basis": "curated_research",
+      "reliability": "confirmed",
+      "source": "Dolby",
+      "reference": "https://www.dolby.com/experience/top-gun-maverick/",
+      "reviewed_at": "2026-06-14"
+    }
+  ]
+}

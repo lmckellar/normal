@@ -21,7 +21,7 @@
             <button id="workflowJunk" class="lab-workflow-option" type="button" data-workflow="junk" role="option">Remove Junk Files</button>
             <button id="workflowWeakEncodes" class="lab-workflow-option" type="button" data-workflow="weak-encodes" role="option">Review Low-Quality Encodes</button>
             <button id="workflowRepairDefaults" class="lab-workflow-option" type="button" data-workflow="repair-defaults" role="option">Fix Audio and Subtitle Defaults</button>
-            <button id="workflowImmersive" class="lab-workflow-option" type="button" data-workflow="immersive-audio" role="option">Review Immersive Audio Candidates</button>
+            <button id="workflowImmersive" class="lab-workflow-option" type="button" data-workflow="format-upgrades" role="option">Review Format Upgrade Candidates</button>
             <button id="workflowCanonicalLists" class="lab-workflow-option" type="button" data-workflow="canonical-lists" role="option">Compare Against Canonical Lists</button>
           </div>
         </div>
@@ -63,6 +63,22 @@
         <option value="comedy">Comedy</option>
         <option value="anime" disabled>Anime</option>
         <option value="tv_shows" disabled>TV Shows</option>
+      </select>
+      <select id="traitFilter" aria-label="Format trait" hidden>
+        <option value="all">all formats</option>
+        <option value="immersive_audio">immersive audio</option>
+        <option value="uhd">UHD</option>
+        <option value="dolby_vision">Dolby Vision</option>
+      </select>
+      <select id="traitStatusFilter" aria-label="Format status" hidden>
+        <option value="default">active statuses</option>
+        <option value="owned">owned</option>
+        <option value="upgrade_available">upgrade available</option>
+        <option value="likely_available">likely available</option>
+        <option value="no_known_release">no known release</option>
+        <option value="contested">contested</option>
+        <option value="unverified">unverified</option>
+        <option value="all">all statuses</option>
       </select>
       <button id="selectAllButton" type="button">Select all</button>
       <button id="deselectAllButton" type="button">Deselect all</button>

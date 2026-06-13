@@ -19,7 +19,6 @@ def _settings_payload() -> dict[str, Any]:
     return {
         "keys": CREDENTIAL_STORE.status(),
         "fun_mode": bool(preferences.get("fun_mode")),
-        "immersive_candidate_finding": bool(preferences.get("immersive_candidate_finding")),
         "operator_preferences": preferences,
         "operator_preferences_revision": operator_preferences_revision(preferences),
     }
@@ -46,7 +45,5 @@ def handle_settings_preferences_update(ctx: RequestContext, payload: dict[str, A
     preferences = load_operator_preferences()
     if "fun_mode" in payload:
         preferences["fun_mode"] = bool(payload["fun_mode"])
-    if "immersive_candidate_finding" in payload:
-        preferences["immersive_candidate_finding"] = bool(payload["immersive_candidate_finding"])
     save_operator_preferences(preferences)
     ctx.respond_json(_settings_payload())

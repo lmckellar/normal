@@ -131,6 +131,61 @@ class MovieScanTests(unittest.TestCase):
             self.assertEqual(facts.sample_aspect_ratio, "4:3")
             self.assertEqual(facts.display_aspect_ratio, "16:9")
 
+    def test_media_facts_from_ffprobe_payload_captures_color_and_dolby_vision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x")
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {"size": "1", "format_name": "matroska"},
+                    "streams": [
+                        {
+                            "codec_type": "video",
+                            "codec_name": "hevc",
+                            "width": 3840,
+                            "height": 2160,
+                            "color_range": "tv",
+                            "color_space": "bt2020nc",
+                            "color_transfer": "smpte2084",
+                            "color_primaries": "bt2020",
+                            "side_data_list": [
+                                {
+                                    "side_data_type": "DOVI configuration record",
+                                    "dv_profile": 8,
+                                }
+                            ],
+                        }
+                    ],
+                },
+                movie_path,
+            )
+            self.assertEqual(facts.color_primaries, "bt2020")
+            self.assertEqual(facts.color_transfer, "smpte2084")
+            self.assertEqual(facts.dolby_vision_profile, 8)
+            self.assertEqual(facts.video_side_data_types, ["DOVI configuration record"])
+
+    def test_hdr_metadata_without_dolby_vision_stays_non_dv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_path = Path(tmpdir) / "Movie.mkv"
+            movie_path.write_bytes(b"x")
+            facts = media_facts_from_ffprobe_payload(
+                {
+                    "format": {"size": "1", "format_name": "matroska"},
+                    "streams": [
+                        {
+                            "codec_type": "video",
+                            "codec_name": "hevc",
+                            "width": 3840,
+                            "height": 2160,
+                            "color_transfer": "smpte2084",
+                            "color_primaries": "bt2020",
+                        }
+                    ],
+                },
+                movie_path,
+            )
+            self.assertIsNone(facts.dolby_vision_profile)
+
     def test_media_facts_from_ffprobe_payload_reads_mkv_bps_tags(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             movie_path = Path(tmpdir) / "Movie.mkv"

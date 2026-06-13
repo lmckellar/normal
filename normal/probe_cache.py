@@ -13,7 +13,7 @@ from normal.quality_review import MediaFacts
 
 class ProbeCache:
     _PATH = Path.home() / ".local" / "share" / "normal" / "probe-cache.json"
-    _VERSION = 4
+    _VERSION = 5
     # Writes are batched: a full-tree scan calls put() once per file, and each
     # _save rewrites the whole entries dict, so per-put persistence was O(n^2)
     # rewrites across thousands of files. Coalesce into one write per FLUSH_EVERY

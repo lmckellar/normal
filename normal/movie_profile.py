@@ -13,9 +13,17 @@ import time
 from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
-from normal.movie_immersive_confirmations import confirmation_index, lookup_verdict
 from normal.movie_moron_encoders import lookup_moron_encoder
 from normal.movie_plan import concise_movie_base, parse_movie_name, path_has_normalized_movie_shape
+from normal.movie_title_traits import (
+    TRAITS,
+    TraitEvidence,
+    all_evidence,
+    assess_trait,
+    lookup_evidence,
+    record_local_observations,
+    trait_key,
+)
 from normal.movie_scan import (
     MovieScanProgress,
     emit_progress,
@@ -70,6 +78,7 @@ class MovieProfileItem:
     facts: MediaFacts
     runtime_minutes: float | None
     profile: MovieProfile
+    trait_assessments: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -78,6 +87,8 @@ class MovieProfileReport:
     generated_at: str
     movies: list[MovieProfileItem] = field(default_factory=list)
     warnings: list[WarningItem] = field(default_factory=list)
+    trait_assessments: list[dict[str, Any]] = field(default_factory=list)
+    trait_observations: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -213,8 +224,6 @@ DEFAULT_OPERATOR_PREFERENCES = {
     "delete_mode": "recycle_all",
     "default_source": "",
     "fun_mode": False,
-    "immersive_candidate_finding": False,
-    "immersive_local_probe_telemetry": True,
 }
 REMOVED_QUALITY_STANCE_KEYS = (
     "require_audio_language_hygiene",
@@ -228,18 +237,134 @@ class MovieStandardsConflictError(RuntimeError):
     pass
 
 
+def local_trait_capability(facts: MediaFacts, trait: str) -> str:
+    if trait == "immersive_audio":
+        return "present" if facts.audio_immersive_extension else (
+            "not_detected" if facts.audio_stream_count else "unknown"
+        )
+    if trait == "uhd":
+        resolution = facts.resolution_bucket or classify_resolution(
+            facts.width,
+            facts.height,
+            facts.sample_aspect_ratio,
+            facts.display_aspect_ratio,
+        )
+        if resolution == "2160p":
+            return "present"
+        return "not_detected" if resolution else "unknown"
+    if trait == "dolby_vision":
+        if facts.dolby_vision_profile is not None:
+            return "present"
+        return "not_detected" if facts.video_stream_count else "unknown"
+    raise ValueError(f"unsupported trait: {trait}")
+
+
+def local_trait_observations(
+    probed: list[tuple[Path, MediaFacts]],
+) -> list[tuple[str, int, str, str]]:
+    observations: list[tuple[str, int, str, str]] = []
+    for movie_path, facts in probed:
+        identity = parse_movie_name(movie_path)
+        if not identity.title or not identity.year:
+            continue
+        for trait in TRAITS:
+            if local_trait_capability(facts, trait) == "present":
+                observations.append((identity.title, identity.year, trait, str(movie_path)))
+    return observations
+
+
+def build_title_trait_assessments(
+    probed: list[tuple[Path, MediaFacts]],
+    *,
+    evidence: list[TraitEvidence],
+    suppressed: set[str] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, dict[str, Any]]]]:
+    groups: dict[str, dict[str, Any]] = {}
+    for movie_path, facts in probed:
+        identity = parse_movie_name(movie_path)
+        if not identity.title or not identity.year:
+            continue
+        prefix = trait_key(identity.title, identity.year, TRAITS[0]).rsplit("|", 1)[0]
+        group = groups.setdefault(
+            prefix,
+            {
+                "title": identity.title,
+                "year": identity.year,
+                "copies": [],
+            },
+        )
+        group["copies"].append((str(movie_path), facts))
+
+    rows: list[dict[str, Any]] = []
+    index: dict[str, dict[str, dict[str, Any]]] = {}
+    suppressed = suppressed or set()
+    for prefix, group in groups.items():
+        title = group["title"]
+        year = group["year"]
+        trait_rows: dict[str, dict[str, Any]] = {}
+        for trait in TRAITS:
+            capabilities = [
+                local_trait_capability(facts, trait)
+                for _, facts in group["copies"]
+            ]
+            capability = (
+                "present"
+                if "present" in capabilities
+                else "not_detected"
+                if "not_detected" in capabilities
+                else "unknown"
+            )
+            matched = lookup_evidence(evidence, title, year, trait)
+            if trait_key(title, year, trait) in suppressed:
+                matched = []
+            local_present_count = sum(value == "present" for value in capabilities)
+            row = asdict(
+                assess_trait(
+                    title,
+                    year,
+                    trait,
+                    capability=capability,
+                    evidence=matched,
+                    local_paths=[path for path, _ in group["copies"]],
+                    local_present_count=local_present_count,
+                )
+            )
+            rows.append(row)
+            trait_rows[trait] = row
+        index[prefix] = trait_rows
+    rows.sort(key=lambda row: (str(row["title"]).casefold(), int(row["year"]), str(row["trait"])))
+    return rows, index
+
+
+def file_trait_assessments(
+    aggregate: dict[str, dict[str, Any]],
+    facts: MediaFacts,
+) -> dict[str, dict[str, Any]]:
+    resolved: dict[str, dict[str, Any]] = {}
+    for trait, row in aggregate.items():
+        capability = local_trait_capability(facts, trait)
+        status = row["status"]
+        if capability == "present":
+            status = "owned"
+        elif row["claim_direction"] == "present" and row["certainty"] == "confirmed":
+            status = "upgrade_available"
+        resolved[trait] = {**row, "capability": capability, "status": status}
+    return resolved
+
+
 def scan_movie_profiles(
     source_root: Path,
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
     progress_callback: Callable[[MovieScanProgress], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
     resolve_language: Callable[[str, int | None], str | None] | None = None,
+    trait_store_path: Path | None = None,
+    legacy_trait_store_path: Path | None = None,
 ) -> MovieProfileReport:
     report = MovieProfileReport(source_root=str(source_root.resolve()), generated_at=utc_now_iso())
     standards = load_movie_standards()
-    immersive_confirmations = confirmation_index()
-    immersive_candidate_enabled = immersive_candidate_finding_enabled()
     cancelled = False
+    probed: list[tuple[Path, MediaFacts]] = []
     movie_files = iter_video_files(source_root, should_cancel=should_cancel)
     first_movie = next(movie_files, None)
     if first_movie is None:
@@ -287,17 +412,7 @@ def scan_movie_profiles(
             facts.sample_aspect_ratio,
             facts.display_aspect_ratio,
         )
-        report.movies.append(
-            build_movie_profile_item(
-                source_root,
-                movie_path,
-                facts,
-                standards,
-                resolve_language=resolve_language,
-                immersive_confirmations=immersive_confirmations,
-                immersive_candidate_enabled=immersive_candidate_enabled,
-            )
-        )
+        probed.append((movie_path, facts))
         processed = index
         emit_progress(progress_callback, processed, 0, movie_path, started, "running")
 
@@ -315,6 +430,38 @@ def scan_movie_profiles(
             )
         )
 
+    observations = local_trait_observations(probed)
+    report.trait_observations = record_local_observations(
+        observations,
+        state_path=trait_store_path,
+        legacy_path=legacy_trait_store_path,
+    )
+    evidence, suppressed = all_evidence(
+        trait_store_path,
+        legacy_path=legacy_trait_store_path,
+    )
+    report.trait_assessments, assessment_index = build_title_trait_assessments(
+        probed, evidence=evidence, suppressed=suppressed
+    )
+    for movie_path, facts in probed:
+        identity = parse_movie_name(movie_path)
+        aggregate_assessments = assessment_index.get(
+            (trait_key(identity.title, identity.year, TRAITS[0]).rsplit("|", 1)[0])
+            if identity.title and identity.year
+            else "",
+            {},
+        )
+        item_assessments = file_trait_assessments(aggregate_assessments, facts)
+        report.movies.append(
+            build_movie_profile_item(
+                source_root,
+                movie_path,
+                facts,
+                standards,
+                resolve_language=resolve_language,
+                trait_assessments=item_assessments,
+            )
+        )
     assign_percentiles(report.movies)
     report.movies.sort(key=lambda item: (total_risk_score(item.profile.diagnostics), item.profile.rank, item.path.lower()), reverse=True)
     emit_progress(progress_callback, processed, processed, None, started, "complete")
@@ -330,9 +477,20 @@ def reclassify_report_with_standards(
     source_root = Path(report.source_root)
     new_report = MovieProfileReport(source_root=report.source_root, generated_at=utc_now_iso())
     new_report.warnings = list(report.warnings)
-    immersive_confirmations = confirmation_index()
-    immersive_candidate_enabled = immersive_candidate_finding_enabled()
+    probed = [(Path(item.path), item.facts) for item in report.movies]
+    evidence, suppressed = all_evidence()
+    new_report.trait_assessments, assessment_index = build_title_trait_assessments(
+        probed, evidence=evidence, suppressed=suppressed
+    )
     for item in report.movies:
+        identity = parse_movie_name(Path(item.path))
+        aggregate_assessments = assessment_index.get(
+            (trait_key(identity.title, identity.year, TRAITS[0]).rsplit("|", 1)[0])
+            if identity.title and identity.year
+            else "",
+            {},
+        )
+        item_assessments = file_trait_assessments(aggregate_assessments, item.facts)
         new_report.movies.append(
             build_movie_profile_item(
                 source_root,
@@ -340,8 +498,7 @@ def reclassify_report_with_standards(
                 item.facts,
                 standards,
                 resolve_language=resolve_language,
-                immersive_confirmations=immersive_confirmations,
-                immersive_candidate_enabled=immersive_candidate_enabled,
+                trait_assessments=item_assessments,
             )
         )
     assign_percentiles(new_report.movies)
@@ -361,6 +518,7 @@ def build_movie_profile_item(
     resolve_language: Callable[[str, int | None], str | None] | None = None,
     immersive_confirmations: dict[str, str] | None = None,
     immersive_candidate_enabled: bool | None = None,
+    trait_assessments: dict[str, dict[str, Any]] | None = None,
 ) -> MovieProfileItem:
     facts.resolution_bucket = facts.resolution_bucket or classify_resolution(
         facts.width,
@@ -382,6 +540,7 @@ def build_movie_profile_item(
         resolve_language=resolve_language,
         immersive_confirmations=immersive_confirmations,
         immersive_candidate_enabled=immersive_candidate_enabled,
+        trait_assessments=trait_assessments,
     )
     weak_candidate = is_replacement_candidate_quality(quality_label, active_standards) and not is_audio_packaging_owned_movie(diagnostics)
     if lopsided_result is not None and lopsided_result.get("status") == "fail":
@@ -394,6 +553,7 @@ def build_movie_profile_item(
         path=str(movie_path),
         facts=facts,
         runtime_minutes=round(facts.runtime_seconds / 60, 1) if facts.runtime_seconds else None,
+        trait_assessments=list((trait_assessments or {}).values()),
         profile=MovieProfile(
             label=label,
             rank=PROFILE_RANKS[label],
@@ -1590,13 +1750,9 @@ def detect_plex_diagnostics(
     resolve_language: Callable[[str, int | None], str | None] | None = None,
     immersive_confirmations: dict[str, str] | None = None,
     immersive_candidate_enabled: bool | None = None,
+    trait_assessments: dict[str, dict[str, Any]] | None = None,
 ) -> list[DiagnosticFinding]:
     findings: list[DiagnosticFinding] = []
-    candidate_enabled = (
-        immersive_candidate_finding_enabled()
-        if immersive_candidate_enabled is None
-        else bool(immersive_candidate_enabled)
-    )
     lower_audio = {codec.lower() for codec in facts.audio_codecs}
     lower_subs = {codec.lower() for codec in facts.subtitle_codecs}
     path_text = str(path)
@@ -1682,18 +1838,7 @@ def detect_plex_diagnostics(
             resolve_language=resolve_language,
         )
     )
-    immersive_verdict: str | None = None
-    if immersive_confirmations:
-        immersive_identity = parse_movie_name(Path(path))
-        if immersive_identity.title and immersive_identity.year:
-            immersive_verdict = lookup_verdict(
-                immersive_confirmations, immersive_identity.title, immersive_identity.year
-            )
-    findings.extend(
-        detect_immersive_audio_candidate(
-            path, facts, standards or {}, verdict=immersive_verdict, enabled=candidate_enabled
-        )
-    )
+    findings.extend(detect_trait_upgrade_candidates(trait_assessments or {}))
     if facts.video_bitrate_kbps is None and facts.total_bitrate_kbps is None:
         findings.append(
             DiagnosticFinding(
@@ -1803,6 +1948,32 @@ def detect_plex_diagnostics(
                 category="playback_risk",
                 summary="No obvious Plex-risk flag was visible in ffprobe output, so the issue may be container or timestamp damage.",
                 remedy="First-line remedy is a lossless remux to rebuild timestamps and indexes, then re-test in Plex.",
+            )
+        )
+    return findings
+
+
+def detect_trait_upgrade_candidates(
+    assessments: dict[str, dict[str, Any]],
+) -> list[DiagnosticFinding]:
+    labels = {
+        "immersive_audio": ("immersive audio", "Atmos / DTS:X"),
+        "uhd": ("UHD", "UHD"),
+        "dolby_vision": ("Dolby Vision", "Dolby Vision"),
+    }
+    findings: list[DiagnosticFinding] = []
+    for trait in TRAITS:
+        assessment = assessments.get(trait) or {}
+        if assessment.get("status") != "upgrade_available":
+            continue
+        display, target = labels[trait]
+        findings.append(
+            DiagnosticFinding(
+                code=f"{trait}_upgrade_available",
+                severity="candidate",
+                category="format_upgrade_candidate",
+                summary=f"A {display} release is confirmed available, but no owned copy carries this trait.",
+                remedy=f"Source the confirmed {target} release as an upgrade for this title.",
             )
         )
     return findings

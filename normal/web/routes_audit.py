@@ -231,6 +231,41 @@ def record_scan_event(
     AUDIT_STORE.append(event)
 
 
+def record_trait_observation_event(
+    source: Path,
+    *,
+    added: list[dict[str, Any]],
+) -> None:
+    if not added:
+        return
+    recorded_at = utc_now_iso()
+    source_root = normalize_source_root(source)
+    count = len(added)
+    summary = f"Recorded {count} new local title-trait observation{'s' if count != 1 else ''}."
+    event = AuditEvent(
+        event_id=make_event_id(source_root, "format_upgrades", "trait_observation", recorded_at, salt=str(count)),
+        recorded_at=recorded_at,
+        source_root=source_root,
+        workflow="format_upgrades",
+        action="trait_observation",
+        summary=summary,
+        subjects=[
+            AuditSubject(kind="title", title=record.get("title"), year=record.get("year"))
+            for record in added
+        ],
+        effects=[AuditEffect(kind="trait_observation", status="recorded", path=source_root, message=summary)],
+        reversal={"capability": "none"},
+        metadata={
+            "source": "local_probe",
+            "observations": [
+                f'{record.get("title")} ({record.get("year")}): {record.get("trait")}'
+                for record in added
+            ],
+        },
+    )
+    AUDIT_STORE.append(event)
+
+
 def record_immersive_telemetry_event(
     source: Path,
     *,

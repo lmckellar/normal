@@ -94,6 +94,12 @@ class MediaFacts:
     video_profile: str | None = None
     video_level: int | None = None
     pixel_format: str | None = None
+    color_range: str | None = None
+    color_space: str | None = None
+    color_transfer: str | None = None
+    color_primaries: str | None = None
+    dolby_vision_profile: int | None = None
+    video_side_data_types: list[str] = field(default_factory=list)
     frame_rate: float | None = None
     average_frame_rate: float | None = None
     video_stream_count: int = 0
