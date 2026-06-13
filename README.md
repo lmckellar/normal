@@ -82,9 +82,9 @@ An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list vi
 
 ✅ A: Those are both fair questions.
 
-`normal` is built around the following principles that lead to some loud claims:
-
 ## 🔥 The Opinionated Part
+
+`normal` is built around the following principles that lead to some loud claims:
 
 **🪙 Physical Storage Economics**
 
