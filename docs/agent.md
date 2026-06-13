@@ -104,13 +104,6 @@ Minimum preflight before reporting success:
 - localhost responds on the chosen port
 - only if the requested workflow includes canonical lists: confirm the dataset is available — managed files present in `~/.local/share/normal/imdb-datasets/`, or `IMDB_DATASET_DIR` pointing at a dataset (or note plainly that lists will be inactive). `IMDB_DATASET_DIR` alone being unset is not a gap. `OMDB_KEY`/`TMDB_KEY` are never preflight gates.
 
-## Search hygiene
-
-- Prefer `rg` for repo search, but treat long UI copy, emoji, and generated assets as literal-text cases: start with `rg -F`, not a regex pattern.
-- Some package-managed assets may be treated as binary during search. If `rg` reports a NUL byte or stops early, retry with `rg -a` / `--text` or search the source-of-truth module instead of the bundled asset.
-- Do not grep compiled or generated frontend assets by default when the same string or behavior can be found more reliably in the owning route, serializer, or source module.
-- If a search target contains shell-significant characters, prefer single-quoted literals or a narrower structural search over repeatedly mutating an unsafe grep command.
-
 ## Data models
 
 ### ProposedChange (models.py)
