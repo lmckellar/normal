@@ -580,6 +580,13 @@ thead th {
 .lab-cell-pill.is-not-available,
 .chip.is-not-available { color: #a3312f; }
 .lab-cell-pill.is-actionable { color: var(--accent); }
+
+.lab-moron-badge {
+  margin-left: 4px;
+  cursor: default;
+  font-style: normal;
+}
+.lab-moron-badge.is-review { opacity: 0.6; }
 .lab-cell-pill.is-audit-system-background {
   border-color: rgba(85, 92, 104, 0.22);
   background: rgba(85, 92, 104, 0.08);

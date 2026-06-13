@@ -202,6 +202,29 @@ class WebTests(unittest.TestCase):
                     self.assertFalse(ctx.responses[-1]["keys"]["omdb"]["present"])
                     self.assertEqual(secrets.read_text(), "")
 
+    def test_settings_preferences_persist_fun_mode_globally(self) -> None:
+        from normal.web import routes_settings
+
+        class StubContext:
+            def __init__(self) -> None:
+                self.responses: list[dict] = []
+
+            def respond_json(self, payload, status=None) -> None:
+                self.responses.append(payload)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preferences_path = Path(tmpdir) / "operator-preferences.json"
+            with patch("normal.movie_profile.OPERATOR_PREFERENCES_PATH", preferences_path):
+                ctx = StubContext()
+                routes_settings.handle_settings_read(ctx, {})
+                self.assertFalse(ctx.responses[-1]["fun_mode"])
+
+                ctx = StubContext()
+                routes_settings.handle_settings_preferences_update(ctx, {"fun_mode": True})
+                self.assertTrue(ctx.responses[-1]["fun_mode"])
+                self.assertTrue(ctx.responses[-1]["operator_preferences"]["fun_mode"])
+                self.assertTrue(json.loads(preferences_path.read_text(encoding="utf-8"))["fun_mode"])
+
     def test_manual_immersive_confirm_route_is_removed(self) -> None:
         from normal.web import routes_profile, server
 
@@ -478,7 +501,6 @@ class WebTests(unittest.TestCase):
     def test_dashboard_payload_refresh_invalidates_lopsided_cache(self) -> None:
         section = NORMALIZE_LAB_JS.split("function updateDashboardPayload(payload, requestedSource = '') {", 1)[1].split("async function refreshDashboardPayload", 1)[0]
         self.assertIn("state._lopsidedFactsCache = null;", section)
-
     def test_movie_canonical_lists_page_is_wired(self) -> None:
         self.assertIn("Compare Against Canonical Lists", FRONTEND)
         self.assertIn("'/api/movies/canonical-lists'", FRONTEND)
@@ -611,6 +633,10 @@ class WebTests(unittest.TestCase):
         self.assertIn("function settingsSurfaceOpen()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("'/api/settings/read'", NORMALIZE_LAB_FRONTEND)
         self.assertIn("'/api/settings/keys'", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn("<h3>Fun Mode</h3>", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn('data-settings-preference="fun_mode"', NORMALIZE_LAB_FRONTEND)
+        self.assertIn("state.funMode = Boolean(preferences.fun_mode);", NORMALIZE_LAB_FRONTEND)
+        self.assertNotIn('id="funModeToggle"', NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"dashboardPanel\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"policyEditorPanel\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"inspectionPane\"", NORMALIZE_LAB_FRONTEND)

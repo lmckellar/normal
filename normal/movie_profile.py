@@ -14,6 +14,7 @@ from typing import Any, Callable
 
 from normal.models import WarningItem, utc_now_iso
 from normal.movie_immersive_confirmations import confirmation_index, lookup_verdict
+from normal.movie_moron_encoders import lookup_moron_encoder
 from normal.movie_plan import concise_movie_base, parse_movie_name, path_has_normalized_movie_shape
 from normal.movie_scan import (
     MovieScanProgress,
@@ -211,6 +212,7 @@ WARNING_GATE_SAFETY_LEVELS = ("safe", "confident", "yolo")
 DEFAULT_OPERATOR_PREFERENCES = {
     "delete_mode": "recycle_all",
     "default_source": "",
+    "fun_mode": False,
     "immersive_candidate_finding": False,
     "immersive_local_probe_telemetry": True,
 }
@@ -1598,6 +1600,23 @@ def detect_plex_diagnostics(
     lower_audio = {codec.lower() for codec in facts.audio_codecs}
     lower_subs = {codec.lower() for codec in facts.subtitle_codecs}
     path_text = str(path)
+
+    moron_path = Path(path)
+    moron_identity = parse_movie_name(moron_path)
+    moron_verdict = lookup_moron_encoder(
+        moron_identity.release_group,
+        stem=f"{moron_path.parent.name} {moron_path.stem}",
+    )
+    if moron_verdict is not None:
+        findings.append(
+            DiagnosticFinding(
+                code=moron_verdict.code,
+                severity=moron_verdict.severity,
+                category=moron_verdict.category,
+                summary=moron_verdict.summary,
+                remedy="Treat as a replacement candidate regardless of measured bitrate; this group's encodes are not trustworthy.",
+            )
+        )
 
     if "dts" in lower_audio and not has_compat_audio_track(lower_audio):
         findings.append(

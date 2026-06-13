@@ -1219,6 +1219,5 @@ class LopsidedEncodeTests(unittest.TestCase):
         codes = {diag.code for diag in item.profile.diagnostics}
         self.assertIn("encode_lopsided_audio_starved", codes)
 
-
 if __name__ == "__main__":
     unittest.main()

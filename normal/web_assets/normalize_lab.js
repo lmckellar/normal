@@ -31,6 +31,34 @@
     { id: 'comedy', label: 'Comedy' },
   ];
 
+  // Weak-encode badges. Pure presentation over the diagnosis codes already
+  // emitted server-side (see weak-encode-badge-taxonomy.md) — never a detector.
+  // A row can carry several (Screecher + Magoo + …). Fun Mode swaps the sober
+  // tooltip for the louder register; it never changes which badges appear.
+  const WEAK_BADGES = {
+    known_moron_encoder:           { glyph: '💩', tierClass: 'is-not-available', label: 'Known moron' },
+    suspect_encoder:               { glyph: '🎲', tierClass: 'is-review', label: 'Suspect encoder' },
+    audio_bitrate_below_minimum:   { glyph: '📢', tierClass: 'is-not-available', label: 'Screecher' },
+    audio_channels_below_minimum:  { glyph: '📢', tierClass: 'is-not-available', label: 'Screecher' },
+    audio_signal_missing:          { glyph: '📢', tierClass: 'is-review', label: 'Screecher' },
+    video_below_minimum:           { glyph: '🥽', tierClass: 'is-not-available', label: 'Magoo' },
+    video_signal_missing:          { glyph: '🥽', tierClass: 'is-review', label: 'Magoo' },
+    encode_lopsided_audio_starved: { glyph: '🤡', tierClass: 'is-not-available', label: 'Dipshit' },
+    encode_lopsided_video_starved: { glyph: '🤡', tierClass: 'is-not-available', label: 'Dipshit' },
+  };
+
+  const WEAK_BADGE_FUN_TOOLTIPS = {
+    known_moron_encoder: badge => `${badge.name} signed this one. Reigning king of WTF encodes — every drop is the wettest fart of a file. Bin this filth without a second thought.`,
+    suspect_encoder: badge => `${badge.name} again. Flips a coin for its settings — might be fine, might be sludge. Open it before you trust it.`,
+    audio_bitrate_below_minimum: () => `The audio is screeching for help — bitrate scraped right to the bone.`,
+    audio_channels_below_minimum: () => `Some chiseller flattened the surround. You're hearing a fraction of the room.`,
+    audio_signal_missing: () => `Couldn't get a clean read on the audio. Suspicious — give it a listen.`,
+    video_below_minimum: () => `Mr Magoo encoded this — squinting, smeared, bitrate-starved. The picture's a fog.`,
+    video_signal_missing: () => `Couldn't get a clean read on the video bitrate. Eyeball it before trusting.`,
+    encode_lopsided_audio_starved: () => `Gorgeous picture welded to honking starved audio. Classic dipshit move.`,
+    encode_lopsided_video_starved: () => `Pristine audio laid over a smeared transcode. Dipshit got it backwards.`,
+  };
+
   const LAYOUT_MODES = {
     default: '2-page-lopsided',
     book: '3-page-book',
@@ -151,6 +179,7 @@
     previewMode: 'selected',
     applyInFlight: false,
     weakFloor: 'standard_definition',
+    funMode: false,
     weakPreview: null,
     weakPreviewKey: '',
     weakPreviewLoading: false,
@@ -1096,6 +1125,13 @@
   function applyPolicyPayload(payload) {
     if (!payload) return;
     state.policyPayload = payload;
+    const preferences = payload.operator_preferences || {};
+    if (Object.prototype.hasOwnProperty.call(preferences, 'fun_mode')) {
+      state.funMode = Boolean(preferences.fun_mode);
+    }
+    if (Object.prototype.hasOwnProperty.call(preferences, 'immersive_candidate_finding')) {
+      state.settingsImmersive = Boolean(preferences.immersive_candidate_finding);
+    }
     if (payload?.replacement_candidate_definition?.fields?.[0]?.value) {
       state.weakFloor = payload.replacement_candidate_definition.fields[0].value;
     }
@@ -1128,7 +1164,59 @@
     return match ? match[1] : '';
   }
 
+  function isFunMode() {
+    return !!state.funMode;
+  }
+
+  function moronEncoderFinding(item) {
+    const diagnostics = item?.profile?.diagnostics || [];
+    return diagnostics.find(diag => diag?.code === 'known_moron_encoder')
+      || diagnostics.find(diag => diag?.code === 'suspect_encoder')
+      || null;
+  }
+
+  function moronEncoderName(summary) {
+    return String(summary || '').split(' — ')[0].trim();
+  }
+
+  function collectWeakBadges(item) {
+    const diagnostics = item?.profile?.diagnostics || [];
+    const seen = new Set();
+    const badges = [];
+    for (const diag of diagnostics) {
+      const def = WEAK_BADGES[diag?.code];
+      if (!def || seen.has(def.glyph)) continue;
+      seen.add(def.glyph);
+      badges.push({
+        code: diag.code,
+        glyph: def.glyph,
+        tierClass: def.tierClass,
+        label: def.label,
+        summary: diag.summary || '',
+        name: moronEncoderName(diag.summary || ''),
+      });
+    }
+    return badges;
+  }
+
+  function weakBadgeClusterMarkup(badges) {
+    if (!badges || !badges.length) return '';
+    return badges.map(badge => {
+      const funBuilder = WEAK_BADGE_FUN_TOOLTIPS[badge.code];
+      const tip = isFunMode() && funBuilder ? funBuilder(badge) : (badge.summary || badge.label);
+      return `<span class="lab-moron-badge ${badge.tierClass}" title="${escapeHtml(tip)}" aria-label="${escapeHtml(badge.label)}">${badge.glyph}</span>`;
+    }).join('');
+  }
+
   function humanMovieProfileIssueLabel(code, summary = '') {
+    if (code === 'known_moron_encoder') {
+      const name = moronEncoderName(summary);
+      return name ? `Known Moron (${name})` : 'Known Moron';
+    }
+    if (code === 'suspect_encoder') {
+      const name = moronEncoderName(summary);
+      return name ? `Suspect Encoder (${name})` : 'Suspect Encoder';
+    }
     if (code === 'video_below_minimum') return 'Below Min. Video Bitrate';
     if (code === 'video_signal_missing') return 'Video Signal Missing';
     if (code === 'audio_channels_below_minimum') {
@@ -1155,6 +1243,8 @@
   }
 
   function movieProfileInlineSummary(item) {
+    const moron = moronEncoderFinding(item);
+    if (moron) return humanMovieProfileIssueLabel(moron.code || '', moron.summary || '');
     const issue = firstMovieProfileIssueResult(item);
     if (issue) return humanMovieProfileIssueLabel(issue.code || '', issue.summary || '');
     if (item?.profile?.legacy_bitrate_label) return `Legacy ${item.profile.legacy_bitrate_label.replaceAll('_', ' ')}`;
@@ -2346,6 +2436,7 @@
   function currentSettingsRenderKey() {
     return JSON.stringify({
       status: state.settingsStatus,
+      funMode: state.funMode,
       immersive: state.settingsImmersive,
       busy: state.settingsBusy,
     });
@@ -2390,7 +2481,7 @@
         <p>When on, scans pull non-immersive titles recent enough that an Atmos / DTS:X release may exist into the Review Immersive Audio Candidates workflow. Unverified candidates only.</p>
         <p>${immersiveOn ? 'Enabled — candidates surface on the next scan.' : 'Disabled — no candidates are surfaced.'}</p>
         <div class="lab-policy-actions">
-          <button class="lab-action-button${immersiveOn ? '' : ' is-primary'}" type="button" data-settings-immersive="${immersiveOn ? 'off' : 'on'}" ${state.settingsBusy ? 'disabled' : ''}>${immersiveOn ? 'Disable' : 'Enable'}</button>
+          <button class="lab-action-button${immersiveOn ? '' : ' is-primary'}" type="button" data-settings-preference="immersive_candidate_finding" data-settings-value="${immersiveOn ? 'off' : 'on'}" ${state.settingsBusy ? 'disabled' : ''}>${immersiveOn ? 'Disable' : 'Enable'}</button>
         </div>
       </section>
     `;
@@ -2398,10 +2489,10 @@
       <div class="lab-policy-header">
         <div class="lab-policy-heading">
           <div class="lab-kicker">Settings</div>
-          <p>Manage optional API keys for remote enrichment. Keys are stored server-side and ingested at launch; only the last four characters are ever shown.</p>
+          <p>Manage workbench-wide preferences and optional API keys. Preferences and keys are stored server-side; only the last four key characters are ever shown.</p>
         </div>
       </div>
-      <div class="lab-policy-sections">${cards}${immersiveCard}</div>
+      <div class="lab-policy-sections">${immersiveCard}${cards}</div>
     `;
     state.settingsRenderKey = renderKey;
     el.settingsPanel.querySelectorAll('[data-settings-save]').forEach(button => {
@@ -2410,15 +2501,28 @@
     el.settingsPanel.querySelectorAll('[data-settings-clear]').forEach(button => {
       button.addEventListener('click', () => clearSettingsKey(button.dataset.settingsClear || ''));
     });
-    el.settingsPanel.querySelectorAll('[data-settings-immersive]').forEach(button => {
-      button.addEventListener('click', () => saveImmersivePreference(button.dataset.settingsImmersive === 'on'));
+    el.settingsPanel.querySelectorAll('[data-settings-preference]').forEach(button => {
+      button.addEventListener('click', () => {
+        saveSettingsPreference(
+          button.dataset.settingsPreference || '',
+          button.dataset.settingsValue === 'on',
+        );
+      });
     });
   }
 
   function applySettings(result) {
     const payload = result || {};
     state.settingsStatus = payload.keys || {};
+    state.funMode = Boolean(payload.fun_mode);
     state.settingsImmersive = Boolean(payload.immersive_candidate_finding);
+    if (state.policyPayload && payload.operator_preferences) {
+      state.policyPayload.operator_preferences = {
+        ...(state.policyPayload.operator_preferences || {}),
+        ...payload.operator_preferences,
+      };
+      state.policyPayload.operator_preferences_revision = payload.operator_preferences_revision || '';
+    }
     if (state.settingsStatus.omdb) {
       window.OMDB_AVAILABLE = Boolean(state.settingsStatus.omdb.present);
     }
@@ -2458,14 +2562,15 @@
     }
   }
 
-  async function saveImmersivePreference(enabled) {
-    if (state.settingsBusy) return;
+  async function saveSettingsPreference(field, enabled) {
+    if (!field || state.settingsBusy) return;
     state.settingsBusy = true;
     state.settingsRenderKey = '';
     renderSettingsPanel();
     try {
-      const result = await postJson('/api/settings/preferences', { immersive_candidate_finding: enabled });
+      const result = await postJson('/api/settings/preferences', { [field]: enabled });
       applySettings(result);
+      renderRows();
     } catch (error) {
       el.inspectionPane.textContent = error.message;
     } finally {
@@ -3169,6 +3274,7 @@
       selectable: isStrictWeakMovie(item),
       current_path: item.path || '',
       issue: movieProfileInlineSummary(item) || humanProfileLabel(item?.profile?.label || ''),
+      badges: collectWeakBadges(item),
       triage: triage.score,
       triageOffender: triage.offender,
       resolution: item?.facts?.resolution_bucket || '',
@@ -3668,7 +3774,7 @@
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
-        <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
+        <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span>${weakBadgeClusterMarkup(row.badges)}</td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${row.triage == null ? 'No measurable bitrate deficit against the quality floor' : `Triage score ${row.triage} of 10`}"><span class="lab-cell-text">${row.triage == null ? '—' : escapeHtml(String(row.triage))}</span></td>
         <td class="lab-cell-supporting${flagVideo}" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-text">${escapeHtml(row.resolution || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono${flagVideo}" data-priority="essential" title="${escapeHtml(formatBitrate(row.video_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.video_bitrate))}</span></td>
@@ -3708,7 +3814,7 @@
   }
 
   function canonicalStatusClass(row) {
-    return row.owned ? 'is-safe' : 'is-unchanged';
+    return row.owned ? 'is-safe' : 'is-not-available';
   }
 
   function renderCanonicalRow(row) {
