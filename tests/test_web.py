@@ -62,6 +62,13 @@ class WebTests(unittest.TestCase):
         self.assertIn("window.OMDB_AVAILABLE = window.NORMAL_BOOT.omdbAvailable;", html)
         self.assertNotIn("omdb-test", html)
         self.assertIn('"tmdbKey": "tmdb-test"', html)
+        self.assertNotIn("fonts.googleapis.com", html)
+        self.assertNotIn("fonts.gstatic.com", html)
+
+    def test_workbench_template_avoids_remote_font_dependencies(self) -> None:
+        self.assertNotIn("fonts.googleapis.com", WORKBENCH_TEMPLATE)
+        self.assertNotIn("fonts.gstatic.com", WORKBENCH_TEMPLATE)
+        self.assertNotIn("@font-face", WORKBENCH_CSS)
 
     def test_handler_serves_static_assets(self) -> None:
         with self.run_test_server() as base_url:
