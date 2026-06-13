@@ -42,9 +42,7 @@
   const ONBOARDING_DISMISS_KEY = 'normal.onboarding.dismissed.cold';
 
   const TABLE_WIDTHS = {
-    select: 'var(--lab-table-select-column-width)',
-    anchor: '24%',
-    anchorWide: '30%',
+    foundation: 'var(--lab-table-foundation-column-width)',
     projectedPath: '28%',
     status: '13ch',
     reason: '13ch',
@@ -60,8 +58,8 @@
     defaultSubtitle: '13ch',
     currentDefault: '15%',
     repairTarget: '17%',
-    rank: '8ch',
-    year: '8ch',
+    rank: 'var(--lab-table-foundation-column-width)',
+    year: 'var(--lab-table-foundation-column-width)',
     inLibrary: '12ch',
     qualityProfile: '16ch',
     immersiveAudio: '24%',
@@ -69,16 +67,16 @@
   };
 
   const NORMALIZE_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: TABLE_WIDTHS.select },
-    { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.anchorWide },
+    { key: 'select', label: '', columnClass: 'lab-col-foundation lab-col-select', priority: 'essential', width: TABLE_WIDTHS.foundation },
+    { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
     { key: 'projected_path', label: 'Projected Path', columnClass: 'lab-col-path', cellClass: 'lab-cell-path lab-cell-mono', priority: 'desktop', width: TABLE_WIDTHS.projectedPath },
     { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.status },
     { key: 'reason_bucket', label: 'Reason', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'medium', width: TABLE_WIDTHS.reason },
   ];
 
   const WEAK_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: TABLE_WIDTHS.select },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.anchor },
+    { key: 'select', label: '', columnClass: 'lab-col-foundation lab-col-select', priority: 'essential', width: TABLE_WIDTHS.foundation },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
     { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: TABLE_WIDTHS.issue },
     { key: 'triage', label: 'Triage', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.triage, tooltip: 'Triage = quality deficit × replacement priority. Higher is worse: the larger the score, the more this encode underperforms its tier and the stronger the case to replace or delete it.' },
     { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.resolution },
@@ -90,8 +88,8 @@
   ];
 
   const JUNK_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: TABLE_WIDTHS.select },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.anchor },
+    { key: 'select', label: '', columnClass: 'lab-col-foundation lab-col-select', priority: 'essential', width: TABLE_WIDTHS.foundation },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
     { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: TABLE_WIDTHS.issue },
     { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.resolution },
     { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.video },
@@ -102,8 +100,8 @@
   ];
 
   const REPAIR_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: TABLE_WIDTHS.select },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.anchor },
+    { key: 'select', label: '', columnClass: 'lab-col-foundation lab-col-select', priority: 'essential', width: TABLE_WIDTHS.foundation },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
     { key: 'audio_bitrate', label: 'Default Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: TABLE_WIDTHS.defaultAudio },
     { key: 'default_subtitle', label: 'Default Subtitle', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: TABLE_WIDTHS.defaultSubtitle },
     { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: TABLE_WIDTHS.issue },
@@ -114,16 +112,16 @@
   ];
 
   const CANONICAL_HEADERS = [
-    { key: 'rank', label: 'Rank', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.rank },
+    { key: 'rank', label: 'Rank', columnClass: 'lab-col-foundation lab-col-signal', cellClass: 'lab-cell-foundation lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.rank },
     { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
     { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: TABLE_WIDTHS.year },
     { key: 'in_library', label: 'In Library', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.inLibrary },
     { key: 'quality_profile', label: 'Quality Profile', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: TABLE_WIDTHS.qualityProfile },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'desktop', width: TABLE_WIDTHS.anchor },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'desktop', width: '24%' },
   ];
 
   const IMMERSIVE_HEADERS = [
-    { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.year },
+    { key: 'year', label: 'Year', columnClass: 'lab-col-foundation lab-col-signal', cellClass: 'lab-cell-foundation lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.year },
     { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
     { key: 'status', label: 'Status', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.status },
     { key: 'audio_summary', label: 'Audio', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: TABLE_WIDTHS.immersiveAudio, tooltip: 'Every row here was probed and carries no Atmos / DTS:X object track — only the channel-based (surround) mix. The codec and layout shown describe that surround track.' },
@@ -3640,7 +3638,7 @@
   function renderNormalizeRow(row) {
     return `
       <tr class="${state.activeRowId === row.result_id ? 'active' : ''}" data-row-id="${escapeHtml(row.result_id)}">
-        <td class="lab-cell-select" data-priority="essential"><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
+        <td class="lab-cell-foundation lab-cell-select" data-priority="essential"><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_value)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_value))}</span></td>
         <td class="lab-cell-path lab-cell-mono" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${escapeHtml(row.projected_path)}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${normalizeConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
@@ -3659,7 +3657,7 @@
     const flagAudio = row.triageOffender === 'audio' ? ' lab-triage-flag' : '';
     return `
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
-        <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
+        <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${row.triage == null ? 'No measurable bitrate deficit against the quality floor' : `Triage score ${row.triage} of 10`}"><span class="lab-cell-text">${row.triage == null ? '—' : escapeHtml(String(row.triage))}</span></td>
@@ -3685,7 +3683,7 @@
       : `<span class="lab-cell-text">${escapeHtml(formatBitrate(row.audio_bitrate))}</span>`;
     return `
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
-        <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
+        <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}" data-junk-filename-cell>
           <span class="lab-cell-text" data-junk-filename-full="${escapeHtml(fileNameFromPath(row.current_path))}">${escapeHtml(fileNameFromPath(row.current_path))}</span>
         </td>
@@ -3711,7 +3709,7 @@
       : `<span class="lab-cell-text">${escapeHtml(row.quality_profile || '—')}</span>`;
     return `
       <tr class="${state.activeRowId === row.row_id ? 'active' : ''}" data-row-id="${escapeHtml(row.row_id)}">
-        <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(String(row.rank || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.rank || '—'))}</span></td>
+        <td class="lab-cell-foundation lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(String(row.rank || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.rank || '—'))}</span></td>
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.title || '—')}">${canonicalTitleMarkup(row.title, row.imdb_id)}</td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(String(row.year || '—'))}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${canonicalStatusClass(row)}">${escapeHtml(canonicalOwnedStatusLabel(row))}</span></td>
@@ -3731,7 +3729,7 @@
     const yearTooltip = needsNormalization ? 'Year requires file normalization to display!' : String(row.year || '—');
     return `
       <tr data-row-id="${escapeHtml(row.row_id)}">
-        <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(yearTooltip)}"><span class="lab-cell-text" title="${escapeHtml(yearTooltip)}">${escapeHtml(String(row.year || '—'))}</span></td>
+        <td class="lab-cell-foundation lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(yearTooltip)}"><span class="lab-cell-text" title="${escapeHtml(yearTooltip)}">${escapeHtml(String(row.year || '—'))}</span></td>
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(titleTooltip)}"><span class="lab-cell-text" title="${escapeHtml(titleTooltip)}">${escapeHtml(row.title || '—')}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${immersiveVerdictPillClass(row.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(row.verdict))}</span></td>
         <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(row.audio_summary || '—')}">${audioSummaryMarkup}</td>
@@ -3761,7 +3759,7 @@
       : `<span class="lab-cell-text">${escapeHtml(row.default_subtitle || 'None')}</span>`;
     return `
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
-        <td class="lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked} ${disabled}>` : ''}</td>
+        <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked} ${disabled}>` : ''}</td>
         <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(defaultAudioLabel)}">${audioBitrateMarkup}</td>
         <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.default_subtitle || 'None')}">${defaultSubtitleMarkup}</td>
