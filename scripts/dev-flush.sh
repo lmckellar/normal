@@ -38,6 +38,7 @@ VENV="$REPO/.venv"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/normal"
 CACHE_DIR="$HOME/.cache/normal"
 LOG="/tmp/normal-dev-web.log"
+UNIT_PREFIX="normal-dev-web"
 
 MODE="warm"
 HOST="127.0.0.1"
@@ -64,6 +65,11 @@ warn() { printf '\033[1;33m[dev-flush]\033[0m %s\n' "$*" >&2; }
 
 stop_server() {
   local pids=""
+  local unit="${UNIT_PREFIX}-${PORT}.service"
+  if systemctl --user is-active --quiet "$unit" 2>/dev/null; then
+    say "stopping user service $unit"
+    systemctl --user stop "$unit"
+  fi
   if command -v lsof >/dev/null 2>&1; then
     pids="$(lsof -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null || true)"
   fi
@@ -132,25 +138,48 @@ preflight() {
 }
 
 start_server() {
-  # shellcheck disable=SC1091
-  source "$VENV/bin/activate"
-  # Ingest saved plan-B enricher keys (OMDB_KEY / TMDB_KEY) from the UI-managed
-  # secrets file into the environment so the cli picks them up at boot. Absence
-  # stays silent; presence is reported so the key has a visible, durable home.
   local secrets="$DATA_DIR/secrets.env"
+  local unit="${UNIT_PREFIX}-${PORT}"
+  local launched_with_systemd=0
   if [[ -f "$secrets" ]]; then
-    set -a
-    # shellcheck disable=SC1090
-    source "$secrets"
-    set +a
     say "ingested saved keys from $secrets"
   fi
   say "starting: normal web --host $HOST --port $PORT --source $SOURCE"
-  ( cd "$REPO" && exec python3 -m normal web --host "$HOST" --port "$PORT" --source "$SOURCE" ) \
-    >"$LOG" 2>&1 &
-  disown || true
+  : >"$LOG"
+  if command -v systemd-run >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1; then
+    systemd-run --user --quiet --collect --unit "$unit" \
+      --property "WorkingDirectory=$REPO" \
+      --property "StandardOutput=append:$LOG" \
+      --property "StandardError=append:$LOG" \
+      /bin/bash -c '
+        source "$1/bin/activate"
+        if [[ -f "$2" ]]; then
+          set -a
+          source "$2"
+          set +a
+        fi
+        export PYTHONUNBUFFERED=1
+        exec python3 -m normal web --host "$3" --port "$4" --source "$5"
+      ' bash "$VENV" "$secrets" "$HOST" "$PORT" "$SOURCE"
+    launched_with_systemd=1
+  else
+    # shellcheck disable=SC1091
+    source "$VENV/bin/activate"
+    if [[ -f "$secrets" ]]; then
+      set -a
+      # shellcheck disable=SC1090
+      source "$secrets"
+      set +a
+    fi
+    ( cd "$REPO" && exec python3 -m normal web --host "$HOST" --port "$PORT" --source "$SOURCE" ) \
+      >"$LOG" 2>&1 &
+    disown || true
+  fi
   for _ in $(seq 1 40); do
     if curl -fsS "http://$HOST:$PORT/" >/dev/null 2>&1; then
+      if [[ "$launched_with_systemd" == 1 ]] && ! systemctl --user is-active --quiet "$unit.service"; then
+        break
+      fi
       say "up: http://$HOST:$PORT/  (logs: $LOG)"
       warn "browser tab still holds the old in-page state — hard-reload it (Ctrl+Shift+R)"
       return 0
