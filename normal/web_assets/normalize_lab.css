@@ -1,21 +1,22 @@
 :root {
   color-scheme: light;
-  --paper: #f6f5f2;
-  --panel: #ffffff;
-  --ink: #1c1d1f;
-  --muted: #6b6f76;
-  --faint: #9a9ea4;
-  --hairline: #e6e4df;
-  --rule: #dcdad3;
-  --accent: #3a5a8c;
-  --accent-wash: rgba(58, 90, 140, 0.08);
-  --accent-line: rgba(58, 90, 140, 0.32);
-  --hover: rgba(0, 0, 0, 0.022);
+  --paper: #f7f5f1;
+  --panel: #fffefc;
+  --ink: #23241f;
+  --muted: #6d6f6a;
+  --faint: #9d9e98;
+  --hairline: #e8e5dd;
+  --rule: #ddd9cf;
+  --accent: #44618c;
+  --accent-wash: rgba(68, 97, 140, 0.08);
+  --accent-line: rgba(68, 97, 140, 0.32);
+  --hover: rgba(35, 36, 31, 0.025);
   --radius: 6px;
   --pad: 14px;
   --gap: 12px;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --mono: "SF Mono", "IBM Plex Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --serif: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --mono: "IBM Plex Mono", "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   --shell-pad-inline: clamp(10px, 1vw, 18px);
   --shell-pad-block: clamp(12px, 1.6vw, 20px);
   --lab-row-height: 28px;
@@ -36,6 +37,13 @@ body {
   line-height: 1.4;
   background: var(--paper);
   color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01" 0;
+}
+
+::selection {
+  background: rgba(68, 97, 140, 0.16);
 }
 
 .lab-shell {
@@ -103,17 +111,18 @@ body {
 
 .lab-kicker {
   text-transform: uppercase;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.18em;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--faint);
 }
 
 .lab-topbar h1 {
   margin: 4px 0 2px;
+  font-family: var(--serif);
   font-size: 19px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .lab-workflow-switch {
@@ -130,22 +139,24 @@ body {
   border: 0;
   border-radius: 4px;
   background: transparent;
+  font-family: var(--serif);
   font-size: 19px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.002em;
+  font-feature-settings: "ss02" 0;
   transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
 .lab-workflow-button:hover { background: transparent; }
 
 .lab-workflow-button[data-active="true"] {
-  background: linear-gradient(180deg, rgba(58, 90, 140, 0.15), rgba(58, 90, 140, 0.08));
-  box-shadow: inset 0 0 0 1px rgba(58, 90, 140, 0.16);
+  background: linear-gradient(180deg, rgba(68, 97, 140, 0.15), rgba(68, 97, 140, 0.08));
+  box-shadow: inset 0 0 0 1px rgba(68, 97, 140, 0.16);
   color: var(--accent);
 }
 
 .lab-workflow-button[data-active="true"]:hover {
-  background: linear-gradient(180deg, rgba(58, 90, 140, 0.18), rgba(58, 90, 140, 0.1));
+  background: linear-gradient(180deg, rgba(68, 97, 140, 0.18), rgba(68, 97, 140, 0.1));
 }
 
 .lab-workflow-caret {
@@ -172,6 +183,8 @@ body {
   text-align: left;
   border: 0;
   background: transparent;
+  font-family: var(--serif);
+  font-weight: 500;
 }
 
 .lab-workflow-option.is-active {
@@ -182,7 +195,10 @@ body {
 .lab-topbar p {
   margin: 0;
   color: var(--muted);
+  font-family: var(--serif);
+  font-style: italic;
   font-size: 13px;
+  letter-spacing: 0.005em;
 }
 
 .lab-controls {
@@ -194,8 +210,9 @@ body {
 
 .lab-controls label {
   font-size: 11px;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--muted);
 }
 
@@ -245,7 +262,7 @@ button:disabled {
   font-weight: 600;
 }
 
-#runButton:hover:not(:disabled) { background: #32507c; }
+#runButton:hover:not(:disabled) { background: #3a547c; }
 
 #runButton.is-running {
   background: var(--panel);
@@ -381,13 +398,13 @@ button:disabled {
 }
 
 .lab-sliver-toggle[data-active="true"] {
-  background: linear-gradient(180deg, rgba(58, 90, 140, 0.15), rgba(58, 90, 140, 0.08));
-  box-shadow: inset 0 0 0 1px rgba(58, 90, 140, 0.16);
+  background: linear-gradient(180deg, rgba(68, 97, 140, 0.15), rgba(68, 97, 140, 0.08));
+  box-shadow: inset 0 0 0 1px rgba(68, 97, 140, 0.16);
   color: var(--accent);
 }
 
 .lab-sliver-toggle[data-active="true"]:hover:not(:disabled) {
-  background: linear-gradient(180deg, rgba(58, 90, 140, 0.18), rgba(58, 90, 140, 0.1));
+  background: linear-gradient(180deg, rgba(68, 97, 140, 0.18), rgba(68, 97, 140, 0.1));
 }
 
 .lab-sliver-separator {
@@ -534,7 +551,8 @@ thead th {
   color: var(--muted);
   font-family: var(--sans);
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.015em;
   line-height: 1.2;
   vertical-align: middle;
 }
@@ -551,8 +569,8 @@ thead th {
   color: #59606d;
 }
 .lab-cell-pill.is-audit-system-user {
-  border-color: rgba(58, 90, 140, 0.24);
-  background: rgba(58, 90, 140, 0.08);
+  border-color: rgba(68, 97, 140, 0.24);
+  background: rgba(68, 97, 140, 0.08);
   color: #36557f;
 }
 .lab-cell-pill.is-audit-media-repair {
@@ -587,7 +605,7 @@ thead th {
 
 .lab-audio-popover-trigger:hover:not(:disabled) {
   background: transparent;
-  color: #32507c;
+  color: #3a547c;
 }
 
 .lab-audio-popover {
@@ -636,7 +654,7 @@ thead th {
   max-height: calc(100vh - 36px);
   overflow: auto;
   padding: 20px 22px 18px;
-  border: 1px solid rgba(58, 90, 140, 0.18);
+  border: 1px solid rgba(68, 97, 140, 0.18);
   border-radius: 14px;
   background:
     linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(255, 255, 255, 0.99)),
@@ -655,17 +673,19 @@ thead th {
 .lab-onboarding-kicker {
   margin-bottom: 8px;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--accent);
 }
 
 .lab-onboarding-title {
   margin: 0 0 12px;
+  font-family: var(--serif);
   font-size: clamp(24px, 3.5vw, 32px);
+  font-weight: 500;
   line-height: 1.05;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.005em;
 }
 
 .lab-onboarding-body {
@@ -687,14 +707,16 @@ thead th {
 
 .lab-onboarding-footnote {
   color: var(--muted);
-  font-weight: 600;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
 }
 
 .lab-audio-popover-title {
   margin: 0 0 6px;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-weight: 600;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -751,9 +773,9 @@ th .sort {
   border: 0;
   padding: 0;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--muted);
 }
 
@@ -764,20 +786,21 @@ tbody td {
   font-size: var(--lab-local-row-font-size, var(--lab-rhythm-row-font-size));
   line-height: var(--lab-local-row-line-height, var(--lab-rhythm-row-line-height));
   color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 tbody tr:hover td { background: var(--hover); }
 
-tbody tr.is-selected td { background: rgba(58, 90, 140, 0.12); }
+tbody tr.is-selected td { background: rgba(68, 97, 140, 0.12); }
 
-tbody tr.is-selected td:first-child { box-shadow: inset 2px 0 0 rgba(58, 90, 140, 0.78); }
+tbody tr.is-selected td:first-child { box-shadow: inset 2px 0 0 rgba(68, 97, 140, 0.78); }
 
 tbody tr.active td { background: var(--accent-wash); }
 
 tbody tr.active td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
 
 tbody tr.is-selected.active td {
-  background: linear-gradient(180deg, rgba(58, 90, 140, 0.2), rgba(58, 90, 140, 0.14));
+  background: linear-gradient(180deg, rgba(68, 97, 140, 0.2), rgba(68, 97, 140, 0.14));
 }
 
 tbody td[colspan] {
@@ -812,7 +835,7 @@ input[type="checkbox"] {
 
 .lab-repair-lock-block {
   position: fixed;
-  background: rgba(246, 245, 242, 0.72);
+  background: rgba(247, 245, 241, 0.72);
   backdrop-filter: blur(1.5px);
   pointer-events: auto;
 }
@@ -851,7 +874,7 @@ input[type="checkbox"] {
   left: var(--lock-left);
   width: calc(var(--lock-right) - var(--lock-left));
   height: calc(var(--lock-bottom) - var(--lock-top));
-  border: 1px solid rgba(58, 90, 140, 0.26);
+  border: 1px solid rgba(68, 97, 140, 0.26);
   border-radius: 8px;
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
 }
@@ -880,7 +903,7 @@ input[type="checkbox"] {
   max-height: 100%;
   overflow-y: auto;
   padding: 24px 26px 22px;
-  border: 1px solid rgba(58, 90, 140, 0.18);
+  border: 1px solid rgba(68, 97, 140, 0.18);
   border-radius: 14px;
   background:
     linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(255, 255, 255, 0.99)),
@@ -892,17 +915,19 @@ input[type="checkbox"] {
 .lab-repair-lock-kicker {
   margin-bottom: 8px;
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--accent);
 }
 
 .lab-repair-lock-title {
   margin: 0 0 14px;
+  font-family: var(--serif);
   font-size: clamp(20px, 2.6vw, 26px);
+  font-weight: 500;
   line-height: 1.08;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.005em;
 }
 
 .lab-repair-lock-body p {
@@ -925,7 +950,9 @@ input[type="checkbox"] {
 
 .lab-repair-lock-footnote {
   color: var(--muted);
-  font-weight: 600;
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
 }
 
 .lab-panel {
@@ -953,16 +980,17 @@ input[type="checkbox"] {
 .lab-panel-kicker {
   color: var(--faint);
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font-weight: 500;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 
 .lab-panel-heading {
   color: var(--ink);
+  font-family: var(--serif);
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.002em;
 }
 
 .lab-preview-group,
@@ -990,8 +1018,9 @@ input[type="checkbox"] {
 
 .lab-preview-group label {
   font-size: 11px;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--muted);
 }
 
@@ -1044,7 +1073,7 @@ input[type="checkbox"] {
   font-weight: 600;
 }
 
-.lab-confirm-button:hover:not(:disabled) { background: #32507c; }
+.lab-confirm-button:hover:not(:disabled) { background: #3a547c; }
 
 .lab-confirm-button:disabled {
   background: var(--panel);
@@ -1069,7 +1098,7 @@ input[type="checkbox"] {
 }
 
 .lab-action-button.is-primary:hover:not(:disabled) {
-  background: #32507c;
+  background: #3a547c;
 }
 
 .lab-action-button.is-caution {
@@ -1300,8 +1329,10 @@ input[type="checkbox"] {
 
 .lab-policy-heading h2 {
   margin: 0;
+  font-family: var(--serif);
   font-size: 18px;
   font-weight: 600;
+  letter-spacing: 0.002em;
 }
 
 .lab-policy-heading p {
@@ -1337,8 +1368,11 @@ input[type="checkbox"] {
 
 .lab-dashboard-metric-value {
   margin: 0 0 4px;
+  font-family: var(--serif);
   font-size: 26px;
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .lab-dashboard-metric-label {
@@ -1384,7 +1418,7 @@ input[type="checkbox"] {
 
 .lab-policy-card.is-open {
   border-color: var(--accent-line);
-  box-shadow: inset 0 0 0 1px rgba(58, 90, 140, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(68, 97, 140, 0.08);
 }
 
 .lab-policy-section-header {
@@ -1411,7 +1445,10 @@ input[type="checkbox"] {
 
 .lab-policy-card h3 {
   margin: 0 0 5px;
+  font-family: var(--serif);
   font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.002em;
 }
 
 .lab-policy-card p {
@@ -1550,11 +1587,11 @@ input[type="checkbox"] {
 }
 
 .lab-audit-child-row td {
-  background: rgba(58, 90, 140, 0.04);
+  background: rgba(68, 97, 140, 0.04);
 }
 
 .lab-audit-child-row:hover td {
-  background: rgba(58, 90, 140, 0.06);
+  background: rgba(68, 97, 140, 0.06);
 }
 
 .lab-audit-child-spacer {
@@ -1573,7 +1610,7 @@ input[type="checkbox"] {
   top: 50%;
   width: 8px;
   height: 1px;
-  background: rgba(58, 90, 140, 0.48);
+  background: rgba(68, 97, 140, 0.48);
 }
 
 .lab-audit-child-outcome .lab-cell-text,
@@ -1692,7 +1729,7 @@ input[type="checkbox"] {
 }
 
 .lab-tree-line.is-landing {
-  background: linear-gradient(90deg, rgba(58, 90, 140, 0.07), rgba(58, 90, 140, 0));
+  background: linear-gradient(90deg, rgba(68, 97, 140, 0.07), rgba(68, 97, 140, 0));
 }
 
 .lab-tree-line.is-landing::before {
