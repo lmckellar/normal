@@ -382,7 +382,7 @@ def build_movie_profile_item(
         immersive_candidate_enabled=immersive_candidate_enabled,
     )
     weak_candidate = is_replacement_candidate_quality(quality_label, active_standards) and not is_audio_packaging_owned_movie(diagnostics)
-    if lopsided_result is not None:
+    if lopsided_result is not None and lopsided_result.get("status") == "fail":
         weak_candidate = True
     label = classify_standard_label(domain_results, active_standards, weak_candidate=weak_candidate)
     diagnostics.extend(domain_results_to_diagnostics(domain_results))

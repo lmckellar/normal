@@ -1201,6 +1201,24 @@ class LopsidedEncodeTests(unittest.TestCase):
         codes = {diag.code for diag in item.profile.diagnostics}
         self.assertIn("encode_lopsided_audio_starved", codes)
 
+    def test_low_confidence_lopsided_stays_review_only(self) -> None:
+        facts = self._facts(
+            video_bitrate_kbps=24000,
+            audio_codec="ac3",
+            audio_bitrate_kbps=320,
+            audio_bitrate_estimated=True,
+        )
+        item = build_movie_profile_item(
+            Path("/movies"),
+            Path("/movies/The Matrix (1999)/The Matrix (1999).mkv"),
+            facts,
+            standards=DEFAULT_MOVIE_STANDARDS,
+        )
+        self.assertFalse(item.profile.weak_candidate)
+        self.assertEqual(item.profile.label, "needs_review")
+        codes = {diag.code for diag in item.profile.diagnostics}
+        self.assertIn("encode_lopsided_audio_starved", codes)
+
 
 if __name__ == "__main__":
     unittest.main()

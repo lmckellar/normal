@@ -339,6 +339,7 @@
     state.dashboardProfilePayload = payload;
     state.dashboardProfileSource = source;
     state.dashboardRequestedSource = normalizeSourceKey(requestedSource) || source;
+    state._lopsidedFactsCache = null;
   }
 
   async function refreshDashboardPayload(source, { weakFloor = state.weakFloor } = {}) {

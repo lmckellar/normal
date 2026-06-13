@@ -475,6 +475,10 @@ class WebTests(unittest.TestCase):
         self.assertIn("lab-lopsided-register", NORMALIZE_LAB_FRONTEND)
         self.assertIn("<h3>Lopsided encode thresholds</h3>", NORMALIZE_LAB_FRONTEND)
 
+    def test_dashboard_payload_refresh_invalidates_lopsided_cache(self) -> None:
+        section = NORMALIZE_LAB_JS.split("function updateDashboardPayload(payload, requestedSource = '') {", 1)[1].split("async function refreshDashboardPayload", 1)[0]
+        self.assertIn("state._lopsidedFactsCache = null;", section)
+
     def test_movie_canonical_lists_page_is_wired(self) -> None:
         self.assertIn("Compare Against Canonical Lists", FRONTEND)
         self.assertIn("'/api/movies/canonical-lists'", FRONTEND)
