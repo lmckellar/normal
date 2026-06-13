@@ -96,7 +96,7 @@ Conversely, beneath a certain perceptual threshold even small files are objectiv
 
 Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
 
-**🤲 Universal Naming Convention **
+**🤲 Universal Naming Convention**
 
 The Fi... erm, The Best Solution to resolving the conflicting expectations of downstream clients such as Plex and Jellyfin is to define a Universal Naming Convention  that translates as freely between media API databases like IMDB/TMDB as it does into other clients like Emby, etc.
 
