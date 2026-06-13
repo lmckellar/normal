@@ -76,6 +76,7 @@
     reason: '13ch',
     issue: '13%',
     triage: '8ch',
+    badges: '10ch',
     resolution: '16ch',
     video: '11ch',
     audio: '11ch',
@@ -108,6 +109,7 @@
     { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
     { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: TABLE_WIDTHS.issue },
     { key: 'triage', label: 'Triage', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.triage, tooltip: 'Triage = quality deficit × replacement priority. Higher is worse: the larger the score, the more this encode underperforms its tier and the stronger the case to replace or delete it.' },
+    { key: 'badges', label: 'Badges', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'essential', width: TABLE_WIDTHS.badges },
     { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.resolution },
     { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.video },
     { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop', width: TABLE_WIDTHS.audio },
@@ -3467,6 +3469,7 @@
     }
     if (usesSimpleSelectionShell()) {
       const read = row => {
+        if (key === 'badges') return Array.isArray(row.badges) ? row.badges.length : 0;
         if (key === 'video_bitrate' || key === 'audio_bitrate' || key === 'channels' || key === 'file_size' || key === 'triage') return Number(row[key] || 0);
         return String(row[key] || '').toLowerCase();
       };
@@ -3729,8 +3732,8 @@
     return `
       <tr class="${state.activeRowId === row.result_id ? 'active' : ''}" data-row-id="${escapeHtml(row.result_id)}">
         <td class="lab-cell-foundation lab-cell-select" data-priority="essential"><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
-        <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_value)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_value))}</span></td>
-        <td class="lab-cell-path lab-cell-mono" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${escapeHtml(row.projected_path)}</span></td>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_value)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_value))}</span></td>
+        <td class="lab-cell-path" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${escapeHtml(row.projected_path)}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${normalizeConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
         <td class="lab-cell-status" data-priority="medium"><span class="lab-cell-pill">${escapeHtml(row.reason_bucket)}</span></td>
       </tr>
@@ -3748,9 +3751,10 @@
     return `
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
-        <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
-        <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span>${weakBadgeClusterMarkup(row.badges)}</td>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
+        <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${row.triage == null ? 'No measurable bitrate deficit against the quality floor' : `Triage score ${row.triage} of 10`}"><span class="lab-cell-text">${row.triage == null ? '—' : escapeHtml(String(row.triage))}</span></td>
+        <td class="lab-cell-signal" data-priority="essential">${weakBadgeClusterMarkup(row.badges)}</td>
         <td class="lab-cell-supporting${flagVideo}" data-priority="medium" title="${escapeHtml(row.resolution || '—')}"><span class="lab-cell-text">${escapeHtml(row.resolution || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono${flagVideo}" data-priority="essential" title="${escapeHtml(formatBitrate(row.video_bitrate))}"><span class="lab-cell-text">${escapeHtml(formatBitrate(row.video_bitrate))}</span></td>
         <td class="lab-cell-signal lab-cell-mono${flagAudio}" data-priority="desktop" title="${escapeHtml(formatBitrate(row.audio_bitrate))}">${audioBitrateMarkup}</td>
@@ -3774,7 +3778,7 @@
     return `
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
-        <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}" data-junk-filename-cell>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_path)}" data-junk-filename-cell>
           <span class="lab-cell-text" data-junk-filename-full="${escapeHtml(fileNameFromPath(row.current_path))}">${escapeHtml(fileNameFromPath(row.current_path))}</span>
         </td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
@@ -3849,7 +3853,7 @@
     return `
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked} ${disabled}>` : ''}</td>
-        <td class="lab-cell-anchor lab-cell-mono" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(defaultAudioLabel)}">${audioBitrateMarkup}</td>
         <td class="lab-cell-supporting" data-priority="desktop" title="${escapeHtml(row.default_subtitle || 'None')}">${defaultSubtitleMarkup}</td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
