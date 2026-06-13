@@ -60,9 +60,9 @@ body {
   --lab-rhythm-row-font-size: 12px;
   --lab-rhythm-row-line-height: 1.25;
   --lab-rhythm-row-inline-pad: 10px;
-  --lab-table-select-column-width: 42px;
-  --lab-table-select-pad-inline-start: 12px;
-  --lab-table-select-pad-inline-end: 8px;
+  --lab-table-select-column-width: 28px;
+  --lab-table-select-pad-inline-start: 0px;
+  --lab-table-select-pad-inline-end: 0px;
   --lab-rhythm-row-rule: rgba(28, 29, 31, 0.08);
   --lab-rhythm-panel-header-gap: 12px;
   --lab-rhythm-panel-header-pad: 12px;
@@ -517,6 +517,7 @@ thead th {
 .lab-scan-table td.lab-cell-select {
   padding-left: var(--lab-table-select-pad-inline-start);
   padding-right: var(--lab-table-select-pad-inline-end);
+  text-align: center;
 }
 
 .lab-cell-text {

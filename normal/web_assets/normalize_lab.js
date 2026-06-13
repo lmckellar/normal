@@ -41,66 +41,93 @@
   const ACTIVITY_POLL_MS = 2000;
   const ONBOARDING_DISMISS_KEY = 'normal.onboarding.dismissed.cold';
 
+  const TABLE_WIDTHS = {
+    select: 'var(--lab-table-select-column-width)',
+    anchor: '24%',
+    anchorWide: '30%',
+    projectedPath: '28%',
+    status: '13ch',
+    reason: '13ch',
+    issue: '13%',
+    triage: '8ch',
+    resolution: '16ch',
+    video: '11ch',
+    audio: '11ch',
+    channels: '7ch',
+    audioSummary: '18%',
+    fileSize: '11ch',
+    defaultAudio: '15ch',
+    defaultSubtitle: '13ch',
+    currentDefault: '15%',
+    repairTarget: '17%',
+    rank: '8ch',
+    year: '8ch',
+    inLibrary: '12ch',
+    qualityProfile: '16ch',
+    immersiveAudio: '24%',
+    immersiveQuality: '18%',
+  };
+
   const NORMALIZE_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
-    { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
-    { key: 'projected_path', label: 'Projected Path', columnClass: 'lab-col-path', cellClass: 'lab-cell-path lab-cell-mono', priority: 'desktop', width: '36%' },
-    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '11ch' },
-    { key: 'reason_bucket', label: 'Reason', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'medium', width: '11ch' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: TABLE_WIDTHS.select },
+    { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.anchorWide },
+    { key: 'projected_path', label: 'Projected Path', columnClass: 'lab-col-path', cellClass: 'lab-cell-path lab-cell-mono', priority: 'desktop', width: TABLE_WIDTHS.projectedPath },
+    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.status },
+    { key: 'reason_bucket', label: 'Reason', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'medium', width: TABLE_WIDTHS.reason },
   ];
 
   const WEAK_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
-    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '22%' },
-    { key: 'triage', label: 'Triage', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '8ch', tooltip: 'Triage = quality deficit × replacement priority. Higher is worse: the larger the score, the more this encode underperforms its tier and the stronger the case to replace or delete it.' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '11%' },
-    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '11ch' },
-    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop', width: '11ch' },
-    { key: 'channels', label: 'Ch', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '7ch' },
-    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '18%' },
-    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: TABLE_WIDTHS.select },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.anchor },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: TABLE_WIDTHS.issue },
+    { key: 'triage', label: 'Triage', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.triage, tooltip: 'Triage = quality deficit × replacement priority. Higher is worse: the larger the score, the more this encode underperforms its tier and the stronger the case to replace or delete it.' },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.resolution },
+    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.video },
+    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop', width: TABLE_WIDTHS.audio },
+    { key: 'channels', label: 'Ch', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: TABLE_WIDTHS.channels },
+    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop', width: TABLE_WIDTHS.audioSummary },
+    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: TABLE_WIDTHS.fileSize },
   ];
 
   const JUNK_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
-    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '22%' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '11%' },
-    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '11ch' },
-    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop', width: '11ch' },
-    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium', width: '11ch' },
-    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '18%' },
-    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: TABLE_WIDTHS.select },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.anchor },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: TABLE_WIDTHS.issue },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.resolution },
+    { key: 'video_bitrate', label: 'Video', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.video },
+    { key: 'audio_bitrate', label: 'Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'desktop', width: TABLE_WIDTHS.audio },
+    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal', priority: 'medium', width: TABLE_WIDTHS.status },
+    { key: 'audio_summary', label: 'Audio Summary', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'desktop', width: TABLE_WIDTHS.audioSummary },
+    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: TABLE_WIDTHS.fileSize },
   ];
 
   const REPAIR_HEADERS = [
-    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: 'var(--lab-table-select-column-width)' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: '24%' },
-    { key: 'audio_bitrate', label: 'Default Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '15ch' },
-    { key: 'default_subtitle', label: 'Default Subtitle', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '13ch' },
-    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: '13%' },
-    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '15%' },
-    { key: 'repair_target', label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '17%' },
-    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '16ch' },
-    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '11ch' },
+    { key: 'select', label: '', columnClass: 'lab-col-select', priority: 'essential', width: TABLE_WIDTHS.select },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.anchor },
+    { key: 'audio_bitrate', label: 'Default Audio', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: TABLE_WIDTHS.defaultAudio },
+    { key: 'default_subtitle', label: 'Default Subtitle', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: TABLE_WIDTHS.defaultSubtitle },
+    { key: 'issue', label: 'Issue', columnClass: 'lab-col-issue', cellClass: 'lab-cell-decision', priority: 'essential', width: TABLE_WIDTHS.issue },
+    { key: 'current_default', label: 'Current Default', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.currentDefault },
+    { key: 'repair_target', label: 'Repair Target', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: TABLE_WIDTHS.repairTarget },
+    { key: 'resolution', label: 'Resolution', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: TABLE_WIDTHS.resolution },
+    { key: 'file_size', label: 'Size', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: TABLE_WIDTHS.fileSize },
   ];
 
   const CANONICAL_HEADERS = [
-    { key: 'rank', label: 'Rank', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '8ch' },
+    { key: 'rank', label: 'Rank', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.rank },
     { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
-    { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '8ch' },
-    { key: 'in_library', label: 'In Library', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '12ch' },
-    { key: 'quality_profile', label: 'Quality Profile', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: '16ch' },
-    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'desktop', width: '24%' },
+    { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: TABLE_WIDTHS.year },
+    { key: 'in_library', label: 'In Library', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.inLibrary },
+    { key: 'quality_profile', label: 'Quality Profile', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'desktop', width: TABLE_WIDTHS.qualityProfile },
+    { key: 'current_path', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'desktop', width: TABLE_WIDTHS.anchor },
   ];
 
   const IMMERSIVE_HEADERS = [
+    { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.year },
     { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
-    { key: 'status', label: 'Status', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: '13ch' },
-    { key: 'year', label: 'Year', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '8ch' },
-    { key: 'audio_summary', label: 'Audio', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: '24%', tooltip: 'Every row here was probed and carries no Atmos / DTS:X object track — only the channel-based (surround) mix. The codec and layout shown describe that surround track.' },
-    { key: 'quality_profile', label: 'Quality Profile', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: '18%' },
+    { key: 'status', label: 'Status', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.status },
+    { key: 'audio_summary', label: 'Audio', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: TABLE_WIDTHS.immersiveAudio, tooltip: 'Every row here was probed and carries no Atmos / DTS:X object track — only the channel-based (surround) mix. The codec and layout shown describe that surround track.' },
+    { key: 'quality_profile', label: 'Quality Profile', columnClass: 'lab-col-resolution', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.immersiveQuality },
   ];
 
   const state = {
@@ -3704,9 +3731,9 @@
     const yearTooltip = needsNormalization ? 'Year requires file normalization to display!' : String(row.year || '—');
     return `
       <tr data-row-id="${escapeHtml(row.row_id)}">
-        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(titleTooltip)}"><span class="lab-cell-text">${escapeHtml(row.title || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(yearTooltip)}"><span class="lab-cell-text" title="${escapeHtml(yearTooltip)}">${escapeHtml(String(row.year || '—'))}</span></td>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(titleTooltip)}"><span class="lab-cell-text" title="${escapeHtml(titleTooltip)}">${escapeHtml(row.title || '—')}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${immersiveVerdictPillClass(row.verdict)}">${escapeHtml(immersiveVerdictDisplayLabel(row.verdict))}</span></td>
-        <td class="lab-cell-signal lab-cell-mono" data-priority="medium" title="${escapeHtml(yearTooltip)}"><span class="lab-cell-text">${escapeHtml(String(row.year || '—'))}</span></td>
         <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(row.audio_summary || '—')}">${audioSummaryMarkup}</td>
         <td class="lab-cell-supporting" data-priority="medium" title="${escapeHtml(row.quality_profile || '—')}"><span class="lab-cell-text">${escapeHtml(row.quality_profile || '—')}</span></td>
       </tr>
