@@ -90,8 +90,9 @@
     year: 'var(--lab-table-foundation-column-width)',
     inLibrary: '12ch',
     qualityProfile: '16ch',
-    immersiveAudio: '24%',
-    immersiveQuality: '18%',
+    category: '17ch',
+    verdict: '20ch',
+    compactMeasure: '14ch',
   };
 
   const NORMALIZE_HEADERS = [
@@ -151,10 +152,10 @@
   const IMMERSIVE_HEADERS = [
     { key: 'year', label: 'Year', columnClass: 'lab-col-foundation lab-col-signal', cellClass: 'lab-cell-foundation lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.year },
     { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
-    { key: 'trait', label: 'Format', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.status },
-    { key: 'status', label: 'Status', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.status },
-    { key: 'capability', label: 'Local', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.status },
-    { key: 'coverage', label: 'Copy Coverage', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.immersiveAudio },
+    { key: 'trait', label: 'Format', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.category },
+    { key: 'status', label: 'Status', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.verdict },
+    { key: 'capability', label: 'Local', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.category },
+    { key: 'coverage', label: 'Copy Coverage', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.compactMeasure },
   ];
 
   const state = {

@@ -837,6 +837,20 @@ class WebTests(unittest.TestCase):
         self.assertIn("columnClass: 'lab-col-foundation lab-col-signal'", widths_js)
         self.assertIn("width: 'auto'", widths_js)
 
+    def test_format_upgrade_columns_use_semantic_content_widths(self) -> None:
+        widths_js = self.workbench_js_source()
+        self.assertIn("category: '17ch'", widths_js)
+        self.assertIn("verdict: '20ch'", widths_js)
+        self.assertIn("compactMeasure: '14ch'", widths_js)
+        self.assertIn("key: 'trait', label: 'Format'", widths_js)
+        self.assertIn("width: TABLE_WIDTHS.category", widths_js)
+        self.assertIn("key: 'status', label: 'Status'", widths_js)
+        self.assertIn("width: TABLE_WIDTHS.verdict", widths_js)
+        self.assertIn("key: 'coverage', label: 'Copy Coverage'", widths_js)
+        self.assertIn("width: TABLE_WIDTHS.compactMeasure", widths_js)
+        self.assertNotIn("immersiveAudio:", widths_js)
+        self.assertNotIn("immersiveQuality:", widths_js)
+
     def test_normalize_lab_audio_repair_buttons_are_bound_to_mux_actions(self) -> None:
         self.assertIn("el.repairActionButton.addEventListener('click', () => {", NORMALIZE_LAB_JS)
         self.assertIn("const request = runSelectedRepairAction(action);", NORMALIZE_LAB_JS)
