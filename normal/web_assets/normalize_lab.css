@@ -551,6 +551,14 @@ thead th {
   font-size: 11px;
 }
 
+.lab-cell-path .lab-path-dir {
+  color: var(--muted);
+}
+
+.lab-cell-path .lab-path-file {
+  color: var(--ink);
+}
+
 .lab-cell-signal,
 .lab-cell-status {
   text-align: left;

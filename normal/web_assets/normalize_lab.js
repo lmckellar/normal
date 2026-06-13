@@ -870,6 +870,13 @@
     return parts.length ? parts[parts.length - 1] : String(path || '');
   }
 
+  function projectedPathMarkup(path) {
+    const raw = String(path || '');
+    const cut = raw.lastIndexOf('/');
+    if (cut < 0) return escapeHtml(raw);
+    return `<span class="lab-path-dir">${escapeHtml(raw.slice(0, cut + 1))}</span><span class="lab-path-file">${escapeHtml(raw.slice(cut + 1))}</span>`;
+  }
+
   function parseTitleYearFromPath(path) {
     const stem = fileNameFromPath(path).replace(/\.[^.]+$/, '');
     const match = stem.match(/^(.+?)\s*\((\d{4})\)/);
@@ -3733,7 +3740,7 @@
       <tr class="${state.activeRowId === row.result_id ? 'active' : ''}" data-row-id="${escapeHtml(row.result_id)}">
         <td class="lab-cell-foundation lab-cell-select" data-priority="essential"><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_value)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_value))}</span></td>
-        <td class="lab-cell-path" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${escapeHtml(row.projected_path)}</span></td>
+        <td class="lab-cell-path" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${projectedPathMarkup(row.projected_path)}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${normalizeConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
         <td class="lab-cell-status" data-priority="medium"><span class="lab-cell-pill">${escapeHtml(row.reason_bucket)}</span></td>
       </tr>
