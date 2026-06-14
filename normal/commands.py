@@ -139,6 +139,16 @@ def run_web(
     allow_roots: list[Path] | None = None,
     allow_peers: list[str] | None = None,
 ) -> int:
+    if unsafe_remote and not (allow_peers or []):
+        raise ValueError(
+            "--unsafe-remote admits no clients without --allow-peer; add a peer CIDR "
+            "(e.g. --allow-peer 192.168.1.0/24) or drop --unsafe-remote."
+        )
+    if (allow_peers or []) and not unsafe_remote:
+        raise ValueError(
+            "--allow-peer lets LAN clients load the page but every mutation is rejected "
+            "on the Host check; add --unsafe-remote to serve them, or drop --allow-peer."
+        )
     default_source = None
     if source is not None:
         default_source = ensure_source_directory(source)

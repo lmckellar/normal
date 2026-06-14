@@ -155,7 +155,11 @@ def handle_movie_junk(args: argparse.Namespace) -> int:
 
 
 def handle_web(args: argparse.Namespace) -> int:
-    return run_web(host=args.host, port=args.port, source=args.source, omdb_key=args.omdb_key, tmdb_key=args.tmdb_key, unsafe_remote=args.unsafe_remote, allow_roots=args.allow_root, allow_peers=args.allow_peer)
+    try:
+        return run_web(host=args.host, port=args.port, source=args.source, omdb_key=args.omdb_key, tmdb_key=args.tmdb_key, unsafe_remote=args.unsafe_remote, allow_roots=args.allow_root, allow_peers=args.allow_peer)
+    except ValueError as exc:
+        print(f"normal: {exc}", file=sys.stderr)
+        return 1
 
 
 def main(argv: list[str] | None = None) -> int:
