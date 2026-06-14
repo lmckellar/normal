@@ -28,3 +28,41 @@ jobs:
 
       - name: Run tests
         run: python -m unittest discover -s tests
+
+  artifact-smoke:
+    name: Installed wheel smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir dist
+
+      - name: Install wheel into a clean environment
+        run: |
+          python -m venv /tmp/smoke-venv
+          /tmp/smoke-venv/bin/python -m pip install --upgrade pip
+          /tmp/smoke-venv/bin/python -m pip install dist/*.whl
+
+      - name: Smoke the installed artifact from outside the checkout
+        working-directory: /tmp
+        run: |
+          /tmp/smoke-venv/bin/normal --help
+          /tmp/smoke-venv/bin/python - <<'PY'
+          from importlib import resources
+
+          for name in ("moron_encoders.json", "immersive_seeds.json", "title_trait_corpus.json"):
+              resources.files("normal").joinpath("data", name).read_text(encoding="utf-8")
+          assets = {entry.name for entry in resources.files("normal").joinpath("web_assets").iterdir()}
+          missing = {"normalize_lab.js", "normalize_lab.css", "normalize_lab.html"} - assets
+          assert not missing, f"missing web assets: {missing}"
+          print("package data present in installed wheel")
+          PY
