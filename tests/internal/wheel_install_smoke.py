@@ -25,18 +25,118 @@ _COPY_IGNORE = shutil.ignore_patterns(
 # (`read_web_asset_text`) so a wheel that ships `normal.web` but drops the
 # `web_assets` package-data still fails.
 _VERIFY_SCRIPT = """
+import json
+import os
+import re
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+
 import normal.web.server as server
 import normal.movie_immersive_confirmations as immersive
 import normal.movie_moron_encoders as moron
 
-html = server.read_web_asset_text("normalize_lab.html")
-assert html.strip(), "normalize_lab.html shipped empty"
+template = server.read_web_asset_text("normalize_lab.html")
+assert template.strip(), "normalize_lab.html shipped empty"
 for _route, (asset_name, _mime) in server.WEB_STATIC_ASSETS.items():
     assert server.read_web_asset_text(asset_name).strip(), asset_name + " missing/empty"
 
 # Bundled data/*.json package-data must ship too (immersive seed lists).
 assert immersive.SEED_TITLES, "immersive seed data missing from wheel"
 assert moron.lookup_moron_encoder("YIFY"), "moron encoder seed data missing from wheel"
+
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+
+omdb_key = "wheel-smoke-omdb-secret"
+tmdb_key = "wheel-smoke-tmdb-secret"
+env = os.environ.copy()
+env["OMDB_KEY"] = omdb_key
+env["TMDB_KEY"] = tmdb_key
+process = subprocess.Popen(
+    [sys.executable, "-m", "normal", "web", "--host", "127.0.0.1", "--port", str(port)],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    text=True,
+    env=env,
+)
+base_url = "http://127.0.0.1:" + str(port)
+
+def request(path, *, data=None, token=None):
+    headers = {}
+    if data is not None:
+        headers["Content-Type"] = "application/json"
+    if token is not None:
+        headers["X-Normal-Token"] = token
+    return urllib.request.urlopen(
+        urllib.request.Request(base_url + path, data=data, headers=headers),
+        timeout=2,
+    )
+
+try:
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            root_response = request("/")
+            break
+        except (OSError, urllib.error.URLError):
+            if process.poll() is not None:
+                stdout, stderr = process.communicate()
+                raise AssertionError("web server exited early\\nstdout:\\n" + stdout + "\\nstderr:\\n" + stderr)
+            if time.monotonic() >= deadline:
+                raise AssertionError("timed out waiting for installed web server")
+            time.sleep(0.1)
+
+    assert root_response.status == 200
+    html = root_response.read().decode("utf-8")
+    for header in server.SECURITY_HEADERS:
+        assert root_response.headers.get(header), header + " missing from /"
+    assert omdb_key not in html, "raw OMDB key leaked into bootstrap"
+    assert tmdb_key not in html, "raw TMDB key leaked into bootstrap"
+
+    bootstrap_match = re.search(
+        r'<script type="application/json" id="normal-boot">(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    assert bootstrap_match, "bootstrap JSON missing"
+    bootstrap = json.loads(bootstrap_match.group(1))
+    assert bootstrap["omdbAvailable"] is True
+    assert bootstrap["tmdbAvailable"] is True
+    token = bootstrap["token"]
+    assert token
+
+    asset_urls = re.findall(r'(?:href|src)="(/assets/[^"]+\\?v=[0-9a-f]{12})"', html)
+    assert len(asset_urls) == len(server.WEB_STATIC_ASSETS), asset_urls
+    for asset_url in asset_urls:
+        with request(asset_url) as asset_response:
+            assert asset_response.status == 200
+            assert asset_response.read(), asset_url + " served empty"
+            for header in server.SECURITY_HEADERS:
+                assert asset_response.headers.get(header), header + " missing from " + asset_url
+
+    body = b"{}"
+    try:
+        request("/api/settings/preferences", data=body)
+        raise AssertionError("mutation POST without token unexpectedly succeeded")
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 403, exc.code
+
+    with request("/api/settings/preferences", data=body, token=token) as mutation_response:
+        assert mutation_response.status == 200
+        assert "operator_preferences" in json.load(mutation_response)
+finally:
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
 print("WHEEL_SMOKE_OK")
 """
 
@@ -60,7 +160,7 @@ class WheelInstallSmokeTests(unittest.TestCase):
     def test_wheel_ships_web_package_and_assets(self) -> None:
         if os.environ.get("NORMAL_TEST_WHEEL", "").strip() not in {"1", "true", "yes"}:
             self.skipTest("set NORMAL_TEST_WHEEL=1 to run the wheel install smoke test")
-        if importlib.util.find_spec("build") is None:
+        if importlib.util.find_spec("build.__main__") is None:
             self.skipTest("the 'build' package is required (pip install build)")
 
         with tempfile.TemporaryDirectory(prefix="normal-wheel-smoke-") as tmp:
