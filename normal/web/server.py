@@ -257,13 +257,13 @@ def build_handler(
 
         def do_POST(self) -> None:
             ctx = self._request_context()
-            route = self.path
-            handler = post_routes.get(route)
-            if handler is None:
-                ctx.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
-                return
             try:
                 security.check_peer(self, allowed_peers=allowed_peers)
+                route = self.path
+                handler = post_routes.get(route)
+                if handler is None:
+                    ctx.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+                    return
                 security.check_post(
                     self,
                     bound_port=self.server.server_address[1],

@@ -79,18 +79,18 @@ def parse_allowed_hosts(values: list[str]) -> frozenset[str]:
 def check_peer(
     handler: BaseHTTPRequestHandler,
     *,
-    allowed_peers: tuple[ipaddress._BaseNetwork, ...],
+    allowed_peers: tuple[ipaddress._BaseNetwork, ...] = (),
 ) -> None:
     try:
         peer = ipaddress.ip_address(handler.client_address[0])
     except (ValueError, IndexError):
-        raise PostRejected(HTTPStatus.FORBIDDEN, "peer not allowed")
+        raise PostRejected(HTTPStatus.FORBIDDEN, "remote peer not allowed")
     if peer.version == 6 and peer.ipv4_mapped is not None:
         peer = peer.ipv4_mapped
     for network in LOOPBACK_NETWORKS + allowed_peers:
         if peer.version == network.version and peer in network:
             return
-    raise PostRejected(HTTPStatus.FORBIDDEN, "peer not allowed")
+    raise PostRejected(HTTPStatus.FORBIDDEN, "remote peer not allowed")
 
 
 def check_post(

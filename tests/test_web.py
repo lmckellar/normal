@@ -1377,14 +1377,15 @@ class WebPeerGateTests(unittest.TestCase):
         return types.SimpleNamespace(client_address=(ip, 50000))
 
     def test_loopback_is_allowed_without_an_allowlist(self):
-        check_peer(self.handler("127.0.0.1"), allowed_peers=())
-        check_peer(self.handler("::1"), allowed_peers=())
-        check_peer(self.handler("::ffff:127.0.0.1"), allowed_peers=())
+        check_peer(self.handler("127.0.0.1"))
+        check_peer(self.handler("::1"))
+        check_peer(self.handler("::ffff:127.0.0.1"))
 
     def test_lan_peer_is_rejected_by_default(self):
         with self.assertRaises(PostRejected) as ctx:
-            check_peer(self.handler("192.168.1.20"), allowed_peers=())
+            check_peer(self.handler("192.168.1.20"))
         self.assertEqual(ctx.exception.status, HTTPStatus.FORBIDDEN)
+        self.assertEqual(ctx.exception.message, "remote peer not allowed")
 
     def test_lan_peer_is_allowed_only_inside_the_allowlist(self):
         peers = parse_allowed_peers(["192.168.1.0/24"])
@@ -1393,8 +1394,45 @@ class WebPeerGateTests(unittest.TestCase):
             check_peer(self.handler("192.168.2.20"), allowed_peers=peers)
 
     def test_malformed_peer_is_rejected(self):
-        with self.assertRaises(PostRejected):
-            check_peer(self.handler("not-an-ip"), allowed_peers=())
+        with self.assertRaises(PostRejected) as ctx:
+            check_peer(self.handler("not-an-ip"))
+        self.assertEqual(ctx.exception.message, "remote peer not allowed")
+
+    def test_remote_get_root_and_assets_are_rejected_before_routing(self):
+        handler_type = build_handler()
+
+        for path in ("/", "/assets/workbench.js"):
+            responses = []
+            handler = handler_type.__new__(handler_type)
+            handler.client_address = ("192.168.1.20", 50000)
+            handler.path = path
+            handler._request_context = lambda: types.SimpleNamespace(
+                respond_json=lambda payload, status=None: responses.append((payload, status))
+            )
+
+            handler.do_GET()
+
+            self.assertEqual(
+                responses,
+                [({"error": "remote peer not allowed"}, HTTPStatus.FORBIDDEN)],
+            )
+
+    def test_remote_post_is_rejected_before_route_lookup(self):
+        handler_type = build_handler()
+        responses = []
+        handler = handler_type.__new__(handler_type)
+        handler.client_address = ("192.168.1.20", 50000)
+        handler.path = "/api/not-a-route"
+        handler._request_context = lambda: types.SimpleNamespace(
+            respond_json=lambda payload, status=None: responses.append((payload, status))
+        )
+
+        handler.do_POST()
+
+        self.assertEqual(
+            responses,
+            [({"error": "remote peer not allowed"}, HTTPStatus.FORBIDDEN)],
+        )
 
 
 class WebPostGateTests(unittest.TestCase):
