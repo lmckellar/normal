@@ -123,7 +123,6 @@ def serve_web_ui(
     default_source: Path | None = None,
     omdb_key: str | None = None,
     tmdb_key: str | None = None,
-    unsafe_remote: bool = False,
     approved_roots: ApprovedRoots | None = None,
     allowed_peers: tuple = (),
     allowed_hosts: frozenset[str] = frozenset(),
@@ -131,7 +130,6 @@ def serve_web_ui(
     state.CREDENTIAL_STORE.seed_from_boot(omdb_key=omdb_key, tmdb_key=tmdb_key)
     handler = build_handler(
         default_source=default_source,
-        unsafe_remote=unsafe_remote,
         approved_roots=approved_roots,
         allowed_peers=allowed_peers,
         allowed_hosts=allowed_hosts,
@@ -215,7 +213,6 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
 
 def build_handler(
     default_source: Path | None = None,
-    unsafe_remote: bool = False,
     approved_roots: ApprovedRoots | None = None,
     allowed_peers: tuple = (),
     allowed_hosts: frozenset[str] = frozenset(),
@@ -267,7 +264,7 @@ def build_handler(
                 security.check_post(
                     self,
                     bound_port=self.server.server_address[1],
-                    allowed_hosts=allowed_hosts if unsafe_remote else frozenset(),
+                    allowed_hosts=allowed_hosts,
                 )
                 payload = ctx.read_json_body()
                 handler(ctx, payload)

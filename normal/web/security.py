@@ -37,17 +37,35 @@ def _default_port(scheme: str) -> int:
 
 
 def parse_origin(value: str) -> RequestOrigin:
-    parsed = urlsplit(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError:
         raise PostRejected(HTTPStatus.FORBIDDEN, "origin not allowed")
-    return RequestOrigin(parsed.scheme, _normal_host(parsed.hostname), parsed.port or _default_port(parsed.scheme))
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise PostRejected(HTTPStatus.FORBIDDEN, "origin not allowed")
+    return RequestOrigin(parsed.scheme, _normal_host(parsed.hostname), port or _default_port(parsed.scheme))
 
 
 def parse_host(value: str) -> RequestOrigin:
-    parsed = urlsplit("//" + value)
-    if not parsed.hostname:
+    if not value or any(char in value for char in "/?#@"):
         raise PostRejected(HTTPStatus.FORBIDDEN, "host not allowed")
-    return RequestOrigin(None, _normal_host(parsed.hostname), parsed.port)
+    try:
+        parsed = urlsplit("//" + value)
+        port = parsed.port
+    except ValueError:
+        raise PostRejected(HTTPStatus.FORBIDDEN, "host not allowed")
+    if not parsed.hostname or parsed.username is not None or parsed.password is not None:
+        raise PostRejected(HTTPStatus.FORBIDDEN, "host not allowed")
+    return RequestOrigin(None, _normal_host(parsed.hostname), port)
 
 
 def parse_allowed_peers(values: list[str]) -> tuple[ipaddress._BaseNetwork, ...]:

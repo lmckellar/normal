@@ -1301,7 +1301,6 @@ class WebPostSecurityTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 403)
         with tempfile.TemporaryDirectory() as tmpdir:
             with self.run_test_server(
-                unsafe_remote=True,
                 allowed_hosts=parse_allowed_hosts(["evil.example.com"]),
             ) as base_url:
                 port = urllib.parse.urlsplit(base_url).port
@@ -1453,6 +1452,13 @@ class WebPostGateTests(unittest.TestCase):
             allowed_hosts=frozenset(),
         )
 
+    def test_ipv6_loopback_origin_with_exact_port_is_allowed(self) -> None:
+        check_post(
+            self.handler(Host="[::1]:8765", Origin="http://[::1]:8765"),
+            bound_port=8765,
+            allowed_hosts=frozenset(),
+        )
+
     def test_origin_scheme_must_match_http_server(self) -> None:
         with self.assertRaises(PostRejected):
             check_post(
@@ -1468,6 +1474,26 @@ class WebPostGateTests(unittest.TestCase):
                 bound_port=8765,
                 allowed_hosts=frozenset(),
             )
+
+    def test_malformed_host_and_origin_authorities_are_rejected(self) -> None:
+        for host in ("localhost:not-a-port", "user@localhost:8765", "localhost:8765/path"):
+            with self.assertRaises(PostRejected):
+                check_post(
+                    self.handler(Host=host),
+                    bound_port=8765,
+                    allowed_hosts=frozenset(),
+                )
+        for origin in (
+            "http://localhost:not-a-port",
+            "http://user@localhost:8765",
+            "http://localhost:8765/path",
+        ):
+            with self.assertRaises(PostRejected):
+                check_post(
+                    self.handler(Origin=origin),
+                    bound_port=8765,
+                    allowed_hosts=frozenset(),
+                )
 
     def test_negative_content_length_is_rejected(self) -> None:
         with self.assertRaises(PostRejected) as ctx:
@@ -1654,22 +1680,33 @@ class WebApprovedRootTests(unittest.TestCase):
     def test_run_web_requires_explicit_peer_and_host_for_remote_access(self) -> None:
         from normal import commands
 
-        with self.assertRaisesRegex(ValueError, "requires both"):
+        with self.assertRaisesRegex(ValueError, "provided together"):
             commands.run_web(
                 host="0.0.0.0",
                 port=0,
-                unsafe_remote=True,
                 allow_peers=["192.168.1.0/24"],
             )
         with patch("normal.commands.serve_web_ui") as serve:
             commands.run_web(
                 host="0.0.0.0",
                 port=0,
+                allow_peers=["192.168.1.0/24"],
+                allow_hosts=["normalbox.local"],
+            )
+        self.assertEqual(serve.call_args.kwargs["allowed_hosts"], frozenset({"normalbox.local"}))
+        self.assertNotIn("unsafe_remote", serve.call_args.kwargs)
+
+    def test_run_web_rejects_legacy_unsafe_remote_switch(self) -> None:
+        from normal import commands
+
+        with self.assertRaisesRegex(ValueError, "no longer supported"):
+            commands.run_web(
+                host="0.0.0.0",
+                port=0,
                 unsafe_remote=True,
                 allow_peers=["192.168.1.0/24"],
-                allow_hosts=["normal.local"],
+                allow_hosts=["normalbox.local"],
             )
-        self.assertEqual(serve.call_args.kwargs["allowed_hosts"], frozenset({"normal.local"}))
 
 
 if __name__ == "__main__":

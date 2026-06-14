@@ -140,15 +140,14 @@ def run_web(
     allow_peers: list[str] | None = None,
     allow_hosts: list[str] | None = None,
 ) -> int:
-    if unsafe_remote and (not (allow_peers or []) or not (allow_hosts or [])):
+    if unsafe_remote:
         raise ValueError(
-            "--unsafe-remote requires both --allow-peer and --allow-host; explicitly "
-            "allow each client network and request host, or drop --unsafe-remote."
+            "--unsafe-remote is no longer supported; use both --allow-peer and "
+            "--allow-host to explicitly enable remote access."
         )
-    if ((allow_peers or []) or (allow_hosts or [])) and not unsafe_remote:
+    if bool(allow_peers or []) != bool(allow_hosts or []):
         raise ValueError(
-            "--allow-peer/--allow-host require --unsafe-remote; enable all three "
-            "explicitly for remote access, or remove the remote allowlists."
+            "--allow-peer and --allow-host must be provided together for remote access."
         )
     default_source = None
     if source is not None:
@@ -161,7 +160,7 @@ def run_web(
     approved_roots = ApprovedRoots.from_paths(seed_roots)
     allowed_peers = parse_allowed_peers(allow_peers or [])
     allowed_hosts = parse_allowed_hosts(allow_hosts or [])
-    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, unsafe_remote=unsafe_remote, approved_roots=approved_roots, allowed_peers=allowed_peers, allowed_hosts=allowed_hosts)
+    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, approved_roots=approved_roots, allowed_peers=allowed_peers, allowed_hosts=allowed_hosts)
     return 0
 
 
