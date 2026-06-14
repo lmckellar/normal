@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib import resources
 from pathlib import Path
 from typing import Callable
+from urllib.parse import urlsplit
 
 from normal.movie_profile import OPERATOR_PREFERENCES_PATH
 from . import state
@@ -240,7 +241,7 @@ def build_handler(
             except PostRejected as exc:
                 ctx.respond_json({"error": exc.message}, status=exc.status)
                 return
-            route = self.path.split("?", 1)[0]
+            route = urlsplit(self.path).path
             handler = get_routes.get(route)
             if handler is None:
                 ctx.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
@@ -256,17 +257,17 @@ def build_handler(
             ctx = self._request_context()
             try:
                 security.check_peer(self, allowed_peers=allowed_peers)
-                route = self.path
+                route = urlsplit(self.path).path
                 handler = post_routes.get(route)
                 if handler is None:
                     ctx.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
                     return
-                security.check_post(
+                content_length = security.check_post(
                     self,
                     bound_port=self.server.server_address[1],
                     allowed_hosts=allowed_hosts,
                 )
-                payload = ctx.read_json_body()
+                payload = ctx.read_json_body(content_length)
                 handler(ctx, payload)
             except PostRejected as exc:
                 ctx.respond_json({"error": exc.message}, status=exc.status)

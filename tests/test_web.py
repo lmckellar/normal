@@ -1243,6 +1243,17 @@ class WebPostSecurityTests(unittest.TestCase):
                 ) as response:
                     self.assertEqual(response.status, 200)
 
+    def test_post_route_ignores_query_string(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.run_test_server() as base_url:
+                with self.post(
+                    base_url,
+                    "/api/source/scan-warning?probe=1",
+                    headers=self.valid_headers(),
+                    data=self.scan_warning_body(tmpdir),
+                ) as response:
+                    self.assertEqual(response.status, 200)
+
     def test_missing_token_is_rejected_before_handler_runs(self) -> None:
         with patch("normal.web.server.handle_source_scan_warning") as spy:
             with self.run_test_server() as base_url:
@@ -1503,6 +1514,16 @@ class WebPostGateTests(unittest.TestCase):
                 allowed_hosts=frozenset(),
             )
         self.assertEqual(ctx.exception.status, HTTPStatus.BAD_REQUEST)
+
+    def test_validated_content_length_is_returned_for_the_body_read(self) -> None:
+        self.assertEqual(
+            check_post(
+                self.handler(**{"Content-Length": "123"}),
+                bound_port=8765,
+                allowed_hosts=frozenset(),
+            ),
+            123,
+        )
 
     def test_missing_content_length_is_rejected(self) -> None:
         handler = self.handler()

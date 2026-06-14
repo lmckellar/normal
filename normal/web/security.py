@@ -116,7 +116,7 @@ def check_post(
     *,
     bound_port: int,
     allowed_hosts: frozenset[str],
-) -> None:
+) -> int:
     token = handler.headers.get("X-Normal-Token", "")
     if not hmac.compare_digest(token, MUTATION_TOKEN):
         raise PostRejected(HTTPStatus.FORBIDDEN, "invalid or missing token")
@@ -150,3 +150,4 @@ def check_post(
         raise PostRejected(HTTPStatus.BAD_REQUEST, "invalid Content-Length")
     if content_length > MAX_JSON_BODY:
         raise PostRejected(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "request body too large")
+    return content_length
