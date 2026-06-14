@@ -153,5 +153,48 @@ def validate_source_for_operation(
                 f"{Path(candidate).expanduser().resolve()}"
             )
     return risk.source
+
+
 class SourcePolicyError(RuntimeError):
     pass
+
+
+def _is_link_or_junction(path: Path) -> bool:
+    if path.is_symlink():
+        return True
+    return bool(hasattr(os.path, "isjunction") and os.path.isjunction(path))
+
+
+def validate_candidate_for_mutation(
+    candidate: Path | str,
+    source: Path | str,
+    approved_roots: ApprovedRoots | None = None,
+) -> Path:
+    resolved_source = Path(source).expanduser().resolve()
+    lexical_candidate = Path(candidate).expanduser()
+    if not lexical_candidate.is_absolute():
+        lexical_candidate = lexical_candidate.absolute()
+
+    try:
+        lexical_candidate.relative_to(resolved_source)
+    except ValueError as exc:
+        raise SourcePolicyError(
+            f"Refusing mutation: candidate path escapes source root: {lexical_candidate}"
+        ) from exc
+
+    current = lexical_candidate
+    while current != resolved_source:
+        if _is_link_or_junction(current):
+            raise SourcePolicyError(
+                f"Refusing mutation through symlink or junction: {lexical_candidate}"
+            )
+        current = current.parent
+
+    resolved_candidate = lexical_candidate.resolve()
+    if not path_is_under(resolved_candidate, resolved_source):
+        raise SourcePolicyError(
+            f"Refusing mutation: candidate path escapes source root: {resolved_candidate}"
+        )
+    if approved_roots is not None and not approved_roots.is_approved(resolved_candidate):
+        raise SourcePolicyError(approved_roots.denial_message(resolved_candidate))
+    return resolved_candidate

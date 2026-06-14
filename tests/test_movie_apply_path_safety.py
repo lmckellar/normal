@@ -83,6 +83,20 @@ class MovieApplyPathSafetyTests(unittest.TestCase):
                     entry.unlink()
                 folder.rmdir()
 
+    def test_apply_rejects_stale_symlink_candidate(self) -> None:
+        movie = self.source / "Movie (2024).mkv"
+        target = self.source / "Real Movie (2024).mkv"
+        target.write_text("video", encoding="utf-8")
+        movie.symlink_to(target)
+        change = self._change("file_delete", movie.name, "", movie)
+
+        report = apply_changes_in_place(self.source, [change])
+
+        self.assertEqual(report.applied, [])
+        self.assertEqual(len(report.failed), 1)
+        self.assertTrue(movie.is_symlink())
+        self.assertTrue(target.exists())
+
 
 class CopySourceTreeSymlinkTests(unittest.TestCase):
     def test_symlinks_are_skipped_and_reported_without_dereferencing(self) -> None:

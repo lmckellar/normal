@@ -15,6 +15,7 @@ from normal.movie_profile import (
 from normal.movie_scan import probe_media_facts
 from normal.pathsafe import contained_resolve
 from normal.quality_review import AudioStreamFacts, MediaFacts
+from normal.source_policy import ApprovedRoots, SourcePolicyError, validate_candidate_for_mutation
 
 
 SUPPORTED_AUDIO_DEFAULT_FIX_EXTENSIONS = {".mkv"}
@@ -42,6 +43,7 @@ def fix_english_audio_defaults(
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
     drop_foreign_audio: bool = False,
     progress_callback: ProgressCallback | None = None,
+    approved_roots: ApprovedRoots | None = None,
 ) -> dict[str, Any]:
     source = source_root.resolve()
     fixed: list[dict[str, Any]] = []
@@ -52,12 +54,18 @@ def fix_english_audio_defaults(
         if not contained:
             skipped.append(AudioDefaultFixResult(str(resolved), "skipped", "outside_source").to_dict())
             continue
-        result = fix_english_audio_default(
-            resolved,
-            probe_media=probe_media,
-            drop_foreign_audio=drop_foreign_audio,
-            progress_callback=progress_callback,
-        )
+        try:
+            resolved = validate_candidate_for_mutation(raw_path, source, approved_roots)
+            result = fix_english_audio_default(
+                resolved,
+                probe_media=probe_media,
+                drop_foreign_audio=drop_foreign_audio,
+                progress_callback=progress_callback,
+                mutation_source=source,
+                approved_roots=approved_roots,
+            )
+        except SourcePolicyError as exc:
+            result = AudioDefaultFixResult(str(resolved), "skipped", f"safety_check_failed: {exc}")
         payload = result.to_dict()
         if result.status == "fixed":
             fixed.append(payload)
@@ -76,6 +84,8 @@ def fix_english_audio_default(
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
     drop_foreign_audio: bool = False,
     progress_callback: ProgressCallback | None = None,
+    mutation_source: Path | None = None,
+    approved_roots: ApprovedRoots | None = None,
 ) -> AudioDefaultFixResult:
     resolved = path.expanduser().resolve()
     if not resolved.exists() or not resolved.is_file():
@@ -111,6 +121,8 @@ def fix_english_audio_default(
         return AudioDefaultFixResult(str(resolved), "skipped", "already_default_english", facts=original_facts)
 
     if not drop_foreign_audio and mkvpropedit_available():
+        if mutation_source is not None:
+            resolved = validate_candidate_for_mutation(resolved, mutation_source, approved_roots)
         command = build_mkvpropedit_command(
             resolved,
             audio_defaults=[index == target_ordinal for index in range(len(audio_streams))],
@@ -139,6 +151,8 @@ def fix_english_audio_default(
         temp_path = Path(handle.name)
 
     try:
+        if mutation_source is not None:
+            resolved = validate_candidate_for_mutation(resolved, mutation_source, approved_roots)
         run_ffmpeg_audio_default_fix(
             resolved,
             temp_path,
@@ -154,6 +168,8 @@ def fix_english_audio_default(
             target_ordinal=kept_ordinals.index(target_ordinal),
             drop_foreign_audio=drop_foreign_audio,
         )
+        if mutation_source is not None:
+            resolved = validate_candidate_for_mutation(resolved, mutation_source, approved_roots)
         temp_path.replace(resolved)
         message = "english_default_set"
         removed_count = 0

@@ -21,6 +21,7 @@ from normal.movie_repair_planner import (
 from normal.movie_scan import probe_media_facts
 from normal.pathsafe import contained_resolve
 from normal.quality_review import MediaFacts, SubtitleStreamFacts
+from normal.source_policy import ApprovedRoots, SourcePolicyError, validate_candidate_for_mutation
 
 
 SUPPORTED_SUBTITLE_DEFAULT_FIX_EXTENSIONS = {".mkv"}
@@ -46,6 +47,7 @@ def fix_movie_subtitle_defaults(
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
     progress_callback: ProgressCallback | None = None,
     subtitle_preferences: dict[str, Any] | None = None,
+    approved_roots: ApprovedRoots | None = None,
 ) -> dict[str, Any]:
     source = source_root.resolve()
     fixed: list[dict[str, Any]] = []
@@ -59,12 +61,18 @@ def fix_movie_subtitle_defaults(
         if not contained:
             skipped.append(SubtitleDefaultFixResult(str(resolved), "skipped", "outside_source").to_dict())
             continue
-        result = fix_movie_subtitle_default(
-            resolved,
-            probe_media=probe_media,
-            progress_callback=progress_callback,
-            subtitle_preferences=active_subtitle_preferences,
-        )
+        try:
+            resolved = validate_candidate_for_mutation(raw_path, source, approved_roots)
+            result = fix_movie_subtitle_default(
+                resolved,
+                probe_media=probe_media,
+                progress_callback=progress_callback,
+                subtitle_preferences=active_subtitle_preferences,
+                mutation_source=source,
+                approved_roots=approved_roots,
+            )
+        except SourcePolicyError as exc:
+            result = SubtitleDefaultFixResult(str(resolved), "skipped", f"safety_check_failed: {exc}")
         payload = result.to_dict()
         if result.status == "fixed":
             fixed.append(payload)
@@ -83,6 +91,8 @@ def fix_movie_subtitle_default(
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
     progress_callback: ProgressCallback | None = None,
     subtitle_preferences: dict[str, Any] | None = None,
+    mutation_source: Path | None = None,
+    approved_roots: ApprovedRoots | None = None,
 ) -> SubtitleDefaultFixResult:
     resolved = path.expanduser().resolve()
     if not resolved.exists() or not resolved.is_file():
@@ -109,6 +119,8 @@ def fix_movie_subtitle_default(
         return SubtitleDefaultFixResult(str(resolved), "skipped", plan.message)
 
     if mkvpropedit_available():
+        if mutation_source is not None:
+            resolved = validate_candidate_for_mutation(resolved, mutation_source, approved_roots)
         command = build_mkvpropedit_command(
             resolved,
             subtitle_defaults=[index == plan.target_ordinal for index in range(len(subtitle_streams))],
@@ -134,6 +146,8 @@ def fix_movie_subtitle_default(
         temp_path = Path(handle.name)
 
     try:
+        if mutation_source is not None:
+            resolved = validate_candidate_for_mutation(resolved, mutation_source, approved_roots)
         run_ffmpeg_subtitle_default_fix(
             resolved,
             temp_path,
@@ -145,6 +159,8 @@ def fix_movie_subtitle_default(
         )
         fixed_facts = probe_media(temp_path)
         verify_fixed_subtitle_stream(fixed_facts.subtitle_streams, target_ordinal=plan.target_ordinal)
+        if mutation_source is not None:
+            resolved = validate_candidate_for_mutation(resolved, mutation_source, approved_roots)
         temp_path.replace(resolved)
         return SubtitleDefaultFixResult(str(resolved), "fixed", plan.success_message, facts=fixed_facts)
     except FileNotFoundError:

@@ -1176,6 +1176,20 @@ class WebTests(unittest.TestCase):
                 ],
             )
 
+    def test_delete_movie_junk_files_rejects_symlink_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            target = source / "Movie.sample.mp4"
+            target.write_text("sample", encoding="utf-8")
+            link = source / "Linked.sample.mp4"
+            link.symlink_to(target)
+
+            with self.assertRaisesRegex(RuntimeError, "symlink or junction"):
+                delete_movie_junk_files(source, [link])
+
+            self.assertTrue(link.is_symlink())
+            self.assertTrue(target.exists())
+
 
 class WebPostSecurityTests(unittest.TestCase):
     @contextmanager

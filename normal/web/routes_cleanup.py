@@ -26,7 +26,12 @@ from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
 from normal.movie_scan import VIDEO_EXTENSIONS
 from normal.movie_profile import load_operator_preferences, normalize_delete_mode
 from normal.pathsafe import contained_resolve
-from normal.source_policy import Operation, validate_source_for_operation
+from normal.source_policy import (
+    ApprovedRoots,
+    Operation,
+    validate_candidate_for_mutation,
+    validate_source_for_operation,
+)
 
 from .activity import tracked_probe
 from .http import RequestContext
@@ -83,7 +88,15 @@ def move_path_to_recycle_bin(path: Path) -> None:
     raise RuntimeError("Recycle mode is configured, but no supported trash command is available.")
 
 
-def execute_delete_path(path: Path, kind: str, preferences: dict[str, Any] | None = None) -> str:
+def execute_delete_path(
+    path: Path,
+    kind: str,
+    preferences: dict[str, Any] | None = None,
+    *,
+    source: Path,
+    approved_roots: ApprovedRoots | None = None,
+) -> str:
+    path = validate_candidate_for_mutation(path, source, approved_roots)
     action = delete_mode_for_kind(kind, preferences)
     if action == "recycle":
         move_path_to_recycle_bin(path)
@@ -98,6 +111,7 @@ def delete_movie_junk_files(
     source: Path,
     raw_paths: list[Any],
     preferences: dict[str, Any] | None = None,
+    approved_roots: ApprovedRoots | None = None,
 ) -> dict[str, Any]:
     source_root = source.resolve()
     deleted = []
@@ -119,7 +133,14 @@ def delete_movie_junk_files(
             skipped.append({"path": str(resolved), "reason": "not_current_junk_candidate"})
             continue
         size_bytes = resolved.stat().st_size
-        execute_delete_path(resolved, "junk", preferences)
+        resolved = validate_candidate_for_mutation(raw_path, source_root, approved_roots)
+        execute_delete_path(
+            Path(str(raw_path)).expanduser(),
+            "junk",
+            preferences,
+            source=source_root,
+            approved_roots=approved_roots,
+        )
         deleted.append(str(resolved))
         deleted_media.append({"path": str(resolved), "size_bytes": size_bytes})
 
@@ -159,7 +180,12 @@ def handle_movies_junk_delete(ctx: RequestContext, payload: dict[str, Any]) -> N
         candidate_paths=[Path(str(path)) for path in paths],
     )
     with ctx.handler.activity_tracker.track(source, "Movie junk delete"):
-        result = delete_movie_junk_files(source, paths, load_operator_preferences())
+        result = delete_movie_junk_files(
+            source,
+            paths,
+            load_operator_preferences(),
+            approved_roots=ctx.approved_roots,
+        )
     _record_junk_delete_event(source, result)
     ctx.respond_json(result)
 
@@ -202,6 +228,7 @@ def cleanup_safe_movie_sidecars(
     source: Path,
     folder: Path,
     preferences: dict[str, Any] | None = None,
+    approved_roots: ApprovedRoots | None = None,
 ) -> dict[str, Any]:
     result = preview_safe_movie_sidecar_cleanup(source, folder)
     if not result["folder"]:
@@ -209,9 +236,21 @@ def cleanup_safe_movie_sidecars(
     for sidecar in result["sidecars"]:
         sidecar_path = Path(sidecar)
         if sidecar_path.exists():
-            execute_delete_path(sidecar_path, "media", preferences)
+            execute_delete_path(
+                sidecar_path,
+                "media",
+                preferences,
+                source=source,
+                approved_roots=approved_roots,
+            )
     if folder.exists():
-        execute_delete_path(folder, "media", preferences)
+        execute_delete_path(
+            folder,
+            "media",
+            preferences,
+            source=source,
+            approved_roots=approved_roots,
+        )
     return result
 
 
@@ -254,6 +293,7 @@ def delete_movie_files(
     source_root: Path,
     paths: list[Any],
     preferences: dict[str, Any] | None = None,
+    approved_roots: ApprovedRoots | None = None,
 ) -> dict[str, Any]:
     source = source_root.resolve()
     deleted: list[str] = []
@@ -277,10 +317,22 @@ def delete_movie_files(
             skipped.append({"path": str(resolved), "reason": "not_file"})
             continue
         size_bytes = resolved.stat().st_size
-        execute_delete_path(resolved, "media", preferences)
+        resolved = validate_candidate_for_mutation(raw_path, source, approved_roots)
+        execute_delete_path(
+            Path(str(raw_path)).expanduser(),
+            "media",
+            preferences,
+            source=source,
+            approved_roots=approved_roots,
+        )
         deleted.append(str(resolved))
         deleted_media.append({"path": str(resolved), "size_bytes": size_bytes})
-        cleanup = cleanup_safe_movie_sidecars(source, resolved.parent, preferences)
+        cleanup = cleanup_safe_movie_sidecars(
+            source,
+            resolved.parent,
+            preferences,
+            approved_roots=approved_roots,
+        )
         cleaned_sidecars.extend(cleanup["sidecars"])
         if cleanup["folder"]:
             removed_folders.append(cleanup["folder"])
@@ -315,7 +367,12 @@ def handle_movies_delete(ctx: RequestContext, payload: dict[str, Any]) -> None:
         candidate_paths=[Path(str(path)) for path in paths],
     )
     with ctx.handler.activity_tracker.track(source, "Movie delete"):
-        result = delete_movie_files(source, paths, load_operator_preferences())
+        result = delete_movie_files(
+            source,
+            paths,
+            load_operator_preferences(),
+            approved_roots=ctx.approved_roots,
+        )
     _record_media_delete_event(source, result, issue_family=issue_family)
     if result["deleted"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
@@ -343,6 +400,7 @@ def handle_movies_audio_packaging_fix(ctx: RequestContext, payload: dict[str, An
             probe_media=tracked_probe(source, "ffprobe audio packaging fix", cache=PROBE_CACHE),
             drop_foreign_audio=drop_foreign_audio,
             progress_callback=lambda update: ctx.handler.activity_tracker.update(activity_id, **update),
+            approved_roots=ctx.approved_roots,
         )
     if result["fixed"]:
         MOVIE_PROFILE_CACHE.invalidate(source)
@@ -389,6 +447,7 @@ def handle_movies_subtitle_readiness_fix(ctx: RequestContext, payload: dict[str,
             [str(path) for path in paths],
             probe_media=tracked_probe(source, "ffprobe subtitle readiness fix", cache=PROBE_CACHE),
             progress_callback=lambda update: ctx.handler.activity_tracker.update(activity_id, **update),
+            approved_roots=ctx.approved_roots,
         )
     result["updated_items"] = build_updated_profile_items(source, result["fixed"], resolve_language=ctx.language_resolver())
     if result["updated_items"]:
@@ -444,6 +503,7 @@ def handle_movies_repair_defaults_fix(ctx: RequestContext, payload: dict[str, An
             drop_foreign_audio=drop_foreign_audio,
             probe_media=tracked_probe(source, "ffprobe repair defaults fix", cache=PROBE_CACHE),
             progress_callback=lambda update: ctx.handler.activity_tracker.update(activity_id, **update),
+            approved_roots=ctx.approved_roots,
         )
     result["updated_items"] = build_updated_profile_items(source, result["fixed"], resolve_language=ctx.language_resolver())
     if result["updated_items"]:

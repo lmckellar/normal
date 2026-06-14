@@ -13,6 +13,7 @@ from normal.source_policy import (
     classify_source,
     path_is_under,
     source_paths_overlap,
+    validate_candidate_for_mutation,
     validate_source_for_operation,
 )
 
@@ -78,6 +79,34 @@ class SourcePolicyTests(unittest.TestCase):
         self.assertTrue(path_is_under(Path("/srv/media/movies"), Path("/srv/media")))
         self.assertTrue(source_paths_overlap(Path("/srv/media"), Path("/srv/media/movies")))
         self.assertFalse(source_paths_overlap(Path("/srv/media"), Path("/srv/music")))
+
+    def test_mutation_candidate_rejects_symlink_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "Movies"
+            source.mkdir()
+            movie = source / "Movie.mkv"
+            movie.write_text("video", encoding="utf-8")
+            link = source / "Linked.mkv"
+            link.symlink_to(movie)
+
+            with self.assertRaisesRegex(SourcePolicyError, "symlink or junction"):
+                validate_candidate_for_mutation(link, source)
+
+    def test_mutation_candidate_rechecks_approved_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "Movies"
+            source.mkdir()
+            movie = source / "Movie.mkv"
+            movie.write_text("video", encoding="utf-8")
+
+            with self.assertRaisesRegex(SourcePolicyError, "not under an approved root"):
+                validate_candidate_for_mutation(
+                    movie,
+                    source,
+                    ApprovedRoots.from_paths([root / "Other"]),
+                )
 
 
 if __name__ == "__main__":

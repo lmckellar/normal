@@ -68,7 +68,7 @@ def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
             approved_roots=ctx.approved_roots,
             candidate_paths=[change.path for change in changes if change.path],
         )
-        report = apply_changes_in_place(source, changes)
+        report = apply_changes_in_place(source, changes, approved_roots=ctx.approved_roots)
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
         _record_normalize_apply_event(source, changes, report.to_dict())

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from normal.models import ProposedChange
+from normal.source_policy import ApprovedRoots, validate_candidate_for_mutation
 
 
 MOVIE_SIDECAR_EXTENSIONS = {
@@ -219,13 +220,23 @@ def validate_relative_destination(root: Path, value: str) -> Path:
     return resolved
 
 
-def apply_change(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+def apply_change(
+    source_root: Path,
+    destination_root: Path,
+    change: ProposedChange,
+    approved_roots: ApprovedRoots | None = None,
+) -> ApplyResult:
     if change.path is None:
         raise ValueError("proposed change is missing path")
 
-    source_path = Path(change.path).resolve()
+    source_path = validate_candidate_for_mutation(change.path, source_root, approved_roots)
     relative_path = source_path.relative_to(source_root.resolve())
     destination_path = destination_root / relative_path
+    destination_path = validate_candidate_for_mutation(
+        destination_path,
+        destination_root,
+        approved_roots if destination_root.resolve() == source_root.resolve() else None,
+    )
 
     if not destination_path.exists():
         return ApplyResult(
@@ -237,11 +248,11 @@ def apply_change(source_root: Path, destination_root: Path, change: ProposedChan
         )
 
     if change.change_type == "file_rename":
-        return apply_file_rename(destination_path, change)
+        return apply_file_rename(destination_path, destination_root, change, approved_roots)
     if change.change_type == "file_delete":
         return apply_file_delete(destination_path, change)
     if change.change_type == "file_move":
-        return apply_file_move(destination_path, destination_root, change)
+        return apply_file_move(destination_path, destination_root, change, approved_roots)
     if change.change_type == "folder_merge":
         return apply_folder_merge(source_root, destination_root, change)
     if change.change_type == "folder_delete":
@@ -257,7 +268,12 @@ def apply_change(source_root: Path, destination_root: Path, change: ProposedChan
     )
 
 
-def apply_file_rename(destination_path: Path, change: ProposedChange) -> ApplyResult:
+def apply_file_rename(
+    destination_path: Path,
+    destination_root: Path,
+    change: ProposedChange,
+    approved_roots: ApprovedRoots | None,
+) -> ApplyResult:
     validate_basename(change.proposed_value)
     if destination_path.name != change.current_value:
         return ApplyResult(
@@ -278,8 +294,18 @@ def apply_file_rename(destination_path: Path, change: ProposedChange) -> ApplyRe
             message="Rename target already exists.",
         )
 
+    destination_path = validate_candidate_for_mutation(
+        destination_path,
+        destination_root,
+        approved_roots,
+    )
     destination_path.rename(renamed_path)
-    sidecar_count = move_matching_sidecars(destination_path, renamed_path)
+    sidecar_count = move_matching_sidecars(
+        destination_path,
+        renamed_path,
+        destination_root,
+        approved_roots,
+    )
     return ApplyResult(
         item_id=change.item_id,
         change_type=change.change_type,
@@ -289,7 +315,12 @@ def apply_file_rename(destination_path: Path, change: ProposedChange) -> ApplyRe
     )
 
 
-def apply_file_move(destination_path: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+def apply_file_move(
+    destination_path: Path,
+    destination_root: Path,
+    change: ProposedChange,
+    approved_roots: ApprovedRoots | None,
+) -> ApplyResult:
     if destination_path.name != change.current_value:
         return ApplyResult(
             item_id=change.item_id,
@@ -310,8 +341,18 @@ def apply_file_move(destination_path: Path, destination_root: Path, change: Prop
         )
 
     moved_path.parent.mkdir(parents=True, exist_ok=True)
+    destination_path = validate_candidate_for_mutation(
+        destination_path,
+        destination_root,
+        approved_roots,
+    )
     destination_path.rename(moved_path)
-    sidecar_count = move_matching_sidecars(destination_path, moved_path)
+    sidecar_count = move_matching_sidecars(
+        destination_path,
+        moved_path,
+        destination_root,
+        approved_roots,
+    )
     return ApplyResult(
         item_id=change.item_id,
         change_type=change.change_type,
@@ -332,13 +373,23 @@ def apply_file_delete(destination_path: Path, change: ProposedChange) -> ApplyRe
     )
 
 
-def move_matching_sidecars(old_media_path: Path, new_media_path: Path) -> int:
+def move_matching_sidecars(
+    old_media_path: Path,
+    new_media_path: Path,
+    destination_root: Path,
+    approved_roots: ApprovedRoots | None,
+) -> int:
     moved_count = 0
     for sidecar in discover_matching_sidecars(old_media_path):
         target = new_media_path.parent / renamed_sidecar_name(sidecar.name, old_media_path.stem, new_media_path.stem)
         if target.exists():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
+        sidecar = validate_candidate_for_mutation(
+            sidecar,
+            destination_root,
+            approved_roots,
+        )
         sidecar.rename(target)
         moved_count += 1
     return moved_count
@@ -563,7 +614,11 @@ def prune_empty_parents(destination_root: Path, start: Path) -> None:
         current = current.parent
 
 
-def apply_changes_in_place(source_root: Path, changes: list[ProposedChange]) -> ApplyReport:
+def apply_changes_in_place(
+    source_root: Path,
+    changes: list[ProposedChange],
+    approved_roots: ApprovedRoots | None = None,
+) -> ApplyReport:
     root = source_root.resolve()
     report = ApplyReport(
         source_root=str(root),
@@ -588,7 +643,7 @@ def apply_changes_in_place(source_root: Path, changes: list[ProposedChange]) -> 
             ))
             continue
         try:
-            result = apply_change(root, root, change)
+            result = apply_change(root, root, change, approved_roots)
         except Exception as exc:
             report.failed.append(ApplyResult(
                 item_id=change.item_id,

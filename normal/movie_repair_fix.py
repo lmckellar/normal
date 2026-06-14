@@ -21,6 +21,7 @@ from normal.movie_repair_planner import build_movie_repair_plan, subtitle_dispos
 from normal.movie_scan import probe_media_facts
 from normal.pathsafe import contained_resolve
 from normal.quality_review import MediaFacts
+from normal.source_policy import ApprovedRoots, SourcePolicyError, validate_candidate_for_mutation
 
 
 SUPPORTED_REPAIR_EXTENSIONS = {".mkv"}
@@ -49,6 +50,7 @@ def fix_movie_repair_defaults(
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
     progress_callback: ProgressCallback | None = None,
     subtitle_preferences: dict[str, Any] | None = None,
+    approved_roots: ApprovedRoots | None = None,
 ) -> dict[str, Any]:
     source = source_root.resolve()
     fixed: list[dict[str, Any]] = []
@@ -62,15 +64,21 @@ def fix_movie_repair_defaults(
         if not contained:
             skipped.append(RepairDefaultsFixResult(str(resolved), "skipped", "outside_source").to_dict())
             continue
-        result = fix_movie_repair_default(
-            resolved,
-            include_audio=include_audio,
-            include_subtitle=include_subtitle,
-            drop_foreign_audio=drop_foreign_audio,
-            probe_media=probe_media,
-            progress_callback=progress_callback,
-            subtitle_preferences=active_subtitle_preferences,
-        )
+        try:
+            resolved = validate_candidate_for_mutation(raw_path, source, approved_roots)
+            result = fix_movie_repair_default(
+                resolved,
+                include_audio=include_audio,
+                include_subtitle=include_subtitle,
+                drop_foreign_audio=drop_foreign_audio,
+                probe_media=probe_media,
+                progress_callback=progress_callback,
+                subtitle_preferences=active_subtitle_preferences,
+                mutation_source=source,
+                approved_roots=approved_roots,
+            )
+        except SourcePolicyError as exc:
+            result = RepairDefaultsFixResult(str(resolved), "skipped", f"safety_check_failed: {exc}")
         payload = result.to_dict()
         if result.status == "fixed":
             fixed.append(payload)
@@ -93,6 +101,8 @@ def fix_movie_repair_default(
     probe_media: Callable[[Path], MediaFacts] = probe_media_facts,
     progress_callback: ProgressCallback | None = None,
     subtitle_preferences: dict[str, Any] | None = None,
+    mutation_source: Path | None = None,
+    approved_roots: ApprovedRoots | None = None,
 ) -> RepairDefaultsFixResult:
     resolved = path.expanduser().resolve()
     if not resolved.exists() or not resolved.is_file():
@@ -124,6 +134,8 @@ def fix_movie_repair_default(
         return RepairDefaultsFixResult(str(resolved), "skipped", "already_repaired", facts=original_facts)
 
     if execution["metadata_only"] and mkvpropedit_available():
+        if mutation_source is not None:
+            resolved = validate_candidate_for_mutation(resolved, mutation_source, approved_roots)
         fast_result = apply_metadata_only_repair(
             resolved,
             original_facts=original_facts,
@@ -143,6 +155,8 @@ def fix_movie_repair_default(
         temp_path = Path(handle.name)
 
     try:
+        if mutation_source is not None:
+            resolved = validate_candidate_for_mutation(resolved, mutation_source, approved_roots)
         run_ffmpeg_repair_defaults_fix(
             resolved,
             temp_path,
@@ -152,6 +166,8 @@ def fix_movie_repair_default(
         )
         fixed_facts = probe_media(temp_path)
         verify_repair_defaults_result(fixed_facts, execution)
+        if mutation_source is not None:
+            resolved = validate_candidate_for_mutation(resolved, mutation_source, approved_roots)
         temp_path.replace(resolved)
         removed_count = 0
         removed_bytes = 0
