@@ -7,12 +7,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from normal.models import ProposedChange
-from normal.movie_enriched import IdentitySlot
+from normal.movie_enriched import IdentitySlot, scan_enriched_library
 from normal.movie_identity import parse_movie_identity
 from normal.movie_profile import MovieProfileReport, build_movie_profile_item
 from normal.quality_review import MediaFacts
+from normal.tv_plan import build_tv_plan, parsed_tv_from_enriched
 from normal.web.serializers import (
     build_movie_normalize_results,
+    build_tv_normalize_results,
     build_profile_response,
     build_updated_profile_items,
     movie_normalize_changes_for_file,
@@ -28,6 +30,33 @@ class FakeProfiledItem:
 
 
 class WebSerializersTests(unittest.TestCase):
+    def test_build_tv_normalize_results_serializes_tv_identity_without_movie_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            episode = source / "Show" / "Show.S01E02.Pilot.1080p.mkv"
+            episode.parent.mkdir()
+            episode.write_text("video", encoding="utf-8")
+            enriched = scan_enriched_library(source, lane="tv", probe_media=lambda _: MediaFacts())
+            plan = build_tv_plan(source, enriched_report=enriched)
+
+            results = build_tv_normalize_results(
+                source,
+                [episode],
+                plan.proposed_changes,
+                plan.warnings,
+                parsed_tv=parsed_tv_from_enriched(enriched),
+            )
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["kind"], "tv_file")
+        self.assertEqual(results[0]["series"], "Show")
+        self.assertEqual(results[0]["season"], 1)
+        self.assertEqual(results[0]["episode_first"], 2)
+        self.assertEqual(results[0]["episode_title"], "Pilot")
+        self.assertEqual(results[0]["projected_path"], "Show/Show - S01E02 - Pilot.mkv")
+        self.assertEqual(results[0]["change_ids"], [f"{episode.relative_to(source)}#file"])
+        self.assertNotIn("title_source", results[0])
+
     def test_build_profile_response_adds_render_identity_and_imdb_id(self) -> None:
         source = Path("/library")
         movie = source / "Arrival.2016.mkv"

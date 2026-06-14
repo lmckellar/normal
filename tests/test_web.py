@@ -1596,6 +1596,7 @@ class WebApprovedRootTests(unittest.TestCase):
         routes = {
             "/api/source/scan-warning": {},
             "/api/movies/apply": {"change_ids": []},
+            "/api/tv/apply": {"change_ids": []},
             "/api/movies/delete": {"paths": []},
             "/api/movies/junk/delete": {"paths": []},
             "/api/movies/audio-packaging/fix": {"paths": []},
@@ -1625,6 +1626,7 @@ class WebApprovedRootTests(unittest.TestCase):
     def test_recursive_routes_reject_drive_root_sources(self) -> None:
         routes = (
             "/api/movies/normalize",
+            "/api/tv/normalize",
             "/api/movies/junk",
             "/api/movies/profile",
             "/api/movies/canonical-lists",

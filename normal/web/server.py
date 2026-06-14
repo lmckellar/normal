@@ -25,7 +25,7 @@ from .routes_cleanup import (
 )
 from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
 from normal.source_policy import ApprovedRoots
-from .routes_normalize import handle_movies_apply, handle_movies_normalize
+from .routes_normalize import handle_movies_apply, handle_movies_normalize, handle_tv_apply, handle_tv_normalize
 from .routes_settings import (
     handle_settings_keys_update,
     handle_settings_preferences_update,
@@ -200,6 +200,8 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/movies/inspect": handle_movies_inspect,
         "/api/movies/normalize": handle_movies_normalize,
         "/api/movies/apply": handle_movies_apply,
+        "/api/tv/normalize": handle_tv_normalize,
+        "/api/tv/apply": handle_tv_apply,
         "/api/movies/junk": handle_movies_junk,
         "/api/movies/junk/delete": handle_movies_junk_delete,
         "/api/movies/delete-preview": handle_movies_delete_preview,

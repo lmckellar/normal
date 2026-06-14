@@ -12,7 +12,7 @@ from .scan_guard import (
     looks_like_drive_directory,
 )
 from .security import parse_allowed_hosts
-from .serializers import build_movie_normalize_results
+from .serializers import build_movie_normalize_results, build_tv_normalize_results
 from .server import build_handler, read_onboarding_bootstrap, read_web_asset_text, render_workbench_html, serve_web_ui
 from .state import HEAVY_SCAN_REGISTRY, RequestConflictError
 
@@ -28,6 +28,7 @@ __all__ = [
     "build_activity_payload",
     "build_handler",
     "build_movie_normalize_results",
+    "build_tv_normalize_results",
     "read_onboarding_bootstrap",
     "build_source_scan_warning",
     "delete_movie_junk_files",

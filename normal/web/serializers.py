@@ -28,6 +28,7 @@ from normal.movie_profile import (
 )
 from normal.movie_repair_planner import build_movie_repair_plan
 from normal.movie_scan import media_facts_from_dict
+from normal.tv_identity import TvIdentity
 
 
 def build_movie_normalize_results(
@@ -93,6 +94,88 @@ def build_movie_normalize_results(
                 "year_source": parsed.year_source,
                 "parse_source_path": parsed.parse_source_path,
                 "compact_token_traces": parsed.compact_token_traces or [],
+            }
+        )
+    return results
+
+
+def build_tv_normalize_results(
+    source_root: Path,
+    tv_files: list[Path],
+    plan_changes: list[ProposedChange],
+    warnings: list[WarningItem] | None = None,
+    parsed_tv: dict[Path, TvIdentity] | None = None,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    warning_index = index_movie_normalize_warnings(source_root, warnings or [])
+    changes_by_path: dict[str, list[ProposedChange]] = {}
+    for change in plan_changes:
+        if change.change_type == "file_rename" and change.path:
+            changes_by_path.setdefault(change.path, []).append(change)
+
+    for tv_path in sorted(tv_files, key=lambda path: str(path.relative_to(source_root)).casefold()):
+        relative_path = tv_path.relative_to(source_root)
+        linked_changes = changes_by_path.get(str(tv_path), [])
+        identity = parsed_tv.get(tv_path) if parsed_tv is not None else None
+        if identity is None:
+            from normal.tv_identity import parse_tv_identity
+
+            identity = parse_tv_identity(tv_path, source_root=source_root)
+        linked_warnings = warning_details_for_movie(relative_path, tv_path, warning_index)
+        projected_path = relative_path
+        if linked_changes:
+            projected_path = relative_path.with_name(linked_changes[0].proposed_value)
+        confidence = "unchanged"
+        if linked_changes:
+            confidence = "review" if any(change.confidence == "review" for change in linked_changes) else "safe"
+        elif linked_warnings or identity.confidence == "review":
+            confidence = "review"
+
+        results.append(
+            {
+                "result_id": f"tv:{relative_path}",
+                "kind": "tv_file",
+                "path": str(tv_path),
+                "current_value": str(relative_path),
+                "proposed_value": str(projected_path),
+                "projected_path": str(projected_path),
+                "confidence": confidence,
+                "actionable": bool(linked_changes),
+                "change_ids": [change.item_id for change in linked_changes],
+                "linked_change_types": dedupe_strings([change.change_type for change in linked_changes]),
+                "linked_changes": [serialize_proposed_change(change) for change in linked_changes],
+                "reason_codes": dedupe_strings(
+                    [
+                        *identity.reason_codes,
+                        *(code for change in linked_changes for code in change.reason_codes),
+                    ]
+                ),
+                "reason_messages": dedupe_strings(
+                    [
+                        *identity.warnings,
+                        *(change.reason for change in linked_changes if change.reason),
+                    ]
+                ),
+                "warning_codes": dedupe_strings(
+                    [
+                        *(warning["code"] for warning in linked_warnings),
+                        *(identity.reason_codes if identity.confidence == "review" else []),
+                    ]
+                ),
+                "warning_messages": dedupe_strings([warning["message"] for warning in linked_warnings]),
+                "warnings": linked_warnings,
+                "series": identity.series,
+                "season": identity.season,
+                "episode_first": identity.episode_first,
+                "episode_last": identity.episode_last,
+                "absolute_episode": identity.absolute_episode,
+                "season_length": identity.season_length,
+                "episode_title": identity.episode_title,
+                "numbering": identity.numbering,
+                "identity_confidence": identity.confidence,
+                "series_source": identity.series_source,
+                "season_source": identity.season_source,
+                "parse_source_path": identity.parse_source_path,
             }
         )
     return results
