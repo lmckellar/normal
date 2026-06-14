@@ -51,6 +51,9 @@ jobs:
       - name: Run native mount tests
         run: python -m unittest tests.test_mounts
 
+      - name: Import mounts from installed artifact
+        run: python -c "import os, tempfile; os.chdir(tempfile.gettempdir()); import normal.mounts"
+
   artifact-smoke:
     name: Installed wheel smoke
     runs-on: ubuntu-latest
@@ -80,6 +83,7 @@ jobs:
           /tmp/smoke-venv/bin/normal --help
           /tmp/smoke-venv/bin/python - <<'PY'
           from importlib import resources
+          import normal.mounts
 
           for name in ("moron_encoders.json", "immersive_seeds.json", "title_trait_corpus.json"):
               resources.files("normal").joinpath("data", name).read_text(encoding="utf-8")

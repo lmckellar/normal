@@ -1192,7 +1192,7 @@ class WebTests(unittest.TestCase):
             link = source / "Linked.sample.mp4"
             link.symlink_to(target)
 
-            with self.assertRaisesRegex(RuntimeError, "symlink or junction"):
+            with self.assertRaisesRegex(RuntimeError, "symlink or reparse point"):
                 delete_movie_junk_files(source, [link])
 
             self.assertTrue(link.is_symlink())

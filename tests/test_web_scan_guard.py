@@ -7,12 +7,11 @@ import unittest
 from contextlib import contextmanager
 from pathlib import Path
 from pathlib import PureWindowsPath
-from subprocess import CompletedProcess
 from unittest.mock import patch
 
+from normal.mounts import MountDetails
 from normal.web.scan_guard import (
     ApprovedRoots,
-    SourceMountDetails,
     build_source_scan_warning,
     client_disconnected,
     format_storage_size,
@@ -20,9 +19,8 @@ from normal.web.scan_guard import (
     guarded_mutation,
     looks_like_drive_directory,
     looks_like_unc_share_root,
+    mount_risk_flags,
     resolve_source_path,
-    risky_mount_flags,
-    source_mount_details,
     source_paths_overlap,
 )
 from normal.web.state import HeavyScanRegistry, RequestConflictError
@@ -57,34 +55,7 @@ class WebScanGuardTests(unittest.TestCase):
         finally:
             left.close()
 
-    def test_source_mount_details_parses_findmnt_output(self) -> None:
-        stdout = '{"filesystems": [{"target": "/mnt/My Media", "fstype": "NTFS3"}]}\n'
-        completed = CompletedProcess(args=[], returncode=0, stdout=stdout, stderr="")
-
-        with patch("normal.web.scan_guard.subprocess.run", return_value=completed):
-            details = source_mount_details(Path("/mnt/My Media/Movies"))
-
-        self.assertEqual(details, SourceMountDetails(fstype="ntfs3", target="/mnt/My Media"))
-
-    def test_source_mount_details_falls_back_to_proc_mounts(self) -> None:
-        proc_mounts = "//srv/share /mnt/My\\040Share cifs rw 0 0\n/dev/sda1 / ext4 rw 0 0\n"
-
-        with patch("normal.web.scan_guard.subprocess.run", side_effect=OSError):
-            with patch("normal.web.scan_guard.Path.read_text", return_value=proc_mounts):
-                details = source_mount_details(Path("/mnt/My Share/Movies"))
-
-        self.assertEqual(details, SourceMountDetails(fstype="cifs", target="/mnt/My Share"))
-
-    def test_proc_mounts_uses_longest_matching_prefix(self) -> None:
-        proc_mounts = "/dev/sda1 / ext4 rw 0 0\n//srv/share /mnt/Media cifs rw 0 0\n"
-
-        with patch("normal.web.scan_guard.subprocess.run", side_effect=OSError):
-            with patch("normal.web.scan_guard.Path.read_text", return_value=proc_mounts):
-                details = source_mount_details(Path("/mnt/Media/Movies"))
-
-        self.assertEqual(details, SourceMountDetails(fstype="cifs", target="/mnt/Media"))
-
-    def test_risky_mount_flags_marks_supported_variants(self) -> None:
+    def test_linux_risk_classification_marks_supported_variants(self) -> None:
         variants = (
             "ntfs", "ntfs3", "fuseblk", "exfat", "vfat", "drvfs", "cifs",
             "smbfs", "nfs", "nfs4", "sshfs", "fuse.sshfs", "rclone",
@@ -92,11 +63,30 @@ class WebScanGuardTests(unittest.TestCase):
         )
         for fstype in variants:
             with self.subTest(fstype=fstype):
-                with patch(
-                    "normal.web.scan_guard.source_mount_details",
-                    return_value=SourceMountDetails(fstype=fstype, target="/mnt/media"),
-                ):
-                    self.assertEqual(risky_mount_flags(Path("/mnt/media/Movies")), [f"mount:{fstype}"])
+                details = MountDetails(fstype=fstype, target="/mnt/media")
+                self.assertEqual(
+                    mount_risk_flags(details, platform="linux"),
+                    [f"mount:{fstype}"],
+                )
+
+    def test_windows_native_ntfs_is_not_risky(self) -> None:
+        details = MountDetails(fstype="ntfs")
+        self.assertEqual(mount_risk_flags(details, platform="windows"), [])
+
+    def test_windows_native_network_kind_is_risky(self) -> None:
+        details = MountDetails(fstype="ntfs", kind="network")
+        self.assertEqual(
+            mount_risk_flags(details, platform="windows"),
+            ["mount:network"],
+        )
+
+    def test_linux_ntfs3_and_fuseblk_are_risky(self) -> None:
+        for fstype in ("ntfs3", "fuseblk"):
+            with self.subTest(fstype=fstype):
+                self.assertEqual(
+                    mount_risk_flags(MountDetails(fstype=fstype), platform="linux"),
+                    [f"mount:{fstype}"],
+                )
 
     def test_build_source_scan_warning_combines_drive_and_mount_risk(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -106,8 +96,8 @@ class WebScanGuardTests(unittest.TestCase):
             with patch("normal.web.scan_guard.shutil.disk_usage", return_value=usage):
                 with patch("normal.web.scan_guard.looks_like_drive_directory", return_value=True):
                     with patch(
-                        "normal.web.scan_guard.source_mount_details",
-                        return_value=SourceMountDetails(fstype="fuseblk", target="/mnt/media"),
+                        "normal.web.scan_guard.mount_details",
+                        return_value=MountDetails(fstype="fuseblk", target="/mnt/media"),
                     ):
                         payload = build_source_scan_warning(source)
 

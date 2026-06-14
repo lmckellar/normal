@@ -5,13 +5,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Literal
 
-from normal.mounts import is_junction, is_mount_root
+from normal.mounts import is_blocked_reparse_point, is_mount_root
 
 Severity = Literal["ok", "warn", "block"]
 
 DRIVE_DIRECTORY = "drive_directory"
 MOUNT_ROOT = "mount_root"
-JUNCTION = "junction"
+REPARSE_POINT = "reparse_point"
 SOURCE_MISSING = "source_missing"
 NOT_DIRECTORY = "not_directory"
 
@@ -29,9 +29,9 @@ _BLOCK_FLAGS_BY_OPERATION: dict[Operation, frozenset[str]] = {
     Operation.INSPECT: frozenset(),
     Operation.HEAVY_SCAN: frozenset({DRIVE_DIRECTORY, MOUNT_ROOT, SOURCE_MISSING, NOT_DIRECTORY}),
     Operation.PLAN: frozenset({DRIVE_DIRECTORY, MOUNT_ROOT, SOURCE_MISSING, NOT_DIRECTORY}),
-    Operation.APPLY: frozenset({DRIVE_DIRECTORY, MOUNT_ROOT, JUNCTION, SOURCE_MISSING, NOT_DIRECTORY}),
-    Operation.DELETE: frozenset({DRIVE_DIRECTORY, MOUNT_ROOT, JUNCTION, SOURCE_MISSING, NOT_DIRECTORY}),
-    Operation.REMUX: frozenset({DRIVE_DIRECTORY, MOUNT_ROOT, JUNCTION, SOURCE_MISSING, NOT_DIRECTORY}),
+    Operation.APPLY: frozenset({DRIVE_DIRECTORY, MOUNT_ROOT, REPARSE_POINT, SOURCE_MISSING, NOT_DIRECTORY}),
+    Operation.DELETE: frozenset({DRIVE_DIRECTORY, MOUNT_ROOT, REPARSE_POINT, SOURCE_MISSING, NOT_DIRECTORY}),
+    Operation.REMUX: frozenset({DRIVE_DIRECTORY, MOUNT_ROOT, REPARSE_POINT, SOURCE_MISSING, NOT_DIRECTORY}),
 }
 
 
@@ -113,8 +113,8 @@ def detect_source_flags(source: Path) -> tuple[str, ...]:
         flags.append(DRIVE_DIRECTORY)
     elif is_mount_root(resolved):
         flags.append(MOUNT_ROOT)
-    if is_junction(candidate):
-        flags.append(JUNCTION)
+    if is_blocked_reparse_point(candidate):
+        flags.append(REPARSE_POINT)
     return tuple(flags)
 
 
@@ -160,10 +160,10 @@ class SourcePolicyError(RuntimeError):
     pass
 
 
-def _is_link_or_junction(path: Path) -> bool:
+def _is_link_or_blocked_reparse_point(path: Path) -> bool:
     if path.is_symlink():
         return True
-    return is_junction(path)
+    return is_blocked_reparse_point(path)
 
 
 def validate_candidate_for_mutation(
@@ -185,9 +185,9 @@ def validate_candidate_for_mutation(
 
     current = lexical_candidate
     while current != resolved_source:
-        if _is_link_or_junction(current):
+        if _is_link_or_blocked_reparse_point(current):
             raise SourcePolicyError(
-                f"Refusing mutation through symlink or junction: {lexical_candidate}"
+                f"Refusing mutation through symlink or reparse point: {lexical_candidate}"
             )
         current = current.parent
 

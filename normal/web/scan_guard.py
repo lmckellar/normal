@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import json
+import os
 import select
 import shutil
 import socket
-import subprocess
+import sys
 from contextlib import contextmanager
 from pathlib import Path, PurePath, PureWindowsPath
 from typing import Any, Iterator
 
-from normal.source_policy import ApprovedRoots, path_is_under, resolve_source_path, source_paths_overlap
+from normal.source_policy import ApprovedRoots, resolve_source_path, source_paths_overlap
 from normal.mounts import MountDetails, is_mount_root, is_unc_share_root, mount_details
 from . import state
 
@@ -24,10 +24,7 @@ def client_disconnected(connection: socket.socket) -> bool:
         return True
 
 
-SourceMountDetails = MountDetails
-
-
-RISKY_FSTYPES = frozenset(
+LINUX_RISKY_FSTYPES = frozenset(
     {
         "ntfs",
         "ntfs3",
@@ -48,6 +45,9 @@ RISKY_FSTYPES = frozenset(
     }
 )
 
+PORTABLE_RISKY_FSTYPES = frozenset({"exfat", "fat", "fat32", "vfat"})
+RISKY_MOUNT_KINDS = frozenset({"network", "removable", "optical", "ramdisk"})
+
 FILESYSTEM_BOUNDARY_WARNING = (
     "This source looks like a filesystem boundary or translated/network/removable filesystem. "
     "Heavy recursive scans may be slow, incomplete, or surprising. "
@@ -61,81 +61,31 @@ UNC_SHARE_ROOT_WARNING = (
 )
 
 
-def _findmnt_mount_details(source: Path) -> SourceMountDetails | None:
-    try:
-        result = subprocess.run(
-            ["findmnt", "--json", "-T", str(source), "-o", "TARGET,FSTYPE"],
-            text=True,
-            capture_output=True,
-            check=False,
-            timeout=1,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if result.returncode != 0 or not result.stdout.strip():
-        return None
-    try:
-        filesystems = json.loads(result.stdout).get("filesystems", [])
-    except (ValueError, AttributeError):
-        return None
-    if not filesystems:
-        return None
-    entry = filesystems[0]
-    target = entry.get("target")
-    fstype = entry.get("fstype")
-    return SourceMountDetails(target=target, fstype=fstype.lower() if fstype else None)
+def mount_risk_flags(details: MountDetails, *, platform: str) -> list[str]:
+    flags: list[str] = []
+    fstype = details.fstype.lower() if details.fstype else None
+    if platform == "windows":
+        risky_fstypes = PORTABLE_RISKY_FSTYPES
+    else:
+        risky_fstypes = LINUX_RISKY_FSTYPES
+    if fstype in risky_fstypes:
+        flags.append(f"mount:{fstype}")
+    if details.kind in RISKY_MOUNT_KINDS and not flags:
+        flags.append(f"mount:{details.kind}")
+    return flags
 
 
-def _unescape_proc_mount_field(field: str) -> str:
-    return (
-        field.replace("\\040", " ")
-        .replace("\\011", "\t")
-        .replace("\\012", "\n")
-        .replace("\\134", "\\")
-    )
-
-
-def _proc_mounts_mount_details(source: Path) -> SourceMountDetails | None:
-    try:
-        lines = Path("/proc/mounts").read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-    best: SourceMountDetails | None = None
-    best_len = -1
-    for line in lines:
-        parts = line.split(" ")
-        if len(parts) < 3:
-            continue
-        target = _unescape_proc_mount_field(parts[1])
-        fstype = parts[2]
-        target_path = Path(target)
-        if path_is_under(source, target_path) and len(target_path.parts) > best_len:
-            best_len = len(target_path.parts)
-            best = SourceMountDetails(target=target, fstype=fstype.lower())
-    return best
-
-
-def source_mount_details(source: Path) -> SourceMountDetails:
-    resolved = source.resolve()
-    native = mount_details(resolved)
-    if native.target or native.fstype or native.kind:
-        return native
-    details = _findmnt_mount_details(resolved)
-    if details is None:
-        details = _proc_mounts_mount_details(resolved)
-    if details is None:
-        return SourceMountDetails()
-    return details
+def _mount_platform() -> str:
+    if os.name == "nt":
+        return "windows"
+    if sys.platform == "darwin":
+        return "macos"
+    return "linux"
 
 
 def risky_mount_flags(source: Path) -> list[str]:
-    details = source_mount_details(source)
-    flags: list[str] = []
-    if details.fstype in RISKY_FSTYPES:
-        flags.append(f"mount:{details.fstype}")
-    if details.kind in {"network", "removable"} and not flags:
-        flags.append(f"mount:{details.kind}")
-    return flags
+    details = mount_details(source)
+    return mount_risk_flags(details, platform=_mount_platform())
 
 
 def _looks_like_windows_root(path: PurePath) -> bool:
@@ -177,11 +127,11 @@ def format_storage_size(size_bytes: int) -> str:
 def build_source_scan_warning(source: Path) -> dict[str, Any]:
     resolved = source.resolve()
     usage = shutil.disk_usage(resolved)
+    details = mount_details(resolved)
     reasons: list[str] = []
     if looks_like_drive_directory(resolved):
         reasons.append("drive_directory")
-    reasons.extend(risky_mount_flags(resolved))
-    mount_details = source_mount_details(resolved)
+    reasons.extend(mount_risk_flags(details, platform=_mount_platform()))
     if looks_like_unc_share_root(resolved):
         message = UNC_SHARE_ROOT_WARNING
     elif reasons:
@@ -194,8 +144,8 @@ def build_source_scan_warning(source: Path) -> dict[str, Any]:
         "reason": reasons[0] if reasons else None,
         "reasons": reasons,
         "message": message,
-        "mount_fstype": mount_details.fstype,
-        "mount_target": mount_details.target,
+        "mount_fstype": details.fstype,
+        "mount_target": details.target,
         "total_size_bytes": usage.total,
         "total_size_label": format_storage_size(usage.total),
     }

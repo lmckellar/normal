@@ -3,11 +3,13 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from normal.source_policy import (
     ApprovedRoots,
     DRIVE_DIRECTORY,
     Operation,
+    REPARSE_POINT,
     SOURCE_MISSING,
     SourcePolicyError,
     classify_source,
@@ -34,6 +36,18 @@ class SourcePolicyTests(unittest.TestCase):
         risk = classify_source(Path("/no/such/source/here"), operation=Operation.APPLY)
         self.assertEqual(risk.severity, "block")
         self.assertIn(SOURCE_MISSING, risk.flags)
+
+    def test_reparse_point_flag_blocks_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            with patch(
+                "normal.source_policy.is_blocked_reparse_point",
+                return_value=True,
+            ):
+                risk = classify_source(source, operation=Operation.APPLY)
+
+        self.assertEqual(risk.severity, "block")
+        self.assertIn(REPARSE_POINT, risk.flags)
 
     def test_enforce_raises_on_block(self) -> None:
         with self.assertRaises(SourcePolicyError):
@@ -90,7 +104,7 @@ class SourcePolicyTests(unittest.TestCase):
             link = source / "Linked.mkv"
             link.symlink_to(movie)
 
-            with self.assertRaisesRegex(SourcePolicyError, "symlink or junction"):
+            with self.assertRaisesRegex(SourcePolicyError, "symlink or reparse point"):
                 validate_candidate_for_mutation(link, source)
 
     def test_mutation_candidate_rechecks_approved_roots(self) -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import json
 import os
 import plistlib
 import subprocess
@@ -30,15 +31,17 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[bytes] | None:
 
 
 def _macos_diskutil_details(source: Path) -> MountDetails | None:
-    result = _run(["diskutil", "info", "-plist", str(source)])
+    boundary = _macos_mount_details(source)
+    query_target = boundary.target if boundary and boundary.target else str(source)
+    result = _run(["diskutil", "info", "-plist", query_target])
     if result is None or result.returncode != 0 or not result.stdout:
-        return None
+        return boundary
     try:
         info = plistlib.loads(result.stdout)
     except (plistlib.InvalidFileException, ValueError):
-        return None
+        return boundary
 
-    target = info.get("MountPoint")
+    target = boundary.target if boundary else info.get("MountPoint")
     fstype = info.get("FilesystemType") or info.get("Type (Bundle)")
     protocol = str(info.get("BusProtocol") or "").lower()
     removable = bool(info.get("RemovableMedia") or info.get("Ejectable"))
@@ -62,6 +65,54 @@ def _macos_mount_details(source: Path) -> MountDetails | None:
         if len(fields) < 3:
             continue
         target = fields[1].replace("\0", " ")
+        target_path = Path(target)
+        try:
+            source.relative_to(target_path)
+        except ValueError:
+            continue
+        if len(target_path.parts) > best_parts:
+            best_parts = len(target_path.parts)
+            best = MountDetails(fstype=fields[2].lower(), target=target)
+    return best
+
+
+def _findmnt_mount_details(source: Path) -> MountDetails | None:
+    result = _run(["findmnt", "--json", "-T", str(source), "-o", "TARGET,FSTYPE"])
+    if result is None or result.returncode != 0 or not result.stdout.strip():
+        return None
+    try:
+        filesystems = json.loads(result.stdout).get("filesystems", [])
+    except (ValueError, AttributeError):
+        return None
+    if not filesystems:
+        return None
+    entry = filesystems[0]
+    target = entry.get("target")
+    fstype = entry.get("fstype")
+    return MountDetails(target=target, fstype=fstype.lower() if fstype else None)
+
+
+def _unescape_proc_mount_field(field: str) -> str:
+    return (
+        field.replace("\\040", " ")
+        .replace("\\011", "\t")
+        .replace("\\012", "\n")
+        .replace("\\134", "\\")
+    )
+
+
+def _proc_mounts_mount_details(source: Path) -> MountDetails | None:
+    try:
+        lines = Path("/proc/mounts").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    best: MountDetails | None = None
+    best_parts = -1
+    for line in lines:
+        fields = line.split(" ")
+        if len(fields) < 3:
+            continue
+        target = _unescape_proc_mount_field(fields[1])
         target_path = Path(target)
         try:
             source.relative_to(target_path)
@@ -140,9 +191,11 @@ def _windows_details(source: Path) -> MountDetails | None:
 def mount_details(source: Path) -> MountDetails:
     resolved = source.resolve()
     if sys.platform == "darwin":
-        return _macos_diskutil_details(resolved) or _macos_mount_details(resolved) or MountDetails()
+        return _macos_diskutil_details(resolved) or MountDetails()
     if os.name == "nt":
         return _windows_details(resolved) or MountDetails()
+    if sys.platform.startswith("linux"):
+        return _findmnt_mount_details(resolved) or _proc_mounts_mount_details(resolved) or MountDetails()
     return MountDetails()
 
 
@@ -171,7 +224,7 @@ def is_unc_share_root(path: Path | PureWindowsPath) -> bool:
     )
 
 
-def is_junction(path: Path) -> bool:
+def is_blocked_reparse_point(path: Path) -> bool:
     if hasattr(os.path, "isjunction") and os.path.isjunction(path):
         return True
     if os.name != "nt":
