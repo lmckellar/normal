@@ -19,6 +19,7 @@ from normal.movie_repair_planner import (
     subtitle_disposition_value,
 )
 from normal.movie_scan import probe_media_facts
+from normal.pathsafe import contained_resolve
 from normal.quality_review import MediaFacts, SubtitleStreamFacts
 
 
@@ -54,10 +55,8 @@ def fix_movie_subtitle_defaults(
     )
 
     for raw_path in paths:
-        resolved = Path(str(raw_path)).expanduser().resolve()
-        try:
-            resolved.relative_to(source)
-        except ValueError:
+        resolved, contained = contained_resolve(raw_path, source)
+        if not contained:
             skipped.append(SubtitleDefaultFixResult(str(resolved), "skipped", "outside_source").to_dict())
             continue
         result = fix_movie_subtitle_default(

@@ -25,6 +25,7 @@ from normal.movie_repair_fix import fix_movie_repair_defaults
 from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
 from normal.movie_scan import VIDEO_EXTENSIONS
 from normal.movie_profile import load_operator_preferences, normalize_delete_mode
+from normal.pathsafe import contained_resolve
 
 from .activity import tracked_probe
 from .http import RequestContext
@@ -103,10 +104,8 @@ def delete_movie_junk_files(
     skipped = []
 
     for raw_path in raw_paths:
-        resolved = Path(str(raw_path)).expanduser().resolve()
-        try:
-            resolved.relative_to(source_root)
-        except ValueError:
+        resolved, contained = contained_resolve(raw_path, source_root)
+        if not contained:
             skipped.append({"path": str(resolved), "reason": "outside_source"})
             continue
         if not resolved.exists() or not resolved.is_file():
@@ -217,10 +216,8 @@ def preview_movie_delete(source_root: Path, paths: list[Any]) -> dict[str, Any]:
     skipped: list[dict[str, str]] = []
 
     for raw_path in paths:
-        resolved = Path(str(raw_path)).expanduser().resolve()
-        try:
-            resolved.relative_to(source)
-        except ValueError:
+        resolved, contained = contained_resolve(raw_path, source)
+        if not contained:
             skipped.append({"path": str(resolved), "reason": "outside_source"})
             continue
         if resolved == source:
@@ -259,10 +256,8 @@ def delete_movie_files(
     skipped: list[dict[str, str]] = []
 
     for raw_path in paths:
-        resolved = Path(str(raw_path)).expanduser().resolve()
-        try:
-            resolved.relative_to(source)
-        except ValueError:
+        resolved, contained = contained_resolve(raw_path, source)
+        if not contained:
             skipped.append({"path": str(resolved), "reason": "outside_source"})
             continue
         if resolved == source:

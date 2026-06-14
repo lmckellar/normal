@@ -13,6 +13,7 @@ from normal.movie_profile import (
     choose_default_audio_stream,
 )
 from normal.movie_scan import probe_media_facts
+from normal.pathsafe import contained_resolve
 from normal.quality_review import AudioStreamFacts, MediaFacts
 
 
@@ -47,10 +48,8 @@ def fix_english_audio_defaults(
     skipped: list[dict[str, Any]] = []
 
     for raw_path in paths:
-        resolved = Path(str(raw_path)).expanduser().resolve()
-        try:
-            resolved.relative_to(source)
-        except ValueError:
+        resolved, contained = contained_resolve(raw_path, source)
+        if not contained:
             skipped.append(AudioDefaultFixResult(str(resolved), "skipped", "outside_source").to_dict())
             continue
         result = fix_english_audio_default(
