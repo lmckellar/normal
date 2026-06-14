@@ -139,19 +139,24 @@ class LinuxMountTests(unittest.TestCase):
         self.assertEqual(details, MountDetails(fstype="cifs", target="/mnt/My Share"))
 
     def test_mount_details_falls_back_from_findmnt_to_proc_mounts(self) -> None:
-        proc_mounts = "//srv/share /mnt/Media cifs rw 0 0\n"
         source = Path("/mnt/Media/Movies")
+        expected = MountDetails(fstype="cifs", target="/mnt/Media")
 
         with (
             patch("normal.mounts.sys.platform", "linux"),
             patch("normal.mounts.os.name", "posix"),
             patch("normal.mounts.Path.resolve", return_value=source),
-            patch("normal.mounts._run", return_value=None),
-            patch("normal.mounts.Path.read_text", return_value=proc_mounts),
+            patch("normal.mounts._findmnt_mount_details", return_value=None) as findmnt,
+            patch(
+                "normal.mounts._proc_mounts_mount_details",
+                return_value=expected,
+            ) as proc_mounts,
         ):
             details = mount_details(source)
 
-        self.assertEqual(details, MountDetails(fstype="cifs", target="/mnt/Media"))
+        self.assertEqual(details, expected)
+        findmnt.assert_called_once_with(source)
+        proc_mounts.assert_called_once_with(source)
 
 
 class WindowsMountTests(unittest.TestCase):
