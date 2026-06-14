@@ -81,6 +81,8 @@ An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list vi
 
 ✅ A: Those are both fair questions.
 
+🤷
+
 ## 🔥 The Opinionated Part
 
 `normal` is built around the following principles that lead to some loud claims:
@@ -111,7 +113,7 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 ## 🧰 Support [1]
 
-`normal` runs on Python 3.12 through 3.14 and is Linux-first — developed and daily-driven on Ubuntu, where it has been perfectly stable through 200+ scans. Under the hood `normal` leans on a small set of bulletproof, battle-tested open-source libraries (`ffmpeg`, `ffprobe`, `mkvtoolnix`, `openpyxl`) and works hard to stay out of their way.
+`normal` runs on Python 3.12 through 3.14 and is Linux-first — developed and daily-driven on Ubuntu, where it has been perfectly stable through 400+ scans (hard drive status: thoroughly fondled). Under the hood `normal` leans on a small set of bulletproof, battle-tested open-source libraries (`ffmpeg`, `ffprobe`, `mkvtoolnix`, `openpyxl`) and mostly just does python stuff around them.
 
 macOS and Windows run in CI alongside Linux. Source safety uses native mount and volume detection on each platform, including macOS APFS/removable/network volumes and Windows drive roots, UNC shares, and junctions. Broader real-library validation remains welcome.
 
@@ -126,12 +128,12 @@ The project is genuinely open to participation now, and a few kinds of help are 
 - **You're on macOS or Windows.** Both platforms run in CI and have native mount safety checks; validation against real libraries, filesystems, and external media remains valuable.
 - **You found an edge case, hit a wall, or have feedback.** Open an issue. Anyone who wants to test, poke at, or break the tool is welcome.
 
-## ⭐ 1 Star on Github that I definitely did not pay for
+## 1 ⭐ on Github that I definitely did not pay for
 
 Find out what all the critics are **raving** about:
 
 > "WTF is this colostomy bag of vibe coded filth?"
-> — People that know how to code good and have big brians
+> — People
 
 ## 📚 Docs
 
