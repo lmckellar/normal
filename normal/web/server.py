@@ -129,7 +129,6 @@ def serve_web_ui(
     handler = build_handler(
         default_source=default_source,
         bound_host=host,
-        bound_port=port,
         unsafe_remote=unsafe_remote,
         approved_roots=approved_roots,
     )
@@ -213,7 +212,6 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
 def build_handler(
     default_source: Path | None = None,
     bound_host: str = "127.0.0.1",
-    bound_port: int = 8765,
     unsafe_remote: bool = False,
     approved_roots: ApprovedRoots | None = None,
 ):
@@ -258,7 +256,7 @@ def build_handler(
                 security.check_post(
                     self,
                     bound_host=bound_host,
-                    bound_port=bound_port,
+                    bound_port=self.server.server_address[1],
                     unsafe_remote=unsafe_remote,
                 )
                 payload = ctx.read_json_body()

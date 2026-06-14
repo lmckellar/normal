@@ -1228,13 +1228,42 @@ class WebPostSecurityTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 403)
         with tempfile.TemporaryDirectory() as tmpdir:
             with self.run_test_server(bound_host="evil.example.com", unsafe_remote=True) as base_url:
+                port = urllib.parse.urlsplit(base_url).port
                 with self.post(
                     base_url,
                     "/api/source/scan-warning",
-                    headers={**headers, "Origin": "http://evil.example.com"},
+                    headers={
+                        **headers,
+                        "Host": f"evil.example.com:{port}",
+                        "Origin": f"http://evil.example.com:{port}",
+                    },
                     data=self.scan_warning_body(tmpdir),
                 ) as response:
                     self.assertEqual(response.status, 200)
+
+    def test_origin_with_wrong_port_is_rejected(self) -> None:
+        headers = self.valid_headers()
+        headers["Origin"] = "http://127.0.0.1:9999"
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(base_url, "/api/source/scan-warning", headers=headers)
+        self.assertEqual(ctx.exception.code, 403)
+
+    def test_host_with_wrong_port_is_rejected(self) -> None:
+        headers = self.valid_headers()
+        headers["Host"] = "127.0.0.1:9999"
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(base_url, "/api/source/scan-warning", headers=headers)
+        self.assertEqual(ctx.exception.code, 403)
+
+    def test_malformed_content_length_is_rejected_without_traceback(self) -> None:
+        headers = self.valid_headers()
+        headers["Content-Length"] = "not-a-number"
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(base_url, "/api/source/scan-warning", headers=headers)
+        self.assertEqual(ctx.exception.code, 400)
 
     def test_oversized_body_is_rejected(self) -> None:
         from normal.web.security import MAX_JSON_BODY
