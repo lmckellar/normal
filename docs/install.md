@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Python 3.12 or later**
+- **Python 3.12, 3.13, or 3.14**
 - **ffprobe** — required by every command that probes media: `movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, and `web`
 
 ### Getting ffprobe
@@ -26,10 +26,13 @@ git clone https://github.com/lmckellar/normal.git
 cd normal
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install -e .
 ```
 
-For a non-editable install from inside the cloned repo, use `pip install .` instead.
+For a non-editable install from inside the cloned repo, use
+`python -m pip install .` instead.
+The install command resolves Python dependencies inside the virtual environment;
+do not rely on packages installed for another global Python version.
 
 **Keep API keys out of `.venv/bin/activate`.** Recreating the venv wipes them. Store them in a durable shell source — `~/.bashrc`, `~/.zshrc`, or a separate env file you source before launch:
 

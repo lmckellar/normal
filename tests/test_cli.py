@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import csv
+from io import StringIO
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from normal.cli import main
+from normal.output import MissingDependencyError
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -35,6 +39,27 @@ class NormalCliTests(unittest.TestCase):
             self.assertEqual(payload["source_root"], str(source.resolve()))
             self.assertIn("movies", payload)
             self.assertIn("warnings", payload)
+
+    def test_missing_dependency_is_reported_without_a_traceback(self) -> None:
+        with patch(
+            "normal.cli.run_movie_register",
+            side_effect=MissingDependencyError("XLSX export requires openpyxl."),
+        ):
+            stderr = StringIO()
+            with patch("sys.stderr", stderr):
+                result = main(
+                    [
+                        "movie-register",
+                        "--report",
+                        "report.json",
+                        "--xlsx",
+                        "catalogue.xlsx",
+                    ]
+                )
+
+        self.assertEqual(result, 1)
+        self.assertEqual(stderr.getvalue(), "normal: XLSX export requires openpyxl.\n")
+        self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_movie_scan_accepts_progress_flag(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

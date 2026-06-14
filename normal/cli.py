@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import sys
 
 from normal.commands import (
     run_movie_apply,
@@ -15,6 +16,7 @@ from normal.commands import (
     run_movie_scan,
     run_web,
 )
+from normal.output import MissingDependencyError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -155,7 +157,11 @@ def handle_web(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except MissingDependencyError as exc:
+        print(f"normal: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

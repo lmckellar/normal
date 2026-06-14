@@ -4,15 +4,15 @@ import csv
 import json
 from pathlib import Path
 
-from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
-
 from normal.movie_plan import parse_movie_name
 from normal.quality_review import build_audio_summary
 
 
 MOVIE_STATUS_PRIORITY = {"severe": 0, "review": 1, "ok": 2, "unscored": 3}
+
+
+class MissingDependencyError(RuntimeError):
+    pass
 
 
 def write_movie_review_csv(report_path: Path, csv_path: Path, minimum_status: str = "review") -> None:
@@ -147,11 +147,6 @@ def safe_float(value: str) -> float:
 # Movie register XLSX
 # ---------------------------------------------------------------------------
 
-_HEADER_FILL = PatternFill(fill_type="solid", fgColor="1F2D3D")
-_HEADER_FONT = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
-_ALT_FILL = PatternFill(fill_type="solid", fgColor="F2F4F7")
-_BODY_FONT = Font(name="Calibri", size=11)
-
 _REGISTER_COLUMNS = [
     ("Title", 36),
     ("Year", 7),
@@ -164,6 +159,21 @@ _REGISTER_COLUMNS = [
 
 
 def write_movie_register_xlsx(report_path: Path, xlsx_path: Path) -> None:
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ModuleNotFoundError as exc:
+        raise MissingDependencyError(
+            "XLSX export requires openpyxl. Activate normal's virtual environment "
+            "and run `python -m pip install -e .` from the checkout."
+        ) from exc
+
+    header_fill = PatternFill(fill_type="solid", fgColor="1F2D3D")
+    header_font = Font(bold=True, color="FFFFFF", name="Calibri", size=11)
+    alternate_fill = PatternFill(fill_type="solid", fgColor="F2F4F7")
+    body_font = Font(name="Calibri", size=11)
+
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     rows = _build_register_rows(payload)
     wb = Workbook()
@@ -172,8 +182,8 @@ def write_movie_register_xlsx(report_path: Path, xlsx_path: Path) -> None:
 
     for col_idx, (header, width) in enumerate(_REGISTER_COLUMNS, start=1):
         cell = ws.cell(row=1, column=col_idx, value=header)
-        cell.font = _HEADER_FONT
-        cell.fill = _HEADER_FILL
+        cell.font = header_font
+        cell.fill = header_fill
         cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.column_dimensions[get_column_letter(col_idx)].width = width
 
@@ -182,10 +192,10 @@ def write_movie_register_xlsx(report_path: Path, xlsx_path: Path) -> None:
     ws.auto_filter.ref = f"A1:{get_column_letter(len(_REGISTER_COLUMNS))}1"
 
     for row_idx, row in enumerate(rows, start=2):
-        fill = _ALT_FILL if row_idx % 2 == 0 else None
+        fill = alternate_fill if row_idx % 2 == 0 else None
         for col_idx, value in enumerate(row, start=1):
             cell = ws.cell(row=row_idx, column=col_idx, value=value)
-            cell.font = _BODY_FONT
+            cell.font = body_font
             cell.alignment = Alignment(vertical="center")
             if fill:
                 cell.fill = fill

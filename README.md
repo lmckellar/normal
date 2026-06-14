@@ -2,7 +2,7 @@
 
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![Version](https://img.shields.io/badge/version-0.7.0--alpha.7-blue)
-![Python](https://img.shields.io/badge/python-3.12%2B-blue)
+![Python](https://img.shields.io/badge/python-3.12%E2%80%933.14-blue)
 ![Platform](https://img.shields.io/badge/platform-Linux--first-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -52,7 +52,7 @@ git clone https://github.com/lmckellar/normal.git
 cd normal
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+python -m pip install -e .
 normal web --host 127.0.0.1 --port 8765
 ```
 
@@ -112,11 +112,11 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 ## 🧰 Support [1]
 
-`normal` runs on Python 3.12+ and is Linux-first — developed and daily-driven on Ubuntu, where it has been perfectly stable through 200+ scans. Under the hood `normal` leans on a small set of bulletproof, battle-tested open-source libraries (`ffmpeg`, `ffprobe`, `mkvtoolnix`, `openpyxl`) and works hard to stay out of their way.
+`normal` runs on Python 3.12 through 3.14 and is Linux-first — developed and daily-driven on Ubuntu, where it has been perfectly stable through 200+ scans. Under the hood `normal` leans on a small set of bulletproof, battle-tested open-source libraries (`ffmpeg`, `ffprobe`, `mkvtoolnix`, `openpyxl`) and works hard to stay out of their way.
 
 macOS and Windows aren't hardened yet. They may already work, but they haven't been validated, and other mount and filesystem types are similarly untested. Treat them as "help wanted," not "you're on your own."
 
-**Requirements:** `ffprobe` for media-probing workflows (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`); `ffmpeg` for remux repairs; and `mkvpropedit` (from `mkvtoolnix`) for the light touch subtitle swaps, falling back to `ffmpeg` when absent. These are external binaries — install them from your distro's packages. The sole Python dependency, `openpyxl`, installs automatically with `pip install -e .` and powers the XLSX export.
+**Requirements:** `ffprobe` for media-probing workflows (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`); `ffmpeg` for remux repairs; and `mkvpropedit` (from `mkvtoolnix`) for the light touch subtitle swaps, falling back to `ffmpeg` when absent. These are external binaries — install them from your distro's packages. The sole Python dependency, `openpyxl`, installs into the active interpreter with `python -m pip install -e .` and powers the XLSX export.
 
 ## 🙌 Get Involved
 

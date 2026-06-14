@@ -4,6 +4,16 @@ This changelog was retroactively rebuilt from commit history and diff/change
 logs. Real release history starts at `v0.7.0-alpha.1`, with a matching git tag
 and GitHub prerelease. Earlier sections remain reconstructed history.
 
+## [Unreleased]
+
+### Changed
+
+- Python 3.12, 3.13, and 3.14 are now explicit tested targets. Packaging rejects
+  unvalidated Python 3.15+ installs until that runtime is added to CI.
+- XLSX support loads only when catalogue export is used. An incomplete source
+  environment now leaves unrelated workflows available and reports the exact
+  install command needed to restore `openpyxl`.
+
 ## [0.7.0-alpha.7] — 2026-06-12
 
 ### Added

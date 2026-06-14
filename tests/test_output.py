@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+import builtins
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from normal.output import _build_register_rows, build_movie_review_rows, write_movie_review_csv
+from normal.output import (
+    MissingDependencyError,
+    _build_register_rows,
+    build_movie_review_rows,
+    write_movie_register_xlsx,
+    write_movie_review_csv,
+)
 
 
 class OutputTests(unittest.TestCase):
@@ -206,6 +214,26 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(rows[0][0:2], ["1917", "2019"])
         self.assertEqual(rows[0][4], "Dolby TrueHD 7.1 Atmos")
         self.assertEqual(rows[1][0:2], ["2001 A Space Odyssey", "1968"])
+
+    def test_movie_register_reports_how_to_restore_missing_xlsx_dependency(self) -> None:
+        real_import = builtins.__import__
+
+        def import_without_openpyxl(name, *args, **kwargs):
+            if name == "openpyxl" or name.startswith("openpyxl."):
+                raise ModuleNotFoundError("No module named 'openpyxl'", name="openpyxl")
+            return real_import(name, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            report_path = root / "movie-quality.json"
+            report_path.write_text('{"movies": []}', encoding="utf-8")
+
+            with patch("builtins.__import__", side_effect=import_without_openpyxl):
+                with self.assertRaisesRegex(
+                    MissingDependencyError,
+                    r"python -m pip install -e \.",
+                ):
+                    write_movie_register_xlsx(report_path, root / "catalogue.xlsx")
 
 
 if __name__ == "__main__":
