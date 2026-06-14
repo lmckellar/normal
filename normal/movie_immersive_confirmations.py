@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 from typing import Any
 
+from normal import paths
 from normal.models import utc_now_iso
 from normal.movie_naming import match_variant_keys, title_match_key
 
@@ -16,7 +17,7 @@ VALID_VERDICTS = {"available", "final_below_target", "unknown"}
 
 
 def default_store_path() -> Path:
-    return Path.home() / ".local" / "share" / "normal" / "immersive-confirmations.json"
+    return paths.data_dir() / "immersive-confirmations.json"
 
 
 def confirmation_key(title: str, year: int) -> str:

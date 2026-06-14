@@ -16,6 +16,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from normal import paths
 from normal.audit import AuditEffect, AuditEvent, AuditStore, AuditSubject, make_event_id
 from normal.models import WarningItem, utc_now_iso
 from normal.movie_identity import MovieIdentityKey, canonical_identity_key, parse_movie_identity
@@ -816,7 +817,7 @@ def _imdb_dataset_dir_from_env() -> Path | None:
 
 
 def _managed_data_root() -> Path:
-    return Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")) / "normal"
+    return paths.data_dir()
 
 
 def managed_imdb_dataset_dir() -> Path:
@@ -1188,8 +1189,7 @@ def canonical_entry_from_tmdb_item(item: dict[str, Any]) -> CanonicalListEntry |
 
 
 def canonical_cache_dir(provider_kind: CanonicalProviderKind) -> Path:
-    base = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
-    path = base / "normal" / "canonical_lists" / CACHE_SCHEMA_VERSION / provider_kind
+    path = paths.data_dir() / "canonical_lists" / CACHE_SCHEMA_VERSION / provider_kind
     path.mkdir(parents=True, exist_ok=True)
     return path
 

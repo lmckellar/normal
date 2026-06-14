@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from normal import paths
 from normal.source_policy import ApprovedRoots, Operation, SourcePolicyError, validate_source_for_operation
 from .activity import build_activity_payload
 from .http import RequestContext
@@ -13,7 +14,7 @@ from .scan_guard import build_source_scan_warning
 
 
 def library_roots_path() -> Path:
-    return Path.home() / ".local" / "share" / "normal" / "library-roots.json"
+    return paths.data_dir() / "library-roots.json"
 
 
 def _validated_library_root(source: str, approved_roots: ApprovedRoots) -> str:

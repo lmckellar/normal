@@ -6,6 +6,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from normal import paths
+
 _SECRETS_FILENAME = "secrets.env"
 _MANAGED_KEYS = ("OMDB_KEY", "TMDB_KEY")
 _FORBIDDEN_VALUE_CHARS = ("\n", "\r", "\x00")
@@ -16,13 +18,8 @@ def _ensure_storable(value: str) -> None:
         raise ValueError("key value may not contain newline or NUL characters")
 
 
-def _data_dir() -> Path:
-    base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return Path(base) / "normal"
-
-
 def secrets_file_path() -> Path:
-    return _data_dir() / _SECRETS_FILENAME
+    return paths.data_dir() / _SECRETS_FILENAME
 
 
 def _field_name(env_key: str) -> str:

@@ -9,6 +9,7 @@ import shutil
 import tempfile
 from typing import Any
 
+from normal import paths
 from normal.models import utc_now_iso
 from normal.movie_naming import title_match_key
 from normal.movie_plan import parse_movie_name
@@ -70,7 +71,7 @@ class ReplacementQueueItem:
 
 
 def default_queue_path() -> Path:
-    return Path.home() / ".local" / "share" / "normal" / "movie-replacement-queue.json"
+    return paths.replacement_queue_path()
 
 
 def title_key(title: str) -> str:

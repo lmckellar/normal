@@ -12,6 +12,7 @@ import tempfile
 import time
 from typing import Any, Callable
 
+from normal import paths
 from normal.models import WarningItem, utc_now_iso
 from normal.movie_moron_encoders import lookup_moron_encoder
 from normal.movie_plan import concise_movie_base, parse_movie_name, path_has_normalized_movie_shape
@@ -207,9 +208,9 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
     },
 }
 
-MOVIE_STANDARDS_PATH = Path.home() / ".local" / "share" / "normal" / "movie-standards.json"
+MOVIE_STANDARDS_PATH = paths.data_dir() / "movie-standards.json"
 LEGACY_MOVIE_STANDARDS_PATH = Path(__file__).resolve().parent.parent / "movie_standards.json"
-OPERATOR_PREFERENCES_PATH = Path.home() / ".local" / "share" / "normal" / "operator-preferences.json"
+OPERATOR_PREFERENCES_PATH = paths.data_dir() / "operator-preferences.json"
 ENGLISH_AUDIO_LANGUAGES = {"eng", "en", "english"}
 ENGLISH_SUBTITLE_LANGUAGES = {"eng", "en", "english"}
 DELETE_MODES = (

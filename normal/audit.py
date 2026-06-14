@@ -8,6 +8,7 @@ import queue
 import threading
 from typing import Any
 
+from normal import paths
 from normal.models import utc_now_iso
 
 
@@ -97,15 +98,15 @@ class AuditRevisionNotice:
 
 
 def default_audit_path() -> Path:
-    return Path.home() / ".local" / "share" / "normal" / "audit-ledger.jsonl"
+    return paths.data_dir() / "audit-ledger.jsonl"
 
 
 def default_replacement_queue_path() -> Path:
-    return Path.home() / ".local" / "share" / "normal" / "movie-replacement-queue.json"
+    return paths.replacement_queue_path()
 
 
 def default_subtitle_history_path() -> Path:
-    return Path.home() / ".local" / "share" / "normal" / "subtitle-fix-history.json"
+    return paths.subtitle_history_path()
 
 
 def normalize_source_root(source_root: Path | str) -> str:

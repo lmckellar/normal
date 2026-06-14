@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from normal import paths
 from normal.models import utc_now_iso
 
 
@@ -15,7 +16,7 @@ _TITLE_YEAR_RE = re.compile(r"^(.+?)\s*\((\d{4})\)")
 
 
 def default_history_path() -> Path:
-    return Path.home() / ".local" / "share" / "normal" / "subtitle-fix-history.json"
+    return paths.subtitle_history_path()
 
 
 def load_history(state_path: Path | None = None) -> dict[str, Any]:

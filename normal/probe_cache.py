@@ -7,12 +7,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+from normal import paths
 from normal.movie_scan import media_facts_from_dict
 from normal.quality_review import MediaFacts
 
 
 class ProbeCache:
-    _PATH = Path.home() / ".local" / "share" / "normal" / "probe-cache.json"
+    _PATH = paths.data_dir() / "probe-cache.json"
     _VERSION = 5
     # Writes are batched: a full-tree scan calls put() once per file, and each
     # _save rewrites the whole entries dict, so per-put persistence was O(n^2)
