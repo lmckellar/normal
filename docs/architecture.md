@@ -34,7 +34,7 @@ Quality starts with local media facts, then classifies them into action and qual
 - `ffprobe` gathers per-file media facts, now including stream aspect metadata, so `resolution_bucket` can represent effective display class rather than raw stored raster when the container exposes usable SAR/DAR data.
 - `movie_profile.py` classifies those facts against repo-local movie standards.
 - The same profile result feeds the Dashboard, Review Low-Quality Encodes, Audio Packaging, and Subtitle Readiness flows.
-- The probed audio facts (carrier codec, channel layout) also back the **Immersive Audio** workflow, which pairs them with a crowdsourced Atmos/DTS:X availability corpus the source metadata never carries.
+- The probed facts (carrier codec, channel layout, resolution, HDR signalling) also back the **Format Upgrade Candidates** workflow, which pairs them with a local trait corpus — immersive audio, UHD, Dolby Vision, Open Matte, Hybrid — to judge what better release exists and whether local copies already carry it, a fact the source metadata never carries.
 - This shared-scan model is deliberate — it avoids separate full-library rescans per page.
 
 Scan economics matter here:

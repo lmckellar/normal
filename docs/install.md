@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- **Python 3.12, 3.13, or 3.14**
+- **Python 3.12, 3.13, or 3.14** — these are the tested targets; packaging rejects unvalidated 3.15+ installs until that runtime is added to CI
 - **ffprobe** — required by every command that probes media: `movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, and `web`
 
 ### Getting ffprobe

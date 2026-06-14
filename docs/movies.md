@@ -14,7 +14,7 @@ To export a formatted XLSX catalogue, use the **Export** button on the Movies li
 
 **Compare Against Canonical Lists** measures owned titles against IMDb-derived all-time lists using a local dataset plus a local cache. The lists are consensus-weighted locally rather than sorted by raw average alone, so broadly validated films outrank niche high-average outliers. It is title-coverage focused — bitrate, quality tiers, and warning telemetry don't affect the result.
 
-Set `IMDB_DATASET_DIR` to a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz` before launch. TMDb stays available as an explicit secondary provider when `TMDB_KEY` is set. The coverage badges are intentionally simple and good enough for first-pass tracking; badge refinement is deferred. For the broader local-first versus outbound-API posture, see [Safety](safety.md#networking-behaviour).
+Set `IMDB_DATASET_DIR` to a directory containing `title.basics.tsv.gz` and `title.ratings.tsv.gz` before launch. TMDb stays available as an explicit secondary provider when `TMDB_KEY` is set. The coverage badges are intentionally simple and good enough for first-pass tracking; badge refinement is deferred. For the broader local-first versus outbound-API posture, see [Safety](safety.md#remote-access-and-metadata).
 
 ![Compare Against Canonical Lists](assets/canonical_lists.png)
 
@@ -28,7 +28,7 @@ Title (Year)/Title (Year).mkv
 
 The production normalizer is concise-first and treated as the intended movie shape. **All Results** includes already-normalized items as no-change rows, so the preview shows the full downstream structure, not just the diffs. The main workbench renders the projected library shape inline as a compact directory tree, stages preview through row selection, and confirms the same apply action it previewed — useful both for checking whether a proposal is merely parsable and whether the selected downstream shape is coherent before applying.
 
-Deep links: `/?workflow=normalize`, `/?workflow=weak-encodes`, `/?workflow=repair-defaults`, `/?workflow=junk`, `/?workflow=immersive-audio`.
+Deep links: `/?workflow=normalize`, `/?workflow=weak-encodes`, `/?workflow=repair-defaults`, `/?workflow=junk`, `/?workflow=format-upgrades`.
 
 Verbose naming still exists temporarily in the CLI as parser-hardening scaffolding, but it is not the public end state:
 
@@ -100,9 +100,11 @@ Quality results include a normalized main-audio summary for the playback-relevan
 
 That shell routes weak-floor editing through the shared **Policy** rail. The default stays intentionally conservative — `Standard Definition`, not `Library Grade` — because the point of the delete workflow is to identify the weakest safe replacement candidates first, not to drag stronger titles into an aggressive destructive lane by default. Weak-encode ownership is also narrower than general review: if a file already has good English audio and the real defect is wrong default-language packaging, that belongs to **Fix Audio and Subtitle Defaults**, not **Review Low-Quality Encodes**.
 
+Each weak row carries a **badges** column that names the specific defect behind the verdict rather than leaving it to a bare score. Beyond starved video or audio, that includes **lopsided** encodes — one stream fine and the other gutted, like a reference-grade picture welded to a 96 kbps down-mix or lossless audio laid over a smeared transcode — and a **known-bad encoder** verdict when the filename still carries a release group with a poor track record: a hard *Known moron* for reliable offenders (YIFY/YTS and the like) and a softer *Suspect encoder* for hit-or-miss groups. The encoder badge is an editorial track-record claim layered over the existing diagnosis, never a detector of its own. The lopsided imbalance threshold is tunable through the **Policy** rail. A global **Fun Mode** operator preference toggles the playful voice on these badges; with it off they read plainly.
+
 **Review Low-Quality Encodes** lets you select weak files for deletion. Each deleted file enters a replacement queue, and when a better encode for the same title shows up in a future scan it is automatically marked complete. Queue history has four hard filters — `Deleted, Awaiting Replacement`, `Replaced`, `Deleted From Queue`, and `All Items`. Deleted rows can be dismissed from history inline when the release is no longer worth replacing; that only changes queue state and touches no media.
 
-The queue-history table sorts by title, year, and IMDb rating. Ratings are fetched server-side from [OMDb](https://www.omdbapi.com/) and require a free key via `--omdb-key` or `OMDB_KEY`. Lookups use local title cleanup plus a small cache, so repeated loads don't keep spending the quota. Without a key the column is hidden; when OMDb is rate-limited, new cells show `limit` and cached ratings still display. This is one of the few optional outbound paths — see [Safety](safety.md#networking-behaviour).
+The queue-history table sorts by title, year, and IMDb rating. Ratings are fetched server-side from [OMDb](https://www.omdbapi.com/) and require a free key via `--omdb-key` or `OMDB_KEY`. Lookups use local title cleanup plus a small cache, so repeated loads don't keep spending the quota. Without a key the column is hidden; when OMDb is rate-limited, new cells show `limit` and cached ratings still display. This is one of the few optional outbound paths — see [Safety](safety.md#remote-access-and-metadata).
 
 ![Review Low-Quality Encodes](assets/delete_weak_encodes.png)
 
@@ -136,13 +138,21 @@ When you run a combined audio + subtitle repair, `normal` computes the final int
 
 ![Fix Audio and Subtitle Defaults](assets/repair_defaults.png)
 
-## Immersive Audio
+## Format Upgrade Candidates
 
-**Review Immersive Audio Candidates** (`/?workflow=immersive-audio`) tackles a fact no scanner can read off a library: whether a film is even *available* in an object-based immersive mix (Dolby Atmos / DTS:X). The upstream catalogues don't expose it, so the workflow crowdsources it.
+**Review Format Upgrade Candidates** (`/?workflow=format-upgrades`) tackles a question no scanner can answer off a library and no public API will sell you: does a *better release* of this film even exist, and do your own copies already have it? It started as an immersive-audio check and grew into a general assessment across five release **traits**:
 
-Each row pairs what the local container actually probes — carrier codec and channel layout — with a seeded, expandable corpus of titles known to have, or to lack, an immersive release. That lets the workbench frame a row as a concrete upgrade candidate rather than a guess. A tri-state **Status** column (immersive available / not available / unknown) replaced the older manual per-title voting, and the verdict surface is split into **Status**, a separate **Audio** explainer, and a **Quality Profile** column.
+- **Immersive Audio** — an object-based mix (Dolby Atmos / DTS:X)
+- **UHD** — a 4K release
+- **Dolby Vision** — dynamic HDR
+- **Open Matte** — an alternate framing that opens up the matted picture
+- **Hybrid** — a fan-assembled best-of-sources encode
 
-Atmos/DTS:X crediting is gated on the actual carrier codec, so a lossy core can't masquerade as the object track. The workflow is non-destructive: it records distinctly-coloured Telemetry Vote events into the audit ledger and flags non-normalized rows with normalization tooltips. The "not available" corpus ships seeded with researched titles and can be extended and shared internally.
+Each owned title gets one row per trait, and the columns read as a sentence: **Upgrade Feature** (the trait), **Known Release** (what the corpus knows exists — *Confirmed Available*, *Likely Available*, *No Known Release*, *Conflicting Reports*, or *Not Researched*), **Corpus Verdict** (the resulting opportunity — *Upgrade Found*, *Partial Coverage*, *Already Covered*, *Quality Review*, *No Known Upgrade*, *Conflicting Reports*, or *Research Needed*), and **Your Copies** (how many local copies carry the trait). Want to know whether your copy of *The Matrix* secretly has a Dolby Vision release available now? Come in. Whether that 7.1 copy of *Top Gun: Maverick* is actually Atmos? It will tell you no — there *is* an Atmos release, your copy just isn't it.
+
+The verdict is evidence-driven on both sides. The "known release" half draws on a seeded, expandable corpus where every claim carries a **basis** (local probe, curated research, manual verification, imported or user report) and a **reliability** grade; a filename that merely *asserts* a trait it can't substantiate reads as needing corroboration rather than being trusted, and Open Matte and Hybrid claims in particular must be corroborated before they count. The "your copies" half is gated on what the container actually probes, so a lossy core can't masquerade as a tracked object track. The default view keeps the actionable, covered, quality-review, no-upgrade, and conflicting rows visible; switch the filter to **Research Needed** to inspect traits with no release evidence yet.
+
+The workflow is non-destructive: it records distinctly-coloured trait-observation events into the audit ledger and flags non-normalized rows with normalization tooltips. The corpus ships seeded with researched titles and can be extended over time.
 
 <placeholder awaiting screenshot>
 
@@ -176,7 +186,7 @@ The **Audio** column uses the same normalized main-audio summary as the scan and
 | Remove Junk Files | Remove junk videos and sidecar spam after preview and confirmation |
 | Review Low-Quality Encodes | Triage low-floor encodes and queue replacements |
 | Fix Audio and Subtitle Defaults | Fix default audio/subtitle behavior where supported, or keep review cases visible |
-| Review Immersive Audio Candidates | Flag titles that have or lack an object-based immersive mix and vote into a shared availability dataset |
+| Review Format Upgrade Candidates | Assess each title against known UHD, Dolby Vision, immersive-audio, Open Matte, and Hybrid releases and show whether your copies already cover them |
 | Compare Against Canonical Lists | Compare owned titles against curated movie lists and unlock simple coverage badges |
 
 Scan cancellation is cooperative rather than instantaneous: scans check between files, while a running `ffprobe` may still finish or hit its timeout before unwind completes.

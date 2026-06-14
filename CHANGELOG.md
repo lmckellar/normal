@@ -6,13 +6,31 @@ and GitHub prerelease. Earlier sections remain reconstructed history.
 
 ## [Unreleased]
 
+## [0.7.0-alpha.8] — 2026-06-14
+
+### Added
+
+- **Format Upgrade Candidates.** The Immersive Audio workflow grew up. What started as "is this title available in an object-based mix?" is now a general question about *release traits* — **immersive audio** (Atmos / DTS:X), **UHD**, **Dolby Vision**, **Open Matte**, and **Hybrid** — answered against a local corpus and your own copies. Renamed to **Review Format Upgrade Candidates** (`/?workflow=format-upgrades`; the old `immersive-audio` link still resolves). Each title gets one row per feature with three columns that read as a sentence: **Known Release** (what the corpus knows exists), **Corpus Verdict** (the resulting upgrade opportunity — found, partial, already covered, none known, conflicting, research needed), and **Your Copies** (local coverage). Want to know whether your copy of *The Matrix* secretly has a Dolby Vision release available now? Come in. Whether that 7.1 copy of *Top Gun: Maverick* is actually Atmos? It will tell you no. Each trait stays gated on real evidence, so a lossy core can't masquerade as a tracked object.
+- **Evidence-backed trait assessments.** Every claim now carries a basis (local probe, curated research, manual verification, imported or user report) and a reliability grade, and the verdict honours them. A filename that asserts a feature it can't substantiate reads as *needs corroboration* rather than being trusted, and Open Matte / Hybrid claims in particular require corroboration before they count.
+- **Weak-encode badges + Fun Mode.** Review Low-Quality Encodes gains a badge column that names *why* a file is weak, with a global **Fun Mode** operator preference that toggles the playful voice on those badges across the workbench.
+- **Known-moron encoder badges.** A file whose name still carries a known-bad release group or uploader (YIFY / YTS, MkvCage, and friends) earns a **Known moron** badge — or a softer **Suspect encoder** for hit-or-miss groups. This is an editorial track-record verdict layered over the existing diagnosis, never a detector of its own. Seeded from a versioned data file.
+- **Lopsided encode detection.** A new weak-encode check flags files where one stream is fine and the other is starved — a reference-grade video welded to a 96 kbps down-mix, or lossless audio laid over a smeared transcode — with a configurable imbalance threshold in library policy.
+- **Reclaimed-space chip** in the weak-encode and repair previews, so the space a delete or repair would free is visible before you confirm.
+
 ### Changed
 
-- Python 3.12, 3.13, and 3.14 are now explicit tested targets. Packaging rejects
-  unvalidated Python 3.15+ installs until that runtime is added to CI.
-- XLSX support loads only when catalogue export is used. An incomplete source
-  environment now leaves unrelated workflows available and reports the exact
-  install command needed to restore `openpyxl`.
+- **Python support is explicit and bounded.** 3.12, 3.13, and 3.14 are tested targets; packaging rejects unvalidated 3.15+ installs until that runtime is added to CI.
+- **XLSX export loads lazily.** `openpyxl` is imported only when catalogue export actually runs, so an incomplete environment leaves every other workflow available and reports the exact install command needed to restore it.
+- **Trait/immersive seeds moved to a versioned data file** under `normal/data/` with provenance, instead of being inlined in code.
+- Workbench typography and table palette restyled for a calmer local-first read; shared table spacing and the foundation column unified across lanes.
+- Normalize's Projected Path column now delineates folder from file.
+- Probe-cache writes are batched per scan instead of saved per file.
+
+### Fixed
+
+- Wheel packaging now ships the `normal.web` subpackage and its bundled assets, so a wheel install launches the web UI correctly.
+- The low-audio weak badge no longer fires on codec-floor-only misses.
+- Lopsided-encode review routing and cache invalidation corrected.
 
 ## [0.7.0-alpha.7] — 2026-06-12
 

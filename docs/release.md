@@ -4,7 +4,7 @@ An internal guide for keeping versioning, the changelog, and the roadmap aligned
 
 ## Versioning
 
-The current package version is `0.7.0a7`, tagged `v0.7.0-alpha.7` and published as a GitHub **prerelease**. Earlier history in `CHANGELOG.md` is a planning aid — reconstructed, not a set of real tags or releases.
+The current package version is `0.7.0a8`, tagged `v0.7.0-alpha.8` and published as a GitHub **prerelease**. Earlier history in `CHANGELOG.md` is a planning aid — reconstructed, not a set of real tags or releases.
 
 Use the smallest bump that explains the work:
 

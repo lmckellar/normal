@@ -211,7 +211,7 @@ Movie pages currently exposed:
 - `Remove Junk Files`
 - `Review Low-Quality Encodes`
 - `Fix Audio and Subtitle Defaults`
-- `Review Immersive Audio Candidates`
+- `Review Format Upgrade Candidates`
 - `Compare Against Canonical Lists`
 
 Workflow deep links:
@@ -220,7 +220,7 @@ Workflow deep links:
 - `/?workflow=weak-encodes`
 - `/?workflow=repair-defaults`
 - `/?workflow=junk`
-- `/?workflow=immersive-audio`
+- `/?workflow=format-upgrades` (the older `/?workflow=immersive-audio` still resolves here)
 
 Heavy recursive web scans show a confirmation warning for risky sources (drive-root style paths, NTFS/FUSE mounts), and the server rejects overlapping heavy scans for the same source rather than running them concurrently. Scan cancellation is cooperative: profile scans check between files, and a running `ffprobe` may finish or time out before the request fully unwinds.
 

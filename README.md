@@ -1,7 +1,7 @@
 # normal
 
 ![Status](https://img.shields.io/badge/status-alpha-orange)
-![Version](https://img.shields.io/badge/version-0.7.0--alpha.7-blue)
+![Version](https://img.shields.io/badge/version-0.7.0--alpha.8-blue)
 ![Python](https://img.shields.io/badge/python-3.12%E2%80%933.14-blue)
 ![Platform](https://img.shields.io/badge/platform-Linux--first-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -26,11 +26,10 @@ User consensus is unanimous:
 - 📤 One Click Export your entire library as a cleanly organized spreadsheet for a quick 💪
 - 🤝 Removes downstream frustrations with clients like Plex, Emby and Jellyfin and their oddly conflicting naming requirements
 - 🦀 Conceals its deep shame and embarrassment for being agent-coded in 2026 but not written in Rust
+- 🆙 Tells you whether a *better release* of a film even exists — UHD, Dolby Vision, object-based immersive audio (Atmos / DTS:X), Open Matte, or Hybrid — and whether your own copies already have it. A fact no scanner can read off a library and no public API will sell you
 - 📊 Lets you compare your collection directly against canonical movie lists and identify what's missing:
-  - IMDB Top 100 All Time
-  - IMDB Top 250 All Time
-  - IMDB Top 100 Action
-  - IMDB Top 100 Animation
+  - IMDb Top 100 / 250 / 500 All Time
+  - Genre lists: Animation, Sci-Fi, Fantasy, Action, Thriller/Mystery, Drama/Romance, Documentary, Comedy
 - 🚨 It even does other stuff too 🔥
 
 All packaged with a clean web GUI, minimal dependencies and all core features are local only.
@@ -116,7 +115,7 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 macOS and Windows aren't hardened yet. They may already work, but they haven't been validated, and other mount and filesystem types are similarly untested. Treat them as "help wanted," not "you're on your own."
 
-**Requirements:** `ffprobe` for media-probing workflows (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`); `ffmpeg` for remux repairs; and `mkvpropedit` (from `mkvtoolnix`) for the light touch subtitle swaps, falling back to `ffmpeg` when absent. These are external binaries — install them from your distro's packages. The sole Python dependency, `openpyxl`, installs into the active interpreter with `python -m pip install -e .` and powers the XLSX export.
+**Requirements:** `ffprobe` for media-probing workflows (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`); `ffmpeg` for remux repairs; and `mkvpropedit` (from `mkvtoolnix`) for the light touch subtitle swaps, falling back to `ffmpeg` when absent. These are external binaries — install them from your distro's packages. The sole Python dependency, `openpyxl`, installs into the active interpreter with `python -m pip install -e .` and powers the XLSX export; it loads lazily, so a missing or broken `openpyxl` only affects catalogue export — every other workflow keeps running and the export tells you the exact command to restore it.
 
 ## 🙌 Get Involved
 

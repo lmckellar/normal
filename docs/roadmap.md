@@ -6,7 +6,7 @@
 
 `normal` is in a semi-stable alpha with a default movie **workbench** at the root route and a narrower, more coherent product shape. Normalize, weak-encode triage, junk cleanup, repair defaults, canonical-list coverage, and export are all materially useful. Recent scan/cache work and the shell pivot make the product feel deliberate rather than exploratory — but it is still pre-`1.0` and still best suited to Linux users comfortable with alpha software.
 
-`v0.7.0-alpha.7` is the current tagged cut. It adds the **Immersive Audio** workflow that crowdsources Atmos/DTS:X availability the source metadata never carries, a **cold-start onboarding gate**, and a **weak-encodes triage score**; it also routes weak-encode and audio deletes through the replacement queue under the unified audit ledger — continuing to favor one coherent workbench that is honest about what each action actually does.
+`v0.7.0-alpha.8` is the current tagged cut. Its centrepiece is **Format Upgrade Candidates** — the old Immersive Audio lane grown into an evidence-backed assessment of whether a *better release* of each title exists (immersive audio, UHD, Dolby Vision, Open Matte, Hybrid) and whether local copies already cover it. The same cut adds weak-encode **badges** (lopsided-encode detection plus known-bad-encoder verdicts) under a global **Fun Mode** toggle, and hardens the boring machinery: explicit Python 3.12–3.14 support with 3.15+ rejected, lazy XLSX loading, and a wheel-packaging fix that ships the web UI. It continues to favor one coherent workbench that is honest about what each action actually does. The preceding `alpha.7` introduced the Immersive Audio workflow, a **cold-start onboarding gate**, and a **weak-encodes triage score**, and routed weak-encode and audio deletes through the replacement queue under the unified audit ledger.
 
 ### Concerns
 
@@ -87,7 +87,7 @@ Both lanes stable, with a clear, distinctive identity: folder and tagging qualit
 
 ## Disclaimer
 
-`normal` is pre-`1.0`. The current version story was reconstructed from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1` and the current release is `v0.7.0-alpha.7`; both carry matching prerelease intent. Earlier `CHANGELOG.md` sections remain reconstructed history rather than tagged releases.
+`normal` is pre-`1.0`. The current version story was reconstructed from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1` and the current release is `v0.7.0-alpha.8`; both carry matching prerelease intent. Earlier `CHANGELOG.md` sections remain reconstructed history rather than tagged releases.
 
 ---
 

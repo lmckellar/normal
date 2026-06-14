@@ -68,7 +68,7 @@ Workflow deep links use the main route:
 - `http://127.0.0.1:8765/?workflow=weak-encodes`
 - `http://127.0.0.1:8765/?workflow=repair-defaults`
 - `http://127.0.0.1:8765/?workflow=junk`
-- `http://127.0.0.1:8765/?workflow=immersive-audio`
+- `http://127.0.0.1:8765/?workflow=format-upgrades`
 
 Exercise the lanes in order:
 
@@ -77,7 +77,7 @@ Exercise the lanes in order:
 3. **Remove Junk Files** — check junk detection is neither too timid nor too reckless
 4. **Review Low-Quality Encodes** — see whether the replacement-candidate policy feels sane
 5. **Fix Audio and Subtitle Defaults** — review the audio-packaging and subtitle-default logic
-6. **Review Immersive Audio Candidates** — flag Atmos/DTS:X upgrade candidates and contribute to the shared availability dataset
+6. **Review Format Upgrade Candidates** — see whether better releases (UHD, Dolby Vision, Atmos/DTS:X, Open Matte, Hybrid) exist for your titles and whether your copies already cover them
 7. **Compare Against Canonical Lists** — the distinct coverage pass, once the core cleanup lanes look right
 
 ## 4. Only then consider live use
