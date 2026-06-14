@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+import ipaddress
 import secrets
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -10,6 +11,7 @@ from urllib.parse import urlsplit
 MUTATION_TOKEN = secrets.token_urlsafe(32)
 MAX_JSON_BODY = 5 * 1024 * 1024
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+LOOPBACK_NETWORKS = (ipaddress.ip_network("127.0.0.0/8"), ipaddress.ip_network("::1/128"))
 
 
 class PostRejected(Exception):
@@ -45,6 +47,27 @@ def parse_host(value: str) -> RequestOrigin:
     if not parsed.hostname:
         raise PostRejected(HTTPStatus.FORBIDDEN, "host not allowed")
     return RequestOrigin(_normal_host(parsed.hostname), parsed.port)
+
+
+def parse_allowed_peers(values: list[str]) -> tuple[ipaddress._BaseNetwork, ...]:
+    return tuple(ipaddress.ip_network(value, strict=False) for value in values)
+
+
+def check_peer(
+    handler: BaseHTTPRequestHandler,
+    *,
+    allowed_peers: tuple[ipaddress._BaseNetwork, ...],
+) -> None:
+    try:
+        peer = ipaddress.ip_address(handler.client_address[0])
+    except (ValueError, IndexError):
+        raise PostRejected(HTTPStatus.FORBIDDEN, "peer not allowed")
+    if peer.version == 6 and peer.ipv4_mapped is not None:
+        peer = peer.ipv4_mapped
+    for network in LOOPBACK_NETWORKS + allowed_peers:
+        if peer.version == network.version and peer in network:
+            return
+    raise PostRejected(HTTPStatus.FORBIDDEN, "peer not allowed")
 
 
 def check_post(

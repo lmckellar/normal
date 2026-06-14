@@ -11,7 +11,7 @@ from normal.movie_plan import build_movie_plan
 from normal.movie_profile import build_histogram_payload, scan_movie_profiles
 from normal.movie_scan import MovieScanProgress, scan_movie_library
 from normal.output import write_movie_register_xlsx, write_movie_review_csv
-from normal.web import ApprovedRoots, serve_web_ui
+from normal.web import ApprovedRoots, parse_allowed_peers, serve_web_ui
 
 
 def ensure_source_directory(source: Path) -> Path:
@@ -139,6 +139,7 @@ def run_web(
     tmdb_key: str | None = None,
     unsafe_remote: bool = False,
     allow_roots: list[Path] | None = None,
+    allow_peers: list[str] | None = None,
 ) -> int:
     default_source = None
     if source is not None:
@@ -149,7 +150,8 @@ def run_web(
     for raw_root in allow_roots or []:
         seed_roots.append(ensure_source_directory(raw_root))
     approved_roots = ApprovedRoots.from_paths(seed_roots)
-    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, unsafe_remote=unsafe_remote, approved_roots=approved_roots)
+    allowed_peers = parse_allowed_peers(allow_peers or [])
+    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, unsafe_remote=unsafe_remote, approved_roots=approved_roots, allowed_peers=allowed_peers)
     return 0
 
 

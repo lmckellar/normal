@@ -124,6 +124,7 @@ def serve_web_ui(
     tmdb_key: str | None = None,
     unsafe_remote: bool = False,
     approved_roots: ApprovedRoots | None = None,
+    allowed_peers: tuple = (),
 ) -> None:
     state.CREDENTIAL_STORE.seed_from_boot(omdb_key=omdb_key, tmdb_key=tmdb_key)
     handler = build_handler(
@@ -131,6 +132,7 @@ def serve_web_ui(
         bound_host=host,
         unsafe_remote=unsafe_remote,
         approved_roots=approved_roots,
+        allowed_peers=allowed_peers,
     )
     server = ThreadingHTTPServer((host, port), handler)
     source_hint = f" default source {default_source}" if default_source else ""
@@ -214,6 +216,7 @@ def build_handler(
     bound_host: str = "127.0.0.1",
     unsafe_remote: bool = False,
     approved_roots: ApprovedRoots | None = None,
+    allowed_peers: tuple = (),
 ):
     get_routes = build_get_routes()
     post_routes = build_post_routes()
@@ -233,6 +236,11 @@ def build_handler(
 
         def do_GET(self) -> None:
             ctx = self._request_context()
+            try:
+                security.check_peer(self, allowed_peers=allowed_peers)
+            except PostRejected as exc:
+                ctx.respond_json({"error": exc.message}, status=exc.status)
+                return
             route = self.path.split("?", 1)[0]
             handler = get_routes.get(route)
             if handler is None:
@@ -253,6 +261,7 @@ def build_handler(
                 ctx.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
                 return
             try:
+                security.check_peer(self, allowed_peers=allowed_peers)
                 security.check_post(
                     self,
                     bound_host=bound_host,

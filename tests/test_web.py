@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import tempfile
 import threading
+import types
 import unittest
 import urllib.error
 import urllib.request
 from contextlib import contextmanager
+from http import HTTPStatus
 from http.server import ThreadingHTTPServer
 import json
 from pathlib import Path
@@ -21,7 +23,7 @@ from normal.web import (
     render_workbench_html,
 )
 from normal.web.routes_cleanup import delete_mode_for_kind
-from normal.web.security import MUTATION_TOKEN
+from normal.web.security import MUTATION_TOKEN, PostRejected, check_peer, parse_allowed_peers
 
 
 WORKBENCH_TEMPLATE = read_web_asset_text("normalize_lab.html")
@@ -1286,6 +1288,31 @@ class WebPostSecurityTests(unittest.TestCase):
                     headers={"Content-Type": "application/json", "Content-Length": str(MAX_JSON_BODY + 1)},
                 )
         self.assertEqual(ctx.exception.code, 403)
+
+
+class WebPeerGateTests(unittest.TestCase):
+    def handler(self, ip):
+        return types.SimpleNamespace(client_address=(ip, 50000))
+
+    def test_loopback_is_allowed_without_an_allowlist(self):
+        check_peer(self.handler("127.0.0.1"), allowed_peers=())
+        check_peer(self.handler("::1"), allowed_peers=())
+        check_peer(self.handler("::ffff:127.0.0.1"), allowed_peers=())
+
+    def test_lan_peer_is_rejected_by_default(self):
+        with self.assertRaises(PostRejected) as ctx:
+            check_peer(self.handler("192.168.1.20"), allowed_peers=())
+        self.assertEqual(ctx.exception.status, HTTPStatus.FORBIDDEN)
+
+    def test_lan_peer_is_allowed_only_inside_the_allowlist(self):
+        peers = parse_allowed_peers(["192.168.1.0/24"])
+        check_peer(self.handler("192.168.1.20"), allowed_peers=peers)
+        with self.assertRaises(PostRejected):
+            check_peer(self.handler("192.168.2.20"), allowed_peers=peers)
+
+    def test_malformed_peer_is_rejected(self):
+        with self.assertRaises(PostRejected):
+            check_peer(self.handler("not-an-ip"), allowed_peers=())
 
 
 class WebApprovedRootTests(unittest.TestCase):

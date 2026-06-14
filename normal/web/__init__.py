@@ -12,6 +12,7 @@ from .scan_guard import (
     looks_like_drive_directory,
     resolve_source_path,
 )
+from .security import parse_allowed_peers
 from .serializers import build_movie_normalize_results
 from .server import build_handler, read_onboarding_bootstrap, read_web_asset_text, render_workbench_html, serve_web_ui
 from .state import HEAVY_SCAN_REGISTRY, RequestConflictError
@@ -36,6 +37,7 @@ __all__ = [
     "format_storage_size",
     "guarded_heavy_scan",
     "looks_like_drive_directory",
+    "parse_allowed_peers",
     "read_web_asset_text",
     "render_workbench_html",
     "resolve_source_path",
