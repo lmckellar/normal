@@ -72,6 +72,7 @@ CANONICAL_TOKEN_MAP = {
     "atmos": "Atmos",
     "multisub": "MULTISUB",
     "remastered": "Remastered",
+    "hybrid": "Hybrid",
     "commentary": "Commentary",
     "multi": "MULTI",
 }
@@ -143,7 +144,10 @@ COMPACT_TITLE_WORDS = {
 }
 
 ParsedMovieName = ParsedMovieIdentity
-NORMALIZED_MOVIE_BASE_PATTERN = re.compile(r"^(?P<title>.+) \((?P<year>19\d{2}|20\d{2}|2100)\)$")
+NORMALIZED_MOVIE_BASE_PATTERN = re.compile(
+    r"^(?P<title>.+) \((?P<year>19\d{2}|20\d{2}|2100)\)"
+    r"(?: (?P<semantic_traits>Open Matte(?: Hybrid)?|Hybrid))?$"
+)
 LEGACY_TITLE_UPGRADE_REASON = "normalized_title_punctuation_upgrade"
 
 
@@ -735,7 +739,13 @@ def dedupe_preserve_order(tokens: list[str]) -> list[str]:
         ordered.append(token)
     return ordered
 def concise_movie_base(parsed: ParsedMovieName) -> str:
-    return f"{parsed.title} ({parsed.year})"
+    semantic_traits = [
+        label
+        for label in ("Open Matte", "Hybrid")
+        if any(token.casefold() == label.casefold() for token in parsed.tech_tokens)
+    ]
+    suffix = f" {' '.join(semantic_traits)}" if semantic_traits else ""
+    return f"{parsed.title} ({parsed.year}){suffix}"
 
 
 def path_has_normalized_movie_shape(path: Path) -> bool:

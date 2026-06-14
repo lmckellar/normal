@@ -13,7 +13,7 @@
     'weak-encodes': 'Review low-quality encodes that are better deleted or replaced.',
     'repair-defaults': 'Fix audio and subtitle defaults to improve playback behaviour and keep repair cases visible.',
     'canonical-lists': 'Compare the library against canonical lists and inspect owned copy quality at a glance.',
-    'format-upgrades': 'Review title-level immersive audio, UHD, and Dolby Vision availability against owned copies.',
+    'format-upgrades': 'Compare known feature releases with UHD, Dolby Vision, immersive audio, Open Matte, and Hybrid coverage across your copies.',
     junk: 'Review obvious junk files and remove them safely.',
   };
 
@@ -152,12 +152,10 @@
   ];
 
   const IMMERSIVE_HEADERS = [
-    { key: 'year', label: 'Year', columnClass: 'lab-col-foundation lab-col-signal', cellClass: 'lab-cell-foundation lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.year },
     { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
-    { key: 'trait', label: 'Format', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.category },
-    { key: 'status', label: 'Status', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.verdict },
-    { key: 'capability', label: 'Local', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.category },
-    { key: 'coverage', label: 'Copies', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.compactMeasure },
+    { key: 'trait', label: 'Upgrade Feature', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.category },
+    { key: 'release_status', label: 'Known Release', tooltip: 'What the evidence corpus knows about releases carrying this feature.', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.verdict },
+    { key: 'opportunity', label: 'Your Copies', tooltip: 'How many local copies carry the feature and what that means for this title.', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: '27ch' },
   ];
 
   const state = {
@@ -888,27 +886,63 @@
     if (trait === 'immersive_audio') return 'Immersive Audio';
     if (trait === 'uhd') return 'UHD';
     if (trait === 'dolby_vision') return 'Dolby Vision';
+    if (trait === 'open_matte') return 'Open Matte';
+    if (trait === 'hybrid') return 'Hybrid';
     return humanProfileLabel(trait);
   }
 
   function immersiveVerdictDisplayLabel(status) {
     const labels = {
-      owned: 'Owned',
-      upgrade_available: 'Upgrade Available',
+      upgrade_available: 'Confirmed Available',
       likely_available: 'Likely Available',
       no_known_release: 'No Known Release',
-      contested: 'Contested',
-      unverified: 'Unverified',
+      contested: 'Conflicting Reports',
+      unverified: 'Not Researched',
     };
     return labels[status] || humanProfileLabel(status);
   }
 
   function immersiveVerdictPillClass(status) {
-    if (status === 'owned') return 'is-safe';
     if (status === 'upgrade_available') return 'is-actionable';
     if (status === 'no_known_release') return 'is-not-available';
     if (status === 'contested') return 'is-review';
     return 'is-review';
+  }
+
+  function formatOpportunityDisplayLabel(opportunity) {
+    const labels = {
+      upgrade_found: 'Upgrade Found',
+      partial_coverage: 'Partial Coverage',
+      already_covered: 'Already Covered',
+      quality_review: 'Quality Review',
+      no_known_upgrade: 'No Known Upgrade',
+      conflicting_reports: 'Conflicting Reports',
+      research_needed: 'Research Needed',
+    };
+    return labels[opportunity] || humanProfileLabel(opportunity);
+  }
+
+  function formatOpportunityPillClass(opportunity) {
+    if (opportunity === 'already_covered') return 'is-safe';
+    if (opportunity === 'upgrade_found' || opportunity === 'partial_coverage') return 'is-actionable';
+    if (opportunity === 'no_known_upgrade') return 'is-not-available';
+    return 'is-review';
+  }
+
+  function localCopySummary(row) {
+    const present = Number(row.local_present_count || 0);
+    const total = Number(row.local_copy_count || 0);
+    const rejected = Number(row.local_rejected_count || 0);
+    if (rejected && !present) {
+      const detail = row.capability === 'quality_unverified'
+        ? 'claim found, quality could not be verified'
+        : 'claim found, below quality floor';
+      return `${detail} · ${present} of ${total}`;
+    }
+    if (total && present === total) return `all copies have it · ${present} of ${total}`;
+    if (present) return `some copies have it · ${present} of ${total}`;
+    if (total) return `no copies have it · 0 of ${total}`;
+    return 'no local copies';
   }
 
   function immersiveRows() {
@@ -918,7 +952,6 @@
     return assessments.map(assessment => ({
       ...assessment,
       row_id: `trait:${assessment.trait}:${assessment.title}:${assessment.year}`,
-      coverage: `${assessment.local_present_count || 0}/${assessment.local_copy_count || 0}`,
     }));
   }
 
@@ -2937,7 +2970,7 @@
     if (isWeakMode()) return `${row.issue} · ${row.resolution || '—'}`;
     if (isRepairDefaultsMode()) return `${row.issue_family || 'Issue'} · ${row.issue}`;
     if (isCanonicalMode()) return `${canonicalOwnedStatusLabel(row)} · ${row.quality_profile || '—'}`;
-    if (isImmersiveMode()) return `${traitDisplayLabel(row.trait)} · ${immersiveVerdictDisplayLabel(row.status)}`;
+    if (isImmersiveMode()) return `${traitDisplayLabel(row.trait)} · ${immersiveVerdictDisplayLabel(row.release_status)} · ${formatOpportunityDisplayLabel(row.opportunity)}`;
     if (isJunkMode()) return `${row.issue} · ${row.confidence || 'review'}`;
     return `${row.projected_path || row.current_value} · ${row.confidence || 'review'}`;
   }
@@ -3421,14 +3454,14 @@
       });
     } else if (isImmersiveMode()) {
       const trait = el.traitFilter.value;
-      const status = el.traitStatusFilter.value;
-      const defaultStatuses = new Set(['owned', 'upgrade_available', 'likely_available', 'no_known_release', 'contested']);
+      const opportunity = el.traitStatusFilter.value;
+      const defaultOpportunities = new Set(['upgrade_found', 'partial_coverage', 'already_covered', 'quality_review', 'no_known_upgrade', 'conflicting_reports']);
       rows = rows.filter(row => {
         if (trait !== 'all' && row.trait !== trait) return false;
-        if (status === 'default' && !defaultStatuses.has(row.status)) return false;
-        if (!['default', 'all'].includes(status) && row.status !== status) return false;
+        if (opportunity === 'default' && !defaultOpportunities.has(row.opportunity)) return false;
+        if (!['default', 'all'].includes(opportunity) && row.opportunity !== opportunity) return false;
         if (query) {
-          const haystack = `${row.title} ${row.year} ${traitDisplayLabel(row.trait)} ${immersiveVerdictDisplayLabel(row.status)} ${row.capability}`.toLowerCase();
+          const haystack = `${row.title} ${row.year} ${traitDisplayLabel(row.trait)} ${immersiveVerdictDisplayLabel(row.release_status)} ${formatOpportunityDisplayLabel(row.opportunity)} ${localCopySummary(row)}`.toLowerCase();
           if (!haystack.includes(query)) return false;
         }
         return true;
@@ -3464,12 +3497,18 @@
       return av < bv ? -1 * mult : av > bv ? 1 * mult : 0;
     }
     if (isImmersiveMode()) {
-      const verdictRank = { owned: 0, upgrade_available: 1, likely_available: 2, no_known_release: 3, contested: 4, unverified: 5 };
+      const verdictRank = { upgrade_available: 0, likely_available: 1, no_known_release: 2, contested: 3, unverified: 4 };
+      const opportunityRank = { upgrade_found: 0, partial_coverage: 1, quality_review: 2, already_covered: 3, no_known_upgrade: 4, conflicting_reports: 5, research_needed: 6 };
       const read = row => {
-        if (key === 'year') return Number(row.year || 0);
-        if (key === 'status') return verdictRank[row.status] ?? 6;
+        if (key === 'release_status') return verdictRank[row.release_status] ?? 5;
+        if (key === 'opportunity') return opportunityRank[row.opportunity] ?? 7;
         return String(row[key] || '').toLowerCase();
       };
+      if (key !== 'title') {
+        const titleOrder = String(a.title || '').localeCompare(String(b.title || ''), undefined, { sensitivity: 'base' })
+          || Number(a.year || 0) - Number(b.year || 0);
+        if (titleOrder) return titleOrder;
+      }
       const av = read(a);
       const bv = read(b);
       return av < bv ? -1 * mult : av > bv ? 1 * mult : 0;
@@ -3702,7 +3741,7 @@
       const emptyMessage = isImmersiveMode()
         ? (state.immersivePayload
           ? 'No title-trait rows match the active filters.'
-          : 'Run Review Format Upgrade Candidates to assess immersive audio, UHD, and Dolby Vision.')
+          : 'Run Review Format Upgrade Candidates to compare known releases with feature coverage across your copies.')
         : 'No rows for the active filters.';
       el.rowsBody.innerHTML = `<tr><td colspan="${colspan}">${escapeHtml(emptyMessage)}</td></tr>`;
       renderConfirmButton();
@@ -3820,20 +3859,30 @@
     `;
   }
 
-  function renderImmersiveRow(row) {
+  function renderImmersiveRow(row, index, rows) {
     const paths = Array.isArray(row.local_paths) ? row.local_paths : [];
-    const coverageTitle = paths.length ? paths.join(' | ') : 'No local copy details.';
+    const copiesTitle = paths.length ? paths.join(' | ') : 'No local copy details.';
     const needsNormalization = !row.year;
     const titleTooltip = needsNormalization ? 'File name needs normalization!' : (row.title || '—');
-    const yearTooltip = needsNormalization ? 'Year requires file normalization to display!' : String(row.year || '—');
+    const groupKey = `${row.title || ''}\u0000${row.year || ''}`;
+    const previous = rows[index - 1];
+    const firstInGroup = !previous || `${previous.title || ''}\u0000${previous.year || ''}` !== groupKey;
+    const groupSize = firstInGroup
+      ? rows.slice(index).findIndex(item => `${item.title || ''}\u0000${item.year || ''}` !== groupKey)
+      : 0;
+    const rowspan = groupSize < 0 ? rows.length - index : groupSize;
+    const titleCell = firstInGroup
+      ? `<td class="lab-cell-anchor lab-format-title" data-priority="essential" rowspan="${rowspan}" title="${escapeHtml(titleTooltip)}"><span class="lab-cell-text" title="${escapeHtml(titleTooltip)}">${escapeHtml(row.title || '—')}</span><span class="lab-format-year">${escapeHtml(String(row.year || '—'))}</span></td>`
+      : '';
     return `
-      <tr data-row-id="${escapeHtml(row.row_id)}">
-        <td class="lab-cell-foundation lab-cell-signal lab-cell-mono" data-priority="essential" title="${escapeHtml(yearTooltip)}"><span class="lab-cell-text" title="${escapeHtml(yearTooltip)}">${escapeHtml(String(row.year || '—'))}</span></td>
-        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(titleTooltip)}"><span class="lab-cell-text" title="${escapeHtml(titleTooltip)}">${escapeHtml(row.title || '—')}</span></td>
+      <tr class="lab-format-feature-row ${firstInGroup ? 'is-group-start' : ''}" data-row-id="${escapeHtml(row.row_id)}">
+        ${titleCell}
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill">${escapeHtml(traitDisplayLabel(row.trait))}</span></td>
-        <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${immersiveVerdictPillClass(row.status)}">${escapeHtml(immersiveVerdictDisplayLabel(row.status))}</span></td>
-        <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-text">${escapeHtml(humanProfileLabel(row.capability))}</span></td>
-        <td class="lab-cell-supporting lab-cell-mono" data-priority="medium" title="${escapeHtml(coverageTitle)}"><span class="lab-cell-text">${escapeHtml(row.coverage)}</span></td>
+        <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${immersiveVerdictPillClass(row.release_status)}">${escapeHtml(immersiveVerdictDisplayLabel(row.release_status))}</span></td>
+        <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(copiesTitle)}">
+          <span class="lab-cell-pill ${formatOpportunityPillClass(row.opportunity)}">${escapeHtml(formatOpportunityDisplayLabel(row.opportunity))}</span>
+          <span class="lab-format-copy-detail">${escapeHtml(localCopySummary(row))}</span>
+        </td>
       </tr>
     `;
   }
@@ -5172,27 +5221,27 @@
 
   function renderImmersivePreviewPane() {
     if (!state.immersivePayload) {
-      el.previewPane.innerHTML = '<div class="lab-preview-empty"><strong>Run Review Format Upgrade Candidates.</strong><div>Probes owned copies and resolves title-level immersive audio, UHD, and Dolby Vision evidence.</div></div>';
+      el.previewPane.innerHTML = '<div class="lab-preview-empty"><strong>Run Review Format Upgrade Candidates.</strong><div>Compares known releases with UHD, Dolby Vision, immersive audio, Open Matte, and Hybrid coverage across your copies.</div></div>';
       return;
     }
     const rows = immersiveRows();
     el.previewPane.innerHTML = `
       <div class="lab-preview-summary">
         <strong>Format Upgrade Candidates</strong>
-        <span class="chip">${rows.length} title-trait row${rows.length === 1 ? '' : 's'}</span>
+        <span class="chip">${new Set(rows.map(row => `${row.title}\u0000${row.year}`)).size} title${new Set(rows.map(row => `${row.title}\u0000${row.year}`)).size === 1 ? '' : 's'}</span>
       </div>
       <div class="lab-preview-list">
         <div class="lab-preview-item">
-          <div class="lab-preview-item-title">Separate axes</div>
-          <div class="lab-preview-item-body">Local capability, title-level availability evidence, certainty, and actionable status remain separate. Copy coverage shows how many owned files carry each trait.</div>
+          <div class="lab-preview-item-title">How to read this view</div>
+          <div class="lab-preview-item-body">Each title owns one row per upgrade feature. <strong>Known Release</strong> reports corpus knowledge; <strong>Your Copies</strong> reports local coverage and the resulting opportunity.</div>
         </div>
         <div class="lab-preview-item">
-          <div class="lab-preview-item-title">Status contract</div>
-          <div class="lab-preview-item-body"><strong>Owned</strong> means at least one local copy carries the trait. <strong>Upgrade Available</strong> requires confirmed positive evidence. Negative research remains provisional as <strong>No Known Release</strong>; soft contradictions are <strong>Contested</strong>.</div>
+          <div class="lab-preview-item-title">Local feature claims</div>
+          <div class="lab-preview-item-body">UHD, Dolby Vision, and immersive audio are probed from media facts. Open Matte and Hybrid are read from filename tokens and accepted only when the copy clears the selected quality floor.</div>
         </div>
         <div class="lab-preview-item">
           <div class="lab-preview-item-title">Default filter</div>
-          <div class="lab-preview-item-body">The default view includes owned, actionable, provisional-negative, and contested rows. Select Unverified explicitly to inspect evidence-empty title-trait rows.</div>
+          <div class="lab-preview-item-body">The default view keeps actionable, covered, quality-review, negative, and conflicting rows visible. Select Research Needed to inspect features with no release evidence.</div>
         </div>
       </div>
     `;

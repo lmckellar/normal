@@ -1207,7 +1207,7 @@ class MoviePlanTests(unittest.TestCase):
             proposed,
         )
         self.assertIn(
-            "Man On Fire (2004)/Man On Fire (2004).mkv",
+            "Man On Fire (2004) Open Matte/Man On Fire (2004) Open Matte.mkv",
             proposed,
         )
         self.assertIn(

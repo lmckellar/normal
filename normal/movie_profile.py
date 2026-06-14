@@ -237,7 +237,28 @@ class MovieStandardsConflictError(RuntimeError):
     pass
 
 
-def local_trait_capability(facts: MediaFacts, trait: str) -> str:
+def path_trait_token(path: Path | str, trait: str) -> bool:
+    tokens = {token.casefold() for token in parse_movie_name(Path(path)).tech_tokens}
+    if trait == "open_matte":
+        return "open matte" in tokens
+    if trait == "hybrid":
+        return "hybrid" in tokens
+    return False
+
+
+def local_trait_quality_label(path: Path, facts: MediaFacts, standards: dict[str, Any]) -> str:
+    domain_results = evaluate_movie_standards(path, facts, standards)
+    return classify_quality_stance(path, facts, domain_results, standards)
+
+
+def local_trait_capability(
+    path: Path | str,
+    facts: MediaFacts,
+    trait: str,
+    standards: dict[str, Any],
+    *,
+    quality_label: str | None = None,
+) -> str:
     if trait == "immersive_audio":
         return "present" if facts.audio_immersive_extension else (
             "not_detected" if facts.audio_stream_count else "unknown"
@@ -256,19 +277,34 @@ def local_trait_capability(facts: MediaFacts, trait: str) -> str:
         if facts.dolby_vision_profile is not None:
             return "present"
         return "not_detected" if facts.video_stream_count else "unknown"
+    if trait in {"open_matte", "hybrid"}:
+        if not path_trait_token(path, trait):
+            return "not_detected"
+        if not facts.video_bitrate_kbps:
+            return "quality_unverified"
+        active_quality_label = quality_label or local_trait_quality_label(Path(path), facts, standards)
+        return "below_quality_floor" if is_replacement_candidate_quality(active_quality_label, standards) else "present"
     raise ValueError(f"unsupported trait: {trait}")
 
 
 def local_trait_observations(
     probed: list[tuple[Path, MediaFacts]],
+    standards: dict[str, Any],
 ) -> list[tuple[str, int, str, str]]:
     observations: list[tuple[str, int, str, str]] = []
     for movie_path, facts in probed:
         identity = parse_movie_name(movie_path)
         if not identity.title or not identity.year:
             continue
+        quality_label = local_trait_quality_label(movie_path, facts, standards)
         for trait in TRAITS:
-            if local_trait_capability(facts, trait) == "present":
+            if local_trait_capability(
+                movie_path,
+                facts,
+                trait,
+                standards,
+                quality_label=quality_label,
+            ) == "present":
                 observations.append((identity.title, identity.year, trait, str(movie_path)))
     return observations
 
@@ -277,6 +313,7 @@ def build_title_trait_assessments(
     probed: list[tuple[Path, MediaFacts]],
     *,
     evidence: list[TraitEvidence],
+    standards: dict[str, Any],
     suppressed: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, dict[str, Any]]]]:
     groups: dict[str, dict[str, Any]] = {}
@@ -302,14 +339,28 @@ def build_title_trait_assessments(
         title = group["title"]
         year = group["year"]
         trait_rows: dict[str, dict[str, Any]] = {}
+        quality_labels = {
+            path: local_trait_quality_label(Path(path), facts, standards)
+            for path, facts in group["copies"]
+        }
         for trait in TRAITS:
             capabilities = [
-                local_trait_capability(facts, trait)
-                for _, facts in group["copies"]
+                local_trait_capability(
+                    path,
+                    facts,
+                    trait,
+                    standards,
+                    quality_label=quality_labels[path],
+                )
+                for path, facts in group["copies"]
             ]
             capability = (
                 "present"
                 if "present" in capabilities
+                else "below_quality_floor"
+                if "below_quality_floor" in capabilities
+                else "quality_unverified"
+                if "quality_unverified" in capabilities
                 else "not_detected"
                 if "not_detected" in capabilities
                 else "unknown"
@@ -318,6 +369,7 @@ def build_title_trait_assessments(
             if trait_key(title, year, trait) in suppressed:
                 matched = []
             local_present_count = sum(value == "present" for value in capabilities)
+            local_rejected_count = sum(value in {"below_quality_floor", "quality_unverified"} for value in capabilities)
             row = asdict(
                 assess_trait(
                     title,
@@ -327,6 +379,7 @@ def build_title_trait_assessments(
                     evidence=matched,
                     local_paths=[path for path, _ in group["copies"]],
                     local_present_count=local_present_count,
+                    local_rejected_count=local_rejected_count,
                 )
             )
             rows.append(row)
@@ -338,11 +391,20 @@ def build_title_trait_assessments(
 
 def file_trait_assessments(
     aggregate: dict[str, dict[str, Any]],
+    path: Path,
     facts: MediaFacts,
+    standards: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     resolved: dict[str, dict[str, Any]] = {}
+    quality_label = local_trait_quality_label(path, facts, standards)
     for trait, row in aggregate.items():
-        capability = local_trait_capability(facts, trait)
+        capability = local_trait_capability(
+            path,
+            facts,
+            trait,
+            standards,
+            quality_label=quality_label,
+        )
         status = row["status"]
         if capability == "present":
             status = "owned"
@@ -430,7 +492,7 @@ def scan_movie_profiles(
             )
         )
 
-    observations = local_trait_observations(probed)
+    observations = local_trait_observations(probed, standards)
     report.trait_observations = record_local_observations(
         observations,
         state_path=trait_store_path,
@@ -441,7 +503,7 @@ def scan_movie_profiles(
         legacy_path=legacy_trait_store_path,
     )
     report.trait_assessments, assessment_index = build_title_trait_assessments(
-        probed, evidence=evidence, suppressed=suppressed
+        probed, evidence=evidence, standards=standards, suppressed=suppressed
     )
     for movie_path, facts in probed:
         identity = parse_movie_name(movie_path)
@@ -451,7 +513,7 @@ def scan_movie_profiles(
             else "",
             {},
         )
-        item_assessments = file_trait_assessments(aggregate_assessments, facts)
+        item_assessments = file_trait_assessments(aggregate_assessments, movie_path, facts, standards)
         report.movies.append(
             build_movie_profile_item(
                 source_root,
@@ -480,7 +542,7 @@ def reclassify_report_with_standards(
     probed = [(Path(item.path), item.facts) for item in report.movies]
     evidence, suppressed = all_evidence()
     new_report.trait_assessments, assessment_index = build_title_trait_assessments(
-        probed, evidence=evidence, suppressed=suppressed
+        probed, evidence=evidence, standards=standards, suppressed=suppressed
     )
     for item in report.movies:
         identity = parse_movie_name(Path(item.path))
@@ -490,7 +552,12 @@ def reclassify_report_with_standards(
             else "",
             {},
         )
-        item_assessments = file_trait_assessments(aggregate_assessments, item.facts)
+        item_assessments = file_trait_assessments(
+            aggregate_assessments,
+            Path(item.path),
+            item.facts,
+            standards,
+        )
         new_report.movies.append(
             build_movie_profile_item(
                 source_root,
@@ -1960,6 +2027,8 @@ def detect_trait_upgrade_candidates(
         "immersive_audio": ("immersive audio", "Atmos / DTS:X"),
         "uhd": ("UHD", "UHD"),
         "dolby_vision": ("Dolby Vision", "Dolby Vision"),
+        "open_matte": ("Open Matte presentation", "Open Matte"),
+        "hybrid": ("Hybrid release", "Hybrid"),
     }
     findings: list[DiagnosticFinding] = []
     for trait in TRAITS:

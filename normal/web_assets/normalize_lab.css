@@ -564,6 +564,27 @@ thead th {
   text-align: left;
 }
 
+.lab-format-feature-row.is-group-start > td {
+  border-top-color: color-mix(in srgb, var(--line) 65%, var(--ink));
+}
+
+.lab-format-title {
+  vertical-align: top;
+}
+
+.lab-format-year,
+.lab-format-copy-detail {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.lab-format-copy-detail {
+  line-height: 1.35;
+}
+
 .lab-cell-pill {
   display: inline-block;
   max-width: 100%;

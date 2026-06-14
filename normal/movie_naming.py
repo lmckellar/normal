@@ -106,6 +106,7 @@ CANONICAL_TOKEN_MAP = {
     "atmos": "Atmos",
     "multisub": "MULTISUB",
     "remastered": "Remastered",
+    "hybrid": "Hybrid",
     "commentary": "Commentary",
     "multi": "MULTI",
     "portuguese": "PORTUGUESE",

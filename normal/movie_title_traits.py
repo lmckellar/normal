@@ -14,7 +14,7 @@ from normal.movie_naming import match_variant_keys, title_match_key
 
 STORE_VERSION = 1
 CORPUS_VERSION = 1
-TRAITS = ("immersive_audio", "uhd", "dolby_vision")
+TRAITS = ("immersive_audio", "uhd", "dolby_vision", "open_matte", "hybrid")
 DIRECTIONS = ("present", "absent")
 BASES = (
     "local_probe",
@@ -52,12 +52,15 @@ class TraitAssessment:
     capability: str
     claim_direction: str
     certainty: str
+    release_status: str
     status: str
+    opportunity: str
     evidence_count: int
     present_evidence_count: int
     absent_evidence_count: int
     local_copy_count: int = 0
     local_present_count: int = 0
+    local_rejected_count: int = 0
     local_paths: tuple[str, ...] = ()
 
 
@@ -329,11 +332,26 @@ def assess_trait(
     evidence: Iterable[TraitEvidence] = (),
     local_paths: Iterable[str] = (),
     local_present_count: int = 0,
+    local_rejected_count: int = 0,
 ) -> TraitAssessment:
     items = list(evidence)
     claim_direction, certainty, claim_status = resolve_claim(items)
     paths = tuple(sorted(set(local_paths), key=str.casefold))
     status = "owned" if capability == "present" else claim_status
+    if paths and local_present_count == len(paths):
+        opportunity = "already_covered"
+    elif local_present_count:
+        opportunity = "partial_coverage"
+    elif local_rejected_count:
+        opportunity = "quality_review"
+    elif claim_status in {"upgrade_available", "likely_available"}:
+        opportunity = "upgrade_found"
+    elif claim_status == "no_known_release":
+        opportunity = "no_known_upgrade"
+    elif claim_status == "contested":
+        opportunity = "conflicting_reports"
+    else:
+        opportunity = "research_needed"
     return TraitAssessment(
         title=title,
         year=int(year),
@@ -341,12 +359,15 @@ def assess_trait(
         capability=capability,
         claim_direction=claim_direction,
         certainty=certainty,
+        release_status=claim_status,
         status=status,
+        opportunity=opportunity,
         evidence_count=len(items),
         present_evidence_count=sum(item.direction == "present" for item in items),
         absent_evidence_count=sum(item.direction == "absent" for item in items),
         local_copy_count=len(paths),
         local_present_count=local_present_count,
+        local_rejected_count=local_rejected_count,
         local_paths=paths,
     )
 

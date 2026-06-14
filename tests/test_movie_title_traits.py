@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from normal.movie_profile import scan_movie_profiles
+from normal.movie_profile import DEFAULT_MOVIE_STANDARDS, build_title_trait_assessments
 from normal.movie_title_traits import (
     TraitEvidence,
     all_evidence,
@@ -191,6 +192,50 @@ class TitleTraitStoreTests(unittest.TestCase):
 
 
 class TitleTraitAggregationTests(unittest.TestCase):
+    def test_filename_traits_require_the_copy_to_clear_the_selected_quality_floor(self) -> None:
+        accepted = Path("Example (2000) 1080p Open Matte Hybrid.mkv")
+        rejected = Path("Weak Example (2001) 1080p Open Matte Hybrid.mkv")
+        rows, _ = build_title_trait_assessments(
+            [
+                (
+                    accepted,
+                    MediaFacts(
+                        width=1920,
+                        height=1080,
+                        video_stream_count=1,
+                        video_bitrate_kbps=5000,
+                        audio_stream_count=1,
+                        audio_codec="aac",
+                        audio_channels=2,
+                        audio_bitrate_kbps=320,
+                    ),
+                ),
+                (
+                    rejected,
+                    MediaFacts(
+                        width=1920,
+                        height=1080,
+                        video_stream_count=1,
+                        video_bitrate_kbps=2000,
+                        audio_stream_count=1,
+                        audio_codec="aac",
+                        audio_channels=2,
+                        audio_bitrate_kbps=192,
+                    ),
+                ),
+            ],
+            evidence=[],
+            standards=DEFAULT_MOVIE_STANDARDS,
+        )
+
+        by_key = {(row["title"], row["trait"]): row for row in rows}
+        for trait in ("open_matte", "hybrid"):
+            self.assertEqual(by_key[("Example", trait)]["local_present_count"], 1)
+            self.assertEqual(by_key[("Example", trait)]["opportunity"], "already_covered")
+            self.assertEqual(by_key[("Weak Example", trait)]["local_present_count"], 0)
+            self.assertEqual(by_key[("Weak Example", trait)]["local_rejected_count"], 1)
+            self.assertEqual(by_key[("Weak Example", trait)]["opportunity"], "quality_review")
+
     def test_same_scan_duplicate_records_evidence_and_marks_missing_copy_actionable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "library"

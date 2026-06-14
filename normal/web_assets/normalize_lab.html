@@ -64,21 +64,24 @@
         <option value="anime" disabled>Anime</option>
         <option value="tv_shows" disabled>TV Shows</option>
       </select>
-      <select id="traitFilter" aria-label="Format trait" hidden>
-        <option value="all">all formats</option>
+      <select id="traitFilter" aria-label="Upgrade feature" hidden>
+        <option value="all">all upgrade features</option>
         <option value="immersive_audio">immersive audio</option>
         <option value="uhd">UHD</option>
         <option value="dolby_vision">Dolby Vision</option>
+        <option value="open_matte">Open Matte</option>
+        <option value="hybrid">Hybrid</option>
       </select>
-      <select id="traitStatusFilter" aria-label="Format status" hidden>
-        <option value="default">active statuses</option>
-        <option value="owned">owned</option>
-        <option value="upgrade_available">upgrade available</option>
-        <option value="likely_available">likely available</option>
-        <option value="no_known_release">no known release</option>
-        <option value="contested">contested</option>
-        <option value="unverified">unverified</option>
-        <option value="all">all statuses</option>
+      <select id="traitStatusFilter" aria-label="Upgrade opportunity" hidden>
+        <option value="default">active opportunities</option>
+        <option value="upgrade_found">upgrade found</option>
+        <option value="partial_coverage">partial coverage</option>
+        <option value="already_covered">already covered</option>
+        <option value="quality_review">quality review</option>
+        <option value="no_known_upgrade">no known upgrade</option>
+        <option value="conflicting_reports">conflicting reports</option>
+        <option value="research_needed">research needed</option>
+        <option value="all">all opportunities</option>
       </select>
       <button id="selectAllButton" type="button">Select all</button>
       <button id="deselectAllButton" type="button">Deselect all</button>
