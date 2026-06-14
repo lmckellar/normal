@@ -11,7 +11,6 @@ from urllib.parse import parse_qs, urlsplit
 MUTATION_TOKEN = secrets.token_urlsafe(32)
 MAX_JSON_BODY = 5 * 1024 * 1024
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
-LOOPBACK_NETWORKS = (ipaddress.ip_network("127.0.0.0/8"), ipaddress.ip_network("::1/128"))
 
 
 class PostRejected(Exception):
@@ -68,8 +67,11 @@ def parse_host(value: str) -> RequestOrigin:
     return RequestOrigin(None, _normal_host(parsed.hostname), port)
 
 
-def parse_allowed_peers(values: list[str]) -> tuple[ipaddress._BaseNetwork, ...]:
-    return tuple(ipaddress.ip_network(value, strict=False) for value in values)
+def is_loopback_bind(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return _normal_host(host) == "localhost"
 
 
 def parse_allowed_hosts(values: list[str]) -> frozenset[str]:
@@ -94,16 +96,6 @@ def parse_allowed_hosts(values: list[str]) -> frozenset[str]:
     return frozenset(allowed)
 
 
-def parse_allowed_origins(values: list[str]) -> frozenset[RequestOrigin]:
-    allowed: set[RequestOrigin] = set()
-    for value in values:
-        try:
-            allowed.add(parse_origin(value.strip()))
-        except PostRejected:
-            raise ValueError(f"invalid allowed origin: {value}")
-    return frozenset(allowed)
-
-
 def check_token(handler: BaseHTTPRequestHandler, *, allow_query: bool = False) -> None:
     token = handler.headers.get("X-Normal-Token", "")
     if allow_query and not token:
@@ -112,29 +104,11 @@ def check_token(handler: BaseHTTPRequestHandler, *, allow_query: bool = False) -
         raise PostRejected(HTTPStatus.FORBIDDEN, "invalid or missing token")
 
 
-def check_peer(
-    handler: BaseHTTPRequestHandler,
-    *,
-    allowed_peers: tuple[ipaddress._BaseNetwork, ...] = (),
-) -> None:
-    try:
-        peer = ipaddress.ip_address(handler.client_address[0])
-    except (ValueError, IndexError):
-        raise PostRejected(HTTPStatus.FORBIDDEN, "remote peer not allowed")
-    if peer.version == 6 and peer.ipv4_mapped is not None:
-        peer = peer.ipv4_mapped
-    for network in LOOPBACK_NETWORKS + allowed_peers:
-        if peer.version == network.version and peer in network:
-            return
-    raise PostRejected(HTTPStatus.FORBIDDEN, "remote peer not allowed")
-
-
 def check_post(
     handler: BaseHTTPRequestHandler,
     *,
     bound_port: int,
     allowed_hosts: frozenset[str],
-    allowed_origins: frozenset[RequestOrigin] = frozenset(),
 ) -> int:
     check_token(handler)
 
@@ -142,18 +116,16 @@ def check_post(
     if content_type != "application/json":
         raise PostRejected(HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "Content-Type must be application/json")
 
+    host = parse_host(handler.headers.get("Host", ""))
+    if host.port != bound_port or host.host not in LOCAL_HOSTS | allowed_hosts:
+        raise PostRejected(HTTPStatus.FORBIDDEN, "host not allowed")
+
     origin_header = handler.headers.get("Origin")
     if origin_header is not None:
         origin = parse_origin(origin_header)
-        local_origin = origin.scheme == "http" and origin.host in LOCAL_HOSTS and origin.port == bound_port
-        if not local_origin and origin not in allowed_origins:
+        expected_origin = RequestOrigin("http", host.host, bound_port)
+        if origin != expected_origin:
             raise PostRejected(HTTPStatus.FORBIDDEN, "origin not allowed")
-
-    host = parse_host(handler.headers.get("Host", ""))
-    local_host = host.host in LOCAL_HOSTS and host.port == bound_port
-    remote_host = host.host in allowed_hosts
-    if not local_host and not remote_host:
-        raise PostRejected(HTTPStatus.FORBIDDEN, "host not allowed")
 
     if handler.headers.get("Transfer-Encoding") is not None:
         raise PostRejected(HTTPStatus.BAD_REQUEST, "Transfer-Encoding is not supported")

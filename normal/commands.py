@@ -12,7 +12,8 @@ from normal.movie_profile import build_histogram_payload, scan_movie_profiles
 from normal.movie_scan import MovieScanProgress, scan_movie_library
 from normal.output import write_movie_register_xlsx, write_movie_review_csv
 from normal.source_policy import Operation, resolve_source_path, validate_source_for_operation
-from normal.web import ApprovedRoots, parse_allowed_hosts, parse_allowed_origins, parse_allowed_peers, serve_web_ui
+from normal.web import ApprovedRoots, parse_allowed_hosts, serve_web_ui
+from normal.web.security import is_loopback_bind
 
 
 def ensure_source_directory(source: Path) -> Path:
@@ -147,21 +148,12 @@ def run_web(
     source: Path | None = None,
     omdb_key: str | None = None,
     tmdb_key: str | None = None,
-    unsafe_remote: bool = False,
     allow_roots: list[Path] | None = None,
-    allow_peers: list[str] | None = None,
-    allow_hosts: list[str] | None = None,
-    allow_origins: list[str] | None = None,
+    allowed_hosts: list[str] | None = None,
 ) -> int:
-    remote_allowlists = bool(allow_peers or allow_hosts or allow_origins)
-    if remote_allowlists and not unsafe_remote:
-        raise ValueError(
-            "--allow-peer, --allow-host, and --allow-origin require --unsafe-remote."
-        )
-    if unsafe_remote and not all((allow_peers, allow_hosts, allow_origins)):
-        raise ValueError(
-            "--unsafe-remote requires --allow-peer, --allow-host, and --allow-origin."
-        )
+    parsed_allowed_hosts = parse_allowed_hosts(allowed_hosts or [])
+    if not is_loopback_bind(host) and not parsed_allowed_hosts:
+        raise ValueError("non-loopback --host requires at least one --allowed-host.")
     default_source = None
     if source is not None:
         default_source = ensure_source_directory(source)
@@ -171,9 +163,6 @@ def run_web(
     for raw_root in allow_roots or []:
         seed_roots.append(ensure_source_directory(raw_root))
     approved_roots = ApprovedRoots.from_paths(seed_roots)
-    allowed_peers = parse_allowed_peers(allow_peers or [])
-    allowed_hosts = parse_allowed_hosts(allow_hosts or [])
-    allowed_origins = parse_allowed_origins(allow_origins or [])
     serve_web_ui(
         host=host,
         port=port,
@@ -181,9 +170,7 @@ def run_web(
         omdb_key=omdb_key,
         tmdb_key=tmdb_key,
         approved_roots=approved_roots,
-        allowed_peers=allowed_peers,
-        allowed_hosts=allowed_hosts,
-        allowed_origins=allowed_origins,
+        allowed_hosts=parsed_allowed_hosts,
     )
     return 0
 

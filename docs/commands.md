@@ -194,21 +194,23 @@ Columns: Title, Year, Resolution, Video, Audio, Container, Size. Sorted A–Z by
 normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 ```
 
-Remote access is opt-in and requires all three request boundaries:
+Remote access is explicit: bind to a non-loopback address and list every LAN IP or
+hostname browsers may use:
 
 ```bash
-normal web --host 0.0.0.0 --unsafe-remote \
-  --allow-peer 192.168.1.0/24 \
-  --allow-host normalbox.local \
-  --allow-origin https://normal.example.test
+normal web --host 0.0.0.0 \
+  --allowed-host 192.168.1.50 \
+  --allowed-host normal.local
 ```
 
-Repeat an allowlist option to add entries. Origins are exact scheme/host/port values and are checked independently from the HTTP `Host`; this supports a reverse proxy or TLS terminator without making either check implicit.
+Repeat `--allowed-host` to add entries. POST requests must use the server's exact
+HTTP scheme, allowed hostname, and bound port.
 
 | Flag | Required | Description |
 |---|---|---|
 | `--host` | No | Bind address (default `127.0.0.1`) |
 | `--port` | No | Port (default `8765`) |
+| `--allowed-host` | For non-loopback `--host` | LAN IP or hostname accepted in remote browser requests; repeat as needed |
 | `--source` | No | Default source path pre-filled in the UI |
 | `--omdb-key` | No | OMDb key for cached server-side IMDb ratings in the replacement queue (falls back to `OMDB_KEY`) |
 | `--tmdb-key` | No | TMDb key for Compare Against Canonical Lists, only when the provider is explicitly TMDb (falls back to `TMDB_KEY`) |

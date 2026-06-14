@@ -84,6 +84,26 @@ class NormalCliTests(unittest.TestCase):
         self.assertEqual(stderr.getvalue(), "normal: Refusing apply on /\n")
         self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_web_accepts_repeated_allowed_hosts(self) -> None:
+        with patch("normal.cli.run_web", return_value=0) as run_web:
+            result = main(
+                [
+                    "web",
+                    "--host",
+                    "0.0.0.0",
+                    "--allowed-host",
+                    "192.168.1.50",
+                    "--allowed-host",
+                    "normal.local",
+                ]
+            )
+
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            run_web.call_args.kwargs["allowed_hosts"],
+            ["192.168.1.50", "normal.local"],
+        )
+
     def test_recursive_commands_reject_drive_root_sources(self) -> None:
         commands = (
             ("movie-plan", "--plan", "/tmp/normal-plan.json"),

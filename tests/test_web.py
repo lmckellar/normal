@@ -27,11 +27,8 @@ from normal.web.security import (
     MAX_JSON_BODY,
     MUTATION_TOKEN,
     PostRejected,
-    check_peer,
     check_post,
     parse_allowed_hosts,
-    parse_allowed_origins,
-    parse_allowed_peers,
 )
 
 
@@ -1315,7 +1312,6 @@ class WebPostSecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with self.run_test_server(
                 allowed_hosts=parse_allowed_hosts(["evil.example.com"]),
-                allowed_origins=parse_allowed_origins(["https://normal.example.test"]),
             ) as base_url:
                 port = urllib.parse.urlsplit(base_url).port
                 with self.post(
@@ -1324,7 +1320,7 @@ class WebPostSecurityTests(unittest.TestCase):
                     headers={
                         **headers,
                         "Host": f"evil.example.com:{port}",
-                        "Origin": "https://normal.example.test",
+                        "Origin": f"http://evil.example.com:{port}",
                     },
                     data=self.scan_warning_body(tmpdir),
                 ) as response:
@@ -1383,69 +1379,6 @@ class WebPostSecurityTests(unittest.TestCase):
                     headers={"Content-Type": "application/json", "Content-Length": str(MAX_JSON_BODY + 1)},
                 )
         self.assertEqual(ctx.exception.code, 403)
-
-
-class WebPeerGateTests(unittest.TestCase):
-    def handler(self, ip):
-        return types.SimpleNamespace(client_address=(ip, 50000))
-
-    def test_loopback_is_allowed_without_an_allowlist(self):
-        check_peer(self.handler("127.0.0.1"))
-        check_peer(self.handler("::1"))
-        check_peer(self.handler("::ffff:127.0.0.1"))
-
-    def test_lan_peer_is_rejected_by_default(self):
-        with self.assertRaises(PostRejected) as ctx:
-            check_peer(self.handler("192.168.1.20"))
-        self.assertEqual(ctx.exception.status, HTTPStatus.FORBIDDEN)
-        self.assertEqual(ctx.exception.message, "remote peer not allowed")
-
-    def test_lan_peer_is_allowed_only_inside_the_allowlist(self):
-        peers = parse_allowed_peers(["192.168.1.0/24"])
-        check_peer(self.handler("192.168.1.20"), allowed_peers=peers)
-        with self.assertRaises(PostRejected):
-            check_peer(self.handler("192.168.2.20"), allowed_peers=peers)
-
-    def test_malformed_peer_is_rejected(self):
-        with self.assertRaises(PostRejected) as ctx:
-            check_peer(self.handler("not-an-ip"))
-        self.assertEqual(ctx.exception.message, "remote peer not allowed")
-
-    def test_remote_get_root_and_assets_are_rejected_before_routing(self):
-        handler_type = build_handler()
-
-        for path in ("/", "/assets/workbench.js"):
-            responses = []
-            handler = handler_type.__new__(handler_type)
-            handler.client_address = ("192.168.1.20", 50000)
-            handler.path = path
-            handler._request_context = lambda: types.SimpleNamespace(
-                respond_json=lambda payload, status=None: responses.append((payload, status))
-            )
-
-            handler.do_GET()
-
-            self.assertEqual(
-                responses,
-                [({"error": "remote peer not allowed"}, HTTPStatus.FORBIDDEN)],
-            )
-
-    def test_remote_post_is_rejected_before_route_lookup(self):
-        handler_type = build_handler()
-        responses = []
-        handler = handler_type.__new__(handler_type)
-        handler.client_address = ("192.168.1.20", 50000)
-        handler.path = "/api/not-a-route"
-        handler._request_context = lambda: types.SimpleNamespace(
-            respond_json=lambda payload, status=None: responses.append((payload, status))
-        )
-
-        handler.do_POST()
-
-        self.assertEqual(
-            responses,
-            [({"error": "remote peer not allowed"}, HTTPStatus.FORBIDDEN)],
-        )
 
 
 class WebGetSecurityTests(unittest.TestCase):
@@ -1517,32 +1450,31 @@ class WebPostGateTests(unittest.TestCase):
                 allowed_hosts=frozenset(),
             )
 
-    def test_explicit_https_origin_is_independent_of_proxy_host(self) -> None:
+    def test_remote_host_and_matching_origin_are_allowed(self) -> None:
         check_post(
             self.handler(
-                Host="normal.internal",
-                Origin="https://normal.example.test",
+                Host="normal.local:8765",
+                Origin="http://normal.local:8765",
             ),
             bound_port=8765,
-            allowed_hosts=parse_allowed_hosts(["normal.internal"]),
-            allowed_origins=parse_allowed_origins(["https://normal.example.test"]),
+            allowed_hosts=parse_allowed_hosts(["normal.local"]),
         )
 
-    def test_allowed_host_does_not_implicitly_allow_origin(self) -> None:
+    def test_origin_must_match_request_host(self) -> None:
         with self.assertRaises(PostRejected):
             check_post(
                 self.handler(
-                    Host="normal.example.test",
-                    Origin="https://normal.example.test",
+                    Host="normal.local:8765",
+                    Origin="http://192.168.1.50:8765",
                 ),
                 bound_port=8765,
-                allowed_hosts=parse_allowed_hosts(["normal.example.test"]),
+                allowed_hosts=parse_allowed_hosts(["normal.local", "192.168.1.50"]),
             )
 
-    def test_host_without_port_is_rejected(self) -> None:
+    def test_localhost_with_wrong_port_is_rejected(self) -> None:
         with self.assertRaises(PostRejected):
             check_post(
-                self.handler(Host="127.0.0.1"),
+                self.handler(Host="localhost:9999"),
                 bound_port=8765,
                 allowed_hosts=frozenset(),
             )
@@ -1571,6 +1503,15 @@ class WebPostGateTests(unittest.TestCase):
         with self.assertRaises(PostRejected) as ctx:
             check_post(
                 self.handler(**{"Content-Length": "-1"}),
+                bound_port=8765,
+                allowed_hosts=frozenset(),
+            )
+        self.assertEqual(ctx.exception.status, HTTPStatus.BAD_REQUEST)
+
+    def test_malformed_content_length_is_rejected(self) -> None:
+        with self.assertRaises(PostRejected) as ctx:
+            check_post(
+                self.handler(**{"Content-Length": "not-a-number"}),
                 bound_port=8765,
                 allowed_hosts=frozenset(),
             )
@@ -1811,36 +1752,23 @@ class WebApprovedRootTests(unittest.TestCase):
             self.assertIn(source.resolve(), roots)
             self.assertIn(extra.resolve(), roots)
 
-    def test_run_web_requires_unsafe_remote_and_all_allowlists(self) -> None:
+    def test_run_web_requires_allowed_host_for_unspecified_bind(self) -> None:
         from normal import commands
 
-        with self.assertRaisesRegex(ValueError, "require --unsafe-remote"):
+        with self.assertRaisesRegex(ValueError, "requires at least one --allowed-host"):
             commands.run_web(
                 host="0.0.0.0",
                 port=0,
-                allow_peers=["192.168.1.0/24"],
-            )
-        with self.assertRaisesRegex(ValueError, "requires --allow-peer"):
-            commands.run_web(
-                host="0.0.0.0",
-                port=0,
-                unsafe_remote=True,
-                allow_peers=["192.168.1.0/24"],
-                allow_hosts=["normalbox.local"],
             )
         with patch("normal.commands.serve_web_ui") as serve:
             commands.run_web(
                 host="0.0.0.0",
                 port=0,
-                unsafe_remote=True,
-                allow_peers=["192.168.1.0/24"],
-                allow_hosts=["normalbox.local"],
-                allow_origins=["https://normal.example.test"],
+                allowed_hosts=["192.168.1.50", "normal.local"],
             )
-        self.assertEqual(serve.call_args.kwargs["allowed_hosts"], frozenset({"normalbox.local"}))
         self.assertEqual(
-            serve.call_args.kwargs["allowed_origins"],
-            parse_allowed_origins(["https://normal.example.test"]),
+            serve.call_args.kwargs["allowed_hosts"],
+            frozenset({"192.168.1.50", "normal.local"}),
         )
 
 
