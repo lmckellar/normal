@@ -67,13 +67,18 @@ def apply_plan(
             f"plan source_root does not match --source: {planned_source} != {source_root.resolve()}"
         )
 
-    destination_root = source_root.resolve() if in_place else prepare_target_root(source_root, target_root)
+    skipped_symlinks: list[ApplyResult] = []
+    if in_place:
+        destination_root = source_root.resolve()
+    else:
+        destination_root, skipped_symlinks = prepare_target_root(source_root, target_root)
     report = ApplyReport(
         source_root=str(source_root.resolve()),
         plan_path=str(plan_path.resolve()),
         target_root=str(destination_root),
         mode="in_place" if in_place else "target",
     )
+    report.skipped.extend(skipped_symlinks)
 
     proposed_changes = [ProposedChange(**change_data) for change_data in payload.get("proposed_changes", [])]
 
@@ -145,7 +150,7 @@ def apply_plan(
     return report
 
 
-def prepare_target_root(source_root: Path, target_root: Path | None) -> Path:
+def prepare_target_root(source_root: Path, target_root: Path | None) -> tuple[Path, list[ApplyResult]]:
     if target_root is None:
         raise ValueError("target_root is required when not applying in place")
 
@@ -157,14 +162,34 @@ def prepare_target_root(source_root: Path, target_root: Path | None) -> Path:
     else:
         destination_root.mkdir(parents=True, exist_ok=True)
 
-    copy_source_tree(source_root.resolve(), destination_root)
-    return destination_root
+    skipped_symlinks = copy_source_tree(source_root.resolve(), destination_root)
+    return destination_root, skipped_symlinks
 
 
-def copy_source_tree(source_root: Path, destination_root: Path) -> None:
+def copy_source_tree(source_root: Path, destination_root: Path) -> list[ApplyResult]:
+    skipped_symlinks: list[ApplyResult] = []
     for source_path in sorted(source_root.rglob("*")):
         relative_path = source_path.relative_to(source_root)
         destination_path = destination_root / relative_path
+        if source_path.is_symlink():
+            try:
+                source_path.resolve().relative_to(source_root)
+                escaped = False
+            except ValueError:
+                escaped = True
+            message = f"Skipped symlink -> {source_path.readlink()}"
+            if escaped:
+                message += " (target outside source root)"
+            skipped_symlinks.append(
+                ApplyResult(
+                    item_id=str(relative_path),
+                    change_type="symlink",
+                    status="skipped",
+                    path=str(source_path),
+                    message=message,
+                )
+            )
+            continue
         if source_path.is_dir():
             destination_path.mkdir(parents=True, exist_ok=True)
             continue
@@ -172,6 +197,7 @@ def copy_source_tree(source_root: Path, destination_root: Path) -> None:
             raise FileExistsError(f"refusing to overwrite existing file in target: {destination_path}")
         destination_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_path, destination_path)
+    return skipped_symlinks
 
 
 def validate_basename(value: str) -> str:

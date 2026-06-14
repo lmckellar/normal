@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from normal.models import ProposedChange
-from normal.movie_apply import apply_changes_in_place
+from normal.movie_apply import apply_changes_in_place, copy_source_tree
 
 
 ESCAPING_DESTINATIONS = ["/tmp/pwned", "../../pwned", "Good Movie (2024)/../../pwned"]
@@ -82,6 +82,42 @@ class MovieApplyPathSafetyTests(unittest.TestCase):
                 for entry in folder.iterdir():
                     entry.unlink()
                 folder.rmdir()
+
+
+class CopySourceTreeSymlinkTests(unittest.TestCase):
+    def test_symlinks_are_skipped_and_reported_without_dereferencing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "source"
+            dest = root / "target"
+            source.mkdir()
+
+            real = source / "Movie (2024).mkv"
+            real.write_text("video", encoding="utf-8")
+
+            outside = root / "outside.mkv"
+            outside.write_text("secret", encoding="utf-8")
+
+            (source / "link_inside.mkv").symlink_to(real)
+            (source / "link_outside.mkv").symlink_to(outside)
+            (source / "link_dir").symlink_to(source)
+            (source / "link_broken.mkv").symlink_to(source / "missing.mkv")
+
+            skipped = copy_source_tree(source.resolve(), dest)
+
+            self.assertTrue((dest / "Movie (2024).mkv").exists())
+            for name in ("link_inside.mkv", "link_outside.mkv", "link_dir", "link_broken.mkv"):
+                self.assertFalse((dest / name).exists())
+                self.assertFalse((dest / name).is_symlink())
+
+            skipped_names = {Path(result.path).name for result in skipped}
+            self.assertEqual(
+                skipped_names,
+                {"link_inside.mkv", "link_outside.mkv", "link_dir", "link_broken.mkv"},
+            )
+            self.assertTrue(all(result.change_type == "symlink" for result in skipped))
+            outside_result = next(r for r in skipped if Path(r.path).name == "link_outside.mkv")
+            self.assertIn("outside source root", outside_result.message)
 
 
 if __name__ == "__main__":
