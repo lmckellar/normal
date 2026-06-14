@@ -126,7 +126,7 @@ The project is genuinely open to participation now, and a few kinds of help are 
 - **You're on macOS or Windows.** Theoretical deployment hardening for both as real targets is being set up — the boring machinery around packaging, paths, mounts, and bundled binaries. Validation from people actually running those platforms would move it along far faster.
 - **You found an edge case, hit a wall, or have feedback.** Open an issue. Anyone who wants to test, poke at, or break the tool is welcome.
 
-## ⭐ 1 Star on Github that I definetely did not pay for
+## ⭐ 1 Star on Github that I definitely did not pay for
 
 Find out what all the critics are **raving** about:
 
