@@ -81,13 +81,13 @@ An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list vi
 
 ✅ A: Those are both fair questions.
 
-🤷
+🤷‍♂️
 
-## 🔥 The Opinionated Part
+## 😤 The Opinionated Part
 
 `normal` is built around the following principles that lead to some loud claims:
 
-**🪙 Physical Storage Economics**
+**🏦 Physical Storage Economics**
 
 The bigger a file gets, the stronger the case it has to make for existing.
 
@@ -97,11 +97,11 @@ Conversely, beneath a certain perceptual threshold even small files are objectiv
 
 Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
 
-**🤲 Universal Naming Convention**
+**🧾 Universal Naming Convention**
 
 The Fi... erm, The Best Solution to resolving the conflicting expectations of downstream clients such as Plex and Jellyfin is to define a Universal Naming Convention  that translates as freely between media API databases like IMDB/TMDB as it does into other clients like Emby, etc.
 
-**😤 The Holy Trinity Of Snobby Claims**
+**👑 The Holy Trinity Of Snobby Claims**
 
 1. A library of 1,000 orderly, relevant, well-encoded films beats a library of 5,000 shit ones.
 
