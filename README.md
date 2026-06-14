@@ -126,6 +126,12 @@ The project is genuinely open to participation now, and a few kinds of help are 
 - **You're on macOS or Windows.** Theoretical deployment hardening for both as real targets is being set up — the boring machinery around packaging, paths, mounts, and bundled binaries. Validation from people actually running those platforms would move it along far faster.
 - **You found an edge case, hit a wall, or have feedback.** Open an issue. Anyone who wants to test, poke at, or break the tool is welcome.
 
+Find out what all the critics are raving about:
+
+> "WTF is this colostomy bag of vibe coded filth?"
+> — People that know code good and have big brians
+
+
 ## 📚 Docs
 
 - 📜 [Statement](docs/statement.md)
