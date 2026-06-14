@@ -25,7 +25,7 @@ User consensus is unanimous:
 - 📽️ Enforces logical subtitle and audio defaults across the board with `ffmpeg` remuxing and `mkvpropedit` subtitle swapping
 - 📤 One Click Export your entire library as a cleanly organized spreadsheet for a quick 💪
 - 🤝 Removes downstream frustrations with clients like Plex, Emby and Jellyfin and their oddly conflicting naming requirements
-- 🆙 Tells you whether a *better release* of a film even exists — UHD, Dolby Vision, object-based immersive audio (Atmos / DTS:X), Open Matte, or Hybrid — and whether your own copies already have it. A fact no scanner can read off a library and no public API will sell you
+- 🗣️ Tells you whether a *better release* of a film even exists — UHD, Dolby Vision, object-based immersive audio (Atmos / DTS:X), Open Matte, or Hybrid — and whether your own copies already have it. A fact no scanner can read off a library and no public API will sell you
 - 🦀 Conceals its deep shame and embarrassment for being agent-coded in 2026 but not written in Rust. It prays to 🧇 for guidance
 - 📊 Lets you compare your collection directly against canonical movie lists and identify what's missing:
   - IMDb Top 100 / 250 / 500 All Time Greatest Movies
