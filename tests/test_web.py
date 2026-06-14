@@ -68,7 +68,8 @@ class WebTests(unittest.TestCase):
         self.assertIn("window.DEFAULT_SOURCE = window.NORMAL_BOOT.defaultSource;", html)
         self.assertIn("window.OMDB_AVAILABLE = window.NORMAL_BOOT.omdbAvailable;", html)
         self.assertNotIn("omdb-test", html)
-        self.assertIn('"tmdbKey": "tmdb-test"', html)
+        self.assertNotIn("tmdb-test", html)
+        self.assertIn('"tmdbAvailable": true', html)
         self.assertNotIn("fonts.googleapis.com", html)
         self.assertNotIn("fonts.gstatic.com", html)
 

@@ -89,7 +89,7 @@ def render_web_bootstrap(default_source: Path | None = None, omdb_key: str | Non
     boot = {
         "defaultSource": str(default_source) if default_source else "",
         "omdbAvailable": bool(omdb_key),
-        "tmdbKey": tmdb_key or "",
+        "tmdbAvailable": bool(tmdb_key),
         "onboarding": read_onboarding_bootstrap(omdb_key=omdb_key, tmdb_key=tmdb_key),
         "token": security.MUTATION_TOKEN,
     }
@@ -98,7 +98,6 @@ def render_web_bootstrap(default_source: Path | None = None, omdb_key: str | Non
             f"window.NORMAL_BOOT = {json.dumps(boot)};",
             "window.DEFAULT_SOURCE = window.NORMAL_BOOT.defaultSource;",
             "window.OMDB_AVAILABLE = window.NORMAL_BOOT.omdbAvailable;",
-            "window.TMDB_KEY = window.NORMAL_BOOT.tmdbKey;",
             "window.NORMAL_TOKEN = window.NORMAL_BOOT.token;",
         )
     )
