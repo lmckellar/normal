@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import select
 import shutil
 import socket
@@ -88,32 +89,96 @@ class SourceMountDetails:
     target: str | None
 
 
-def source_mount_details(source: Path) -> SourceMountDetails:
+RISKY_FSTYPES = frozenset(
+    {
+        "ntfs",
+        "ntfs3",
+        "fuseblk",
+        "exfat",
+        "vfat",
+        "drvfs",
+        "cifs",
+        "smbfs",
+        "nfs",
+        "nfs4",
+        "sshfs",
+        "fuse.sshfs",
+        "rclone",
+        "fuse.rclone",
+        "mergerfs",
+        "fuse.mergerfs",
+    }
+)
+
+
+def _findmnt_mount_details(source: Path) -> SourceMountDetails | None:
     try:
         result = subprocess.run(
-            ["findmnt", "-T", str(source.resolve()), "-o", "TARGET,FSTYPE", "-n"],
+            ["findmnt", "--json", "-T", str(source), "-o", "TARGET,FSTYPE"],
             text=True,
             capture_output=True,
             check=False,
             timeout=1,
         )
     except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    try:
+        filesystems = json.loads(result.stdout).get("filesystems", [])
+    except (ValueError, AttributeError):
+        return None
+    if not filesystems:
+        return None
+    entry = filesystems[0]
+    target = entry.get("target")
+    fstype = entry.get("fstype")
+    return SourceMountDetails(target=target, fstype=fstype.lower() if fstype else None)
+
+
+def _unescape_proc_mount_field(field: str) -> str:
+    return (
+        field.replace("\\040", " ")
+        .replace("\\011", "\t")
+        .replace("\\012", "\n")
+        .replace("\\134", "\\")
+    )
+
+
+def _proc_mounts_mount_details(source: Path) -> SourceMountDetails | None:
+    try:
+        lines = Path("/proc/mounts").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    best: SourceMountDetails | None = None
+    best_len = -1
+    for line in lines:
+        parts = line.split(" ")
+        if len(parts) < 3:
+            continue
+        target = _unescape_proc_mount_field(parts[1])
+        fstype = parts[2]
+        target_path = Path(target)
+        if path_is_under(source, target_path) and len(target_path.parts) > best_len:
+            best_len = len(target_path.parts)
+            best = SourceMountDetails(target=target, fstype=fstype.lower())
+    return best
+
+
+def source_mount_details(source: Path) -> SourceMountDetails:
+    resolved = source.resolve()
+    details = _findmnt_mount_details(resolved)
+    if details is None:
+        details = _proc_mounts_mount_details(resolved)
+    if details is None:
         return SourceMountDetails(fstype=None, target=None)
-    if result.returncode != 0:
-        return SourceMountDetails(fstype=None, target=None)
-    line = result.stdout.strip()
-    if not line:
-        return SourceMountDetails(fstype=None, target=None)
-    parts = line.split()
-    if len(parts) < 2:
-        return SourceMountDetails(fstype=None, target=None)
-    return SourceMountDetails(target=parts[0], fstype=parts[1].lower())
+    return details
 
 
 def risky_mount_flags(source: Path) -> list[str]:
     details = source_mount_details(source)
     flags: list[str] = []
-    if details.fstype in {"fuseblk", "ntfs", "ntfs3"}:
+    if details.fstype in RISKY_FSTYPES:
         flags.append(f"mount:{details.fstype}")
     return flags
 

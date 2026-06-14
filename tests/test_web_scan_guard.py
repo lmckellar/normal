@@ -55,12 +55,22 @@ class WebScanGuardTests(unittest.TestCase):
             left.close()
 
     def test_source_mount_details_parses_findmnt_output(self) -> None:
-        completed = CompletedProcess(args=[], returncode=0, stdout="/mnt/media ntfs3\n", stderr="")
+        stdout = '{"filesystems": [{"target": "/mnt/My Media", "fstype": "NTFS3"}]}\n'
+        completed = CompletedProcess(args=[], returncode=0, stdout=stdout, stderr="")
 
         with patch("normal.web.scan_guard.subprocess.run", return_value=completed):
-            details = source_mount_details(Path("/mnt/media/Movies"))
+            details = source_mount_details(Path("/mnt/My Media/Movies"))
 
-        self.assertEqual(details, SourceMountDetails(fstype="ntfs3", target="/mnt/media"))
+        self.assertEqual(details, SourceMountDetails(fstype="ntfs3", target="/mnt/My Media"))
+
+    def test_source_mount_details_falls_back_to_proc_mounts(self) -> None:
+        proc_mounts = "//srv/share /mnt/My\\040Share cifs rw 0 0\n/dev/sda1 / ext4 rw 0 0\n"
+
+        with patch("normal.web.scan_guard.subprocess.run", side_effect=OSError):
+            with patch("normal.web.scan_guard.Path.read_text", return_value=proc_mounts):
+                details = source_mount_details(Path("/mnt/My Share/Movies"))
+
+        self.assertEqual(details, SourceMountDetails(fstype="cifs", target="/mnt/My Share"))
 
     def test_risky_mount_flags_marks_ntfs_variants(self) -> None:
         with patch("normal.web.scan_guard.source_mount_details", return_value=SourceMountDetails(fstype="fuseblk", target="/mnt/media")):
