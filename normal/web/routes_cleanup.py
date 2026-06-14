@@ -36,7 +36,7 @@ from normal.source_policy import (
 from .activity import tracked_probe
 from .http import RequestContext
 from .routes_audit import normalize_subject_from_path, record_scan_event
-from .scan_guard import guarded_heavy_scan
+from .scan_guard import guarded_heavy_scan, guarded_mutation
 from .serializers import build_updated_profile_items
 from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE, PROBE_CACHE
 
@@ -179,7 +179,7 @@ def handle_movies_junk_delete(ctx: RequestContext, payload: dict[str, Any]) -> N
         approved_roots=ctx.approved_roots,
         candidate_paths=[Path(str(path)) for path in paths],
     )
-    with ctx.handler.activity_tracker.track(source, "Movie junk delete"):
+    with guarded_mutation(source, "Movie junk delete"), ctx.handler.activity_tracker.track(source, "Movie junk delete"):
         result = delete_movie_junk_files(
             source,
             paths,
@@ -366,7 +366,7 @@ def handle_movies_delete(ctx: RequestContext, payload: dict[str, Any]) -> None:
         approved_roots=ctx.approved_roots,
         candidate_paths=[Path(str(path)) for path in paths],
     )
-    with ctx.handler.activity_tracker.track(source, "Movie delete"):
+    with guarded_mutation(source, "Movie delete"), ctx.handler.activity_tracker.track(source, "Movie delete"):
         result = delete_movie_files(
             source,
             paths,
@@ -393,7 +393,7 @@ def handle_movies_audio_packaging_fix(ctx: RequestContext, payload: dict[str, An
         candidate_paths=[Path(str(path)) for path in paths],
     )
     label = "Movie audio fix: make English default + drop foreign audio" if drop_foreign_audio else "Movie audio fix: make English default"
-    with ctx.handler.activity_tracker.track(source, label, kind="remux") as activity_id:
+    with guarded_mutation(source, label), ctx.handler.activity_tracker.track(source, label, kind="remux") as activity_id:
         result = fix_english_audio_defaults(
             source,
             [str(path) for path in paths],
@@ -441,7 +441,7 @@ def handle_movies_subtitle_readiness_fix(ctx: RequestContext, payload: dict[str,
         approved_roots=ctx.approved_roots,
         candidate_paths=[Path(str(path)) for path in paths],
     )
-    with ctx.handler.activity_tracker.track(source, "Movie subtitle fix: repair defaults", kind="remux") as activity_id:
+    with guarded_mutation(source, "Movie subtitle fix: repair defaults"), ctx.handler.activity_tracker.track(source, "Movie subtitle fix: repair defaults", kind="remux") as activity_id:
         result = fix_movie_subtitle_defaults(
             source,
             [str(path) for path in paths],
@@ -494,7 +494,7 @@ def handle_movies_repair_defaults_fix(ctx: RequestContext, payload: dict[str, An
     if include_subtitle:
         label_parts.append("subtitle default")
     label = "Movie repair defaults: " + " + ".join(label_parts)
-    with ctx.handler.activity_tracker.track(source, label, kind="remux") as activity_id:
+    with guarded_mutation(source, label), ctx.handler.activity_tracker.track(source, label, kind="remux") as activity_id:
         result = fix_movie_repair_defaults(
             source,
             [str(path) for path in paths],

@@ -23,6 +23,7 @@ class _ActiveScan:
     category: str
     source: Path
     label: str
+    mutating: bool = False
 
 
 class HeavyScanRegistry:
@@ -31,21 +32,26 @@ class HeavyScanRegistry:
         self._active: list[_ActiveScan] = []
 
     @contextmanager
-    def claim(self, source: Path, category: str, label: str) -> Iterator[None]:
+    def claim(self, source: Path, category: str, label: str, *, mutating: bool = False) -> Iterator[None]:
         from normal.source_policy import source_paths_overlap
 
         resolved = source.resolve()
-        entry = _ActiveScan(category=category, source=resolved, label=label)
+        entry = _ActiveScan(category=category, source=resolved, label=label, mutating=mutating)
         with self._lock:
             for active in self._active:
                 if source_paths_overlap(active.source, resolved):
-                    raise RequestConflictError(f"{label} is already running for {active.source}")
+                    raise RequestConflictError(_conflict_message(label, mutating, active))
             self._active.append(entry)
         try:
             yield
         finally:
             with self._lock:
                 self._active.remove(entry)
+
+
+def _conflict_message(label: str, mutating: bool, active: _ActiveScan) -> str:
+    verb = "is blocked while" if mutating or active.mutating else "cannot start while"
+    return f"{label} {verb} {active.label} is already running on this library."
 
 
 @dataclass

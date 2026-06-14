@@ -11,7 +11,7 @@ from normal.source_policy import Operation, validate_source_for_operation
 
 from .http import RequestContext
 from .routes_audit import build_reversal_entries_for_normalize_effects, record_scan_event
-from .scan_guard import guarded_heavy_scan
+from .scan_guard import guarded_heavy_scan, guarded_mutation
 from .serializers import build_movie_normalize_results
 from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE
 
@@ -57,7 +57,7 @@ def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
     if not isinstance(raw_ids, list):
         raise ValueError("change_ids must be a list")
     requested_ids = {str(item_id) for item_id in raw_ids}
-    with ctx.handler.activity_tracker.track(source, "Movie apply"):
+    with guarded_mutation(source, "Movie apply"), ctx.handler.activity_tracker.track(source, "Movie apply"):
         plan_movie_files = discover_video_files(source)
         plan_parsed_movies = {movie_path: parse_movie_name_with_sidecar_fallback(movie_path) for movie_path in plan_movie_files}
         authoritative_plan = build_movie_plan(source, movie_files=plan_movie_files, parsed_movies=plan_parsed_movies)

@@ -195,3 +195,9 @@ def build_source_scan_warning(source: Path) -> dict[str, Any]:
 def guarded_heavy_scan(source: Path, label: str, *, category: str = "heavy_scan") -> Iterator[None]:
     with state.HEAVY_SCAN_REGISTRY.claim(source, category, label):
         yield
+
+
+@contextmanager
+def guarded_mutation(source: Path, label: str, *, category: str = "mutation") -> Iterator[None]:
+    with state.HEAVY_SCAN_REGISTRY.claim(source, category, label, mutating=True):
+        yield

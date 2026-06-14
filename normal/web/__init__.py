@@ -9,6 +9,7 @@ from .scan_guard import (
     build_source_scan_warning,
     format_storage_size,
     guarded_heavy_scan,
+    guarded_mutation,
     looks_like_drive_directory,
 )
 from .security import parse_allowed_peers
@@ -35,6 +36,7 @@ __all__ = [
     "find_external_activity",
     "format_storage_size",
     "guarded_heavy_scan",
+    "guarded_mutation",
     "looks_like_drive_directory",
     "parse_allowed_peers",
     "read_web_asset_text",

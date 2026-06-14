@@ -1034,8 +1034,16 @@
       body: JSON.stringify(body),
     });
     const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || `${url} failed`);
+    if (!response.ok) throw mutationFetchError(response, payload, `${url} failed`);
     return payload;
+  }
+
+  function mutationFetchError(response, payload, fallback) {
+    const serverMessage = payload && payload.error ? payload.error : '';
+    if (response.status === 409) {
+      return new Error(serverMessage || 'Another operation is already running on this library. Wait for it to finish, then try again.');
+    }
+    return new Error(serverMessage || fallback);
   }
 
   function auditSourceKey() {
@@ -5503,7 +5511,7 @@
         body: JSON.stringify({ source: el.sourcePath.value.trim(), paths, drop_foreign_audio: dropForeignAudio }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'audio packaging fix failed');
+      if (!response.ok) throw mutationFetchError(response, payload, 'audio packaging fix failed');
       state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true, action });
       markAuditLedgerDirty();
       state.repairActionNotice = dropForeignAudio
@@ -5538,7 +5546,7 @@
         body: JSON.stringify({ source: el.sourcePath.value.trim(), paths, issue_codes: issueCodes }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'subtitle readiness fix failed');
+      if (!response.ok) throw mutationFetchError(response, payload, 'subtitle readiness fix failed');
       state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true, action });
       markAuditLedgerDirty();
       state.repairActionNotice = `${payload.fixed?.length || 0} subtitle default${(payload.fixed?.length || 0) === 1 ? '' : 's'} repaired.`;
@@ -5579,7 +5587,7 @@
         }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'repair defaults fix failed');
+      if (!response.ok) throw mutationFetchError(response, payload, 'repair defaults fix failed');
       state.repairPayload = mergeUpdatedProfileItems(state.repairPayload, payload.updated_items || [], { dropResolved: true, action });
       markAuditLedgerDirty();
       state.repairActionNotice = `${payload.fixed?.length || 0} combined repair remux${(payload.fixed?.length || 0) === 1 ? '' : 's'} completed.`;
@@ -5681,7 +5689,7 @@
           body: JSON.stringify({ source, paths, issue_family: 'weak_encode' }),
         });
         const delPayload = await delResponse.json();
-        if (!delResponse.ok) throw new Error(delPayload.error || 'delete failed');
+        if (!delResponse.ok) throw mutationFetchError(delResponse, delPayload, 'delete failed');
         state.weakPayload = removeWeakDeletedItems(state.weakPayload, delPayload.deleted || []);
         await refreshDashboardPayload(source, { weakFloor: state.weakFloor });
         markAuditLedgerDirty();
@@ -5712,7 +5720,7 @@
           body: JSON.stringify({ source, paths }),
         });
         const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'junk delete failed');
+        if (!response.ok) throw mutationFetchError(response, payload, 'junk delete failed');
         state.junkPayload = removeJunkDeletedItems(state.junkPayload, payload.deleted || []);
         await refreshDashboardPayload(source, { weakFloor: state.weakFloor });
         markAuditLedgerDirty();
@@ -5738,7 +5746,7 @@
         body: JSON.stringify({ source: el.sourcePath.value, change_ids: changeIds }),
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || 'confirm failed');
+      if (!response.ok) throw mutationFetchError(response, payload, 'confirm failed');
       state.normalizePayload = payload.remaining_plan || null;
       markAuditLedgerDirty();
       state.selected = new Set();
