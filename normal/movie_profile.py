@@ -207,7 +207,8 @@ DEFAULT_MOVIE_STANDARDS: dict[str, Any] = {
     },
 }
 
-MOVIE_STANDARDS_PATH = Path(__file__).resolve().parent.parent / "movie_standards.json"
+MOVIE_STANDARDS_PATH = Path.home() / ".local" / "share" / "normal" / "movie-standards.json"
+LEGACY_MOVIE_STANDARDS_PATH = Path(__file__).resolve().parent.parent / "movie_standards.json"
 OPERATOR_PREFERENCES_PATH = Path.home() / ".local" / "share" / "normal" / "operator-preferences.json"
 ENGLISH_AUDIO_LANGUAGES = {"eng", "en", "english"}
 ENGLISH_SUBTITLE_LANGUAGES = {"eng", "en", "english"}
@@ -655,10 +656,11 @@ def build_movie_profile_item(
 
 def load_movie_standards() -> dict[str, Any]:
     standards = json.loads(json.dumps(default_library_policy()))
-    if not MOVIE_STANDARDS_PATH.exists():
+    source_path = MOVIE_STANDARDS_PATH if MOVIE_STANDARDS_PATH.exists() else LEGACY_MOVIE_STANDARDS_PATH
+    if not source_path.exists():
         return standards
     try:
-        payload = json.loads(MOVIE_STANDARDS_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(source_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return standards
     if not isinstance(payload, dict):
