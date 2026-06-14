@@ -26,6 +26,7 @@ from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
 from normal.movie_scan import VIDEO_EXTENSIONS
 from normal.movie_profile import load_operator_preferences, normalize_delete_mode
 from normal.pathsafe import contained_resolve
+from normal.source_policy import enforce_source_policy
 
 from .activity import tracked_probe
 from .http import RequestContext
@@ -151,6 +152,7 @@ def handle_movies_junk_delete(ctx: RequestContext, payload: dict[str, Any]) -> N
     paths = payload.get("paths")
     if not isinstance(paths, list):
         raise ValueError("paths must be a list")
+    enforce_source_policy(source, operation="mutate")
     with ctx.handler.activity_tracker.track(source, "Movie junk delete"):
         result = delete_movie_junk_files(source, paths, load_operator_preferences())
     _record_junk_delete_event(source, result)
@@ -301,6 +303,7 @@ def handle_movies_delete(ctx: RequestContext, payload: dict[str, Any]) -> None:
     if not isinstance(paths, list):
         raise ValueError("paths must be a list")
     issue_family = str(payload.get("issue_family") or "").strip() or None
+    enforce_source_policy(source, operation="mutate")
     with ctx.handler.activity_tracker.track(source, "Movie delete"):
         result = delete_movie_files(source, paths, load_operator_preferences())
     _record_media_delete_event(source, result, issue_family=issue_family)
@@ -316,6 +319,7 @@ def handle_movies_audio_packaging_fix(ctx: RequestContext, payload: dict[str, An
     if not isinstance(paths, list):
         raise ValueError("paths must be a list")
     drop_foreign_audio = bool(payload.get("drop_foreign_audio"))
+    enforce_source_policy(source, operation="mutate")
     label = "Movie audio fix: make English default + drop foreign audio" if drop_foreign_audio else "Movie audio fix: make English default"
     with ctx.handler.activity_tracker.track(source, label, kind="remux") as activity_id:
         result = fix_english_audio_defaults(
@@ -358,6 +362,7 @@ def handle_movies_subtitle_readiness_fix(ctx: RequestContext, payload: dict[str,
     paths = payload.get("paths")
     if not isinstance(paths, list):
         raise ValueError("paths must be a list")
+    enforce_source_policy(source, operation="mutate")
     with ctx.handler.activity_tracker.track(source, "Movie subtitle fix: repair defaults", kind="remux") as activity_id:
         result = fix_movie_subtitle_defaults(
             source,
@@ -389,6 +394,7 @@ def handle_movies_repair_defaults_fix(ctx: RequestContext, payload: dict[str, An
     paths = payload.get("paths")
     if not isinstance(paths, list):
         raise ValueError("paths must be a list")
+    enforce_source_policy(source, operation="mutate")
     include_audio = bool(payload.get("include_audio"))
     include_subtitle = bool(payload.get("include_subtitle"))
     if not include_audio and not include_subtitle:

@@ -7,6 +7,7 @@ from normal.models import utc_now_iso
 from normal.movie_apply import apply_changes_in_place
 from normal.movie_plan import build_movie_plan, parse_movie_name_with_sidecar_fallback
 from normal.movie_scan import discover_video_files
+from normal.source_policy import enforce_source_policy
 
 from .http import RequestContext
 from .routes_audit import build_reversal_entries_for_normalize_effects, record_scan_event
@@ -51,6 +52,7 @@ def handle_movies_normalize(ctx: RequestContext, payload: dict[str, Any]) -> Non
 
 def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
+    enforce_source_policy(source, operation="mutate")
     raw_ids = payload.get("change_ids", [])
     if not isinstance(raw_ids, list):
         raise ValueError("change_ids must be a list")
