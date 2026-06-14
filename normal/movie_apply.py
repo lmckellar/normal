@@ -174,6 +174,25 @@ def copy_source_tree(source_root: Path, destination_root: Path) -> None:
         shutil.copy2(source_path, destination_path)
 
 
+def validate_basename(value: str) -> str:
+    if value in {"", ".", ".."} or "/" in value or "\\" in value or Path(value).is_absolute():
+        raise ValueError(f"unsafe rename target: {value!r}")
+    return value
+
+
+def validate_relative_destination(root: Path, value: str) -> Path:
+    candidate = Path(value)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        raise ValueError(f"unsafe destination path: {value!r}")
+    root_resolved = root.resolve()
+    resolved = (root_resolved / candidate).resolve()
+    try:
+        resolved.relative_to(root_resolved)
+    except ValueError:
+        raise ValueError(f"destination path escapes source root: {value!r}")
+    return resolved
+
+
 def apply_change(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
     if change.path is None:
         raise ValueError("proposed change is missing path")
@@ -213,6 +232,7 @@ def apply_change(source_root: Path, destination_root: Path, change: ProposedChan
 
 
 def apply_file_rename(destination_path: Path, change: ProposedChange) -> ApplyResult:
+    validate_basename(change.proposed_value)
     if destination_path.name != change.current_value:
         return ApplyResult(
             item_id=change.item_id,
@@ -253,7 +273,7 @@ def apply_file_move(destination_path: Path, destination_root: Path, change: Prop
             message="Filename drifted from the plan current_value.",
         )
 
-    moved_path = destination_root / change.proposed_value
+    moved_path = validate_relative_destination(destination_root, change.proposed_value)
     if moved_path.exists():
         return ApplyResult(
             item_id=change.item_id,
@@ -358,7 +378,7 @@ def apply_folder_rename(source_root: Path, destination_root: Path, change: Propo
             message="Folder path drifted from the plan current_value.",
         )
 
-    target_dir = destination_root / change.proposed_value
+    target_dir = validate_relative_destination(destination_root, change.proposed_value)
     if target_dir.exists():
         if target_dir.samefile(destination_dir):
             return ApplyResult(
@@ -413,7 +433,7 @@ def apply_folder_merge(source_root: Path, destination_root: Path, change: Propos
             message="Folder path drifted from the plan current_value.",
         )
 
-    target_dir = destination_root / change.proposed_value
+    target_dir = validate_relative_destination(destination_root, change.proposed_value)
     if not target_dir.exists() or not target_dir.is_dir():
         return ApplyResult(
             item_id=change.item_id,
