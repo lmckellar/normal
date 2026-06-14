@@ -846,7 +846,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("width: TABLE_WIDTHS.category", widths_js)
         self.assertIn("key: 'status', label: 'Status'", widths_js)
         self.assertIn("width: TABLE_WIDTHS.verdict", widths_js)
-        self.assertIn("key: 'coverage', label: 'Copy Coverage'", widths_js)
+        self.assertIn("key: 'coverage', label: 'Copies'", widths_js)
         self.assertIn("width: TABLE_WIDTHS.compactMeasure", widths_js)
         self.assertNotIn("immersiveAudio:", widths_js)
         self.assertNotIn("immersiveQuality:", widths_js)

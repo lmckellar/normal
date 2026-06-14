@@ -157,7 +157,7 @@
     { key: 'trait', label: 'Format', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.category },
     { key: 'status', label: 'Status', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.verdict },
     { key: 'capability', label: 'Local', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.category },
-    { key: 'coverage', label: 'Copy Coverage', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.compactMeasure },
+    { key: 'coverage', label: 'Copies', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'medium', width: TABLE_WIDTHS.compactMeasure },
   ];
 
   const state = {
