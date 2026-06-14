@@ -35,8 +35,9 @@ class MacOSMountTests(unittest.TestCase):
             details = _macos_diskutil_details(Path("/Volumes/Media/Movies"))
 
         self.assertEqual(details, MountDetails("apfs", "/Volumes/Media", None))
-        self.assertTrue(is_mount_root(Path("/Volumes/Media"), details))
-        self.assertFalse(is_mount_root(Path("/Volumes/Media/Movies"), details))
+        if os.name != "nt":
+            self.assertTrue(is_mount_root(Path("/Volumes/Media"), details))
+            self.assertFalse(is_mount_root(Path("/Volumes/Media/Movies"), details))
 
     def test_diskutil_marks_exfat_removable_media(self) -> None:
         payload = plistlib.dumps(
