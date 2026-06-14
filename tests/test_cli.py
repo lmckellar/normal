@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from normal.cli import main
 from normal.output import MissingDependencyError
+from normal.source_policy import SourcePolicyError
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -59,6 +60,28 @@ class NormalCliTests(unittest.TestCase):
 
         self.assertEqual(result, 1)
         self.assertEqual(stderr.getvalue(), "normal: XLSX export requires openpyxl.\n")
+        self.assertNotIn("Traceback", stderr.getvalue())
+
+    def test_source_policy_error_is_reported_without_a_traceback(self) -> None:
+        with patch(
+            "normal.cli.run_movie_apply",
+            side_effect=SourcePolicyError("Refusing apply on /"),
+        ):
+            stderr = StringIO()
+            with patch("sys.stderr", stderr):
+                result = main(
+                    [
+                        "movie-apply",
+                        "--source",
+                        "/",
+                        "--plan",
+                        "plan.json",
+                        "--in-place",
+                    ]
+                )
+
+        self.assertEqual(result, 1)
+        self.assertEqual(stderr.getvalue(), "normal: Refusing apply on /\n")
         self.assertNotIn("Traceback", stderr.getvalue())
 
     def test_movie_scan_accepts_progress_flag(self) -> None:

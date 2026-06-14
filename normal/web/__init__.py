@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+from normal.source_policy import ApprovedRoots, resolve_source_path
 from . import activity, scan_guard, state
 from .activity import ActivityTracker, build_activity_payload, find_external_activity
 from .routes_cleanup import delete_movie_junk_files
 from .scan_guard import (
-    ApprovedRoots,
     SourceMountDetails,
     build_source_scan_warning,
     format_storage_size,
     guarded_heavy_scan,
     looks_like_drive_directory,
-    resolve_source_path,
 )
 from .security import parse_allowed_peers
 from .serializers import build_movie_normalize_results

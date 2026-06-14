@@ -32,7 +32,7 @@ class HeavyScanRegistry:
 
     @contextmanager
     def claim(self, source: Path, category: str, label: str) -> Iterator[None]:
-        from .scan_guard import source_paths_overlap
+        from normal.source_policy import source_paths_overlap
 
         resolved = source.resolve()
         entry = _ActiveScan(category=category, source=resolved, label=label)

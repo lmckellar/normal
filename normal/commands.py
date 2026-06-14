@@ -11,16 +11,12 @@ from normal.movie_plan import build_movie_plan
 from normal.movie_profile import build_histogram_payload, scan_movie_profiles
 from normal.movie_scan import MovieScanProgress, scan_movie_library
 from normal.output import write_movie_register_xlsx, write_movie_review_csv
+from normal.source_policy import Operation, resolve_source_path, validate_source_for_operation
 from normal.web import ApprovedRoots, parse_allowed_peers, serve_web_ui
 
 
 def ensure_source_directory(source: Path) -> Path:
-    resolved = source.expanduser().resolve()
-    if not resolved.exists():
-        raise FileNotFoundError(f"source does not exist: {resolved}")
-    if not resolved.is_dir():
-        raise NotADirectoryError(f"source is not a directory: {resolved}")
-    return resolved
+    return resolve_source_path(source)
 
 
 def ensure_parent_directory(path: Path) -> None:
@@ -72,6 +68,8 @@ def run_movie_plan(source: Path, plan_path: Path, summary_path: Path | None) -> 
 
 def run_movie_apply(source: Path, plan_path: Path, target: Path | None, in_place: bool) -> int:
     source_root = ensure_source_directory(source)
+    if in_place:
+        validate_source_for_operation(source_root, operation=Operation.APPLY)
     resolved_plan = plan_path.expanduser().resolve()
     if not resolved_plan.exists():
         raise FileNotFoundError(f"plan does not exist: {resolved_plan}")

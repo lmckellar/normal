@@ -17,6 +17,7 @@ from normal.commands import (
     run_web,
 )
 from normal.output import MissingDependencyError
+from normal.source_policy import SourcePolicyError
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -162,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except MissingDependencyError as exc:
+    except (MissingDependencyError, SourcePolicyError) as exc:
         print(f"normal: {exc}", file=sys.stderr)
         return 1
 

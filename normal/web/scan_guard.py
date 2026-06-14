@@ -8,69 +8,10 @@ import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Iterator
 
+from normal.source_policy import ApprovedRoots, path_is_under, resolve_source_path, source_paths_overlap
 from . import state
-
-
-def resolve_source_path(raw_source: Any, default_source: Path | None = None) -> Path:
-    if raw_source:
-        resolved = Path(str(raw_source)).expanduser().resolve()
-    elif default_source is not None:
-        resolved = default_source.resolve()
-    else:
-        raise ValueError("source is required")
-    if not resolved.exists():
-        raise FileNotFoundError(f"source does not exist: {resolved}")
-    if not resolved.is_dir():
-        raise NotADirectoryError(f"source is not a directory: {resolved}")
-    return resolved
-
-
-def path_is_under(path: Path, root: Path) -> bool:
-    try:
-        path.resolve().relative_to(root.resolve())
-        return True
-    except ValueError:
-        return False
-
-
-@dataclass(frozen=True, slots=True)
-class ApprovedRoots:
-    roots: tuple[Path, ...] = ()
-
-    @classmethod
-    def from_paths(cls, paths: Iterable[Path]) -> "ApprovedRoots":
-        resolved: list[Path] = []
-        for raw in paths:
-            candidate = Path(raw).expanduser().resolve()
-            if candidate not in resolved:
-                resolved.append(candidate)
-        return cls(roots=tuple(resolved))
-
-    def is_approved(self, path: Path) -> bool:
-        return any(path_is_under(path, root) for root in self.roots)
-
-    def resolve_approved(self, raw_source: Any, default_source: Path | None = None) -> Path:
-        source = resolve_source_path(raw_source, default_source=default_source)
-        if not self.is_approved(source):
-            raise PermissionError(self.denial_message(source))
-        return source
-
-    def denial_message(self, source: Path) -> str:
-        listed = "\n".join(f"  {root}" for root in self.roots) if self.roots else "  (none)"
-        return (
-            f"Source is not under an approved root: {source}\n\n"
-            f"Approved roots:\n{listed}\n\n"
-            "Restart with:\n"
-            f"  normal web --allow-root {source}"
-        )
-
-
-def source_paths_overlap(left: Path, right: Path) -> bool:
-    left_resolved = left.resolve()
-    right_resolved = right.resolve()
-    return path_is_under(left_resolved, right_resolved) or path_is_under(right_resolved, left_resolved)
 
 
 def client_disconnected(connection: socket.socket) -> bool:

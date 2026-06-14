@@ -9,7 +9,8 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from normal.movie_omdb import resolve_original_language
-from .scan_guard import ApprovedRoots, client_disconnected, resolve_source_path
+from normal.source_policy import ApprovedRoots, resolve_source_path
+from .scan_guard import client_disconnected
 from .security import MAX_JSON_BODY
 
 

@@ -11,9 +11,9 @@ from typing import Any, Callable, Iterator
 
 from normal.movie_scan import probe_media_facts
 from normal.probe_cache import ProbeCache
+from normal.source_policy import path_is_under, source_paths_overlap
 
 from . import state
-from .scan_guard import path_is_under, source_paths_overlap
 
 
 @dataclass

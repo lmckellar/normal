@@ -7,7 +7,7 @@ from normal.models import utc_now_iso
 from normal.movie_apply import apply_changes_in_place
 from normal.movie_plan import build_movie_plan, parse_movie_name_with_sidecar_fallback
 from normal.movie_scan import discover_video_files
-from normal.source_policy import enforce_source_policy
+from normal.source_policy import Operation, validate_source_for_operation
 
 from .http import RequestContext
 from .routes_audit import build_reversal_entries_for_normalize_effects, record_scan_event
@@ -52,7 +52,7 @@ def handle_movies_normalize(ctx: RequestContext, payload: dict[str, Any]) -> Non
 
 def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
-    enforce_source_policy(source, operation="mutate")
+    validate_source_for_operation(source, operation=Operation.APPLY, approved_roots=ctx.approved_roots)
     raw_ids = payload.get("change_ids", [])
     if not isinstance(raw_ids, list):
         raise ValueError("change_ids must be a list")
@@ -62,6 +62,12 @@ def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
         plan_parsed_movies = {movie_path: parse_movie_name_with_sidecar_fallback(movie_path) for movie_path in plan_movie_files}
         authoritative_plan = build_movie_plan(source, movie_files=plan_movie_files, parsed_movies=plan_parsed_movies)
         changes = [change for change in authoritative_plan.proposed_changes if change.item_id in requested_ids]
+        validate_source_for_operation(
+            source,
+            operation=Operation.APPLY,
+            approved_roots=ctx.approved_roots,
+            candidate_paths=[change.path for change in changes if change.path],
+        )
         report = apply_changes_in_place(source, changes)
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)

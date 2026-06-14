@@ -23,7 +23,7 @@ from .routes_cleanup import (
     handle_movies_subtitle_readiness_fix,
 )
 from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
-from .scan_guard import ApprovedRoots
+from normal.source_policy import ApprovedRoots
 from .routes_normalize import handle_movies_apply, handle_movies_normalize
 from .routes_settings import (
     handle_settings_keys_update,
