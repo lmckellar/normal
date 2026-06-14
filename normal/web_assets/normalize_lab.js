@@ -25,7 +25,7 @@
 
   const WORKFLOW_DESCRIPTIONS = {
     normalize: 'Review naming fixes and apply clean movie title and path changes across the library.',
-    'tv-normalize': 'Review filename-only TV episode naming fixes for an explicitly selected TV library.',
+    'tv-normalize': 'Review naming fixes and apply clean series, season, and episode filenames. Files are renamed in place — folders are left as they are.',
     'weak-encodes': 'Review low-quality encodes that are better deleted or replaced.',
     'repair-defaults': 'Fix audio and subtitle defaults to improve playback behaviour and keep repair cases visible.',
     'canonical-lists': 'Compare the library against canonical lists and inspect owned copy quality at a glance.',
@@ -3259,6 +3259,20 @@
     return String(row.episode_first);
   }
 
+  function tvNumberingLabel(numbering) {
+    switch (numbering) {
+      case 'span': return 'Multi-episode';
+      case 'sxe':
+      case 'loose_sxe':
+      case 'x': return 'Season/Episode';
+      case 'of_total': return 'N of M';
+      case 'absolute': return 'Absolute';
+      default: return 'Unrecognized';
+    }
+  }
+
+  const TV_CHANGE_VERBS = { file_rename: 'Rename', file_move: 'Move' };
+
   function tvWarningsLabel(row) {
     const messages = [...(row.warning_messages || []), ...(row.reason_messages || [])];
     return [...new Set(messages.filter(Boolean))].join(' | ') || '—';
@@ -3266,8 +3280,8 @@
 
   function tvChangesLabel(row) {
     const changes = row.linked_changes || [];
-    if (!changes.length) return 'unchanged';
-    return changes.map(change => `${change.change_type}: ${change.current_value} -> ${change.proposed_value}`).join(' | ');
+    if (!changes.length) return 'No change';
+    return [...new Set(changes.map(change => TV_CHANGE_VERBS[change.change_type] || 'Update'))].join(' | ');
   }
 
   function isStrictWeakMovie(item) {
@@ -3833,8 +3847,8 @@
       if (pending > 0) {
         el.confirmButton.disabled = state.applyInFlight;
         el.confirmButton.textContent = state.applyInFlight
-          ? `Resuming drain (${pending} pending)`
-          : `Resume drain (${pending} pending)`;
+          ? `Resuming (${pending} pending)`
+          : `Resume (${pending} pending)`;
         return;
       }
     }
@@ -3930,7 +3944,7 @@
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.series || '—')}"><span class="lab-cell-text">${escapeHtml(row.series || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium"><span class="lab-cell-text">${row.season == null ? '—' : escapeHtml(String(row.season))}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="essential"><span class="lab-cell-text">${escapeHtml(tvEpisodeLabel(row))}</span></td>
-        <td class="lab-cell-status" data-priority="medium"><span class="lab-cell-pill">${escapeHtml(row.numbering || 'unknown')}</span></td>
+        <td class="lab-cell-status" data-priority="medium" title="${escapeHtml(row.numbering || '')}"><span class="lab-cell-pill">${escapeHtml(tvNumberingLabel(row.numbering))}</span></td>
         <td class="lab-cell-path" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${projectedPathMarkup(row.projected_path)}</span></td>
         <td class="lab-cell-status" data-priority="essential" title="${escapeHtml(row.identity_confidence || row.confidence)}"><span class="lab-cell-pill ${normalizeConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
         <td class="lab-cell-status" data-priority="medium" title="${escapeHtml(warnings)}"><span class="lab-cell-text">${escapeHtml(warnings)}</span></td>

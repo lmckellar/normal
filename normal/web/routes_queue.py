@@ -131,7 +131,7 @@ def handle_queue_drain(ctx: RequestContext, payload: dict[str, Any]) -> None:
             ctx.handler.activity_tracker.update(
                 activity_id,
                 current_path=action.source_path,
-                status_text=f"{progress['done']} of {total} drained",
+                status_text=f"{progress['done']} of {total} applied",
                 processed=progress["done"],
                 total=total,
                 progress_fraction=(progress["done"] / total) if total else None,

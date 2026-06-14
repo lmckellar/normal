@@ -58,7 +58,7 @@ class QueueWorkbenchStringTests(unittest.TestCase):
         self.assertIn("function pendingQueueCount()", WORKBENCH_JS)
         self.assertIn("function drainStagedQueue(lane, source)", WORKBENCH_JS)
         self.assertIn("function resumeDrainQueue()", WORKBENCH_JS)
-        self.assertIn("`Resume drain (${pending} pending)`", WORKBENCH_JS)
+        self.assertIn("`Resume (${pending} pending)`", WORKBENCH_JS)
         self.assertIn("if (pendingQueueCount() > 0) {", WORKBENCH_JS)
         # Resume drains the persisted queue directly — no re-stage.
         self.assertNotIn("queue/stage", WORKBENCH_JS.split("async function resumeDrainQueue()")[1].split("async function")[0])
