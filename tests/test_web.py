@@ -20,6 +20,7 @@ from normal.web import (
     render_workbench_html,
 )
 from normal.web.routes_cleanup import delete_mode_for_kind
+from normal.web.security import MUTATION_TOKEN
 
 
 WORKBENCH_TEMPLATE = read_web_asset_text("normalize_lab.html")
@@ -366,7 +367,7 @@ class WebTests(unittest.TestCase):
                 req = urllib.request.Request(
                     f"{base_url}/api/movies/junk",
                     data=body,
-                    headers={"Content-Type": "application/json"},
+                    headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                     method="POST",
                 )
                 with urllib.request.urlopen(req) as response:
@@ -616,7 +617,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("el.placeholderToggle.innerHTML = railIconSvg('trophy');", NORMALIZE_LAB_FRONTEND)
         self.assertIn("railIconSvg('download')", NORMALIZE_LAB_FRONTEND)
         self.assertIn("const exportLabel = exportBusy ? 'Exporting Catalogue' : 'Export Catalogue';", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("await fetch('/api/movies/register', {", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("await postFetch('/api/movies/register', {", NORMALIZE_LAB_FRONTEND)
         self.assertIn("el.placeholderDownloadToggle.addEventListener('click', () => {", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("class=\"lab-sliver-middle\"", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("class=\"lab-sliver-foot\"", NORMALIZE_LAB_FRONTEND)
@@ -867,7 +868,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("Running single-pass audio and subtitle remux for ${paths.length} file", NORMALIZE_LAB_JS)
         self.assertIn("Running single-pass audio, subtitle, and foreign-audio remux for ${paths.length} file", NORMALIZE_LAB_JS)
         self.assertIn("body: JSON.stringify({ source: el.sourcePath.value.trim(), paths, drop_foreign_audio: dropForeignAudio }),", NORMALIZE_LAB_JS)
-        self.assertIn("await fetch('/api/movies/repair-defaults/fix', {", NORMALIZE_LAB_JS)
+        self.assertIn("await postFetch('/api/movies/repair-defaults/fix', {", NORMALIZE_LAB_JS)
         self.assertIn("if (actionTouchesSubtitle(action)) {", NORMALIZE_LAB_JS)
         self.assertIn("const applicableRows = selectedRepairRowsForAction(action);", NORMALIZE_LAB_JS)
 
@@ -1022,7 +1023,7 @@ class WebTests(unittest.TestCase):
                         req = urllib.request.Request(
                             f"{base_url}/api/movies/audio-packaging/fix",
                             data=body,
-                            headers={"Content-Type": "application/json"},
+                            headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                             method="POST",
                         )
                         with urllib.request.urlopen(req) as response:
@@ -1051,7 +1052,7 @@ class WebTests(unittest.TestCase):
                         req = urllib.request.Request(
                             f"{base_url}/api/movies/repair-defaults/fix",
                             data=body,
-                            headers={"Content-Type": "application/json"},
+                            headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                             method="POST",
                         )
                         with urllib.request.urlopen(req) as response:
@@ -1074,7 +1075,7 @@ class WebTests(unittest.TestCase):
                 req = urllib.request.Request(
                     f"{base_url}/api/movies/delete-preview",
                     data=body,
-                    headers={"Content-Type": "application/json"},
+                    headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                     method="POST",
                 )
                 with urllib.request.urlopen(req) as response:
@@ -1142,6 +1143,117 @@ class WebTests(unittest.TestCase):
                     {"path": str(large_false_positive.resolve()), "reason": "not_current_junk_candidate"},
                 ],
             )
+
+
+class WebPostSecurityTests(unittest.TestCase):
+    @contextmanager
+    def run_test_server(self, **handler_kwargs):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler(**handler_kwargs))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_address[1]}"
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def post(self, base_url, path, *, headers=None, data=b"{}"):
+        req = urllib.request.Request(f"{base_url}{path}", data=data, headers=headers or {}, method="POST")
+        return urllib.request.urlopen(req)
+
+    def valid_headers(self):
+        from normal.web.security import MUTATION_TOKEN
+
+        return {"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN}
+
+    def scan_warning_body(self, tmpdir):
+        return json.dumps({"source": tmpdir}).encode("utf-8")
+
+    def test_workbench_exposes_mutation_token(self) -> None:
+        from normal.web.security import MUTATION_TOKEN
+
+        html = render_workbench_html(Path("/library/movies"))
+        self.assertIn(f'"token": "{MUTATION_TOKEN}"', html)
+        self.assertIn("window.NORMAL_TOKEN = window.NORMAL_BOOT.token;", html)
+
+    def test_valid_token_and_json_passes_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.run_test_server() as base_url:
+                with self.post(
+                    base_url,
+                    "/api/source/scan-warning",
+                    headers=self.valid_headers(),
+                    data=self.scan_warning_body(tmpdir),
+                ) as response:
+                    self.assertEqual(response.status, 200)
+
+    def test_missing_token_is_rejected_before_handler_runs(self) -> None:
+        with patch("normal.web.server.handle_source_scan_warning") as spy:
+            with self.run_test_server() as base_url:
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    self.post(
+                        base_url,
+                        "/api/source/scan-warning",
+                        headers={"Content-Type": "application/json"},
+                    )
+        self.assertEqual(ctx.exception.code, 403)
+        spy.assert_not_called()
+
+    def test_non_json_content_type_is_rejected(self) -> None:
+        headers = self.valid_headers()
+        headers["Content-Type"] = "text/plain"
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(base_url, "/api/source/scan-warning", headers=headers)
+        self.assertEqual(ctx.exception.code, 415)
+
+    def test_cross_origin_is_rejected(self) -> None:
+        headers = self.valid_headers()
+        headers["Origin"] = "http://evil.example.com"
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(base_url, "/api/source/scan-warning", headers=headers)
+        self.assertEqual(ctx.exception.code, 403)
+
+    def test_foreign_host_is_rejected_unless_unsafe_remote(self) -> None:
+        headers = self.valid_headers()
+        headers["Host"] = "evil.example.com"
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(base_url, "/api/source/scan-warning", headers=headers)
+        self.assertEqual(ctx.exception.code, 403)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.run_test_server(bound_host="evil.example.com", unsafe_remote=True) as base_url:
+                with self.post(
+                    base_url,
+                    "/api/source/scan-warning",
+                    headers={**headers, "Origin": "http://evil.example.com"},
+                    data=self.scan_warning_body(tmpdir),
+                ) as response:
+                    self.assertEqual(response.status, 200)
+
+    def test_oversized_body_is_rejected(self) -> None:
+        from normal.web.security import MAX_JSON_BODY
+
+        headers = self.valid_headers()
+        headers["Content-Length"] = str(MAX_JSON_BODY + 1)
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(base_url, "/api/source/scan-warning", headers=headers)
+        self.assertEqual(ctx.exception.code, 413)
+
+    def test_token_is_checked_before_size(self) -> None:
+        from normal.web.security import MAX_JSON_BODY
+
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(
+                    base_url,
+                    "/api/source/scan-warning",
+                    headers={"Content-Type": "application/json", "Content-Length": str(MAX_JSON_BODY + 1)},
+                )
+        self.assertEqual(ctx.exception.code, 403)
 
 
 if __name__ == "__main__":

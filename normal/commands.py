@@ -137,11 +137,12 @@ def run_web(
     source: Path | None = None,
     omdb_key: str | None = None,
     tmdb_key: str | None = None,
+    unsafe_remote: bool = False,
 ) -> int:
     default_source = None
     if source is not None:
         default_source = ensure_source_directory(source)
-    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key)
+    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, unsafe_remote=unsafe_remote)
     return 0
 
 

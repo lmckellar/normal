@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from normal.movie_omdb import resolve_original_language
 from .scan_guard import client_disconnected, resolve_source_path
+from .security import MAX_JSON_BODY
 
 
 @dataclass(slots=True)
@@ -27,6 +28,8 @@ class RequestContext:
 
     def read_json_body(self) -> dict[str, Any]:
         length = int(self.handler.headers.get("Content-Length", "0"))
+        if length > MAX_JSON_BODY:
+            raise ValueError("request body too large")
         body = self.handler.rfile.read(length) if length else b"{}"
         if not body:
             return {}

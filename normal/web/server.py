@@ -29,6 +29,8 @@ from .routes_settings import (
     handle_settings_preferences_update,
     handle_settings_read,
 )
+from . import security
+from .security import PostRejected
 from .routes_profile import (
     handle_movies_canonical_lists,
     handle_movies_canonical_refresh,
@@ -89,6 +91,7 @@ def render_web_bootstrap(default_source: Path | None = None, omdb_key: str | Non
         "omdbAvailable": bool(omdb_key),
         "tmdbKey": tmdb_key or "",
         "onboarding": read_onboarding_bootstrap(omdb_key=omdb_key, tmdb_key=tmdb_key),
+        "token": security.MUTATION_TOKEN,
     }
     return "\n".join(
         (
@@ -96,6 +99,7 @@ def render_web_bootstrap(default_source: Path | None = None, omdb_key: str | Non
             "window.DEFAULT_SOURCE = window.NORMAL_BOOT.defaultSource;",
             "window.OMDB_AVAILABLE = window.NORMAL_BOOT.omdbAvailable;",
             "window.TMDB_KEY = window.NORMAL_BOOT.tmdbKey;",
+            "window.NORMAL_TOKEN = window.NORMAL_BOOT.token;",
         )
     )
 
@@ -118,9 +122,15 @@ def serve_web_ui(
     default_source: Path | None = None,
     omdb_key: str | None = None,
     tmdb_key: str | None = None,
+    unsafe_remote: bool = False,
 ) -> None:
     state.CREDENTIAL_STORE.seed_from_boot(omdb_key=omdb_key, tmdb_key=tmdb_key)
-    handler = build_handler(default_source=default_source)
+    handler = build_handler(
+        default_source=default_source,
+        bound_host=host,
+        bound_port=port,
+        unsafe_remote=unsafe_remote,
+    )
     server = ThreadingHTTPServer((host, port), handler)
     source_hint = f" default source {default_source}" if default_source else ""
     print(f"normal web UI listening on http://{host}:{port}/{source_hint}")
@@ -200,6 +210,9 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
 
 def build_handler(
     default_source: Path | None = None,
+    bound_host: str = "127.0.0.1",
+    bound_port: int = 8765,
+    unsafe_remote: bool = False,
 ):
     get_routes = build_get_routes()
     post_routes = build_post_routes()
@@ -237,8 +250,16 @@ def build_handler(
                 ctx.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
                 return
             try:
+                security.check_post(
+                    self,
+                    bound_host=bound_host,
+                    bound_port=bound_port,
+                    unsafe_remote=unsafe_remote,
+                )
                 payload = ctx.read_json_body()
                 handler(ctx, payload)
+            except PostRejected as exc:
+                ctx.respond_json({"error": exc.message}, status=exc.status)
             except RequestConflictError as exc:
                 ctx.respond_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             except Exception as exc:

@@ -15,6 +15,7 @@ from normal.models import utc_now_iso
 from normal.movie_canonical_lists import CanonicalLibrarySummary, CanonicalListsReport
 from normal.movie_profile import MovieProfileReport
 from normal.web import build_handler
+from normal.web.security import MUTATION_TOKEN
 from normal.web.state import MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE
 
 
@@ -330,7 +331,7 @@ class AuditRouteTests(unittest.TestCase):
                     normalize_request = urllib.request.Request(
                         f"{base_url}/api/movies/normalize",
                         data=json.dumps({"source": str(source)}).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                         method="POST",
                     )
                     with urllib.request.urlopen(normalize_request) as response:
@@ -338,7 +339,7 @@ class AuditRouteTests(unittest.TestCase):
                     apply_request = urllib.request.Request(
                         f"{base_url}/api/movies/apply",
                         data=json.dumps({"source": str(source), "changes": normalize_payload["proposed_changes"]}).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                         method="POST",
                     )
                     with urllib.request.urlopen(apply_request) as response:
@@ -346,7 +347,7 @@ class AuditRouteTests(unittest.TestCase):
                     audit_request = urllib.request.Request(
                         f"{base_url}/api/audit/read",
                         data=json.dumps({"source": str(source), "limit": 10}).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                         method="POST",
                     )
                     with urllib.request.urlopen(audit_request) as response:
@@ -409,7 +410,7 @@ class AuditRouteTests(unittest.TestCase):
                                 "action": "mark_handled",
                             }
                         ).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                         method="POST",
                     )
                     with urllib.request.urlopen(update_request) as response:
@@ -452,7 +453,7 @@ class AuditRouteTests(unittest.TestCase):
                                     "values": {"quality_profile_floor": "Standard"},
                                 }
                             ).encode("utf-8"),
-                            headers={"Content-Type": "application/json"},
+                            headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                             method="POST",
                         )
                         with urllib.request.urlopen(request):
@@ -496,7 +497,7 @@ class AuditRouteTests(unittest.TestCase):
                                     "values": {"default_source": "~/Movies"},
                                 }
                             ).encode("utf-8"),
-                            headers={"Content-Type": "application/json"},
+                            headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                             method="POST",
                         )
                         with urllib.request.urlopen(request) as response:
@@ -546,7 +547,7 @@ class AuditRouteTests(unittest.TestCase):
                                     "values": {"quality_profile_floor": "compact_grade"},
                                 }
                             ).encode("utf-8"),
-                            headers={"Content-Type": "application/json"},
+                            headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                             method="POST",
                         )
                         with urllib.request.urlopen(request):
@@ -593,7 +594,7 @@ class AuditRouteTests(unittest.TestCase):
                                     "values": {"default_source": "~/Movies"},
                                 }
                             ).encode("utf-8"),
-                            headers={"Content-Type": "application/json"},
+                            headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                             method="POST",
                         )
                         with urllib.request.urlopen(request):
@@ -626,7 +627,7 @@ class AuditRouteTests(unittest.TestCase):
                     request = urllib.request.Request(
                         f"{base_url}/api/movies/register",
                         data=json.dumps({"source": str(source)}).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                         method="POST",
                     )
                     with urllib.request.urlopen(request) as response:
@@ -662,7 +663,7 @@ class AuditRouteTests(unittest.TestCase):
                     request = urllib.request.Request(
                         f"{base_url}/api/movies/profile",
                         data=json.dumps({"source": str(source)}).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                         method="POST",
                     )
                     with urllib.request.urlopen(request):
@@ -720,7 +721,7 @@ class AuditRouteTests(unittest.TestCase):
                     request = urllib.request.Request(
                         f"{base_url}/api/movies/canonical-lists",
                         data=json.dumps({"source": str(source)}).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                         method="POST",
                     )
                     with urllib.request.urlopen(request):
@@ -762,7 +763,7 @@ class AuditRouteTests(unittest.TestCase):
                     request = urllib.request.Request(
                         f"{base_url}/api/audit/read",
                         data=json.dumps({"source": str(source), "limit": 10}).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                         method="POST",
                     )
                     with urllib.request.urlopen(request) as response:

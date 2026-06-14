@@ -1009,10 +1009,14 @@
     return String(label || '').split('_').filter(Boolean).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   }
 
+  function postFetch(url, options = {}) {
+    const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+    if (window.NORMAL_TOKEN) headers['X-Normal-Token'] = window.NORMAL_TOKEN;
+    return fetch(url, { ...options, method: 'POST', headers });
+  }
+
   async function postJson(url, body) {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const response = await postFetch(url, {
       body: JSON.stringify(body),
     });
     const payload = await response.json();
@@ -4335,9 +4339,7 @@
     if (state.weakPreview && state.weakPreviewKey === key) return state.weakPreview;
     state.weakPreviewLoading = true;
     renderPreviewPane();
-    const response = await fetch('/api/movies/delete-preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const response = await postFetch('/api/movies/delete-preview', {
       body: JSON.stringify({ source, paths }),
     });
     const payload = await response.json();
@@ -5363,9 +5365,7 @@
     state.catalogueExportInFlight = true;
     renderSidePanel();
     try {
-      const response = await fetch('/api/movies/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await postFetch('/api/movies/register', {
         body: JSON.stringify({ source }),
       });
       if (!response.ok) {
@@ -5455,9 +5455,7 @@
     renderConfirmButton();
       try {
         const source = el.sourcePath.value.trim();
-        const delResponse = await fetch('/api/movies/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const delResponse = await postFetch('/api/movies/delete', {
         body: JSON.stringify({ source, paths, issue_family: 'audio_packaging' }),
       });
       const delPayload = await delResponse.json();
@@ -5487,9 +5485,7 @@
     renderRows();
     renderSidePanel();
     try {
-      const response = await fetch('/api/movies/audio-packaging/fix', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await postFetch('/api/movies/audio-packaging/fix', {
         body: JSON.stringify({ source: el.sourcePath.value.trim(), paths, drop_foreign_audio: dropForeignAudio }),
       });
       const payload = await response.json();
@@ -5524,9 +5520,7 @@
     renderRows();
     renderSidePanel();
     try {
-      const response = await fetch('/api/movies/subtitle-readiness/fix', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await postFetch('/api/movies/subtitle-readiness/fix', {
         body: JSON.stringify({ source: el.sourcePath.value.trim(), paths, issue_codes: issueCodes }),
       });
       const payload = await response.json();
@@ -5561,9 +5555,7 @@
     renderRows();
     renderSidePanel();
     try {
-      const response = await fetch('/api/movies/repair-defaults/fix', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await postFetch('/api/movies/repair-defaults/fix', {
         body: JSON.stringify({
           source: el.sourcePath.value.trim(),
           paths,
@@ -5671,9 +5663,7 @@
       try {
         const source = el.sourcePath.value.trim();
         const paths = items.map(item => item.path).filter(Boolean);
-        const delResponse = await fetch('/api/movies/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const delResponse = await postFetch('/api/movies/delete', {
           body: JSON.stringify({ source, paths, issue_family: 'weak_encode' }),
         });
         const delPayload = await delResponse.json();
@@ -5704,9 +5694,7 @@
       try {
         const source = el.sourcePath.value.trim();
         const paths = items.map(item => item.path).filter(Boolean);
-        const response = await fetch('/api/movies/junk/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const response = await postFetch('/api/movies/junk/delete', {
           body: JSON.stringify({ source, paths }),
         });
         const payload = await response.json();
@@ -5731,9 +5719,7 @@
     state.applyInFlight = true;
     renderConfirmButton();
     try {
-      const response = await fetch('/api/movies/apply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await postFetch('/api/movies/apply', {
         body: JSON.stringify({ source: el.sourcePath.value, changes }),
       });
       const payload = await response.json();
