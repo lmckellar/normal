@@ -1,4 +1,4 @@
-# normal
+# normal movie renamer
 
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![Version](https://img.shields.io/badge/version-0.7.0--alpha.9-blue)
