@@ -107,6 +107,27 @@ class SourcePolicyTests(unittest.TestCase):
             with self.assertRaisesRegex(SourcePolicyError, "symlink or reparse point"):
                 validate_candidate_for_mutation(link, source)
 
+    def test_mutation_candidate_accepts_source_path_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            real_root = root / "real"
+            source = real_root / "Movies"
+            source.mkdir(parents=True)
+            movie = source / "Movie.mkv"
+            movie.write_text("video", encoding="utf-8")
+            alias = root / "alias"
+            try:
+                alias.symlink_to(real_root, target_is_directory=True)
+            except OSError as exc:
+                self.skipTest(f"directory symlink unavailable: {exc}")
+
+            resolved = validate_candidate_for_mutation(
+                alias / "Movies" / "Movie.mkv",
+                alias / "Movies",
+            )
+
+            self.assertEqual(resolved, movie.resolve())
+
     def test_mutation_candidate_rechecks_approved_roots(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -171,31 +171,34 @@ def validate_candidate_for_mutation(
     source: Path | str,
     approved_roots: ApprovedRoots | None = None,
 ) -> Path:
-    resolved_source = Path(source).expanduser().resolve()
+    lexical_source = Path(source).expanduser()
+    if not lexical_source.is_absolute():
+        lexical_source = lexical_source.absolute()
+    resolved_source = lexical_source.resolve()
     lexical_candidate = Path(candidate).expanduser()
     if not lexical_candidate.is_absolute():
         lexical_candidate = lexical_candidate.absolute()
-
-    try:
-        lexical_candidate.relative_to(resolved_source)
-    except ValueError as exc:
-        raise SourcePolicyError(
-            f"Refusing mutation: candidate path escapes source root: {lexical_candidate}"
-        ) from exc
-
-    current = lexical_candidate
-    while current != resolved_source:
-        if _is_link_or_blocked_reparse_point(current):
-            raise SourcePolicyError(
-                f"Refusing mutation through symlink or reparse point: {lexical_candidate}"
-            )
-        current = current.parent
 
     resolved_candidate = lexical_candidate.resolve()
     if not path_is_under(resolved_candidate, resolved_source):
         raise SourcePolicyError(
             f"Refusing mutation: candidate path escapes source root: {resolved_candidate}"
         )
+
+    current = lexical_candidate
+    while current != lexical_source:
+        if _is_link_or_blocked_reparse_point(current):
+            raise SourcePolicyError(
+                f"Refusing mutation through symlink or reparse point: {lexical_candidate}"
+            )
+        if current.resolve() == resolved_source:
+            break
+        parent = current.parent
+        if parent == current:
+            raise SourcePolicyError(
+                f"Refusing mutation: candidate path escapes source root: {resolved_candidate}"
+            )
+        current = parent
     if approved_roots is not None and not approved_roots.is_approved(resolved_candidate):
         raise SourcePolicyError(approved_roots.denial_message(resolved_candidate))
     return resolved_candidate

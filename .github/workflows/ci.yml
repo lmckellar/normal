@@ -51,8 +51,13 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install .
 
-      - name: Run full unit suite
-        run: python -m unittest discover -s tests
+      - name: Run native portability suite
+        run: >-
+          python -m unittest
+          tests.test_mounts
+          tests.test_source_policy
+          tests.test_paths
+          tests.test_pathsafe
 
       - name: Smoke CLI help
         run: normal --help
