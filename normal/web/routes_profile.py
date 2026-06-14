@@ -13,6 +13,7 @@ from normal.movie_canonical_lists import (
     canonical_status_payload,
     ensure_canonical_provider_ready,
 )
+from normal.movie_enriched import build_movie_scan_from_enriched, scan_enriched_library
 from normal.movie_immersive_confirmations import record_available_observations
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_plan import parse_movie_name
@@ -29,6 +30,7 @@ from normal.movie_profile import (
     library_policy_revision,
     load_movie_standards,
     load_operator_preferences,
+    movie_identity_from_slot,
     movie_standards_revision,
     MovieStandardsConflictError,
     normalize_weak_encode_floor,
@@ -39,7 +41,7 @@ from normal.movie_profile import (
     update_policy_definition,
     update_movie_profile_definition,
 )
-from normal.movie_scan import MovieScanProgress, scan_movie_library
+from normal.movie_scan import MovieScanProgress
 from normal.source_policy import Operation, validate_source_for_operation
 from .activity import tracked_probe
 from .http import RequestContext
@@ -53,7 +55,14 @@ from .routes_audit import (
 )
 from .scan_guard import guarded_heavy_scan
 from .serializers import build_profile_response
-from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE, PROBE_CACHE, RequestConflictError
+from .state import (
+    AUDIT_STORE,
+    MOVIE_CANONICAL_CACHE,
+    MOVIE_ENRICHED_CACHE,
+    MOVIE_PROFILE_CACHE,
+    PROBE_CACHE,
+    RequestConflictError,
+)
 
 
 def invalidate_policy_caches(source: Path | None, label: str) -> None:
@@ -84,7 +93,7 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
             source,
             standards=effective_standards,
             tmdb_key=ctx.tmdb_key,
-            movie_paths=[Path(item.path) for item in response_report.movies],
+            movie_items=response_report.movies,
             audit_store=AUDIT_STORE,
         )
         response["canonical_status"] = response["canonical_summary"].get("canonical_status")
@@ -125,12 +134,19 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
                     eta_seconds=progress.eta_seconds if has_total else None,
                 )
 
+            enriched = MOVIE_ENRICHED_CACHE.get(source)
+            if enriched is None:
+                enriched = scan_enriched_library(
+                    source,
+                    probe_media=tracked_probe(source, "ffprobe movie metadata", cache=PROBE_CACHE),
+                    progress_callback=update_profile_activity,
+                    should_cancel=ctx.client_disconnected,
+                )
+                MOVIE_ENRICHED_CACHE.put(source, enriched)
             report = scan_movie_profiles(
                 source,
-                probe_media=tracked_probe(source, "ffprobe movie metadata", cache=PROBE_CACHE),
-                progress_callback=update_profile_activity,
-                should_cancel=ctx.client_disconnected,
                 resolve_language=resolve_language,
+                enriched_report=enriched,
             )
         PROBE_CACHE.flush()
         MOVIE_PROFILE_CACHE.put(source, report)
@@ -142,7 +158,7 @@ def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
             source,
             standards=effective_standards,
             tmdb_key=ctx.tmdb_key,
-            movie_paths=[Path(item.path) for item in response_report.movies],
+            movie_items=response_report.movies,
             audit_store=AUDIT_STORE,
         )
         response["canonical_status"] = response["canonical_summary"].get("canonical_status")
@@ -325,12 +341,20 @@ def handle_movies_canonical_lists(ctx: RequestContext, payload: dict[str, Any]) 
         return
     with guarded_heavy_scan(source, "Movie canonical lists"):
         with ctx.handler.activity_tracker.track(source, "Movie canonical lists"):
+            profile_report = MOVIE_PROFILE_CACHE.get(source)
+            enriched_report = MOVIE_ENRICHED_CACHE.get(source)
             report = build_canonical_lists_report(
                 source,
                 standards=standards,
                 tmdb_key=ctx.tmdb_key,
                 should_cancel=ctx.client_disconnected,
-                movie_paths=[Path(item.path) for item in MOVIE_PROFILE_CACHE.get(source).movies] if MOVIE_PROFILE_CACHE.get(source) is not None else None,
+                movie_items=(
+                    profile_report.movies
+                    if profile_report is not None
+                    else enriched_report.files
+                    if enriched_report is not None
+                    else None
+                ),
                 audit_store=AUDIT_STORE,
             )
     MOVIE_CANONICAL_CACHE.put(source, report)
@@ -384,7 +408,14 @@ def handle_movies_register(ctx: RequestContext, payload: dict[str, Any]) -> None
     )
     with guarded_heavy_scan(source, "Movie catalogue export"):
         with ctx.handler.activity_tracker.track(source, "Movie catalogue export"):
-            scan_report = scan_movie_library(source, probe_media=tracked_probe(source, "ffprobe movie catalogue", cache=PROBE_CACHE))
+            enriched = MOVIE_ENRICHED_CACHE.get(source)
+            if enriched is None:
+                enriched = scan_enriched_library(
+                    source,
+                    probe_media=tracked_probe(source, "ffprobe movie catalogue", cache=PROBE_CACHE),
+                )
+                MOVIE_ENRICHED_CACHE.put(source, enriched)
+            scan_report = build_movie_scan_from_enriched(enriched)
             with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as jf:
                 json.dump(scan_report.to_dict(), jf)
                 report_path = Path(jf.name)
@@ -418,7 +449,7 @@ def _harvest_local_immersive_votes(source: Path, report: Any) -> None:
     for item in report.movies:
         if not getattr(item.facts, "audio_immersive_extension", None):
             continue
-        identity = parse_movie_name(Path(item.path))
+        identity = movie_identity_from_slot(getattr(item, "identity", None)) or parse_movie_name(Path(item.path))
         if identity.title and identity.year:
             observations.append((identity.title, identity.year))
     added = record_available_observations(observations, source="local_probe")

@@ -624,6 +624,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("function renderCanonicalPreviewPane()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function canonicalRows()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function imdbTitleUrl(imdbId)", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function imdbTitleSearchUrl(title)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function canonicalTitleMarkup(title, imdbId)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("imdb_id: entry.imdb_id || ''", NORMALIZE_LAB_FRONTEND)
         self.assertIn("href=\"${escapeHtml(url)}\" target=\"_blank\" rel=\"noopener noreferrer\"", NORMALIZE_LAB_FRONTEND)

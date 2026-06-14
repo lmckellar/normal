@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from normal.models import ProposedChange, WarningItem
+from normal.movie_canonical_lists import resolve_imdb_ids
 from normal.movie_plan import parse_movie_name_with_sidecar_fallback
 from normal.movie_profile import (
     build_default_source_definition,
@@ -22,6 +23,7 @@ from normal.movie_profile import (
     build_replacement_candidate_definition,
     load_movie_standards,
     movie_standards_revision,
+    movie_identity_from_slot,
     normalized_subtitle_preferences,
 )
 from normal.movie_repair_planner import build_movie_repair_plan
@@ -261,6 +263,14 @@ def build_profile_response(
     standards_payload = standards if standards is not None else load_library_policy()
     operator_preferences = load_operator_preferences()
     response = report.to_dict()
+    identities = [movie_identity_from_slot(item.identity) for item in report.movies]
+    imdb_ids = resolve_imdb_ids(identities)
+    for payload_item, identity, imdb_id in zip(response.get("movies", []), identities, imdb_ids):
+        if identity is None:
+            continue
+        payload_item["title"] = identity.title
+        payload_item["year"] = identity.year
+        payload_item["imdb_id"] = imdb_id
     attach_repair_plans_to_payload_movies(response.get("movies"), standards_payload, resolve_language=resolve_language)
     response["histogram"] = build_histogram_payload(report)
     response["policy"] = standards_payload

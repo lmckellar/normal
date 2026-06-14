@@ -7,7 +7,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from normal.models import ProposedChange
-from normal.movie_profile import MovieProfileReport
+from normal.movie_enriched import IdentitySlot
+from normal.movie_identity import parse_movie_identity
+from normal.movie_profile import MovieProfileReport, build_movie_profile_item
+from normal.quality_review import MediaFacts
 from normal.web.serializers import (
     build_movie_normalize_results,
     build_profile_response,
@@ -25,6 +28,30 @@ class FakeProfiledItem:
 
 
 class WebSerializersTests(unittest.TestCase):
+    def test_build_profile_response_adds_render_identity_and_imdb_id(self) -> None:
+        source = Path("/library")
+        movie = source / "Arrival.2016.mkv"
+        identity = parse_movie_identity(movie)
+        report = MovieProfileReport(
+            source_root=str(source),
+            generated_at="2026-06-15T00:00:00+00:00",
+            movies=[
+                build_movie_profile_item(
+                    source,
+                    movie,
+                    MediaFacts(width=1920, height=1080, video_bitrate_kbps=8000),
+                    identity=IdentitySlot(lane="movie", value=identity),
+                )
+            ],
+        )
+
+        with patch("normal.web.serializers.resolve_imdb_ids", return_value=["tt2543164"]):
+            payload = build_profile_response(source, report)
+
+        self.assertEqual(payload["movies"][0]["title"], "Arrival")
+        self.assertEqual(payload["movies"][0]["year"], 2016)
+        self.assertEqual(payload["movies"][0]["imdb_id"], "tt2543164")
+
     def test_movie_normalize_changes_for_file_links_file_and_folder_changes(self) -> None:
         movie_path = Path("/library/Action/Movie.2000/Movie.mkv")
         relative_path = Path("Action/Movie.2000/Movie.mkv")

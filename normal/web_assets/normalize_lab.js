@@ -844,9 +844,14 @@
     return value ? `https://www.imdb.com/title/${value}/` : '';
   }
 
+  function imdbTitleSearchUrl(title) {
+    const value = String(title || '').trim();
+    return value ? `https://www.imdb.com/find/?q=${encodeURIComponent(value)}` : '';
+  }
+
   function canonicalTitleMarkup(title, imdbId) {
     const label = escapeHtml(title || '—');
-    const url = imdbTitleUrl(imdbId);
+    const url = imdbTitleUrl(imdbId) || imdbTitleSearchUrl(title);
     if (!url) return `<span class="lab-cell-text">${label}</span>`;
     return `<a class="lab-cell-text" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
   }
@@ -3324,6 +3329,9 @@
       item,
       selectable: isStrictWeakMovie(item),
       current_path: item.path || '',
+      title: item.title || '',
+      year: item.year || '',
+      imdb_id: item.imdb_id || '',
       issue: movieProfileInlineSummary(item) || humanProfileLabel(item?.profile?.label || ''),
       badges: collectWeakBadges(item),
       triage: triage.score,
@@ -3836,7 +3844,7 @@
     return `
       <tr class="${escapeHtml(simpleSelectionRowClass(row.row_id))}" data-row-id="${escapeHtml(row.row_id)}">
         <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${row.selectable ? `<input type="checkbox" data-row-check="${escapeHtml(row.row_id)}" ${checked}>` : ''}</td>
-        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_path)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span></td>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_path)}">${row.title ? canonicalTitleMarkup(row.title, row.imdb_id) : `<span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_path))}</span>`}</td>
         <td class="lab-cell-decision" data-priority="essential" title="${escapeHtml(row.issue)}"><span class="lab-cell-text">${escapeHtml(row.issue)}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="essential" title="${row.triage == null ? 'No measurable bitrate deficit against the quality floor' : `Triage score ${row.triage} of 10`}"><span class="lab-cell-text">${row.triage == null ? '—' : escapeHtml(String(row.triage))}</span></td>
         <td class="lab-cell-signal" data-priority="essential">${weakBadgeClusterMarkup(row.badges)}</td>

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 import hashlib
-from itertools import chain
 import json
 import os
 from pathlib import Path
@@ -14,6 +13,8 @@ from typing import Any, Callable
 
 from normal import paths
 from normal.models import WarningItem, utc_now_iso
+from normal.movie_enriched import EnrichedLibraryReport, IdentitySlot, scan_enriched_library
+from normal.movie_identity import ParsedMovieIdentity
 from normal.movie_moron_encoders import lookup_moron_encoder
 from normal.movie_plan import concise_movie_base, parse_movie_name, path_has_normalized_movie_shape
 from normal.movie_title_traits import (
@@ -29,7 +30,6 @@ from normal.movie_title_traits import (
 from normal.movie_scan import (
     MovieScanProgress,
     emit_progress,
-    iter_video_files,
     movie_id_for,
     probe_media_facts,
 )
@@ -81,6 +81,7 @@ class MovieProfileItem:
     runtime_minutes: float | None
     profile: MovieProfile
     trait_assessments: list[dict[str, Any]] = field(default_factory=list)
+    identity: IdentitySlot | None = None
 
 
 @dataclass(slots=True)
@@ -93,7 +94,10 @@ class MovieProfileReport:
     trait_observations: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        for movie in payload["movies"]:
+            movie.pop("identity", None)
+        return payload
 
 
 PROFILE_RANKS = {
@@ -240,8 +244,13 @@ class MovieStandardsConflictError(RuntimeError):
     pass
 
 
-def path_trait_token(path: Path | str, trait: str) -> bool:
-    tokens = {token.casefold() for token in parse_movie_name(Path(path)).tech_tokens}
+def path_trait_token(
+    path: Path | str,
+    trait: str,
+    *,
+    identity: ParsedMovieIdentity | None = None,
+) -> bool:
+    tokens = {token.casefold() for token in (identity or parse_movie_name(Path(path))).tech_tokens}
     if trait == "open_matte":
         return "open matte" in tokens
     if trait == "hybrid":
@@ -249,9 +258,15 @@ def path_trait_token(path: Path | str, trait: str) -> bool:
     return False
 
 
-def local_trait_quality_label(path: Path, facts: MediaFacts, standards: dict[str, Any]) -> str:
+def local_trait_quality_label(
+    path: Path,
+    facts: MediaFacts,
+    standards: dict[str, Any],
+    *,
+    identity: ParsedMovieIdentity | None = None,
+) -> str:
     domain_results = evaluate_movie_standards(path, facts, standards)
-    return classify_quality_stance(path, facts, domain_results, standards)
+    return classify_quality_stance(path, facts, domain_results, standards, identity=identity)
 
 
 def local_trait_capability(
@@ -262,6 +277,7 @@ def local_trait_capability(
     *,
     quality_label: str | None = None,
     hybrid_corroborated: bool = False,
+    identity: ParsedMovieIdentity | None = None,
 ) -> str:
     if trait == "immersive_audio":
         return "present" if facts.audio_immersive_extension else (
@@ -282,13 +298,18 @@ def local_trait_capability(
             return "present"
         return "not_detected" if facts.video_stream_count else "unknown"
     if trait in {"open_matte", "hybrid"}:
-        if not path_trait_token(path, trait):
+        if not path_trait_token(path, trait, identity=identity):
             return "not_detected"
         if trait == "hybrid" and not hybrid_corroborated:
             return "claim_unverified"
         if not facts.video_bitrate_kbps:
             return "quality_unverified"
-        active_quality_label = quality_label or local_trait_quality_label(Path(path), facts, standards)
+        active_quality_label = quality_label or local_trait_quality_label(
+            Path(path),
+            facts,
+            standards,
+            identity=identity,
+        )
         return "below_quality_floor" if is_replacement_candidate_quality(active_quality_label, standards) else "present"
     raise ValueError(f"unsupported trait: {trait}")
 
@@ -296,13 +317,15 @@ def local_trait_capability(
 def local_trait_observations(
     probed: list[tuple[Path, MediaFacts]],
     standards: dict[str, Any],
+    *,
+    identities: dict[Path, ParsedMovieIdentity] | None = None,
 ) -> list[tuple[str, int, str, str]]:
     observations: list[tuple[str, int, str, str]] = []
     for movie_path, facts in probed:
-        identity = parse_movie_name(movie_path)
+        identity = (identities or {}).get(movie_path) or parse_movie_name(movie_path)
         if not identity.title or not identity.year:
             continue
-        quality_label = local_trait_quality_label(movie_path, facts, standards)
+        quality_label = local_trait_quality_label(movie_path, facts, standards, identity=identity)
         for trait in TRAITS:
             if trait == "hybrid":
                 continue
@@ -312,6 +335,7 @@ def local_trait_observations(
                 trait,
                 standards,
                 quality_label=quality_label,
+                identity=identity,
             ) == "present":
                 observations.append((identity.title, identity.year, trait, str(movie_path)))
     return observations
@@ -323,10 +347,11 @@ def build_title_trait_assessments(
     evidence: list[TraitEvidence],
     standards: dict[str, Any],
     suppressed: set[str] | None = None,
+    identities: dict[Path, ParsedMovieIdentity] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, dict[str, dict[str, Any]]]]:
     groups: dict[str, dict[str, Any]] = {}
     for movie_path, facts in probed:
-        identity = parse_movie_name(movie_path)
+        identity = (identities or {}).get(movie_path) or parse_movie_name(movie_path)
         if not identity.title or not identity.year:
             continue
         prefix = trait_key(identity.title, identity.year, TRAITS[0]).rsplit("|", 1)[0]
@@ -338,7 +363,7 @@ def build_title_trait_assessments(
                 "copies": [],
             },
         )
-        group["copies"].append((str(movie_path), facts))
+        group["copies"].append((str(movie_path), facts, identity))
 
     rows: list[dict[str, Any]] = []
     index: dict[str, dict[str, dict[str, Any]]] = {}
@@ -348,8 +373,8 @@ def build_title_trait_assessments(
         year = group["year"]
         trait_rows: dict[str, dict[str, Any]] = {}
         quality_labels = {
-            path: local_trait_quality_label(Path(path), facts, standards)
-            for path, facts in group["copies"]
+            path: local_trait_quality_label(Path(path), facts, standards, identity=identity)
+            for path, facts, identity in group["copies"]
         }
         for trait in TRAITS:
             matched = lookup_evidence(evidence, title, year, trait)
@@ -364,8 +389,9 @@ def build_title_trait_assessments(
                     standards,
                     quality_label=quality_labels[path],
                     hybrid_corroborated=hybrid_corroborated,
+                    identity=identity,
                 )
-                for path, facts in group["copies"]
+                for path, facts, identity in group["copies"]
             ]
             capability = (
                 "present"
@@ -389,7 +415,7 @@ def build_title_trait_assessments(
                     trait,
                     capability=capability,
                     evidence=matched,
-                    local_paths=[path for path, _ in group["copies"]],
+                    local_paths=[path for path, _, _ in group["copies"]],
                     local_present_count=local_present_count,
                     local_rejected_count=local_rejected_count,
                 )
@@ -406,9 +432,11 @@ def file_trait_assessments(
     path: Path,
     facts: MediaFacts,
     standards: dict[str, Any],
+    *,
+    identity: ParsedMovieIdentity | None = None,
 ) -> dict[str, dict[str, Any]]:
     resolved: dict[str, dict[str, Any]] = {}
-    quality_label = local_trait_quality_label(path, facts, standards)
+    quality_label = local_trait_quality_label(path, facts, standards, identity=identity)
     for trait, row in aggregate.items():
         capability = local_trait_capability(
             path,
@@ -416,6 +444,7 @@ def file_trait_assessments(
             trait,
             standards,
             quality_label=quality_label,
+            identity=identity,
             hybrid_corroborated=(
                 trait == "hybrid"
                 and row.get("claim_direction") == "present"
@@ -439,68 +468,63 @@ def scan_movie_profiles(
     resolve_language: Callable[[str, int | None], str | None] | None = None,
     trait_store_path: Path | None = None,
     legacy_trait_store_path: Path | None = None,
+    enriched_report: EnrichedLibraryReport | None = None,
 ) -> MovieProfileReport:
     report = MovieProfileReport(source_root=str(source_root.resolve()), generated_at=utc_now_iso())
     standards = load_movie_standards()
-    cancelled = False
     probed: list[tuple[Path, MediaFacts]] = []
-    movie_files = iter_video_files(source_root, should_cancel=should_cancel)
-    first_movie = next(movie_files, None)
-    if first_movie is None:
-        report.warnings.append(
-            WarningItem(
-                code="no_video_files",
-                message="No supported video files were found under the source directory.",
-                path=str(source_root),
-            )
-        )
-        return report
-
     started = time.monotonic()
     processed = 0
-    emit_progress(progress_callback, processed, 0, None, started, "starting")
-
-    for index, movie_path in enumerate(chain([first_movie], movie_files), start=1):
-        if should_cancel is not None and should_cancel():
-            cancelled = True
-            report.warnings.append(
-                WarningItem(
-                    code="movie_profile_cancelled",
-                    message="Movie profile scan was cancelled before completion.",
-                    path=str(source_root),
-                )
+    if enriched_report is None:
+        def adapt_progress(progress: MovieScanProgress) -> None:
+            if progress.status == "complete":
+                return
+            emit_progress(
+                progress_callback,
+                progress.processed,
+                0,
+                Path(progress.current_path) if progress.current_path else None,
+                started,
+                progress.status,
             )
-            break
-        try:
-            facts = probe_media(movie_path)
-        except Exception as exc:
+
+        enriched_report = scan_enriched_library(
+            source_root,
+            probe_media=probe_media,
+            progress_callback=adapt_progress,
+            should_cancel=should_cancel,
+        )
+    elif progress_callback is not None:
+        emit_progress(progress_callback, 0, 0, None, started, "starting")
+
+    identities: dict[Path, ParsedMovieIdentity] = {}
+    identity_slots: dict[Path, IdentitySlot] = {}
+    for index, enriched in enumerate(enriched_report.files, start=1):
+        movie_path = Path(enriched.path)
+        identity = movie_identity_from_slot(enriched.identity)
+        if identity is not None:
+            identities[movie_path] = identity
+            identity_slots[movie_path] = enriched.identity
+        if enriched.probe_error:
             report.warnings.append(
                 WarningItem(
                     code="movie_profile_probe_error",
-                    message=f"Unable to probe media metadata: {exc}",
+                    message=f"Unable to probe media metadata: {enriched.probe_error}",
                     path=str(movie_path),
                 )
             )
             processed = index
-            emit_progress(progress_callback, processed, 0, movie_path, started, "warning")
             continue
-
-        facts.resolution_bucket = facts.resolution_bucket or classify_resolution(
-            facts.width,
-            facts.height,
-            facts.sample_aspect_ratio,
-            facts.display_aspect_ratio,
+        enriched.facts.resolution_bucket = enriched.facts.resolution_bucket or classify_resolution(
+            enriched.facts.width,
+            enriched.facts.height,
+            enriched.facts.sample_aspect_ratio,
+            enriched.facts.display_aspect_ratio,
         )
-        probed.append((movie_path, facts))
+        probed.append((movie_path, enriched.facts))
         processed = index
-        emit_progress(progress_callback, processed, 0, movie_path, started, "running")
 
-    if (
-        should_cancel is not None
-        and should_cancel()
-        and not cancelled
-        and not any(warning.code == "movie_profile_cancelled" for warning in report.warnings)
-    ):
+    if any(warning.code == "movie_enriched_cancelled" for warning in enriched_report.warnings):
         report.warnings.append(
             WarningItem(
                 code="movie_profile_cancelled",
@@ -508,8 +532,11 @@ def scan_movie_profiles(
                 path=str(source_root),
             )
         )
+    if not enriched_report.files and any(warning.code == "no_video_files" for warning in enriched_report.warnings):
+        report.warnings.extend(warning for warning in enriched_report.warnings if warning.code == "no_video_files")
+        return report
 
-    observations = local_trait_observations(probed, standards)
+    observations = local_trait_observations(probed, standards, identities=identities)
     report.trait_observations = record_local_observations(
         observations,
         state_path=trait_store_path,
@@ -520,17 +547,27 @@ def scan_movie_profiles(
         legacy_path=legacy_trait_store_path,
     )
     report.trait_assessments, assessment_index = build_title_trait_assessments(
-        probed, evidence=evidence, standards=standards, suppressed=suppressed
+        probed,
+        evidence=evidence,
+        standards=standards,
+        suppressed=suppressed,
+        identities=identities,
     )
     for movie_path, facts in probed:
-        identity = parse_movie_name(movie_path)
+        identity = identities.get(movie_path) or parse_movie_name(movie_path)
         aggregate_assessments = assessment_index.get(
             (trait_key(identity.title, identity.year, TRAITS[0]).rsplit("|", 1)[0])
             if identity.title and identity.year
             else "",
             {},
         )
-        item_assessments = file_trait_assessments(aggregate_assessments, movie_path, facts, standards)
+        item_assessments = file_trait_assessments(
+            aggregate_assessments,
+            movie_path,
+            facts,
+            standards,
+            identity=identity,
+        )
         report.movies.append(
             build_movie_profile_item(
                 source_root,
@@ -539,12 +576,19 @@ def scan_movie_profiles(
                 standards,
                 resolve_language=resolve_language,
                 trait_assessments=item_assessments,
+                identity=identity_slots.get(movie_path),
             )
         )
     assign_percentiles(report.movies)
     report.movies.sort(key=lambda item: (total_risk_score(item.profile.diagnostics), item.profile.rank, item.path.lower()), reverse=True)
     emit_progress(progress_callback, processed, processed, None, started, "complete")
     return report
+
+
+def movie_identity_from_slot(identity: IdentitySlot | None) -> ParsedMovieIdentity | None:
+    if identity is None or identity.lane != "movie":
+        return None
+    return identity.value if isinstance(identity.value, ParsedMovieIdentity) else None
 
 
 def reclassify_report_with_standards(
@@ -558,11 +602,20 @@ def reclassify_report_with_standards(
     new_report.warnings = list(report.warnings)
     probed = [(Path(item.path), item.facts) for item in report.movies]
     evidence, suppressed = all_evidence()
+    identities = {
+        Path(item.path): identity
+        for item in report.movies
+        if (identity := movie_identity_from_slot(item.identity)) is not None
+    }
     new_report.trait_assessments, assessment_index = build_title_trait_assessments(
-        probed, evidence=evidence, standards=standards, suppressed=suppressed
+        probed,
+        evidence=evidence,
+        standards=standards,
+        suppressed=suppressed,
+        identities=identities,
     )
     for item in report.movies:
-        identity = parse_movie_name(Path(item.path))
+        identity = identities.get(Path(item.path)) or parse_movie_name(Path(item.path))
         aggregate_assessments = assessment_index.get(
             (trait_key(identity.title, identity.year, TRAITS[0]).rsplit("|", 1)[0])
             if identity.title and identity.year
@@ -574,6 +627,7 @@ def reclassify_report_with_standards(
             Path(item.path),
             item.facts,
             standards,
+            identity=identity,
         )
         new_report.movies.append(
             build_movie_profile_item(
@@ -583,6 +637,7 @@ def reclassify_report_with_standards(
                 standards,
                 resolve_language=resolve_language,
                 trait_assessments=item_assessments,
+                identity=item.identity or IdentitySlot(lane="movie", value=identity),
             )
         )
     assign_percentiles(new_report.movies)
@@ -603,7 +658,9 @@ def build_movie_profile_item(
     immersive_confirmations: dict[str, str] | None = None,
     immersive_candidate_enabled: bool | None = None,
     trait_assessments: dict[str, dict[str, Any]] | None = None,
+    identity: IdentitySlot | None = None,
 ) -> MovieProfileItem:
+    movie_identity = movie_identity_from_slot(identity)
     facts.resolution_bucket = facts.resolution_bucket or classify_resolution(
         facts.width,
         facts.height,
@@ -616,7 +673,13 @@ def build_movie_profile_item(
     lopsided_result = evaluate_lopsided_encode(facts, active_standards)
     if lopsided_result is not None:
         domain_results.append(lopsided_result)
-    quality_label = classify_quality_stance(movie_path, facts, domain_results, active_standards)
+    quality_label = classify_quality_stance(
+        movie_path,
+        facts,
+        domain_results,
+        active_standards,
+        identity=movie_identity,
+    )
     diagnostics = detect_plex_diagnostics(
         movie_path,
         facts,
@@ -625,6 +688,7 @@ def build_movie_profile_item(
         immersive_confirmations=immersive_confirmations,
         immersive_candidate_enabled=immersive_candidate_enabled,
         trait_assessments=trait_assessments,
+        identity=movie_identity,
     )
     weak_candidate = is_replacement_candidate_quality(quality_label, active_standards) and not is_audio_packaging_owned_movie(diagnostics)
     if lopsided_result is not None and lopsided_result.get("status") == "fail":
@@ -638,6 +702,7 @@ def build_movie_profile_item(
         facts=facts,
         runtime_minutes=round(facts.runtime_seconds / 60, 1) if facts.runtime_seconds else None,
         trait_assessments=list((trait_assessments or {}).values()),
+        identity=identity,
         profile=MovieProfile(
             label=label,
             rank=PROFILE_RANKS[label],
@@ -1689,11 +1754,21 @@ def classify_quality_stance(
     facts: MediaFacts,
     domain_results: list[dict[str, Any]],
     standards: dict[str, Any],
+    *,
+    identity: ParsedMovieIdentity | None = None,
 ) -> str:
     stances = standards.get("quality_stances") or {}
     for label in reversed(QUALITY_STANCE_ORDER):
         stance = stances.get(label) or {}
-        if movie_matches_quality_stance(label, stance, path, facts, domain_results, standards):
+        if movie_matches_quality_stance(
+            label,
+            stance,
+            path,
+            facts,
+            domain_results,
+            standards,
+            identity=identity,
+        ):
             return label
     return "standard_definition"
 
@@ -1705,6 +1780,8 @@ def movie_matches_quality_stance(
     facts: MediaFacts,
     domain_results: list[dict[str, Any]],
     standards: dict[str, Any],
+    *,
+    identity: ParsedMovieIdentity | None = None,
 ) -> bool:
     resolution = facts.resolution_bucket or classify_resolution(
         facts.width,
@@ -1727,7 +1804,7 @@ def movie_matches_quality_stance(
         mono_cutoff = int(stance.get("audio_channels_mono_cutoff") or 0)
         exempt = False
         if vintage_cutoff or atmos_cutoff or mono_cutoff:
-            parsed_identity = parse_movie_name(path)
+            parsed_identity = identity or parse_movie_name(path)
             year = parsed_identity.year
             if vintage_cutoff and year and year < vintage_cutoff:
                 exempt = True
@@ -1836,6 +1913,7 @@ def detect_plex_diagnostics(
     immersive_confirmations: dict[str, str] | None = None,
     immersive_candidate_enabled: bool | None = None,
     trait_assessments: dict[str, dict[str, Any]] | None = None,
+    identity: ParsedMovieIdentity | None = None,
 ) -> list[DiagnosticFinding]:
     findings: list[DiagnosticFinding] = []
     lower_audio = {codec.lower() for codec in facts.audio_codecs}
@@ -1843,7 +1921,7 @@ def detect_plex_diagnostics(
     path_text = str(path)
 
     moron_path = Path(path)
-    moron_identity = parse_movie_name(moron_path)
+    moron_identity = identity or parse_movie_name(moron_path)
     moron_verdict = lookup_moron_encoder(
         moron_identity.release_group,
         stem=f"{moron_path.parent.name} {moron_path.stem}",
@@ -1912,7 +1990,7 @@ def detect_plex_diagnostics(
     audio_title: str | None = None
     audio_year: int | None = None
     if resolve_language is not None:
-        parsed_audio_identity = parse_movie_name(Path(path))
+        parsed_audio_identity = identity or parse_movie_name(Path(path))
         audio_title = parsed_audio_identity.title
         audio_year = parsed_audio_identity.year
     findings.extend(

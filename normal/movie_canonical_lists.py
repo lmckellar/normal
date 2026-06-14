@@ -21,7 +21,7 @@ from normal.audit import AuditEffect, AuditEvent, AuditStore, AuditSubject, make
 from normal.models import WarningItem, utc_now_iso
 from normal.movie_identity import MovieIdentityKey, canonical_identity_key, parse_movie_identity
 from normal.movie_naming import title_alias_keys
-from normal.movie_profile import normalize_canonical_list_provider
+from normal.movie_profile import movie_identity_from_slot, normalize_canonical_list_provider
 from normal.movie_scan import iter_video_files
 
 
@@ -49,6 +49,9 @@ _IMDB_DATASET_LOCK = threading.Lock()
 _IMDB_DATASET_REFRESH_THREAD: threading.Thread | None = None
 _IMDB_DATASET_REFRESH_AUDIT_SOURCES: set[str] = set()
 _IMDB_DATASET_REFRESH_AUDIT_STORE: AuditStore | None = None
+_IMDB_SESSION_CACHE_LOCK = threading.RLock()
+_IMDB_SESSION_RECORDS: dict[str, list[IMDbMovieRecord]] = {}
+_IMDB_SESSION_REVERSE_INDEXES: dict[str, dict[tuple[str, int], str | None]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,6 +289,7 @@ def build_canonical_lists_report(
     should_cancel: Callable[[], bool] | None = None,
     imdb_dataset_dir: Path | None = None,
     movie_paths: list[Path] | None = None,
+    movie_items: list[Any] | None = None,
     include_all_entries: bool = True,
     audit_store: AuditStore | None = None,
 ) -> CanonicalListsReport:
@@ -300,7 +304,9 @@ def build_canonical_lists_report(
         audit_source_root=source_root,
     )
     inventory, unparsed_files, duplicate_files = (
-        build_movie_inventory_from_paths(movie_paths)
+        build_movie_inventory_from_items(movie_items)
+        if movie_items is not None
+        else build_movie_inventory_from_paths(movie_paths)
         if movie_paths is not None
         else build_movie_inventory(source_root, should_cancel=should_cancel)
     )
@@ -347,7 +353,8 @@ def build_canonical_summary(
     *,
     standards: dict[str, Any] | None,
     tmdb_key: str | None,
-    movie_paths: list[Path],
+    movie_paths: list[Path] | None = None,
+    movie_items: list[Any] | None = None,
     now: Callable[[], float] = time.time,
     imdb_dataset_dir: Path | None = None,
     audit_store: AuditStore | None = None,
@@ -359,6 +366,7 @@ def build_canonical_summary(
         now=now,
         imdb_dataset_dir=imdb_dataset_dir,
         movie_paths=movie_paths,
+        movie_items=movie_items,
         include_all_entries=False,
         audit_store=audit_store,
     )
@@ -501,6 +509,24 @@ def build_movie_inventory_from_paths(movie_paths: list[Path]) -> tuple[dict[Movi
     for movie_path in movie_paths:
         parsed = parse_movie_identity(movie_path)
         if parsed.title is None or parsed.year is None:
+            unparsed_files += 1
+            continue
+        key = canonical_identity_key(parsed.title, parsed.year)
+        if key in inventory:
+            duplicate_files += 1
+            continue
+        inventory[key] = OwnedMovie(title=parsed.title, year=parsed.year, path=str(movie_path))
+    return inventory, unparsed_files, duplicate_files
+
+
+def build_movie_inventory_from_items(movie_items: list[Any]) -> tuple[dict[MovieIdentityKey, OwnedMovie], int, int]:
+    inventory: dict[MovieIdentityKey, OwnedMovie] = {}
+    unparsed_files = 0
+    duplicate_files = 0
+    for item in movie_items:
+        movie_path = Path(str(item.path))
+        parsed = movie_identity_from_slot(getattr(item, "identity", None))
+        if parsed is None or parsed.title is None or parsed.year is None:
             unparsed_files += 1
             continue
         key = canonical_identity_key(parsed.title, parsed.year)
@@ -715,6 +741,12 @@ class IMDbCanonicalProvider:
     def _load_movies(self) -> list[IMDbMovieRecord]:
         if self._movie_cache is not None:
             return self._movie_cache
+        namespace = imdb_dataset_session_namespace(self.dataset_dir)
+        with _IMDB_SESSION_CACHE_LOCK:
+            cached = _IMDB_SESSION_RECORDS.get(namespace)
+        if cached is not None:
+            self._movie_cache = cached
+            return cached
         ratings_path = self.dataset_dir / "title.ratings.tsv.gz"
         basics_path = self.dataset_dir / "title.basics.tsv.gz"
         if not ratings_path.exists() or not basics_path.exists():
@@ -769,6 +801,8 @@ class IMDbCanonicalProvider:
                     )
                 )
         self._movie_cache = movies
+        with _IMDB_SESSION_CACHE_LOCK:
+            _IMDB_SESSION_RECORDS[namespace] = movies
         return movies
 
     def _records_with_min_votes(self, records: list[IMDbMovieRecord], minimum_votes: int) -> list[IMDbMovieRecord]:
@@ -872,6 +906,68 @@ def imdb_dataset_cache_namespace(dataset_dir: Path) -> str:
         if isinstance(stamp, str) and stamp:
             return hashlib.sha1(f"managed:{stamp}".encode("utf-8")).hexdigest()[:12]
     return hashlib.sha1(f"path:{resolved}".encode("utf-8")).hexdigest()[:12]
+
+
+def imdb_dataset_session_namespace(dataset_dir: Path) -> str:
+    cache_namespace = imdb_dataset_cache_namespace(dataset_dir)
+    file_fingerprint = []
+    for name in sorted(IMDB_DATASET_URLS):
+        path = dataset_dir / name
+        try:
+            stat = path.stat()
+        except OSError:
+            file_fingerprint.append(f"{name}:missing")
+        else:
+            file_fingerprint.append(f"{name}:{stat.st_mtime_ns}:{stat.st_size}")
+    return hashlib.sha1(f"{cache_namespace}:{'|'.join(file_fingerprint)}".encode("utf-8")).hexdigest()[:16]
+
+
+def build_imdb_reverse_index(records: list[IMDbMovieRecord]) -> dict[tuple[str, int], str | None]:
+    index: dict[tuple[str, int], str | None] = {}
+    for record in records:
+        for alias in title_alias_keys(record.title):
+            key = (alias, record.year)
+            if key not in index:
+                index[key] = record.imdb_id
+            elif index[key] != record.imdb_id:
+                index[key] = None
+    return index
+
+
+def resolve_imdb_ids(
+    identities: list[ParsedMovieIdentity | None],
+    *,
+    dataset_dir: Path | None = None,
+) -> list[str | None]:
+    if not any(identity and identity.title and identity.year for identity in identities):
+        return [None] * len(identities)
+    resolved_dir = _resolve_imdb_dataset_dir(dataset_dir)
+    if resolved_dir is None or not _dataset_files_present(resolved_dir):
+        return [None] * len(identities)
+    namespace = imdb_dataset_session_namespace(resolved_dir)
+    with _IMDB_SESSION_CACHE_LOCK:
+        reverse_index = _IMDB_SESSION_REVERSE_INDEXES.get(namespace)
+    if reverse_index is None:
+        provider = IMDbCanonicalProvider(dataset_dir=resolved_dir)
+        reverse_index = build_imdb_reverse_index(provider._load_movies())
+        with _IMDB_SESSION_CACHE_LOCK:
+            _IMDB_SESSION_REVERSE_INDEXES[namespace] = reverse_index
+    resolved: list[str | None] = []
+    for identity in identities:
+        imdb_id = None
+        if identity is not None and identity.title and identity.year:
+            for alias in title_alias_keys(identity.title):
+                imdb_id = reverse_index.get((alias, identity.year))
+                if imdb_id is not None:
+                    break
+        resolved.append(imdb_id)
+    return resolved
+
+
+def clear_imdb_session_cache() -> None:
+    with _IMDB_SESSION_CACHE_LOCK:
+        _IMDB_SESSION_RECORDS.clear()
+        _IMDB_SESSION_REVERSE_INDEXES.clear()
 
 
 def imdb_dataset_status(
@@ -1117,6 +1213,7 @@ def _download_managed_imdb_dataset(*, now: Callable[[], float]) -> None:
         dataset_dir.mkdir(parents=True, exist_ok=True)
         for name in IMDB_DATASET_URLS:
             (temp_dir / name).replace(dataset_dir / name)
+        clear_imdb_session_cache()
         manifest["files"] = files_meta
         manifest["dataset_dir"] = str(dataset_dir)
         manifest["dataset_urls"] = dict(IMDB_DATASET_URLS)

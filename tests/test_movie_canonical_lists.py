@@ -13,11 +13,16 @@ from unittest.mock import patch
 from normal.audit import AuditStore
 from normal.movie_canonical_lists import (
     CanonicalListEntry,
+    IMDbMovieRecord,
+    build_imdb_reverse_index,
     build_canonical_lists_report,
+    clear_imdb_session_cache,
     ensure_imdb_dataset_ready,
     load_cache_entries,
+    resolve_imdb_ids,
     write_cache_entries,
 )
+from normal.movie_identity import parse_movie_identity
 
 
 def write_imdb_dataset(dataset_dir: Path, rows: list[dict[str, object]]) -> None:
@@ -47,6 +52,41 @@ def write_imdb_dataset(dataset_dir: Path, rows: list[dict[str, object]]) -> None
 
 
 class MovieCanonicalListsTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        clear_imdb_session_cache()
+
+    def test_imdb_reverse_index_nulls_collisions(self) -> None:
+        records = [
+            IMDbMovieRecord("tt0000001", "Crash", 1996, 7.0, 30000, frozenset()),
+            IMDbMovieRecord("tt0000002", "Crash", 1996, 7.1, 40000, frozenset()),
+            IMDbMovieRecord("tt0000003", "Arrival", 2016, 7.9, 500000, frozenset()),
+        ]
+
+        index = build_imdb_reverse_index(records)
+
+        self.assertIsNone(index[("crash", 1996)])
+        self.assertEqual(index[("arrival", 2016)], "tt0000003")
+
+    def test_resolve_imdb_ids_builds_dataset_index_once_per_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dataset_dir = Path(tmpdir)
+            for name in ("title.basics.tsv.gz", "title.ratings.tsv.gz"):
+                (dataset_dir / name).write_bytes(b"placeholder")
+            records = [
+                IMDbMovieRecord("tt2543164", "Arrival", 2016, 7.9, 800000, frozenset()),
+            ]
+            identities = [parse_movie_identity(Path("Arrival.2016.mkv"))]
+
+            with patch(
+                "normal.movie_canonical_lists.IMDbCanonicalProvider._load_movies",
+                return_value=records,
+            ) as load_movies:
+                first = resolve_imdb_ids(identities, dataset_dir=dataset_dir)
+                second = resolve_imdb_ids(identities, dataset_dir=dataset_dir)
+
+            self.assertEqual(first, ["tt2543164"])
+            self.assertEqual(second, first)
+            load_movies.assert_called_once()
     def test_build_canonical_lists_report_defaults_to_imdb_provider(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)

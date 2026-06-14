@@ -22,7 +22,10 @@ from normal.movie_junk import (
 )
 from normal.movie_plan import parse_movie_name_with_sidecar_fallback
 from normal.movie_scan import (
+    MovieReviewItem,
+    MovieScanReport,
     MovieScanProgress,
+    STATUS_PRIORITY,
     emit_progress,
     iter_video_files,
     movie_id_for,
@@ -156,6 +159,45 @@ def parsed_movies_from_enriched(report: EnrichedLibraryReport) -> dict[Path, Par
         if isinstance(item.identity.value, ParsedMovieIdentity):
             parsed[Path(item.path)] = item.identity.value
     return parsed
+
+
+def build_movie_scan_from_enriched(report: EnrichedLibraryReport) -> MovieScanReport:
+    projected = MovieScanReport(
+        source_root=report.source_root,
+        generated_at=report.generated_at,
+    )
+    for item in report.files:
+        if item.probe_error:
+            projected.warnings.append(
+                WarningItem(
+                    code="movie_probe_error",
+                    message=f"Unable to probe media metadata: {item.probe_error}",
+                    path=item.path,
+                )
+            )
+            continue
+        priority_score = item.replacement_priority_score or 1.0
+        review_item = MovieReviewItem(
+            movie_id=item.movie_id,
+            path=item.path,
+            review=item.review,
+            replacement_priority_score=priority_score,
+            replacement_priority_label=item.replacement_priority_label or "medium",
+            replacement_year_hint=item.replacement_year_hint,
+            triage_score=round(item.review.score * priority_score, 1),
+        )
+        projected.movies.append(review_item)
+    if not report.files:
+        projected.warnings.extend(warning for warning in report.warnings if warning.code == "no_video_files")
+    projected.movies.sort(
+        key=lambda item: (
+            -item.triage_score,
+            STATUS_PRIORITY.get(item.review.status, 99),
+            -item.review.score,
+            item.path.lower(),
+        )
+    )
+    return projected
 
 
 def build_movie_cleanup_from_enriched(

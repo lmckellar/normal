@@ -4,13 +4,18 @@ from dataclasses import asdict
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from normal.movie_canonical_lists import build_movie_inventory_from_items
 from normal.movie_enriched import (
+    build_movie_scan_from_enriched,
     build_movie_cleanup_from_enriched,
     parsed_movies_from_enriched,
     scan_enriched_library,
 )
 from normal.movie_junk import scan_movie_cleanup
+from normal.movie_profile import scan_movie_profiles
+from normal.movie_scan import scan_movie_library
 from normal.quality_review import MediaFacts
 from normal.web.state import MovieEnrichedCache
 
@@ -99,6 +104,77 @@ class MovieEnrichedTests(unittest.TestCase):
             self.assertIs(cache.get(source), report)
             cache.invalidate(source)
             self.assertIsNone(cache.get(source))
+
+    def test_profile_projection_reuses_enriched_facts_and_identity_without_serializing_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Movie.1999.1080p.mkv"
+            movie.write_text("video", encoding="utf-8")
+            enriched = scan_enriched_library(
+                source,
+                probe_media=lambda _: MediaFacts(
+                    width=1920,
+                    height=1080,
+                    video_bitrate_kbps=8000,
+                ),
+            )
+
+            with patch("normal.movie_profile.parse_movie_name", side_effect=AssertionError("identity reparsed")):
+                report = scan_movie_profiles(
+                    source,
+                    probe_media=lambda _: (_ for _ in ()).throw(AssertionError("media reprobed")),
+                    enriched_report=enriched,
+                )
+
+            self.assertEqual(len(report.movies), 1)
+            self.assertIs(report.movies[0].facts, enriched.files[0].facts)
+            self.assertIs(report.movies[0].identity, enriched.files[0].identity)
+            self.assertNotIn("identity", report.to_dict()["movies"][0])
+
+    def test_canonical_inventory_consumes_retained_enriched_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Movie.1999.mkv"
+            movie.write_text("video", encoding="utf-8")
+            enriched = scan_enriched_library(source, probe_media=lambda _: MediaFacts())
+
+            with patch(
+                "normal.movie_canonical_lists.parse_movie_identity",
+                side_effect=AssertionError("identity reparsed"),
+            ):
+                inventory, unparsed, duplicates = build_movie_inventory_from_items(enriched.files)
+
+            self.assertEqual([(key.title, key.year) for key in inventory], [("movie", 1999)])
+            self.assertEqual(unparsed, 0)
+            self.assertEqual(duplicates, 0)
+
+    def test_catalogue_projection_matches_standalone_movie_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie = source / "Movie.1999.mkv"
+            movie.write_text("video", encoding="utf-8")
+            facts = MediaFacts(
+                runtime_seconds=7200,
+                file_size_bytes=2_000 * 1024 * 1024,
+                width=1920,
+                height=1080,
+                video_bitrate_kbps=2500,
+                audio_bitrate_kbps=128,
+            )
+
+            standalone = scan_movie_library(source, probe_media=lambda _: facts)
+            projected = build_movie_scan_from_enriched(
+                scan_enriched_library(source, probe_media=lambda _: facts)
+            )
+
+            self.assertEqual(
+                [asdict(item) for item in projected.movies],
+                [asdict(item) for item in standalone.movies],
+            )
+            self.assertEqual(
+                [asdict(warning) for warning in projected.warnings],
+                [asdict(warning) for warning in standalone.warnings],
+            )
 
 
 if __name__ == "__main__":

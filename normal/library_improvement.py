@@ -11,6 +11,7 @@ from normal.movie_naming import title_alias_keys
 from normal.movie_profile import (
     MovieProfileReport,
     QUALITY_STANCE_RANKS,
+    movie_identity_from_slot,
     normalize_quality_stance_label,
     replacement_candidate_quality_floor,
 )
@@ -154,7 +155,7 @@ def build_profile_inventory(
     floor_rank = QUALITY_STANCE_RANKS.get(floor, 0)
     inventory: dict[MovieIdentityKey, int] = {}
     for item in report.movies:
-        parsed = parse_movie_identity(Path(item.path))
+        parsed = movie_identity_from_slot(getattr(item, "identity", None)) or parse_movie_identity(Path(item.path))
         if parsed.title is None or parsed.year is None:
             continue
         quality_label = getattr(item.profile, "quality_label", None)
