@@ -3,9 +3,11 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from normal.models import ProposedChange
 from normal.movie_apply import apply_changes_in_place, copy_source_tree
+from normal.source_policy import ApprovedRoots, validate_candidate_for_mutation
 
 
 ESCAPING_DESTINATIONS = ["/tmp/pwned", "../../pwned", "Good Movie (2024)/../../pwned"]
@@ -96,6 +98,59 @@ class MovieApplyPathSafetyTests(unittest.TestCase):
         self.assertEqual(len(report.failed), 1)
         self.assertTrue(movie.is_symlink())
         self.assertTrue(target.exists())
+
+    def test_folder_rename_revalidates_source_and_target_with_approved_roots(self) -> None:
+        folder = self.source / "Movie"
+        folder.mkdir()
+        target = self.source / "Movie (2024)"
+        change = self._change("folder_rename", "Movie", "Movie (2024)", folder)
+        approved_roots = ApprovedRoots.from_paths([self.source])
+
+        with patch(
+            "normal.movie_apply.validate_candidate_for_mutation",
+            wraps=validate_candidate_for_mutation,
+        ) as validate:
+            report = apply_changes_in_place(self.source, [change], approved_roots)
+
+        self.assertEqual(len(report.applied), 1)
+        validate.assert_any_call(folder, self.source.resolve(), approved_roots)
+        validate.assert_any_call(target, self.source.resolve(), approved_roots)
+
+    def test_folder_merge_revalidates_each_entry_and_target_with_approved_roots(self) -> None:
+        folder = self.source / "Movie"
+        folder.mkdir()
+        entry = folder / "Movie.mkv"
+        entry.write_text("video", encoding="utf-8")
+        target_folder = self.source / "Movie (2024)"
+        target_folder.mkdir()
+        target = target_folder / entry.name
+        change = self._change("folder_merge", "Movie", "Movie (2024)", folder)
+        approved_roots = ApprovedRoots.from_paths([self.source])
+
+        with patch(
+            "normal.movie_apply.validate_candidate_for_mutation",
+            wraps=validate_candidate_for_mutation,
+        ) as validate:
+            report = apply_changes_in_place(self.source, [change], approved_roots)
+
+        self.assertEqual(len(report.applied), 1)
+        validate.assert_any_call(entry, self.source.resolve(), approved_roots)
+        validate.assert_any_call(target, self.source.resolve(), approved_roots)
+
+    def test_folder_delete_revalidates_target_with_approved_roots(self) -> None:
+        folder = self.source / "Movie"
+        folder.mkdir()
+        change = self._change("folder_delete", "Movie", "", folder)
+        approved_roots = ApprovedRoots.from_paths([self.source])
+
+        with patch(
+            "normal.movie_apply.validate_candidate_for_mutation",
+            wraps=validate_candidate_for_mutation,
+        ) as validate:
+            report = apply_changes_in_place(self.source, [change], approved_roots)
+
+        self.assertEqual(len(report.applied), 1)
+        validate.assert_any_call(folder, self.source.resolve(), approved_roots)
 
 
 class CopySourceTreeSymlinkTests(unittest.TestCase):

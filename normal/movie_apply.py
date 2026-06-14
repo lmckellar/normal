@@ -254,11 +254,11 @@ def apply_change(
     if change.change_type == "file_move":
         return apply_file_move(destination_path, destination_root, change, approved_roots)
     if change.change_type == "folder_merge":
-        return apply_folder_merge(source_root, destination_root, change)
+        return apply_folder_merge(source_root, destination_root, change, approved_roots)
     if change.change_type == "folder_delete":
-        return apply_folder_delete(source_root, destination_root, change)
+        return apply_folder_delete(source_root, destination_root, change, approved_roots)
     if change.change_type == "folder_rename":
-        return apply_folder_rename(source_root, destination_root, change)
+        return apply_folder_rename(source_root, destination_root, change, approved_roots)
     return ApplyResult(
         item_id=change.item_id,
         change_type=change.change_type,
@@ -430,7 +430,12 @@ def format_sidecar_count(count: int) -> str:
     return f" with {count} sidecar{'s' if count != 1 else ''}"
 
 
-def apply_folder_rename(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+def apply_folder_rename(
+    source_root: Path,
+    destination_root: Path,
+    change: ProposedChange,
+    approved_roots: ApprovedRoots | None,
+) -> ApplyResult:
     if change.path is None:
         raise ValueError("folder rename is missing path")
 
@@ -473,10 +478,19 @@ def apply_folder_rename(source_root: Path, destination_root: Path, change: Propo
             message="Folder rename target already exists.",
         )
 
+    validate_candidate_for_mutation(target_dir, destination_root, approved_roots)
     target_dir.parent.mkdir(parents=True, exist_ok=True)
+    destination_dir = validate_candidate_for_mutation(destination_dir, destination_root, approved_roots)
+    target_dir = validate_candidate_for_mutation(target_dir, destination_root, approved_roots)
     destination_dir.rename(target_dir)
-    move_wrapper_sidecars_after_collapse(destination_root, relative_current, target_dir, destination_dir.parent)
-    prune_empty_parents(destination_root, destination_dir.parent)
+    move_wrapper_sidecars_after_collapse(
+        destination_root,
+        relative_current,
+        target_dir,
+        destination_dir.parent,
+        approved_roots,
+    )
+    prune_empty_parents(destination_root, destination_dir.parent, approved_roots)
     return ApplyResult(
         item_id=change.item_id,
         change_type=change.change_type,
@@ -486,7 +500,12 @@ def apply_folder_rename(source_root: Path, destination_root: Path, change: Propo
     )
 
 
-def apply_folder_merge(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+def apply_folder_merge(
+    source_root: Path,
+    destination_root: Path,
+    change: ProposedChange,
+    approved_roots: ApprovedRoots | None,
+) -> ApplyResult:
     if change.path is None:
         raise ValueError("folder merge is missing path")
 
@@ -531,9 +550,11 @@ def apply_folder_merge(source_root: Path, destination_root: Path, change: Propos
                 path=str(target),
                 message="Folder merge target already contains an entry with the same name.",
             )
+        entry = validate_candidate_for_mutation(entry, destination_root, approved_roots)
+        target = validate_candidate_for_mutation(target, destination_root, approved_roots)
         entry.rename(target)
         moved_count += 1
-    prune_empty_parents(destination_root, destination_dir)
+    prune_empty_parents(destination_root, destination_dir, approved_roots)
     return ApplyResult(
         item_id=change.item_id,
         change_type=change.change_type,
@@ -543,7 +564,12 @@ def apply_folder_merge(source_root: Path, destination_root: Path, change: Propos
     )
 
 
-def apply_folder_delete(source_root: Path, destination_root: Path, change: ProposedChange) -> ApplyResult:
+def apply_folder_delete(
+    source_root: Path,
+    destination_root: Path,
+    change: ProposedChange,
+    approved_roots: ApprovedRoots | None,
+) -> ApplyResult:
     if change.path is None:
         raise ValueError("folder delete is missing path")
 
@@ -566,8 +592,9 @@ def apply_folder_delete(source_root: Path, destination_root: Path, change: Propo
             path=str(destination_dir),
             message="Folder path drifted from the plan current_value.",
         )
+    destination_dir = validate_candidate_for_mutation(destination_dir, destination_root, approved_roots)
     shutil.rmtree(destination_dir)
-    prune_empty_parents(destination_root, destination_dir.parent)
+    prune_empty_parents(destination_root, destination_dir.parent, approved_roots)
     return ApplyResult(
         item_id=change.item_id,
         change_type=change.change_type,
@@ -582,6 +609,7 @@ def move_wrapper_sidecars_after_collapse(
     relative_current: Path,
     target_dir: Path,
     old_parent: Path,
+    approved_roots: ApprovedRoots | None,
 ) -> None:
     current_parts = relative_current.parts
     target_relative = target_dir.relative_to(destination_root)
@@ -600,14 +628,21 @@ def move_wrapper_sidecars_after_collapse(
         target = target_dir / entry.name
         if target.exists():
             continue
+        entry = validate_candidate_for_mutation(entry, destination_root, approved_roots)
+        target = validate_candidate_for_mutation(target, destination_root, approved_roots)
         entry.rename(target)
 
 
-def prune_empty_parents(destination_root: Path, start: Path) -> None:
+def prune_empty_parents(
+    destination_root: Path,
+    start: Path,
+    approved_roots: ApprovedRoots | None,
+) -> None:
     current = start
     root = destination_root.resolve()
     while current.resolve() != root:
         try:
+            current = validate_candidate_for_mutation(current, root, approved_roots)
             current.rmdir()
         except OSError:
             break
