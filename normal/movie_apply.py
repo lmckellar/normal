@@ -532,6 +532,15 @@ def apply_changes_in_place(source_root: Path, changes: list[ProposedChange]) -> 
         reverse=True,
     )
     for change in non_folder + folder_changes:
+        if change.confidence != "safe":
+            report.skipped.append(ApplyResult(
+                item_id=change.item_id,
+                change_type=change.change_type,
+                status="skipped",
+                path=change.path,
+                message="Skipped review change.",
+            ))
+            continue
         try:
             result = apply_change(root, root, change)
         except Exception as exc:

@@ -5716,11 +5716,12 @@
     }
     const changes = selectedProposedChanges();
     if (!changes.length) return;
+    const changeIds = changes.map(change => change.item_id);
     state.applyInFlight = true;
     renderConfirmButton();
     try {
       const response = await postFetch('/api/movies/apply', {
-        body: JSON.stringify({ source: el.sourcePath.value, changes }),
+        body: JSON.stringify({ source: el.sourcePath.value, change_ids: changeIds }),
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'confirm failed');

@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from normal.audit import AuditEffect, AuditEvent, AuditSubject, make_event_id
-from normal.models import ProposedChange
 from normal.models import utc_now_iso
 from normal.movie_apply import apply_changes_in_place
 from normal.movie_plan import build_movie_plan, parse_movie_name_with_sidecar_fallback
@@ -52,11 +51,15 @@ def handle_movies_normalize(ctx: RequestContext, payload: dict[str, Any]) -> Non
 
 def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
-    raw_changes = payload.get("changes", [])
-    if not isinstance(raw_changes, list):
-        raise ValueError("changes must be a list")
-    changes = [ProposedChange(**c) for c in raw_changes]
+    raw_ids = payload.get("change_ids", [])
+    if not isinstance(raw_ids, list):
+        raise ValueError("change_ids must be a list")
+    requested_ids = {str(item_id) for item_id in raw_ids}
     with ctx.handler.activity_tracker.track(source, "Movie apply"):
+        plan_movie_files = discover_video_files(source)
+        plan_parsed_movies = {movie_path: parse_movie_name_with_sidecar_fallback(movie_path) for movie_path in plan_movie_files}
+        authoritative_plan = build_movie_plan(source, movie_files=plan_movie_files, parsed_movies=plan_parsed_movies)
+        changes = [change for change in authoritative_plan.proposed_changes if change.item_id in requested_ids]
         report = apply_changes_in_place(source, changes)
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)

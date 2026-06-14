@@ -338,7 +338,7 @@ class AuditRouteTests(unittest.TestCase):
                         normalize_payload = json.loads(response.read().decode("utf-8"))
                     apply_request = urllib.request.Request(
                         f"{base_url}/api/movies/apply",
-                        data=json.dumps({"source": str(source), "changes": normalize_payload["proposed_changes"]}).encode("utf-8"),
+                        data=json.dumps({"source": str(source), "change_ids": [change["item_id"] for change in normalize_payload["proposed_changes"]]}).encode("utf-8"),
                         headers={"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN},
                         method="POST",
                     )
