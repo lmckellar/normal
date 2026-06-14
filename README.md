@@ -61,9 +61,11 @@ Then open `http://127.0.0.1:8765` in your browser. On first run, point `normal` 
 
 ## 🤓 Safety
 
-`normal` is aggressive by default and is actually safely architected, despite looking like it was zero shotted by Gemini Flash 🥴. It renames, moves, deletes and remuxes files, and it tries to get from mess to clean in as few drive read/write passes as possible. That's the whole point — but it also means you should not aim it at your real library cold.
+`normal` is aggressive by default and is actually safely architected, despite looking like it was zero shotted by Gemini Flash 🥴. 
 
-Before it touches anything you care about, copy a small test directory with a representative cross-section of your actual naming and folder conventions — a Noah's Ark of your current mess — and run everything there first. Watching the tool purify a test library for the first time is a good experience. Watching it touch your real library before you're ready is not.
+It renames, moves, deletes and remuxes files, and it tries to get from mess to clean in as few drive read/write passes as possible. That's the whole point — but it also means you should not aim it at your real library cold.
+
+Before it touches anything you care about, copy a small test directory with a representative cross-section of your actual naming and folder conventions — a Noah's Ark of your current mess — and run everything there first. 
 
 The full safety posture, the approval gates, and networking behaviour live in [docs/safety.md](docs/safety.md). Recommended first-run process is in [docs/quickstart.md](docs/quickstart.md).
 
