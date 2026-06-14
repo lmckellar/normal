@@ -12,7 +12,7 @@ from normal.movie_profile import build_histogram_payload, scan_movie_profiles
 from normal.movie_scan import MovieScanProgress, scan_movie_library
 from normal.output import write_movie_register_xlsx, write_movie_review_csv
 from normal.source_policy import Operation, resolve_source_path, validate_source_for_operation
-from normal.web import ApprovedRoots, parse_allowed_peers, serve_web_ui
+from normal.web import ApprovedRoots, parse_allowed_hosts, parse_allowed_peers, serve_web_ui
 
 
 def ensure_source_directory(source: Path) -> Path:
@@ -138,16 +138,17 @@ def run_web(
     unsafe_remote: bool = False,
     allow_roots: list[Path] | None = None,
     allow_peers: list[str] | None = None,
+    allow_hosts: list[str] | None = None,
 ) -> int:
-    if unsafe_remote and not (allow_peers or []):
+    if unsafe_remote and (not (allow_peers or []) or not (allow_hosts or [])):
         raise ValueError(
-            "--unsafe-remote admits no clients without --allow-peer; add a peer CIDR "
-            "(e.g. --allow-peer 192.168.1.0/24) or drop --unsafe-remote."
+            "--unsafe-remote requires both --allow-peer and --allow-host; explicitly "
+            "allow each client network and request host, or drop --unsafe-remote."
         )
-    if (allow_peers or []) and not unsafe_remote:
+    if ((allow_peers or []) or (allow_hosts or [])) and not unsafe_remote:
         raise ValueError(
-            "--allow-peer lets LAN clients load the page but every mutation is rejected "
-            "on the Host check; add --unsafe-remote to serve them, or drop --allow-peer."
+            "--allow-peer/--allow-host require --unsafe-remote; enable all three "
+            "explicitly for remote access, or remove the remote allowlists."
         )
     default_source = None
     if source is not None:
@@ -159,7 +160,8 @@ def run_web(
         seed_roots.append(ensure_source_directory(raw_root))
     approved_roots = ApprovedRoots.from_paths(seed_roots)
     allowed_peers = parse_allowed_peers(allow_peers or [])
-    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, unsafe_remote=unsafe_remote, approved_roots=approved_roots, allowed_peers=allowed_peers)
+    allowed_hosts = parse_allowed_hosts(allow_hosts or [])
+    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, unsafe_remote=unsafe_remote, approved_roots=approved_roots, allowed_peers=allowed_peers, allowed_hosts=allowed_hosts)
     return 0
 
 

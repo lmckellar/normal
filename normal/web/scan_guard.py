@@ -7,7 +7,7 @@ import socket
 import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath, PureWindowsPath
 from typing import Any, Iterator
 
 from normal.source_policy import ApprovedRoots, path_is_under, resolve_source_path, source_paths_overlap
@@ -136,10 +136,19 @@ def risky_mount_flags(source: Path) -> list[str]:
     return flags
 
 
-def looks_like_drive_directory(path: Path) -> bool:
-    if path == path.anchor:
+def _looks_like_windows_root(path: PurePath) -> bool:
+    windows_path = PureWindowsPath(str(path))
+    return bool(
+        windows_path.drive
+        and windows_path.root == "\\"
+        and len(windows_path.parts) == 1
+    )
+
+
+def looks_like_drive_directory(path: PurePath) -> bool:
+    if _looks_like_windows_root(path):
         return True
-    if path.is_mount():
+    if isinstance(path, Path) and path.is_mount():
         return True
     parts = path.parts
     if len(parts) == 3 and parts[1] in {"mnt", "Volumes"}:
@@ -151,9 +160,14 @@ def looks_like_drive_directory(path: Path) -> bool:
     return False
 
 
-def looks_like_unc_share_root(path: Path) -> bool:
-    anchor = path.anchor
-    return anchor.startswith("\\\\") and path == path.__class__(anchor)
+def looks_like_unc_share_root(path: PurePath) -> bool:
+    windows_path = PureWindowsPath(str(path))
+    drive = windows_path.drive.lower()
+    return (
+        windows_path.root == "\\"
+        and len(windows_path.parts) == 1
+        and (drive.startswith("\\\\") or drive.startswith("\\\\?\\unc\\"))
+    )
 
 
 def format_storage_size(size_bytes: int) -> str:

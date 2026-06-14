@@ -114,6 +114,8 @@ class CredentialStore:
                 fh.flush()
                 os.fsync(fh.fileno())
             os.replace(tmp_name, path)
+            if os.name == "posix":
+                os.chmod(path, 0o600)
         except BaseException:
             try:
                 os.unlink(tmp_name)

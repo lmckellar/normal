@@ -112,6 +112,7 @@ def build_parser() -> argparse.ArgumentParser:
     web_parser.add_argument("--tmdb-key", default=os.environ.get("TMDB_KEY"), metavar="KEY")
     web_parser.add_argument("--unsafe-remote", action="store_true")
     web_parser.add_argument("--allow-peer", action="append", default=[], metavar="IP/CIDR")
+    web_parser.add_argument("--allow-host", action="append", default=[], metavar="HOST")
     web_parser.set_defaults(func=handle_web)
 
     return parser
@@ -156,7 +157,7 @@ def handle_movie_junk(args: argparse.Namespace) -> int:
 
 def handle_web(args: argparse.Namespace) -> int:
     try:
-        return run_web(host=args.host, port=args.port, source=args.source, omdb_key=args.omdb_key, tmdb_key=args.tmdb_key, unsafe_remote=args.unsafe_remote, allow_roots=args.allow_root, allow_peers=args.allow_peer)
+        return run_web(host=args.host, port=args.port, source=args.source, omdb_key=args.omdb_key, tmdb_key=args.tmdb_key, unsafe_remote=args.unsafe_remote, allow_roots=args.allow_root, allow_peers=args.allow_peer, allow_hosts=args.allow_host)
     except ValueError as exc:
         print(f"normal: {exc}", file=sys.stderr)
         return 1

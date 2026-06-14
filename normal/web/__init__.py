@@ -12,7 +12,7 @@ from .scan_guard import (
     guarded_mutation,
     looks_like_drive_directory,
 )
-from .security import parse_allowed_peers
+from .security import parse_allowed_hosts, parse_allowed_peers
 from .serializers import build_movie_normalize_results
 from .server import build_handler, read_onboarding_bootstrap, read_web_asset_text, render_workbench_html, serve_web_ui
 from .state import HEAVY_SCAN_REGISTRY, RequestConflictError
@@ -39,6 +39,7 @@ __all__ = [
     "guarded_mutation",
     "looks_like_drive_directory",
     "parse_allowed_peers",
+    "parse_allowed_hosts",
     "read_web_asset_text",
     "render_workbench_html",
     "resolve_source_path",

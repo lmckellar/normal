@@ -23,7 +23,15 @@ from normal.web import (
     render_workbench_html,
 )
 from normal.web.routes_cleanup import delete_mode_for_kind
-from normal.web.security import MUTATION_TOKEN, PostRejected, check_peer, parse_allowed_peers
+from normal.web.security import (
+    MAX_JSON_BODY,
+    MUTATION_TOKEN,
+    PostRejected,
+    check_peer,
+    check_post,
+    parse_allowed_hosts,
+    parse_allowed_peers,
+)
 
 
 WORKBENCH_TEMPLATE = read_web_asset_text("normalize_lab.html")
@@ -1194,6 +1202,7 @@ class WebTests(unittest.TestCase):
 class WebPostSecurityTests(unittest.TestCase):
     @contextmanager
     def run_test_server(self, **handler_kwargs):
+        handler_kwargs.setdefault("approved_roots", ApprovedRoots.from_paths([Path(tempfile.gettempdir())]))
         server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler(**handler_kwargs))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -1246,6 +1255,27 @@ class WebPostSecurityTests(unittest.TestCase):
         self.assertEqual(ctx.exception.code, 403)
         spy.assert_not_called()
 
+    def test_bad_token_is_rejected(self) -> None:
+        headers = self.valid_headers()
+        headers["X-Normal-Token"] = "wrong"
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(base_url, "/api/source/scan-warning", headers=headers)
+        self.assertEqual(ctx.exception.code, 403)
+
+    def test_json_content_type_with_charset_is_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            headers = self.valid_headers()
+            headers["Content-Type"] = "application/json; charset=utf-8"
+            with self.run_test_server() as base_url:
+                with self.post(
+                    base_url,
+                    "/api/source/scan-warning",
+                    headers=headers,
+                    data=self.scan_warning_body(tmpdir),
+                ) as response:
+                    self.assertEqual(response.status, 200)
+
     def test_non_json_content_type_is_rejected(self) -> None:
         headers = self.valid_headers()
         headers["Content-Type"] = "text/plain"
@@ -1262,7 +1292,7 @@ class WebPostSecurityTests(unittest.TestCase):
                 self.post(base_url, "/api/source/scan-warning", headers=headers)
         self.assertEqual(ctx.exception.code, 403)
 
-    def test_foreign_host_is_rejected_unless_unsafe_remote(self) -> None:
+    def test_foreign_host_requires_explicit_remote_host_allowlist(self) -> None:
         headers = self.valid_headers()
         headers["Host"] = "evil.example.com"
         with self.run_test_server() as base_url:
@@ -1270,7 +1300,10 @@ class WebPostSecurityTests(unittest.TestCase):
                 self.post(base_url, "/api/source/scan-warning", headers=headers)
         self.assertEqual(ctx.exception.code, 403)
         with tempfile.TemporaryDirectory() as tmpdir:
-            with self.run_test_server(bound_host="evil.example.com", unsafe_remote=True) as base_url:
+            with self.run_test_server(
+                unsafe_remote=True,
+                allowed_hosts=parse_allowed_hosts(["evil.example.com"]),
+            ) as base_url:
                 port = urllib.parse.urlsplit(base_url).port
                 with self.post(
                     base_url,
@@ -1287,6 +1320,14 @@ class WebPostSecurityTests(unittest.TestCase):
     def test_origin_with_wrong_port_is_rejected(self) -> None:
         headers = self.valid_headers()
         headers["Origin"] = "http://127.0.0.1:9999"
+        with self.run_test_server() as base_url:
+            with self.assertRaises(urllib.error.HTTPError) as ctx:
+                self.post(base_url, "/api/source/scan-warning", headers=headers)
+        self.assertEqual(ctx.exception.code, 403)
+
+    def test_origin_with_wrong_scheme_is_rejected(self) -> None:
+        headers = self.valid_headers()
+        headers["Origin"] = "https://127.0.0.1:8765"
         with self.run_test_server() as base_url:
             with self.assertRaises(urllib.error.HTTPError) as ctx:
                 self.post(base_url, "/api/source/scan-warning", headers=headers)
@@ -1356,6 +1397,79 @@ class WebPeerGateTests(unittest.TestCase):
             check_peer(self.handler("not-an-ip"), allowed_peers=())
 
 
+class WebPostGateTests(unittest.TestCase):
+    def handler(self, **headers):
+        defaults = {
+            "X-Normal-Token": MUTATION_TOKEN,
+            "Content-Type": "application/json",
+            "Host": "127.0.0.1:8765",
+            "Content-Length": "0",
+        }
+        defaults.update(headers)
+        return types.SimpleNamespace(headers=defaults)
+
+    def test_ipv6_loopback_host_with_exact_port_is_allowed(self) -> None:
+        check_post(
+            self.handler(Host="[::1]:8765"),
+            bound_port=8765,
+            allowed_hosts=frozenset(),
+        )
+
+    def test_origin_scheme_must_match_http_server(self) -> None:
+        with self.assertRaises(PostRejected):
+            check_post(
+                self.handler(Origin="https://127.0.0.1:8765"),
+                bound_port=8765,
+                allowed_hosts=frozenset(),
+            )
+
+    def test_host_without_port_is_rejected(self) -> None:
+        with self.assertRaises(PostRejected):
+            check_post(
+                self.handler(Host="127.0.0.1"),
+                bound_port=8765,
+                allowed_hosts=frozenset(),
+            )
+
+    def test_negative_content_length_is_rejected(self) -> None:
+        with self.assertRaises(PostRejected) as ctx:
+            check_post(
+                self.handler(**{"Content-Length": "-1"}),
+                bound_port=8765,
+                allowed_hosts=frozenset(),
+            )
+        self.assertEqual(ctx.exception.status, HTTPStatus.BAD_REQUEST)
+
+    def test_missing_content_length_is_rejected(self) -> None:
+        handler = self.handler()
+        del handler.headers["Content-Length"]
+        with self.assertRaises(PostRejected) as ctx:
+            check_post(handler, bound_port=8765, allowed_hosts=frozenset())
+        self.assertEqual(ctx.exception.status, HTTPStatus.LENGTH_REQUIRED)
+
+    def test_chunked_body_is_rejected(self) -> None:
+        with self.assertRaises(PostRejected) as ctx:
+            check_post(
+                self.handler(**{"Transfer-Encoding": "chunked"}),
+                bound_port=8765,
+                allowed_hosts=frozenset(),
+            )
+        self.assertEqual(ctx.exception.status, HTTPStatus.BAD_REQUEST)
+
+    def test_too_large_content_length_is_rejected(self) -> None:
+        with self.assertRaises(PostRejected) as ctx:
+            check_post(
+                self.handler(**{"Content-Length": str(MAX_JSON_BODY + 1)}),
+                bound_port=8765,
+                allowed_hosts=frozenset(),
+            )
+        self.assertEqual(ctx.exception.status, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+
+    def test_unspecified_bind_address_is_not_an_allowed_host(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_allowed_hosts(["0.0.0.0"])
+
+
 class WebApprovedRootTests(unittest.TestCase):
     @contextmanager
     def run_test_server(self, **handler_kwargs):
@@ -1390,20 +1504,16 @@ class WebApprovedRootTests(unittest.TestCase):
             self.assertIn("not under an approved root", ctx.exception.read().decode("utf-8"))
             self.assertTrue(movie.exists())
 
-    def test_scan_warning_inspects_unapproved_path_without_approving_it(self) -> None:
+    def test_scan_warning_rejects_unapproved_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "Movies"
             source.mkdir()
             warn_body = json.dumps({"source": str(source)}).encode("utf-8")
-            mutate_body = json.dumps({"source": str(source), "paths": []}).encode("utf-8")
             with self.run_test_server(approved_roots=ApprovedRoots.from_paths([])) as base_url:
-                with self.post(base_url, "/api/source/scan-warning", warn_body) as response:
-                    self.assertEqual(response.status, 200)
-                    payload = json.loads(response.read().decode("utf-8"))
-                self.assertEqual(payload["source"], str(source.resolve()))
                 with self.assertRaises(urllib.error.HTTPError) as ctx:
-                    self.post(base_url, "/api/movies/delete", mutate_body)
+                    self.post(base_url, "/api/source/scan-warning", warn_body)
             self.assertEqual(ctx.exception.code, 400)
+            self.assertIn("not under an approved root", ctx.exception.read().decode("utf-8"))
 
     def test_library_roots_only_persist_approved_operation_safe_paths(self) -> None:
         from normal.web import routes_core
@@ -1502,6 +1612,26 @@ class WebApprovedRootTests(unittest.TestCase):
             roots = captured["approved_roots"].roots
             self.assertIn(source.resolve(), roots)
             self.assertIn(extra.resolve(), roots)
+
+    def test_run_web_requires_explicit_peer_and_host_for_remote_access(self) -> None:
+        from normal import commands
+
+        with self.assertRaisesRegex(ValueError, "requires both"):
+            commands.run_web(
+                host="0.0.0.0",
+                port=0,
+                unsafe_remote=True,
+                allow_peers=["192.168.1.0/24"],
+            )
+        with patch("normal.commands.serve_web_ui") as serve:
+            commands.run_web(
+                host="0.0.0.0",
+                port=0,
+                unsafe_remote=True,
+                allow_peers=["192.168.1.0/24"],
+                allow_hosts=["normal.local"],
+            )
+        self.assertEqual(serve.call_args.kwargs["allowed_hosts"], frozenset({"normal.local"}))
 
 
 if __name__ == "__main__":

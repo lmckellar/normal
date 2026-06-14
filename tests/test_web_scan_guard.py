@@ -17,6 +17,7 @@ from normal.web.scan_guard import (
     client_disconnected,
     format_storage_size,
     guarded_heavy_scan,
+    guarded_mutation,
     looks_like_drive_directory,
     looks_like_unc_share_root,
     resolve_source_path,
@@ -74,11 +75,28 @@ class WebScanGuardTests(unittest.TestCase):
 
         self.assertEqual(details, SourceMountDetails(fstype="cifs", target="/mnt/My Share"))
 
-    def test_risky_mount_flags_marks_ntfs_variants(self) -> None:
-        with patch("normal.web.scan_guard.source_mount_details", return_value=SourceMountDetails(fstype="fuseblk", target="/mnt/media")):
-            flags = risky_mount_flags(Path("/mnt/media/Movies"))
+    def test_proc_mounts_uses_longest_matching_prefix(self) -> None:
+        proc_mounts = "/dev/sda1 / ext4 rw 0 0\n//srv/share /mnt/Media cifs rw 0 0\n"
 
-        self.assertEqual(flags, ["mount:fuseblk"])
+        with patch("normal.web.scan_guard.subprocess.run", side_effect=OSError):
+            with patch("normal.web.scan_guard.Path.read_text", return_value=proc_mounts):
+                details = source_mount_details(Path("/mnt/Media/Movies"))
+
+        self.assertEqual(details, SourceMountDetails(fstype="cifs", target="/mnt/Media"))
+
+    def test_risky_mount_flags_marks_supported_variants(self) -> None:
+        variants = (
+            "ntfs", "ntfs3", "fuseblk", "exfat", "vfat", "drvfs", "cifs",
+            "smbfs", "nfs", "nfs4", "sshfs", "fuse.sshfs", "rclone",
+            "fuse.rclone", "mergerfs", "fuse.mergerfs",
+        )
+        for fstype in variants:
+            with self.subTest(fstype=fstype):
+                with patch(
+                    "normal.web.scan_guard.source_mount_details",
+                    return_value=SourceMountDetails(fstype=fstype, target="/mnt/media"),
+                ):
+                    self.assertEqual(risky_mount_flags(Path("/mnt/media/Movies")), [f"mount:{fstype}"])
 
     def test_build_source_scan_warning_combines_drive_and_mount_risk(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -154,11 +172,32 @@ class WebScanGuardTests(unittest.TestCase):
                 with registry.claim(base / "B", "heavy_scan", "Scan B"):
                     pass
 
+    def test_mutation_conflicts_with_parent_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            parent = Path(tmpdir) / "Movies"
+            child = parent / "A"
+            child.mkdir(parents=True)
+            registry = HeavyScanRegistry()
+
+            with patch("normal.web.scan_guard.state.HEAVY_SCAN_REGISTRY", registry):
+                with guarded_heavy_scan(parent, "Library scan"):
+                    with self.assertRaises(RequestConflictError):
+                        with guarded_mutation(child, "Movie delete"):
+                            self.fail("mutation inside an active parent scan should be blocked")
+
     def test_looks_like_drive_directory_covers_common_mount_roots(self) -> None:
         self.assertTrue(looks_like_drive_directory(Path("/mnt/media_storage")))
         self.assertTrue(looks_like_drive_directory(Path("/media/lachlan/Drive")))
         self.assertTrue(looks_like_drive_directory(Path("/Volumes/Media")))
         self.assertFalse(looks_like_drive_directory(Path("/mnt/media_storage/Movies")))
+
+    def test_looks_like_drive_directory_covers_windows_roots(self) -> None:
+        self.assertTrue(looks_like_drive_directory(PureWindowsPath("C:/")))
+        self.assertTrue(looks_like_drive_directory(PureWindowsPath("//?/C:/")))
+        self.assertTrue(looks_like_drive_directory(PureWindowsPath("//server/share")))
+        self.assertTrue(looks_like_drive_directory(PureWindowsPath("//?/UNC/server/share")))
+        self.assertFalse(looks_like_drive_directory(PureWindowsPath("C:/Movies")))
+        self.assertFalse(looks_like_drive_directory(PureWindowsPath("//server/share/Movies")))
 
     def test_looks_like_unc_share_root_only_matches_share_root(self) -> None:
         self.assertTrue(looks_like_unc_share_root(PureWindowsPath(r"\\server\share")))
