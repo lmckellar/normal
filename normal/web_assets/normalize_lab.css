@@ -1069,6 +1069,13 @@ input[type="checkbox"] {
   letter-spacing: -0.01em;
 }
 
+.lab-queue-status {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
 .lab-preview-group,
 .lab-preview-controls {
   display: flex;

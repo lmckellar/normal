@@ -258,6 +258,9 @@
     lopsidedDraft: null,
     lopsidedView: 'registers',
     lopsidedBusy: false,
+    queueStatus: {},
+    drainInFlight: false,
+    drainController: null,
   };
 
   const el = {
@@ -306,6 +309,7 @@
     repairActionSelect: document.getElementById('repairActionSelect'),
     repairActionButton: document.getElementById('repairActionButton'),
     confirmButton: document.getElementById('confirmButton'),
+    queueStatusLine: document.getElementById('queueStatusLine'),
     previewPanelKicker: document.getElementById('previewPanelKicker'),
     previewPanelHeading: document.getElementById('previewPanelHeading'),
     previewPane: document.getElementById('previewPane'),
@@ -533,6 +537,18 @@
 
   function isImmersiveMode() {
     return state.workflow === 'format-upgrades';
+  }
+
+  function isMovieNormalizeMode() {
+    return state.workflow === 'normalize';
+  }
+
+  function isNormalizeLaneMode() {
+    return isMovieNormalizeMode() || isTvNormalizeMode();
+  }
+
+  function normalizeQueueLane() {
+    return isTvNormalizeMode() ? 'tv' : 'movie';
   }
 
   function usesSimpleSelectionShell() {
@@ -3774,6 +3790,7 @@
   }
 
   function renderConfirmButton() {
+    renderQueueStatus();
     el.confirmButton.hidden = false;
     if (isCanonicalMode() || isImmersiveMode()) {
       el.confirmButton.hidden = true;
@@ -3806,6 +3823,11 @@
       return;
     }
     el.confirmButton.classList.remove('is-danger');
+    if (state.drainInFlight) {
+      el.confirmButton.disabled = false;
+      el.confirmButton.textContent = 'Stop';
+      return;
+    }
     const operationCount = selectedProposedChanges().length;
     el.confirmButton.disabled = operationCount === 0 || state.applyInFlight;
     el.confirmButton.textContent = state.applyInFlight
@@ -5869,6 +5891,100 @@
     }
   }
 
+  function queueCountsLabel(counts) {
+    const safe = counts || {};
+    return `${safe.pending || 0} pending · ${safe.done || 0} done · ${safe.skipped || 0} skipped · ${safe.failed || 0} failed`;
+  }
+
+  function renderQueueStatus() {
+    if (!el.queueStatusLine) return;
+    if (!isNormalizeLaneMode()) {
+      el.queueStatusLine.hidden = true;
+      el.queueStatusLine.textContent = '';
+      return;
+    }
+    const status = state.queueStatus[normalizeQueueLane()];
+    if (!status?.exists && !state.drainInFlight) {
+      el.queueStatusLine.hidden = true;
+      el.queueStatusLine.textContent = '';
+      return;
+    }
+    el.queueStatusLine.hidden = false;
+    const prefix = state.drainInFlight ? 'Draining queue' : 'Staged queue';
+    el.queueStatusLine.textContent = `${prefix}: ${queueCountsLabel(status?.counts)}`;
+  }
+
+  async function refreshQueueStatus(lane) {
+    const source = el.sourcePath.value.trim();
+    if (!source) {
+      state.queueStatus[lane] = null;
+      return null;
+    }
+    try {
+      const payload = await postJson('/api/normalize/queue/status', { source, lane });
+      state.queueStatus[lane] = payload;
+      return payload;
+    } catch (error) {
+      state.queueStatus[lane] = null;
+      return null;
+    }
+  }
+
+  async function refreshQueueStatusAllLanes() {
+    await Promise.all([refreshQueueStatus('movie'), refreshQueueStatus('tv')]);
+    renderConfirmButton();
+  }
+
+  function stopDrain() {
+    if (state.drainController) state.drainController.abort();
+  }
+
+  async function stageAndDrainSelected() {
+    const changes = selectedProposedChanges();
+    if (!changes.length) return;
+    const lane = normalizeQueueLane();
+    const source = el.sourcePath.value.trim();
+    const changeIds = changes.map(change => change.item_id);
+    state.applyInFlight = true;
+    renderConfirmButton();
+    try {
+      const staged = await postJson('/api/normalize/queue/stage', { source, lane, change_ids: changeIds });
+      state.queueStatus[lane] = staged;
+      const controller = new AbortController();
+      state.drainController = controller;
+      state.drainInFlight = true;
+      renderConfirmButton();
+      try {
+        const response = await postFetch('/api/normalize/queue/drain', {
+          body: JSON.stringify({ source, lane }),
+          signal: controller.signal,
+        });
+        const drained = await response.json();
+        if (!response.ok) throw mutationFetchError(response, drained, 'drain failed');
+        state.queueStatus[lane] = drained;
+      } catch (error) {
+        // Aborting the fetch disconnects the client, which the drain worker
+        // reads as a cooperative stop between items. Re-read the persisted
+        // queue so the surface reflects what committed before the stop.
+        if (error?.name === 'AbortError') {
+          await refreshQueueStatus(lane);
+        } else {
+          throw error;
+        }
+      } finally {
+        state.drainInFlight = false;
+        state.drainController = null;
+      }
+      markAuditLedgerDirty();
+      await runNormalize();
+    } finally {
+      state.applyInFlight = false;
+      state.drainInFlight = false;
+      state.drainController = null;
+      renderConfirmButton();
+    }
+  }
+
   function setWorkflow(workflow) {
     dismissAuditSurface();
     state.workflow = ['tv-normalize', 'weak-encodes', 'repair-defaults', 'canonical-lists', 'format-upgrades', 'junk'].includes(workflow) ? workflow : 'normalize';
@@ -5895,6 +6011,7 @@
     renderTableHeader();
     renderRows();
     renderSidePanel();
+    if (isNormalizeLaneMode()) refreshQueueStatusAllLanes().catch(() => {});
   }
 
   async function refreshActivityPayload() {
@@ -6119,6 +6236,7 @@
     closeAuditEventSource();
     refreshActivityPayload().catch(() => {});
     scheduleActivityPoll();
+    refreshQueueStatusAllLanes().catch(() => {});
     renderSidePanel();
     if (auditSurfaceOpen() && auditSourceKey()) {
       refreshAuditPayload({ immediate: true }).catch(error => {
@@ -6136,6 +6254,16 @@
   }
 
   el.confirmButton.addEventListener('click', () => {
+    if (isNormalizeLaneMode()) {
+      if (state.drainInFlight) {
+        stopDrain();
+        return;
+      }
+      stageAndDrainSelected().catch(error => {
+        el.previewPane.textContent = error.message;
+      });
+      return;
+    }
     confirmSelected().catch(error => {
       el.previewPane.textContent = error.message;
     });
@@ -6156,6 +6284,7 @@
       }
       await refreshActivityPayload();
       scheduleActivityPoll();
+      await refreshQueueStatusAllLanes();
       if (normalizeSourceKey(el.sourcePath.value)) {
         state.surfaceMode = 'audit';
         await refreshAuditPayload({ immediate: true });

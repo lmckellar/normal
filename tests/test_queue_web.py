@@ -20,6 +20,41 @@ from normal.web.server import build_handler
 from normal.web.state import MovieEnrichedCache
 
 
+WORKBENCH_HTML = (Path(__file__).resolve().parent.parent / "normal" / "web_assets" / "normalize_lab.html").read_text(encoding="utf-8")
+WORKBENCH_JS = (Path(__file__).resolve().parent.parent / "normal" / "web_assets" / "normalize_lab.js").read_text(encoding="utf-8")
+
+
+class QueueWorkbenchStringTests(unittest.TestCase):
+    def test_workbench_surfaces_queue_status_line(self) -> None:
+        self.assertIn('id="queueStatusLine"', WORKBENCH_HTML)
+        self.assertIn("function renderQueueStatus()", WORKBENCH_JS)
+        self.assertIn("function queueCountsLabel(counts)", WORKBENCH_JS)
+
+    def test_workbench_reads_queue_status_per_lane_on_load(self) -> None:
+        self.assertIn("function refreshQueueStatus(lane)", WORKBENCH_JS)
+        self.assertIn("function refreshQueueStatusAllLanes()", WORKBENCH_JS)
+        self.assertIn("refreshQueueStatus('movie')", WORKBENCH_JS)
+        self.assertIn("refreshQueueStatus('tv')", WORKBENCH_JS)
+        self.assertIn("'/api/normalize/queue/status'", WORKBENCH_JS)
+        self.assertIn("await refreshQueueStatusAllLanes();", WORKBENCH_JS)
+
+    def test_workbench_busy_phase_becomes_stop_affordance(self) -> None:
+        self.assertIn("function stopDrain()", WORKBENCH_JS)
+        self.assertIn("state.drainController.abort()", WORKBENCH_JS)
+        self.assertIn("new AbortController()", WORKBENCH_JS)
+        self.assertIn("signal: controller.signal", WORKBENCH_JS)
+        self.assertIn("error?.name === 'AbortError'", WORKBENCH_JS)
+        self.assertIn("if (state.drainInFlight) {", WORKBENCH_JS)
+        self.assertIn("el.confirmButton.textContent = 'Stop';", WORKBENCH_JS)
+
+    def test_workbench_stages_then_drains_alongside_direct_apply(self) -> None:
+        self.assertIn("function stageAndDrainSelected()", WORKBENCH_JS)
+        self.assertIn("function normalizeQueueLane()", WORKBENCH_JS)
+        self.assertIn("'/api/normalize/queue/stage'", WORKBENCH_JS)
+        self.assertIn("'/api/normalize/queue/drain'", WORKBENCH_JS)
+        self.assertIn("isTvNormalizeMode() ? '/api/tv/apply' : '/api/movies/apply'", WORKBENCH_JS)
+
+
 class QueueWebTests(unittest.TestCase):
     @contextmanager
     def harness(self, root: Path):
