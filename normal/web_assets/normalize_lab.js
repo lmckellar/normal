@@ -935,6 +935,9 @@
     const present = Number(row.local_present_count || 0);
     const total = Number(row.local_copy_count || 0);
     const rejected = Number(row.local_rejected_count || 0);
+    if (row.capability === 'claim_unverified') {
+      return `filename claim needs corroboration · ${present} of ${total}`;
+    }
     if (rejected && !present) {
       const detail = row.capability === 'quality_unverified'
         ? 'claim found, quality could not be verified'

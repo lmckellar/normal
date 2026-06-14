@@ -20,6 +20,7 @@ from normal.movie_title_traits import (
     TraitEvidence,
     all_evidence,
     assess_trait,
+    has_independent_confirmed_positive,
     lookup_evidence,
     record_local_observations,
     trait_key,
@@ -258,6 +259,7 @@ def local_trait_capability(
     standards: dict[str, Any],
     *,
     quality_label: str | None = None,
+    hybrid_corroborated: bool = False,
 ) -> str:
     if trait == "immersive_audio":
         return "present" if facts.audio_immersive_extension else (
@@ -280,6 +282,8 @@ def local_trait_capability(
     if trait in {"open_matte", "hybrid"}:
         if not path_trait_token(path, trait):
             return "not_detected"
+        if trait == "hybrid" and not hybrid_corroborated:
+            return "claim_unverified"
         if not facts.video_bitrate_kbps:
             return "quality_unverified"
         active_quality_label = quality_label or local_trait_quality_label(Path(path), facts, standards)
@@ -298,6 +302,8 @@ def local_trait_observations(
             continue
         quality_label = local_trait_quality_label(movie_path, facts, standards)
         for trait in TRAITS:
+            if trait == "hybrid":
+                continue
             if local_trait_capability(
                 movie_path,
                 facts,
@@ -344,6 +350,10 @@ def build_title_trait_assessments(
             for path, facts in group["copies"]
         }
         for trait in TRAITS:
+            matched = lookup_evidence(evidence, title, year, trait)
+            if trait_key(title, year, trait) in suppressed:
+                matched = []
+            hybrid_corroborated = trait == "hybrid" and has_independent_confirmed_positive(matched)
             capabilities = [
                 local_trait_capability(
                     path,
@@ -351,6 +361,7 @@ def build_title_trait_assessments(
                     trait,
                     standards,
                     quality_label=quality_labels[path],
+                    hybrid_corroborated=hybrid_corroborated,
                 )
                 for path, facts in group["copies"]
             ]
@@ -361,13 +372,12 @@ def build_title_trait_assessments(
                 if "below_quality_floor" in capabilities
                 else "quality_unverified"
                 if "quality_unverified" in capabilities
+                else "claim_unverified"
+                if "claim_unverified" in capabilities
                 else "not_detected"
                 if "not_detected" in capabilities
                 else "unknown"
             )
-            matched = lookup_evidence(evidence, title, year, trait)
-            if trait_key(title, year, trait) in suppressed:
-                matched = []
             local_present_count = sum(value == "present" for value in capabilities)
             local_rejected_count = sum(value in {"below_quality_floor", "quality_unverified"} for value in capabilities)
             row = asdict(
@@ -404,6 +414,11 @@ def file_trait_assessments(
             trait,
             standards,
             quality_label=quality_label,
+            hybrid_corroborated=(
+                trait == "hybrid"
+                and row.get("claim_direction") == "present"
+                and row.get("certainty") == "confirmed"
+            ),
         )
         status = row["status"]
         if capability == "present":

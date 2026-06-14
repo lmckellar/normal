@@ -25,6 +25,7 @@ BASES = (
 )
 RELIABILITIES = ("confirmed", "high", "plausible", "unknown")
 HARD_POSITIVE_BASES = {"local_probe", "curated_research", "manual_verification"}
+INDEPENDENT_HARD_POSITIVE_BASES = {"curated_research", "manual_verification"}
 PROVISIONAL_NEGATIVE_BASES = {"curated_research", "manual_verification"}
 CORPUS_RESOURCE = ("normal", "data", "title_trait_corpus.json")
 
@@ -294,7 +295,11 @@ def resolve_claim(evidence: Iterable[TraitEvidence]) -> tuple[str, str, str]:
     hard_positive = any(
         item.direction == "present"
         and item.reliability == "confirmed"
-        and item.basis in HARD_POSITIVE_BASES
+        and item.basis in (
+            INDEPENDENT_HARD_POSITIVE_BASES
+            if item.trait == "hybrid"
+            else HARD_POSITIVE_BASES
+        )
         for item in items
     )
     if hard_positive:
@@ -321,6 +326,15 @@ def resolve_claim(evidence: Iterable[TraitEvidence]) -> tuple[str, str, str]:
     if soft_directions == {"absent"}:
         return "absent", "plausible", "unverified"
     return "unknown", "unknown", "unverified"
+
+
+def has_independent_confirmed_positive(evidence: Iterable[TraitEvidence]) -> bool:
+    return any(
+        item.direction == "present"
+        and item.reliability == "confirmed"
+        and item.basis in INDEPENDENT_HARD_POSITIVE_BASES
+        for item in evidence
+    )
 
 
 def assess_trait(

@@ -27,12 +27,13 @@ def evidence(
     reliability: str,
     *,
     evidence_id: str = "evidence",
+    trait: str = "uhd",
 ) -> TraitEvidence:
     return TraitEvidence(
         evidence_id=evidence_id,
         title="Example",
         year=2000,
-        trait="uhd",
+        trait=trait,
         direction=direction,
         basis=basis,
         reliability=reliability,
@@ -78,6 +79,36 @@ class TitleTraitConsensusTests(unittest.TestCase):
 
     def test_empty_evidence_is_unverified(self) -> None:
         self.assertEqual(resolve_claim([]), ("unknown", "unknown", "unverified"))
+
+    def test_hybrid_local_probe_does_not_confirm_the_claim(self) -> None:
+        self.assertEqual(
+            resolve_claim(
+                [
+                    evidence(
+                        "present",
+                        "local_probe",
+                        "confirmed",
+                        trait="hybrid",
+                    )
+                ]
+            ),
+            ("unknown", "unknown", "unverified"),
+        )
+
+    def test_hybrid_independent_confirmation_remains_actionable(self) -> None:
+        self.assertEqual(
+            resolve_claim(
+                [
+                    evidence(
+                        "present",
+                        "curated_research",
+                        "confirmed",
+                        trait="hybrid",
+                    )
+                ]
+            ),
+            ("present", "confirmed", "upgrade_available"),
+        )
 
 
 class TitleTraitStoreTests(unittest.TestCase):
@@ -192,7 +223,7 @@ class TitleTraitStoreTests(unittest.TestCase):
 
 
 class TitleTraitAggregationTests(unittest.TestCase):
-    def test_filename_traits_require_the_copy_to_clear_the_selected_quality_floor(self) -> None:
+    def test_open_matte_filename_claim_requires_the_copy_to_clear_the_selected_quality_floor(self) -> None:
         accepted = Path("Example (2000) 1080p Open Matte Hybrid.mkv")
         rejected = Path("Weak Example (2001) 1080p Open Matte Hybrid.mkv")
         rows, _ = build_title_trait_assessments(
@@ -229,12 +260,82 @@ class TitleTraitAggregationTests(unittest.TestCase):
         )
 
         by_key = {(row["title"], row["trait"]): row for row in rows}
-        for trait in ("open_matte", "hybrid"):
-            self.assertEqual(by_key[("Example", trait)]["local_present_count"], 1)
-            self.assertEqual(by_key[("Example", trait)]["opportunity"], "already_covered")
-            self.assertEqual(by_key[("Weak Example", trait)]["local_present_count"], 0)
-            self.assertEqual(by_key[("Weak Example", trait)]["local_rejected_count"], 1)
-            self.assertEqual(by_key[("Weak Example", trait)]["opportunity"], "quality_review")
+        self.assertEqual(by_key[("Example", "open_matte")]["local_present_count"], 1)
+        self.assertEqual(by_key[("Example", "open_matte")]["opportunity"], "already_covered")
+        self.assertEqual(by_key[("Weak Example", "open_matte")]["local_present_count"], 0)
+        self.assertEqual(by_key[("Weak Example", "open_matte")]["local_rejected_count"], 1)
+        self.assertEqual(by_key[("Weak Example", "open_matte")]["opportunity"], "quality_review")
+
+    def test_hybrid_filename_claim_requires_independent_title_corroboration(self) -> None:
+        path = Path("Example (2000) 1080p Hybrid.mkv")
+        facts = MediaFacts(
+            width=1920,
+            height=1080,
+            video_stream_count=1,
+            video_bitrate_kbps=5000,
+            audio_stream_count=1,
+            audio_codec="aac",
+            audio_channels=2,
+            audio_bitrate_kbps=320,
+        )
+
+        rows, _ = build_title_trait_assessments(
+            [(path, facts)],
+            evidence=[],
+            standards=DEFAULT_MOVIE_STANDARDS,
+        )
+        uncorroborated = next(row for row in rows if row["trait"] == "hybrid")
+        self.assertEqual(uncorroborated["capability"], "claim_unverified")
+        self.assertEqual(uncorroborated["status"], "unverified")
+        self.assertEqual(uncorroborated["opportunity"], "research_needed")
+        self.assertEqual(uncorroborated["local_present_count"], 0)
+
+        rows, _ = build_title_trait_assessments(
+            [(path, facts)],
+            evidence=[
+                evidence(
+                    "present",
+                    "curated_research",
+                    "confirmed",
+                    trait="hybrid",
+                )
+            ],
+            standards=DEFAULT_MOVIE_STANDARDS,
+        )
+        corroborated = next(row for row in rows if row["trait"] == "hybrid")
+        self.assertEqual(corroborated["capability"], "present")
+        self.assertEqual(corroborated["status"], "owned")
+        self.assertEqual(corroborated["opportunity"], "already_covered")
+
+    def test_scan_records_open_matte_but_not_hybrid_filename_observation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "library"
+            trait_store = Path(tmpdir) / "title-trait-evidence.json"
+            legacy_store = Path(tmpdir) / "missing-legacy.json"
+            movie = source / "Example (2000) Open Matte Hybrid.mkv"
+            source.mkdir()
+            movie.write_bytes(b"video")
+
+            report = scan_movie_profiles(
+                source,
+                probe_media=lambda _path: MediaFacts(
+                    width=1920,
+                    height=1080,
+                    video_stream_count=1,
+                    video_bitrate_kbps=5000,
+                    audio_stream_count=1,
+                    audio_codec="aac",
+                    audio_channels=2,
+                    audio_bitrate_kbps=320,
+                ),
+                trait_store_path=trait_store,
+                legacy_trait_store_path=legacy_store,
+            )
+
+            self.assertEqual(
+                {item["trait"] for item in report.trait_observations},
+                {"open_matte"},
+            )
 
     def test_same_scan_duplicate_records_evidence_and_marks_missing_copy_actionable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
