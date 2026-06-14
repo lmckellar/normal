@@ -18,6 +18,10 @@ from normal.web.server import build_handler
 from normal.web.state import MovieEnrichedCache
 
 
+WORKBENCH_HTML = (Path(__file__).resolve().parent.parent / "normal" / "web_assets" / "normalize_lab.html").read_text(encoding="utf-8")
+WORKBENCH_JS = (Path(__file__).resolve().parent.parent / "normal" / "web_assets" / "normalize_lab.js").read_text(encoding="utf-8")
+
+
 class TvWebTests(unittest.TestCase):
     @contextmanager
     def run_test_server(self, root: Path):
@@ -149,6 +153,24 @@ class TvWebTests(unittest.TestCase):
         self.assertIn("movie_files", payload)
         self.assertNotIn("tv_results", payload)
         self.assertNotIn("tv_files", payload)
+
+    def test_workbench_exposes_explicit_tv_normalize_lane(self) -> None:
+        self.assertIn('data-workflow="tv-normalize"', WORKBENCH_HTML)
+        self.assertIn("if (workflow === 'tv-normalize'", WORKBENCH_JS)
+        self.assertIn("isTvNormalizeMode() ? '/api/tv/normalize' : '/api/movies/normalize'", WORKBENCH_JS)
+        self.assertIn("isTvNormalizeMode() ? '/api/tv/apply' : '/api/movies/apply'", WORKBENCH_JS)
+        self.assertIn("state.normalizePayload?.tv_results", WORKBENCH_JS)
+        self.assertIn("state.normalizePayload?.movie_results", WORKBENCH_JS)
+
+    def test_workbench_tv_rows_render_identity_warnings_and_change_records(self) -> None:
+        self.assertIn("const TV_NORMALIZE_HEADERS = [", WORKBENCH_JS)
+        for field in ("series", "season", "episode_first", "episode_last", "absolute_episode", "numbering", "identity_confidence"):
+            self.assertIn(field, WORKBENCH_JS)
+        self.assertIn("function tvWarningsLabel(row)", WORKBENCH_JS)
+        self.assertIn("row.warning_messages", WORKBENCH_JS)
+        self.assertIn("row.reason_messages", WORKBENCH_JS)
+        self.assertIn("function tvChangesLabel(row)", WORKBENCH_JS)
+        self.assertIn("row.linked_changes", WORKBENCH_JS)
 
 
 if __name__ == "__main__":

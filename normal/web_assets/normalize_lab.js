@@ -15,6 +15,7 @@
 
   const WORKFLOW_LABELS = {
     normalize: 'Normalize Movie Library Naming',
+    'tv-normalize': 'Normalize TV Episode Naming',
     'weak-encodes': 'Review Low-Quality Encodes',
     'repair-defaults': 'Fix Audio and Subtitle Defaults',
     'canonical-lists': 'Compare Against Canonical Lists',
@@ -24,6 +25,7 @@
 
   const WORKFLOW_DESCRIPTIONS = {
     normalize: 'Review naming fixes and apply clean movie title and path changes across the library.',
+    'tv-normalize': 'Review filename-only TV episode naming fixes for an explicitly selected TV library.',
     'weak-encodes': 'Review low-quality encodes that are better deleted or replaced.',
     'repair-defaults': 'Fix audio and subtitle defaults to improve playback behaviour and keep repair cases visible.',
     'canonical-lists': 'Compare the library against canonical lists and inspect owned copy quality at a glance.',
@@ -116,6 +118,19 @@
     { key: 'projected_path', label: 'Projected Path', columnClass: 'lab-col-path', cellClass: 'lab-cell-path lab-cell-mono', priority: 'desktop', width: TABLE_WIDTHS.projectedPath },
     { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.status },
     { key: 'reason_bucket', label: 'Reason', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'medium', width: TABLE_WIDTHS.reason },
+  ];
+
+  const TV_NORMALIZE_HEADERS = [
+    { key: 'select', label: '', columnClass: 'lab-col-foundation lab-col-select', priority: 'essential', width: TABLE_WIDTHS.foundation },
+    { key: 'current_value', label: 'File Name', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor lab-cell-mono', priority: 'essential', width: 'auto' },
+    { key: 'series', label: 'Series', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: '15%' },
+    { key: 'season', label: 'Season', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'medium', width: '8ch' },
+    { key: 'episode', label: 'Episode', columnClass: 'lab-col-signal', cellClass: 'lab-cell-signal lab-cell-mono', priority: 'essential', width: '11ch' },
+    { key: 'numbering', label: 'Numbering', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'medium', width: '11ch' },
+    { key: 'projected_path', label: 'Projected Path', columnClass: 'lab-col-path', cellClass: 'lab-cell-path lab-cell-mono', priority: 'desktop', width: '22%' },
+    { key: 'confidence', label: 'Confidence', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.status },
+    { key: 'warnings', label: 'Warnings', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'medium', width: '16ch' },
+    { key: 'changes', label: 'Changes', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'desktop', width: '18ch' },
   ];
 
   const WEAK_HEADERS = [
@@ -253,6 +268,7 @@
     workflowDescription: document.getElementById('workflowDescription'),
     workflowMenu: document.getElementById('workflowMenu'),
     workflowNormalize: document.getElementById('workflowNormalize'),
+    workflowTvNormalize: document.getElementById('workflowTvNormalize'),
     workflowWeakEncodes: document.getElementById('workflowWeakEncodes'),
     workflowRepairDefaults: document.getElementById('workflowRepairDefaults'),
     workflowCanonicalLists: document.getElementById('workflowCanonicalLists'),
@@ -345,7 +361,7 @@
     const params = new URLSearchParams(window.location.search);
     const workflow = params.get('workflow');
     if (workflow === 'immersive-audio') return 'format-upgrades';
-    if (workflow === 'weak-encodes' || workflow === 'junk' || workflow === 'repair-defaults' || workflow === 'canonical-lists' || workflow === 'format-upgrades') return workflow;
+    if (workflow === 'tv-normalize' || workflow === 'weak-encodes' || workflow === 'junk' || workflow === 'repair-defaults' || workflow === 'canonical-lists' || workflow === 'format-upgrades') return workflow;
     return 'normalize';
   }
 
@@ -497,6 +513,10 @@
 
   function isWeakMode() {
     return state.workflow === 'weak-encodes';
+  }
+
+  function isTvNormalizeMode() {
+    return state.workflow === 'tv-normalize';
   }
 
   function isJunkMode() {
@@ -1800,13 +1820,14 @@
     el.workflowDescription.textContent = WORKFLOW_DESCRIPTIONS[state.workflow];
     el.workflowButton.dataset.active = surfaceOpen() ? 'false' : 'true';
     el.workflowNormalize.classList.toggle('is-active', state.workflow === 'normalize');
+    el.workflowTvNormalize.classList.toggle('is-active', isTvNormalizeMode());
     el.workflowWeakEncodes.classList.toggle('is-active', state.workflow === 'weak-encodes');
     el.workflowRepairDefaults.classList.toggle('is-active', state.workflow === 'repair-defaults');
     el.workflowCanonicalLists.classList.toggle('is-active', state.workflow === 'canonical-lists');
     el.workflowImmersive.classList.toggle('is-active', state.workflow === 'format-upgrades');
     el.workflowJunk.classList.toggle('is-active', state.workflow === 'junk');
     el.workflowButton.disabled = repairWorkflowBusy();
-    [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowImmersive, el.workflowJunk].forEach(button => {
+    [el.workflowNormalize, el.workflowTvNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowImmersive, el.workflowJunk].forEach(button => {
       button.disabled = repairWorkflowBusy();
     });
   }
@@ -1826,11 +1847,12 @@
 
   function renderRunButton() {
     const normalize = state.workflow === 'normalize';
+    const tvNormalize = isTvNormalizeMode();
     const repairDefaults = state.workflow === 'repair-defaults';
     const canonical = state.workflow === 'canonical-lists';
     const immersive = state.workflow === 'format-upgrades';
     const junk = state.workflow === 'junk';
-    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize Movie Library Naming' : (repairDefaults ? 'Run Fix Audio and Subtitle Defaults' : (canonical ? 'Run Compare Against Canonical Lists' : (immersive ? 'Run Review Format Upgrade Candidates' : (junk ? 'Run Remove Junk Files' : 'Run Review Low-Quality Encodes')))));
+    el.runButton.textContent = state.runInFlight ? 'Running' : (normalize ? 'Run Normalize Movie Library Naming' : (tvNormalize ? 'Run Normalize TV Episode Naming' : (repairDefaults ? 'Run Fix Audio and Subtitle Defaults' : (canonical ? 'Run Compare Against Canonical Lists' : (immersive ? 'Run Review Format Upgrade Candidates' : (junk ? 'Run Remove Junk Files' : 'Run Review Low-Quality Encodes'))))));
     el.runButton.disabled = state.runInFlight || repairWorkflowBusy();
     el.runButton.classList.toggle('is-running', state.runInFlight);
   }
@@ -3149,6 +3171,7 @@
     if (isCanonicalMode()) return CANONICAL_HEADERS;
     if (isImmersiveMode()) return IMMERSIVE_HEADERS;
     if (isJunkMode()) return JUNK_HEADERS;
+    if (isTvNormalizeMode()) return TV_NORMALIZE_HEADERS;
     return NORMALIZE_HEADERS;
   }
 
@@ -3193,11 +3216,42 @@
   }
 
   function normalizeRows() {
-    return (state.normalizePayload?.movie_results || []).map(row => ({
-      ...row,
-      reason_bucket: buildReasonBucket(row),
-      linked_changes: (row.linked_changes || []).length ? row.linked_changes : linkedChangesForRow(row),
-    }));
+    const results = isTvNormalizeMode()
+      ? (state.normalizePayload?.tv_results || [])
+      : (state.normalizePayload?.movie_results || []);
+    return results.map(row => {
+      const linkedChanges = (row.linked_changes || []).length ? row.linked_changes : linkedChangesForRow(row);
+      const normalizedRow = {
+        ...row,
+        reason_bucket: buildReasonBucket(row),
+        linked_changes: linkedChanges,
+      };
+      if (!isTvNormalizeMode()) return normalizedRow;
+      return {
+        ...normalizedRow,
+        episode: tvEpisodeLabel(normalizedRow),
+        warnings: tvWarningsLabel(normalizedRow),
+        changes: tvChangesLabel(normalizedRow),
+      };
+    });
+  }
+
+  function tvEpisodeLabel(row) {
+    if (row.numbering === 'absolute') return row.absolute_episode == null ? '—' : String(row.absolute_episode);
+    if (row.episode_first == null) return '—';
+    if (row.episode_last != null && row.episode_last !== row.episode_first) return `${row.episode_first}-${row.episode_last}`;
+    return String(row.episode_first);
+  }
+
+  function tvWarningsLabel(row) {
+    const messages = [...(row.warning_messages || []), ...(row.reason_messages || [])];
+    return [...new Set(messages.filter(Boolean))].join(' | ') || '—';
+  }
+
+  function tvChangesLabel(row) {
+    const changes = row.linked_changes || [];
+    if (!changes.length) return 'unchanged';
+    return changes.map(change => `${change.change_type}: ${change.current_value} -> ${change.proposed_value}`).join(' | ');
   }
 
   function isStrictWeakMovie(item) {
@@ -3822,6 +3876,7 @@
   }
 
   function renderNormalizeRow(row) {
+    if (isTvNormalizeMode()) return renderTvNormalizeRow(row);
     return `
       <tr class="${state.activeRowId === row.result_id ? 'active' : ''}" data-row-id="${escapeHtml(row.result_id)}">
         <td class="lab-cell-foundation lab-cell-select" data-priority="essential"><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
@@ -3829,6 +3884,25 @@
         <td class="lab-cell-path" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${projectedPathMarkup(row.projected_path)}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${normalizeConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
         <td class="lab-cell-status" data-priority="medium"><span class="lab-cell-pill">${escapeHtml(row.reason_bucket)}</span></td>
+      </tr>
+    `;
+  }
+
+  function renderTvNormalizeRow(row) {
+    const warnings = tvWarningsLabel(row);
+    const changes = tvChangesLabel(row);
+    return `
+      <tr class="${state.activeRowId === row.result_id ? 'active' : ''}" data-row-id="${escapeHtml(row.result_id)}">
+        <td class="lab-cell-foundation lab-cell-select" data-priority="essential"><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_value)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_value))}</span></td>
+        <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.series || '—')}"><span class="lab-cell-text">${escapeHtml(row.series || '—')}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="medium"><span class="lab-cell-text">${row.season == null ? '—' : escapeHtml(String(row.season))}</span></td>
+        <td class="lab-cell-signal lab-cell-mono" data-priority="essential"><span class="lab-cell-text">${escapeHtml(tvEpisodeLabel(row))}</span></td>
+        <td class="lab-cell-status" data-priority="medium"><span class="lab-cell-pill">${escapeHtml(row.numbering || 'unknown')}</span></td>
+        <td class="lab-cell-path" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${projectedPathMarkup(row.projected_path)}</span></td>
+        <td class="lab-cell-status" data-priority="essential" title="${escapeHtml(row.identity_confidence || row.confidence)}"><span class="lab-cell-pill ${normalizeConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
+        <td class="lab-cell-status" data-priority="medium" title="${escapeHtml(warnings)}"><span class="lab-cell-text">${escapeHtml(warnings)}</span></td>
+        <td class="lab-cell-status" data-priority="desktop" title="${escapeHtml(changes)}"><span class="lab-cell-text">${escapeHtml(changes)}</span></td>
       </tr>
     `;
   }
@@ -4330,7 +4404,9 @@
   function renderSelectedPreview() {
     const rows = selectedRows();
     if (!state.normalizePayload) {
-      el.previewPane.textContent = 'Run normalize to inspect projected output.';
+      el.previewPane.textContent = isTvNormalizeMode()
+        ? 'Run TV normalize to inspect projected output.'
+        : 'Run normalize to inspect projected output.';
       return;
     }
     if (!rows.length) {
@@ -5314,7 +5390,8 @@
   }
 
   async function runNormalize() {
-    const payload = await postJson('/api/movies/normalize', { source: el.sourcePath.value });
+    const endpoint = isTvNormalizeMode() ? '/api/tv/normalize' : '/api/movies/normalize';
+    const payload = await postJson(endpoint, { source: el.sourcePath.value });
     state.normalizePayload = payload;
     markAuditLedgerDirty();
     state.selected = new Set();
@@ -5757,7 +5834,8 @@
     state.applyInFlight = true;
     renderConfirmButton();
     try {
-      const response = await postFetch('/api/movies/apply', {
+      const endpoint = isTvNormalizeMode() ? '/api/tv/apply' : '/api/movies/apply';
+      const response = await postFetch(endpoint, {
         body: JSON.stringify({ source: el.sourcePath.value, change_ids: changeIds }),
       });
       const payload = await response.json();
@@ -5769,10 +5847,16 @@
       state.previewMode = 'selected';
       renderRows();
       if (!state.normalizePayload) {
+        const noRemainingHeading = isTvNormalizeMode()
+          ? 'No remaining TV normalize changes.'
+          : 'No remaining normalize changes.';
+        const rerunMessage = isTvNormalizeMode()
+          ? 'Run TV normalize again to refresh the library view.'
+          : 'Run normalize again to refresh the library view.';
         el.previewPane.innerHTML = `
           <div class="lab-preview-empty">
-            <strong>No remaining normalize changes.</strong>
-            <div>Run normalize again to refresh the library view.</div>
+            <strong>${noRemainingHeading}</strong>
+            <div>${rerunMessage}</div>
           </div>
         `;
         renderPanelVisibility();
@@ -5787,7 +5871,7 @@
 
   function setWorkflow(workflow) {
     dismissAuditSurface();
-    state.workflow = ['weak-encodes', 'repair-defaults', 'canonical-lists', 'format-upgrades', 'junk'].includes(workflow) ? workflow : 'normalize';
+    state.workflow = ['tv-normalize', 'weak-encodes', 'repair-defaults', 'canonical-lists', 'format-upgrades', 'junk'].includes(workflow) ? workflow : 'normalize';
     state.layoutMode = LAYOUT_MODES.default;
     state.surfaceMode = 'default';
     state.selected = new Set();
@@ -5858,7 +5942,7 @@
     el.workflowButton.setAttribute('aria-expanded', open ? 'true' : 'false');
   });
 
-  [el.workflowNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowImmersive, el.workflowJunk].forEach(button => {
+  [el.workflowNormalize, el.workflowTvNormalize, el.workflowWeakEncodes, el.workflowRepairDefaults, el.workflowCanonicalLists, el.workflowImmersive, el.workflowJunk].forEach(button => {
     button.addEventListener('click', async () => {
       if (repairWorkflowBusy()) return;
       el.workflowMenu.hidden = true;
