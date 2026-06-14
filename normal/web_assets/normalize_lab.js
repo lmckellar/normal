@@ -3828,6 +3828,16 @@
       el.confirmButton.textContent = 'Stop';
       return;
     }
+    if (isNormalizeLaneMode()) {
+      const pending = pendingQueueCount();
+      if (pending > 0) {
+        el.confirmButton.disabled = state.applyInFlight;
+        el.confirmButton.textContent = state.applyInFlight
+          ? `Resuming drain (${pending} pending)`
+          : `Resume drain (${pending} pending)`;
+        return;
+      }
+    }
     const operationCount = selectedProposedChanges().length;
     el.confirmButton.disabled = operationCount === 0 || state.applyInFlight;
     el.confirmButton.textContent = state.applyInFlight
@@ -5896,6 +5906,11 @@
     return `${safe.pending || 0} pending · ${safe.done || 0} done · ${safe.skipped || 0} skipped · ${safe.failed || 0} failed`;
   }
 
+  function pendingQueueCount() {
+    const status = state.queueStatus[normalizeQueueLane()];
+    return status?.counts?.pending || 0;
+  }
+
   function renderQueueStatus() {
     if (!el.queueStatusLine) return;
     if (!isNormalizeLaneMode()) {
@@ -5939,6 +5954,34 @@
     if (state.drainController) state.drainController.abort();
   }
 
+  async function drainStagedQueue(lane, source) {
+    const controller = new AbortController();
+    state.drainController = controller;
+    state.drainInFlight = true;
+    renderConfirmButton();
+    try {
+      const response = await postFetch('/api/normalize/queue/drain', {
+        body: JSON.stringify({ source, lane }),
+        signal: controller.signal,
+      });
+      const drained = await response.json();
+      if (!response.ok) throw mutationFetchError(response, drained, 'drain failed');
+      state.queueStatus[lane] = drained;
+    } catch (error) {
+      // Aborting the fetch disconnects the client, which the drain worker
+      // reads as a cooperative stop between items. Re-read the persisted
+      // queue so the surface reflects what committed before the stop.
+      if (error?.name === 'AbortError') {
+        await refreshQueueStatus(lane);
+      } else {
+        throw error;
+      }
+    } finally {
+      state.drainInFlight = false;
+      state.drainController = null;
+    }
+  }
+
   async function stageAndDrainSelected() {
     const changes = selectedProposedChanges();
     if (!changes.length) return;
@@ -5950,31 +5993,25 @@
     try {
       const staged = await postJson('/api/normalize/queue/stage', { source, lane, change_ids: changeIds });
       state.queueStatus[lane] = staged;
-      const controller = new AbortController();
-      state.drainController = controller;
-      state.drainInFlight = true;
+      await drainStagedQueue(lane, source);
+      markAuditLedgerDirty();
+      await runNormalize();
+    } finally {
+      state.applyInFlight = false;
+      state.drainInFlight = false;
+      state.drainController = null;
       renderConfirmButton();
-      try {
-        const response = await postFetch('/api/normalize/queue/drain', {
-          body: JSON.stringify({ source, lane }),
-          signal: controller.signal,
-        });
-        const drained = await response.json();
-        if (!response.ok) throw mutationFetchError(response, drained, 'drain failed');
-        state.queueStatus[lane] = drained;
-      } catch (error) {
-        // Aborting the fetch disconnects the client, which the drain worker
-        // reads as a cooperative stop between items. Re-read the persisted
-        // queue so the surface reflects what committed before the stop.
-        if (error?.name === 'AbortError') {
-          await refreshQueueStatus(lane);
-        } else {
-          throw error;
-        }
-      } finally {
-        state.drainInFlight = false;
-        state.drainController = null;
-      }
+    }
+  }
+
+  async function resumeDrainQueue() {
+    const lane = normalizeQueueLane();
+    const source = el.sourcePath.value.trim();
+    if (!source) return;
+    state.applyInFlight = true;
+    renderConfirmButton();
+    try {
+      await drainStagedQueue(lane, source);
       markAuditLedgerDirty();
       await runNormalize();
     } finally {
@@ -6257,6 +6294,12 @@
     if (isNormalizeLaneMode()) {
       if (state.drainInFlight) {
         stopDrain();
+        return;
+      }
+      if (pendingQueueCount() > 0) {
+        resumeDrainQueue().catch(error => {
+          el.previewPane.textContent = error.message;
+        });
         return;
       }
       stageAndDrainSelected().catch(error => {
