@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
+from pathlib import PureWindowsPath
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
@@ -17,6 +18,7 @@ from normal.web.scan_guard import (
     format_storage_size,
     guarded_heavy_scan,
     looks_like_drive_directory,
+    looks_like_unc_share_root,
     resolve_source_path,
     risky_mount_flags,
     source_mount_details,
@@ -94,9 +96,30 @@ class WebScanGuardTests(unittest.TestCase):
         self.assertTrue(payload["warn"])
         self.assertEqual(payload["reason"], "drive_directory")
         self.assertEqual(payload["reasons"], ["drive_directory", "mount:fuseblk"])
-        self.assertIn("drive directory", payload["message"])
-        self.assertIn("higher risk", payload["message"])
+        self.assertEqual(
+            payload["message"],
+            "This source looks like a filesystem boundary or translated/network/removable filesystem. "
+            "Heavy recursive scans may be slow, incomplete, or surprising. "
+            "Choose a specific movie-library folder below this root, or restart with an explicit override.",
+        )
         self.assertEqual(payload["total_size_label"], "4.5 TB")
+
+    def test_build_source_scan_warning_uses_unc_share_root_language(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            usage = type("Usage", (), {"total": 4_500_000_000_000})()
+
+            with patch("normal.web.scan_guard.shutil.disk_usage", return_value=usage):
+                with patch("normal.web.scan_guard.looks_like_drive_directory", return_value=True):
+                    with patch("normal.web.scan_guard.looks_like_unc_share_root", return_value=True):
+                        payload = build_source_scan_warning(source)
+
+        self.assertEqual(
+            payload["message"],
+            "You selected a network share root. "
+            "Normal will not recursively scan or mutate a whole share by default. "
+            "Choose a specific library folder inside the share.",
+        )
 
     def test_guarded_heavy_scan_rejects_same_source_overlap(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -136,6 +159,11 @@ class WebScanGuardTests(unittest.TestCase):
         self.assertTrue(looks_like_drive_directory(Path("/media/lachlan/Drive")))
         self.assertTrue(looks_like_drive_directory(Path("/Volumes/Media")))
         self.assertFalse(looks_like_drive_directory(Path("/mnt/media_storage/Movies")))
+
+    def test_looks_like_unc_share_root_only_matches_share_root(self) -> None:
+        self.assertTrue(looks_like_unc_share_root(PureWindowsPath(r"\\server\share")))
+        self.assertFalse(looks_like_unc_share_root(PureWindowsPath(r"\\server\share\Movies")))
+        self.assertFalse(looks_like_unc_share_root(PureWindowsPath(r"C:\\")))
 
     def test_format_storage_size_uses_expected_units(self) -> None:
         self.assertEqual(format_storage_size(4_500_000_000_000), "4.5 TB")

@@ -51,6 +51,18 @@ RISKY_FSTYPES = frozenset(
     }
 )
 
+FILESYSTEM_BOUNDARY_WARNING = (
+    "This source looks like a filesystem boundary or translated/network/removable filesystem. "
+    "Heavy recursive scans may be slow, incomplete, or surprising. "
+    "Choose a specific movie-library folder below this root, or restart with an explicit override."
+)
+
+UNC_SHARE_ROOT_WARNING = (
+    "You selected a network share root. "
+    "Normal will not recursively scan or mutate a whole share by default. "
+    "Choose a specific library folder inside the share."
+)
+
 
 def _findmnt_mount_details(source: Path) -> SourceMountDetails | None:
     try:
@@ -139,6 +151,11 @@ def looks_like_drive_directory(path: Path) -> bool:
     return False
 
 
+def looks_like_unc_share_root(path: Path) -> bool:
+    anchor = path.anchor
+    return anchor.startswith("\\\\") and path == path.__class__(anchor)
+
+
 def format_storage_size(size_bytes: int) -> str:
     if size_bytes >= 1_000_000_000_000:
         return f"{size_bytes / 1_000_000_000_000:.1f} TB"
@@ -155,18 +172,18 @@ def build_source_scan_warning(source: Path) -> dict[str, Any]:
         reasons.append("drive_directory")
     reasons.extend(risky_mount_flags(resolved))
     mount_details = source_mount_details(resolved)
-    message_parts: list[str] = []
-    if "drive_directory" in reasons:
-        message_parts.append("It looks like you are scanning a drive directory.")
-    if any(reason.startswith("mount:") for reason in reasons):
-        fstype = mount_details.fstype.upper() if mount_details.fstype else "FUSE/NTFS"
-        message_parts.append(f"This source is on a {fstype} mount, which is higher risk for heavy recursive scans on Ubuntu GNOME.")
+    if looks_like_unc_share_root(resolved):
+        message = UNC_SHARE_ROOT_WARNING
+    elif reasons:
+        message = FILESYSTEM_BOUNDARY_WARNING
+    else:
+        message = ""
     return {
         "source": str(resolved),
         "warn": bool(reasons),
         "reason": reasons[0] if reasons else None,
         "reasons": reasons,
-        "message": " ".join(message_parts).strip(),
+        "message": message,
         "mount_fstype": mount_details.fstype,
         "mount_target": mount_details.target,
         "total_size_bytes": usage.total,
