@@ -564,24 +564,47 @@ thead th {
   text-align: left;
 }
 
-.lab-format-feature-row.is-group-start > td {
+.lab-format-parent-row > td {
   border-top-color: color-mix(in srgb, var(--line) 65%, var(--ink));
+  background: var(--panel);
 }
 
-.lab-format-title {
-  vertical-align: top;
+.lab-format-parent-row .lab-cell-text {
+  color: var(--ink);
+  font-weight: 550;
 }
 
-.lab-format-year,
+.lab-format-feature-row.is-child-row > td {
+  background: color-mix(in srgb, var(--paper) 97%, var(--accent));
+}
+
+.lab-format-feature-row.is-child-row:hover > td {
+  background: color-mix(in srgb, var(--paper) 94%, var(--accent));
+}
+
+.lab-format-child-spacer {
+  border-bottom-color: color-mix(in srgb, var(--line) 55%, transparent);
+}
+
+.lab-format-feature-row.is-child-row .lab-format-feature {
+  position: relative;
+  padding-left: 22px;
+}
+
+.lab-format-feature-row.is-child-row .lab-format-feature::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 7px;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
 .lab-format-copy-detail {
-  display: block;
-  margin-top: 4px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 500;
-}
-
-.lab-format-copy-detail {
   line-height: 1.35;
 }
 

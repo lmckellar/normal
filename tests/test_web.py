@@ -841,11 +841,15 @@ class WebTests(unittest.TestCase):
         widths_js = self.workbench_js_source()
         self.assertIn("category: '17ch'", widths_js)
         self.assertIn("verdict: '20ch'", widths_js)
+        self.assertIn("key: 'year', label: 'Year'", widths_js)
+        self.assertIn("width: TABLE_WIDTHS.year", widths_js)
         self.assertIn("key: 'trait', label: 'Upgrade Feature'", widths_js)
         self.assertIn("width: TABLE_WIDTHS.category", widths_js)
         self.assertIn("key: 'release_status', label: 'Known Release'", widths_js)
         self.assertIn("width: TABLE_WIDTHS.verdict", widths_js)
-        self.assertIn("key: 'opportunity', label: 'Your Copies'", widths_js)
+        self.assertIn("key: 'opportunity', label: 'Corpus Verdict'", widths_js)
+        self.assertIn("key: 'coverage', label: 'Your Copies'", widths_js)
+        self.assertIn("if (key === 'coverage') return localCopySummary(row).toLowerCase();", widths_js)
         self.assertIn("function localCopySummary(row)", widths_js)
         self.assertIn("function formatOpportunityDisplayLabel(opportunity)", widths_js)
         self.assertNotIn("immersiveAudio:", widths_js)
@@ -870,8 +874,13 @@ class WebTests(unittest.TestCase):
     def test_immersive_rows_keep_normalization_tooltips_on_visible_text(self) -> None:
         widths_js = self.workbench_js_source()
         self.assertIn('const titleTooltip = needsNormalization ? \'File name needs normalization!\'', widths_js)
+        self.assertIn('const yearTooltip = needsNormalization ? \'Year requires file normalization to display!\'', widths_js)
+        self.assertIn('<span class="lab-cell-text" title="${escapeHtml(yearTooltip)}">', widths_js)
         self.assertIn('<span class="lab-cell-text" title="${escapeHtml(titleTooltip)}">', widths_js)
-        self.assertIn('class="lab-format-year"', widths_js)
+        self.assertIn('class="lab-format-parent-row"', widths_js)
+        self.assertIn('class="lab-format-feature-row is-child-row"', widths_js)
+        self.assertIn('class="lab-cell-foundation lab-cell-signal lab-cell-mono lab-format-child-spacer"', widths_js)
+        self.assertNotIn('rowspan="${rowspan}"', widths_js)
 
     def test_combined_repair_action_uses_single_backend_remux_request(self) -> None:
         action_section = NORMALIZE_LAB_JS.split("async function runSelectedRepairAction(action) {", 1)[1].split("async function confirmSelected()", 1)[0]

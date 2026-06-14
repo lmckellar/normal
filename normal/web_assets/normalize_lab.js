@@ -152,10 +152,12 @@
   ];
 
   const IMMERSIVE_HEADERS = [
+    { key: 'year', label: 'Year', columnClass: 'lab-col-foundation lab-col-signal', cellClass: 'lab-cell-foundation lab-cell-signal lab-cell-mono', priority: 'essential', width: TABLE_WIDTHS.year },
     { key: 'title', label: 'Title', columnClass: 'lab-col-anchor', cellClass: 'lab-cell-anchor', priority: 'essential', width: 'auto' },
     { key: 'trait', label: 'Upgrade Feature', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.category },
     { key: 'release_status', label: 'Known Release', tooltip: 'What the evidence corpus knows about releases carrying this feature.', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.verdict },
-    { key: 'opportunity', label: 'Your Copies', tooltip: 'How many local copies carry the feature and what that means for this title.', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: '27ch' },
+    { key: 'opportunity', label: 'Corpus Verdict', tooltip: 'The resulting upgrade verdict for this title and feature.', columnClass: 'lab-col-status', cellClass: 'lab-cell-status', priority: 'essential', width: TABLE_WIDTHS.verdict },
+    { key: 'coverage', label: 'Your Copies', tooltip: 'How many local copies carry this feature.', columnClass: 'lab-col-audio-summary', cellClass: 'lab-cell-supporting', priority: 'essential', width: '27ch' },
   ];
 
   const state = {
@@ -3502,6 +3504,7 @@
       const read = row => {
         if (key === 'release_status') return verdictRank[row.release_status] ?? 5;
         if (key === 'opportunity') return opportunityRank[row.opportunity] ?? 7;
+        if (key === 'coverage') return localCopySummary(row).toLowerCase();
         return String(row[key] || '').toLowerCase();
       };
       if (key !== 'title') {
@@ -3864,25 +3867,31 @@
     const copiesTitle = paths.length ? paths.join(' | ') : 'No local copy details.';
     const needsNormalization = !row.year;
     const titleTooltip = needsNormalization ? 'File name needs normalization!' : (row.title || '—');
+    const yearTooltip = needsNormalization ? 'Year requires file normalization to display!' : String(row.year || '—');
     const groupKey = `${row.title || ''}\u0000${row.year || ''}`;
     const previous = rows[index - 1];
     const firstInGroup = !previous || `${previous.title || ''}\u0000${previous.year || ''}` !== groupKey;
-    const groupSize = firstInGroup
-      ? rows.slice(index).findIndex(item => `${item.title || ''}\u0000${item.year || ''}` !== groupKey)
-      : 0;
-    const rowspan = groupSize < 0 ? rows.length - index : groupSize;
-    const titleCell = firstInGroup
-      ? `<td class="lab-cell-anchor lab-format-title" data-priority="essential" rowspan="${rowspan}" title="${escapeHtml(titleTooltip)}"><span class="lab-cell-text" title="${escapeHtml(titleTooltip)}">${escapeHtml(row.title || '—')}</span><span class="lab-format-year">${escapeHtml(String(row.year || '—'))}</span></td>`
+    const parentRow = firstInGroup
+      ? `
+        <tr class="lab-format-parent-row">
+          <td class="lab-cell-foundation lab-cell-signal lab-cell-mono" data-priority="essential"><span class="lab-cell-text" title="${escapeHtml(yearTooltip)}">${escapeHtml(String(row.year || '—'))}</span></td>
+          <td class="lab-cell-anchor" data-priority="essential"><span class="lab-cell-text" title="${escapeHtml(titleTooltip)}">${escapeHtml(row.title || '—')}</span></td>
+          <td class="lab-cell-status"></td>
+          <td class="lab-cell-status"></td>
+          <td class="lab-cell-status"></td>
+          <td class="lab-cell-supporting"></td>
+        </tr>
+      `
       : '';
     return `
-      <tr class="lab-format-feature-row ${firstInGroup ? 'is-group-start' : ''}" data-row-id="${escapeHtml(row.row_id)}">
-        ${titleCell}
-        <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill">${escapeHtml(traitDisplayLabel(row.trait))}</span></td>
+      ${parentRow}
+      <tr class="lab-format-feature-row is-child-row" data-row-id="${escapeHtml(row.row_id)}">
+        <td class="lab-cell-foundation lab-cell-signal lab-cell-mono lab-format-child-spacer" data-priority="essential"></td>
+        <td class="lab-cell-anchor lab-format-child-spacer" data-priority="essential"></td>
+        <td class="lab-cell-status lab-format-feature" data-priority="essential"><span class="lab-cell-pill">${escapeHtml(traitDisplayLabel(row.trait))}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${immersiveVerdictPillClass(row.release_status)}">${escapeHtml(immersiveVerdictDisplayLabel(row.release_status))}</span></td>
-        <td class="lab-cell-supporting" data-priority="essential" title="${escapeHtml(copiesTitle)}">
-          <span class="lab-cell-pill ${formatOpportunityPillClass(row.opportunity)}">${escapeHtml(formatOpportunityDisplayLabel(row.opportunity))}</span>
-          <span class="lab-format-copy-detail">${escapeHtml(localCopySummary(row))}</span>
-        </td>
+        <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${formatOpportunityPillClass(row.opportunity)}">${escapeHtml(formatOpportunityDisplayLabel(row.opportunity))}</span></td>
+        <td class="lab-cell-supporting lab-format-copy-detail" data-priority="essential" title="${escapeHtml(copiesTitle)}"><span class="lab-cell-text">${escapeHtml(localCopySummary(row))}</span></td>
       </tr>
     `;
   }
