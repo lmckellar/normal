@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any
 
 _SECRETS_FILENAME = "secrets.env"
 _MANAGED_KEYS = ("OMDB_KEY", "TMDB_KEY")
+_FORBIDDEN_VALUE_CHARS = ("\n", "\r", "\x00")
+
+
+def _ensure_storable(value: str) -> None:
+    if any(char in value for char in _FORBIDDEN_VALUE_CHARS):
+        raise ValueError("key value may not contain newline or NUL characters")
 
 
 def _data_dir() -> Path:
@@ -70,6 +77,10 @@ class CredentialStore:
     def set_keys(self, updates: dict[str, str | None]) -> dict[str, Any]:
         with self._lock:
             for env_key in _MANAGED_KEYS:
+                value = updates.get(env_key)
+                if isinstance(value, str) and value.strip():
+                    _ensure_storable(value.strip())
+            for env_key in _MANAGED_KEYS:
                 if env_key not in updates:
                     continue
                 value = updates[env_key]
@@ -90,9 +101,22 @@ class CredentialStore:
 
     def _persist_locked(self) -> None:
         path = secrets_file_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
+        parent = path.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "posix":
+            os.chmod(parent, 0o700)
         lines = [f"{env_key}={self._keys[env_key]}" for env_key in _MANAGED_KEYS if self._keys.get(env_key)]
         content = ("\n".join(lines) + "\n") if lines else ""
-        fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(content)
+        fd, tmp_name = tempfile.mkstemp(dir=str(parent), prefix=f".{_SECRETS_FILENAME}.", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(content)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_name, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise

@@ -208,6 +208,23 @@ class WebTests(unittest.TestCase):
                     self.assertFalse(ctx.responses[-1]["keys"]["omdb"]["present"])
                     self.assertEqual(secrets.read_text(), "")
 
+    def test_set_keys_rejects_newline_and_nul_values(self) -> None:
+        from normal.web import credentials as credentials_module
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.dict("os.environ", {"XDG_DATA_HOME": tmp}):
+                store = credentials_module.CredentialStore()
+                store.set_keys({"OMDB_KEY": "good-key"})
+                secrets = credentials_module.secrets_file_path()
+                self.assertEqual(secrets.read_text(), "OMDB_KEY=good-key\n")
+
+                for bad in ("inject\nMORE=1", "with\x00nul", "carriage\rreturn"):
+                    with self.assertRaises(ValueError):
+                        store.set_keys({"TMDB_KEY": bad})
+
+                self.assertIsNone(store.tmdb_key())
+                self.assertEqual(secrets.read_text(), "OMDB_KEY=good-key\n")
+
     def test_settings_preferences_persist_fun_mode_globally(self) -> None:
         from normal.web import routes_settings
 
