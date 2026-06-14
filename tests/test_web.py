@@ -30,6 +30,7 @@ from normal.web.security import (
     check_peer,
     check_post,
     parse_allowed_hosts,
+    parse_allowed_origins,
     parse_allowed_peers,
 )
 
@@ -116,7 +117,8 @@ class WebTests(unittest.TestCase):
             source = Path(tmpdir) / "movies"
             source.mkdir()
             with self.run_test_server() as base_url:
-                with urllib.request.urlopen(f"{base_url}/api/audit/stream?source={quote(str(source))}", timeout=2) as response:
+                url = f"{base_url}/api/audit/stream?source={quote(str(source))}&token={quote(MUTATION_TOKEN)}"
+                with urllib.request.urlopen(url, timeout=2) as response:
                     self.assertEqual(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
                     self.assertEqual(response.headers.get("Cache-Control"), "no-store")
                     data_line = response.readline().decode("utf-8").strip()
@@ -382,7 +384,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("Drive activity: idle", FRONTEND)
         self.assertIn("const ACTIVITY_POLL_MS = 2000;", FRONTEND)
         self.assertIn("function activityPayloadHasRemux(payload = state.activityPayload)", FRONTEND)
-        self.assertIn("await fetch(`/api/activity?source=${encodeURIComponent(source)}`);", FRONTEND)
+        self.assertIn("await tokenFetch(`/api/activity?source=${encodeURIComponent(source)}`);", FRONTEND)
         self.assertIn("scheduleActivityPoll();", FRONTEND)
 
     def test_movie_junk_page_is_wired(self) -> None:
@@ -692,7 +694,7 @@ class WebTests(unittest.TestCase):
         self.assertIn("id=\"auditToggle\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"auditPanel\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("/api/audit/read", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("/api/audit/stream?source=${encodeURIComponent(source)}", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("new EventSource(`/api/audit/stream?${params.toString()}`)", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function refreshAuditPayload(", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function markAuditLedgerDirty()", NORMALIZE_LAB_FRONTEND)
         self.assertIn("function ensureAuditEventSource()", NORMALIZE_LAB_FRONTEND)
@@ -1313,6 +1315,7 @@ class WebPostSecurityTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with self.run_test_server(
                 allowed_hosts=parse_allowed_hosts(["evil.example.com"]),
+                allowed_origins=parse_allowed_origins(["https://normal.example.test"]),
             ) as base_url:
                 port = urllib.parse.urlsplit(base_url).port
                 with self.post(
@@ -1321,7 +1324,7 @@ class WebPostSecurityTests(unittest.TestCase):
                     headers={
                         **headers,
                         "Host": f"evil.example.com:{port}",
-                        "Origin": f"http://evil.example.com:{port}",
+                        "Origin": "https://normal.example.test",
                     },
                     data=self.scan_warning_body(tmpdir),
                 ) as response:
@@ -1445,6 +1448,42 @@ class WebPeerGateTests(unittest.TestCase):
         )
 
 
+class WebGetSecurityTests(unittest.TestCase):
+    @contextmanager
+    def run_test_server(self):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler())
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_address[1]}"
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def test_sensitive_get_routes_require_token(self) -> None:
+        for path in ("/api/activity", "/api/library-roots", "/api/audit/stream"):
+            with self.subTest(path=path), self.run_test_server() as base_url:
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    urllib.request.urlopen(f"{base_url}{path}")
+                self.assertEqual(ctx.exception.code, HTTPStatus.FORBIDDEN)
+
+    def test_json_get_accepts_header_token(self) -> None:
+        with self.run_test_server() as base_url:
+            request = urllib.request.Request(
+                f"{base_url}/api/library-roots",
+                headers={"X-Normal-Token": MUTATION_TOKEN},
+            )
+            with urllib.request.urlopen(request) as response:
+                self.assertEqual(response.status, HTTPStatus.OK)
+
+    def test_static_and_index_remain_unauthenticated(self) -> None:
+        with self.run_test_server() as base_url:
+            for path in ("/", "/assets/workbench.js"):
+                with self.subTest(path=path), urllib.request.urlopen(f"{base_url}{path}") as response:
+                    self.assertEqual(response.status, HTTPStatus.OK)
+
+
 class WebPostGateTests(unittest.TestCase):
     def handler(self, **headers):
         defaults = {
@@ -1476,6 +1515,28 @@ class WebPostGateTests(unittest.TestCase):
                 self.handler(Origin="https://127.0.0.1:8765"),
                 bound_port=8765,
                 allowed_hosts=frozenset(),
+            )
+
+    def test_explicit_https_origin_is_independent_of_proxy_host(self) -> None:
+        check_post(
+            self.handler(
+                Host="normal.internal",
+                Origin="https://normal.example.test",
+            ),
+            bound_port=8765,
+            allowed_hosts=parse_allowed_hosts(["normal.internal"]),
+            allowed_origins=parse_allowed_origins(["https://normal.example.test"]),
+        )
+
+    def test_allowed_host_does_not_implicitly_allow_origin(self) -> None:
+        with self.assertRaises(PostRejected):
+            check_post(
+                self.handler(
+                    Host="normal.example.test",
+                    Origin="https://normal.example.test",
+                ),
+                bound_port=8765,
+                allowed_hosts=parse_allowed_hosts(["normal.example.test"]),
             )
 
     def test_host_without_port_is_rejected(self) -> None:
@@ -1715,7 +1776,11 @@ class WebApprovedRootTests(unittest.TestCase):
 
             with patch("normal.web.routes_core.library_roots_path", return_value=storage):
                 with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
-                    with urllib.request.urlopen(f"{base_url}/api/library-roots") as response:
+                    request = urllib.request.Request(
+                        f"{base_url}/api/library-roots",
+                        headers={"X-Normal-Token": MUTATION_TOKEN},
+                    )
+                    with urllib.request.urlopen(request) as response:
                         payload = json.loads(response.read().decode("utf-8"))
 
             self.assertEqual(payload["movies"], "")
@@ -1727,7 +1792,8 @@ class WebApprovedRootTests(unittest.TestCase):
             child = root / "Movies"
             child.mkdir(parents=True)
             with self.run_test_server(approved_roots=ApprovedRoots.from_paths([root])) as base_url:
-                with urllib.request.urlopen(f"{base_url}/api/audit/stream?source={quote(str(child))}", timeout=2) as response:
+                url = f"{base_url}/api/audit/stream?source={quote(str(child))}&token={quote(MUTATION_TOKEN)}"
+                with urllib.request.urlopen(url, timeout=2) as response:
                     self.assertEqual(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
 
     def test_run_web_seeds_approved_roots_from_source_and_allow_root(self) -> None:
@@ -1745,29 +1811,16 @@ class WebApprovedRootTests(unittest.TestCase):
             self.assertIn(source.resolve(), roots)
             self.assertIn(extra.resolve(), roots)
 
-    def test_run_web_requires_explicit_peer_and_host_for_remote_access(self) -> None:
+    def test_run_web_requires_unsafe_remote_and_all_allowlists(self) -> None:
         from normal import commands
 
-        with self.assertRaisesRegex(ValueError, "provided together"):
+        with self.assertRaisesRegex(ValueError, "require --unsafe-remote"):
             commands.run_web(
                 host="0.0.0.0",
                 port=0,
                 allow_peers=["192.168.1.0/24"],
             )
-        with patch("normal.commands.serve_web_ui") as serve:
-            commands.run_web(
-                host="0.0.0.0",
-                port=0,
-                allow_peers=["192.168.1.0/24"],
-                allow_hosts=["normalbox.local"],
-            )
-        self.assertEqual(serve.call_args.kwargs["allowed_hosts"], frozenset({"normalbox.local"}))
-        self.assertNotIn("unsafe_remote", serve.call_args.kwargs)
-
-    def test_run_web_rejects_legacy_unsafe_remote_switch(self) -> None:
-        from normal import commands
-
-        with self.assertRaisesRegex(ValueError, "no longer supported"):
+        with self.assertRaisesRegex(ValueError, "requires --allow-peer"):
             commands.run_web(
                 host="0.0.0.0",
                 port=0,
@@ -1775,6 +1828,20 @@ class WebApprovedRootTests(unittest.TestCase):
                 allow_peers=["192.168.1.0/24"],
                 allow_hosts=["normalbox.local"],
             )
+        with patch("normal.commands.serve_web_ui") as serve:
+            commands.run_web(
+                host="0.0.0.0",
+                port=0,
+                unsafe_remote=True,
+                allow_peers=["192.168.1.0/24"],
+                allow_hosts=["normalbox.local"],
+                allow_origins=["https://normal.example.test"],
+            )
+        self.assertEqual(serve.call_args.kwargs["allowed_hosts"], frozenset({"normalbox.local"}))
+        self.assertEqual(
+            serve.call_args.kwargs["allowed_origins"],
+            parse_allowed_origins(["https://normal.example.test"]),
+        )
 
 
 if __name__ == "__main__":

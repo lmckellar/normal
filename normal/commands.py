@@ -12,7 +12,7 @@ from normal.movie_profile import build_histogram_payload, scan_movie_profiles
 from normal.movie_scan import MovieScanProgress, scan_movie_library
 from normal.output import write_movie_register_xlsx, write_movie_review_csv
 from normal.source_policy import Operation, resolve_source_path, validate_source_for_operation
-from normal.web import ApprovedRoots, parse_allowed_hosts, parse_allowed_peers, serve_web_ui
+from normal.web import ApprovedRoots, parse_allowed_hosts, parse_allowed_origins, parse_allowed_peers, serve_web_ui
 
 
 def ensure_source_directory(source: Path) -> Path:
@@ -151,15 +151,16 @@ def run_web(
     allow_roots: list[Path] | None = None,
     allow_peers: list[str] | None = None,
     allow_hosts: list[str] | None = None,
+    allow_origins: list[str] | None = None,
 ) -> int:
-    if unsafe_remote:
+    remote_allowlists = bool(allow_peers or allow_hosts or allow_origins)
+    if remote_allowlists and not unsafe_remote:
         raise ValueError(
-            "--unsafe-remote is no longer supported; use both --allow-peer and "
-            "--allow-host to explicitly enable remote access."
+            "--allow-peer, --allow-host, and --allow-origin require --unsafe-remote."
         )
-    if bool(allow_peers or []) != bool(allow_hosts or []):
+    if unsafe_remote and not all((allow_peers, allow_hosts, allow_origins)):
         raise ValueError(
-            "--allow-peer and --allow-host must be provided together for remote access."
+            "--unsafe-remote requires --allow-peer, --allow-host, and --allow-origin."
         )
     default_source = None
     if source is not None:
@@ -172,7 +173,18 @@ def run_web(
     approved_roots = ApprovedRoots.from_paths(seed_roots)
     allowed_peers = parse_allowed_peers(allow_peers or [])
     allowed_hosts = parse_allowed_hosts(allow_hosts or [])
-    serve_web_ui(host=host, port=port, default_source=default_source, omdb_key=omdb_key, tmdb_key=tmdb_key, approved_roots=approved_roots, allowed_peers=allowed_peers, allowed_hosts=allowed_hosts)
+    allowed_origins = parse_allowed_origins(allow_origins or [])
+    serve_web_ui(
+        host=host,
+        port=port,
+        default_source=default_source,
+        omdb_key=omdb_key,
+        tmdb_key=tmdb_key,
+        approved_roots=approved_roots,
+        allowed_peers=allowed_peers,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
     return 0
 
 

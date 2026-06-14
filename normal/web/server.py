@@ -127,6 +127,7 @@ def serve_web_ui(
     approved_roots: ApprovedRoots | None = None,
     allowed_peers: tuple = (),
     allowed_hosts: frozenset[str] = frozenset(),
+    allowed_origins: frozenset[security.RequestOrigin] = frozenset(),
 ) -> None:
     state.CREDENTIAL_STORE.seed_from_boot(omdb_key=omdb_key, tmdb_key=tmdb_key)
     handler = build_handler(
@@ -134,6 +135,7 @@ def serve_web_ui(
         approved_roots=approved_roots,
         allowed_peers=allowed_peers,
         allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
     )
     server = ThreadingHTTPServer((host, port), handler)
     source_hint = f" default source {default_source}" if default_source else ""
@@ -217,6 +219,7 @@ def build_handler(
     approved_roots: ApprovedRoots | None = None,
     allowed_peers: tuple = (),
     allowed_hosts: frozenset[str] = frozenset(),
+    allowed_origins: frozenset[security.RequestOrigin] = frozenset(),
 ):
     get_routes = build_get_routes()
     post_routes = build_post_routes()
@@ -247,7 +250,11 @@ def build_handler(
                 ctx.respond_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
                 return
             try:
+                if route.startswith("/api/"):
+                    security.check_token(self, allow_query=route == "/api/audit/stream")
                 handler(ctx)
+            except PostRejected as exc:
+                ctx.respond_json({"error": exc.message}, status=exc.status)
             except RequestConflictError as exc:
                 ctx.respond_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             except Exception as exc:
@@ -266,6 +273,7 @@ def build_handler(
                     self,
                     bound_port=self.server.server_address[1],
                     allowed_hosts=allowed_hosts,
+                    allowed_origins=allowed_origins,
                 )
                 payload = ctx.read_json_body(content_length)
                 handler(ctx, payload)

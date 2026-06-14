@@ -1029,6 +1029,12 @@
     return fetch(url, { ...options, method: 'POST', headers });
   }
 
+  function tokenFetch(url, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    if (window.NORMAL_TOKEN) headers['X-Normal-Token'] = window.NORMAL_TOKEN;
+    return fetch(url, { ...options, headers });
+  }
+
   async function postJson(url, body) {
     const response = await postFetch(url, {
       body: JSON.stringify(body),
@@ -1093,7 +1099,8 @@
     }
     if (state.auditEventSource && state.auditEventSourceKey === source) return;
     closeAuditEventSource();
-    const stream = new EventSource(`/api/audit/stream?source=${encodeURIComponent(source)}`);
+    const params = new URLSearchParams({ source, token: window.NORMAL_TOKEN || '' });
+    const stream = new EventSource(`/api/audit/stream?${params.toString()}`);
     state.auditEventSource = stream;
     state.auditEventSourceKey = source;
     stream.onmessage = event => {
@@ -5812,7 +5819,7 @@
     if (state.activityRefreshInFlight) return;
     state.activityRefreshInFlight = true;
     try {
-      const response = await fetch(`/api/activity?source=${encodeURIComponent(source)}`);
+      const response = await tokenFetch(`/api/activity?source=${encodeURIComponent(source)}`);
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || 'activity read failed');
       state.activityPayload = payload;

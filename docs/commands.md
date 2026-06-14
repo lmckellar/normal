@@ -194,6 +194,17 @@ Columns: Title, Year, Resolution, Video, Audio, Container, Size. Sorted A–Z by
 normal web --host 127.0.0.1 --port 8765 --source /path/to/library
 ```
 
+Remote access is opt-in and requires all three request boundaries:
+
+```bash
+normal web --host 0.0.0.0 --unsafe-remote \
+  --allow-peer 192.168.1.0/24 \
+  --allow-host normalbox.local \
+  --allow-origin https://normal.example.test
+```
+
+Repeat an allowlist option to add entries. Origins are exact scheme/host/port values and are checked independently from the HTTP `Host`; this supports a reverse proxy or TLS terminator without making either check implicit.
+
 | Flag | Required | Description |
 |---|---|---|
 | `--host` | No | Bind address (default `127.0.0.1`) |
