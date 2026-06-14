@@ -1405,6 +1405,80 @@ class WebApprovedRootTests(unittest.TestCase):
                     self.post(base_url, "/api/movies/delete", mutate_body)
             self.assertEqual(ctx.exception.code, 400)
 
+    def test_library_roots_only_persist_approved_operation_safe_paths(self) -> None:
+        from normal.web import routes_core
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            approved = root / "Movies"
+            approved.mkdir()
+            storage = root / "library-roots.json"
+            body = json.dumps(
+                {
+                    "movies": str(approved),
+                    "recent": [{"lane": "movies", "source": str(approved)}],
+                }
+            ).encode("utf-8")
+            with patch("normal.web.routes_core.library_roots_path", return_value=storage):
+                with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
+                    with self.post(base_url, "/api/library-roots", body) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                reloaded = routes_core.load_library_roots(ApprovedRoots.from_paths([approved]))
+
+            self.assertEqual(payload["movies"], str(approved.resolve()))
+            self.assertEqual(payload["recent"][0]["source"], str(approved.resolve()))
+            self.assertEqual(reloaded, payload)
+
+    def test_library_roots_reject_unapproved_path_without_overwriting_saved_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            approved = root / "Approved"
+            unapproved = root / "Other"
+            approved.mkdir()
+            unapproved.mkdir()
+            storage = root / "library-roots.json"
+            saved = {"movies": str(approved), "recent": []}
+            storage.write_text(json.dumps(saved), encoding="utf-8")
+            body = json.dumps({"movies": str(unapproved), "recent": []}).encode("utf-8")
+
+            with patch("normal.web.routes_core.library_roots_path", return_value=storage):
+                with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
+                    with self.assertRaises(urllib.error.HTTPError) as ctx:
+                        self.post(base_url, "/api/library-roots", body)
+
+            self.assertEqual(ctx.exception.code, 400)
+            self.assertIn("not under an approved root", ctx.exception.read().decode("utf-8"))
+            self.assertEqual(json.loads(storage.read_text(encoding="utf-8")), saved)
+
+    def test_library_roots_get_hides_legacy_unapproved_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            approved = root / "Approved"
+            unapproved = root / "Other"
+            approved.mkdir()
+            unapproved.mkdir()
+            storage = root / "library-roots.json"
+            storage.write_text(
+                json.dumps(
+                    {
+                        "movies": str(unapproved),
+                        "recent": [
+                            {"lane": "movies", "source": str(unapproved)},
+                            {"lane": "movies", "source": str(approved)},
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            with patch("normal.web.routes_core.library_roots_path", return_value=storage):
+                with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
+                    with urllib.request.urlopen(f"{base_url}/api/library-roots") as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+
+            self.assertEqual(payload["movies"], "")
+            self.assertEqual(payload["recent"], [{"lane": "movies", "source": str(approved.resolve())}])
+
     def test_source_under_approved_root_passes_at_route_level(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir) / "Library"
