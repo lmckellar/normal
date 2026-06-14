@@ -1215,6 +1215,55 @@ class MoviePlanTests(unittest.TestCase):
             proposed,
         )
 
+    def test_parse_movie_name_recognizes_semantic_trait_variants(self) -> None:
+        cases = {
+            "Example.2000.Open-Matte.mkv": ["Open Matte"],
+            "Example.2000.OpenMatte.1080p.mkv": ["Open Matte", "1080p"],
+            "Example.2000.OpenMatteHybrid2160p.mkv": ["Open Matte", "Hybrid", "2160p"],
+            "Example.2000.Hybrid2160p.mkv": ["Hybrid", "2160p"],
+            "Example.2000.Open-Matte-GROUP.mkv": ["Open Matte"],
+        }
+
+        for filename, expected_tokens in cases.items():
+            with self.subTest(filename=filename):
+                parsed = parse_movie_name(Path(filename))
+                self.assertEqual(parsed.tech_tokens, expected_tokens)
+
+    def test_parse_movie_name_recovers_strong_pre_year_open_matte_claims(self) -> None:
+        cases = {
+            "Avengers.Endgame.Open.Matte.V2.2019.KK650.Regraded": (
+                "Avengers Endgame",
+                ["Open Matte", "V2", "KK650", "Regraded"],
+            ),
+            "Harry.Potter.And.The.Sorcerer's.Stone.OPEN.MATTE.2001.1080p.DTS-X.7.1.KK650": (
+                "Harry Potter And The Sorcerer's Stone",
+                ["Open Matte", "1080p", "DTS", "X", "7.1", "KK650"],
+            ),
+            "[1993] Jurassic Park - [OPEN MATTE] [1080p.h265.10bit.ITA-ENG] (by.phadron) MIRCrew.mkv": (
+                "Jurassic Park",
+                ["Open Matte", "1080p", "H.265", "10bit", "ITA", "ENG", "BY", "phadron", "MIRCrew"],
+            ),
+            "[2006] 300 [OPEN MATTE] [1080p.x265.10bit.ITA-ENG] (by.phadron) MIRCrew.mkv": (
+                "300",
+                ["Open Matte", "1080p", "x265", "10bit", "ITA", "ENG", "BY", "phadron", "MIRCrew"],
+            ),
+        }
+
+        for filename, (expected_title, expected_tokens) in cases.items():
+            with self.subTest(filename=filename):
+                parsed = parse_movie_name(Path(filename))
+                self.assertEqual(parsed.title, expected_title)
+                self.assertEqual(parsed.tech_tokens, expected_tokens)
+
+    def test_parse_movie_name_does_not_treat_hybrid_title_or_release_group_as_trait(self) -> None:
+        title = parse_movie_name(Path("Super.Hybrid.2010.720p.BluRay.x264-THUGLiNE"))
+        release_group = parse_movie_name(Path("Columbus.Circle.2012.NORDiC.1080p.BluRay.x264-HYBRiD"))
+
+        self.assertEqual(title.title, "Super Hybrid")
+        self.assertNotIn("Hybrid", title.tech_tokens)
+        self.assertEqual(release_group.release_group, "HYBRID")
+        self.assertNotIn("Hybrid", release_group.tech_tokens)
+
 
 if __name__ == "__main__":
     unittest.main()

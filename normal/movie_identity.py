@@ -12,8 +12,10 @@ from normal.movie_naming import (
     normalize_display_title as shared_normalize_display_title,
     normalize_token as shared_normalize_token,
     prefer_ascii_title_segment as shared_prefer_ascii_title_segment,
+    protect_open_matte_tokens,
     should_mark_compact_split_for_review as shared_should_mark_compact_split_for_review,
     should_split_compact_technical_token as shared_should_split_compact_technical_token,
+    split_open_matte_title_claim,
     split_compact_technical_token as shared_split_compact_technical_token,
     split_known_compact_title_words as shared_split_known_compact_title_words,
     split_title_prefix_tail as shared_split_title_prefix_tail,
@@ -110,6 +112,7 @@ CANONICAL_TOKEN_MAP = {
     "atmos": "Atmos",
     "multisub": "MULTISUB",
     "remastered": "Remastered",
+    "openmatte": "Open Matte",
     "hybrid": "Hybrid",
     "commentary": "Commentary",
     "multi": "MULTI",
@@ -168,6 +171,8 @@ COMPACT_TECH_MARKERS = (
     "hdr10",
     "hdr",
     "sdr",
+    "openmatte",
+    "hybrid",
     "multisub",
     "eng",
     "ita",
@@ -272,9 +277,10 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
 
     year = int(match.group(1))
     title_source_name = "filename_prefix" if year_source == "filename" else "parent_folder_prefix"
-    title_source, prefix_tail_text = split_title_prefix_tail(source_text[: match.start()])
+    semantic_title_source, semantic_prefix_tail = split_open_matte_title_claim(source_text[: match.start()])
+    title_source, prefix_tail_text = split_title_prefix_tail(semantic_title_source)
     title_text = cleanup_title_text(prefer_ascii_title_segment(title_source))
-    tail_text = f"{prefix_tail_text} {source_text[match.end() :]}".strip()
+    tail_text = f"{prefix_tail_text} {semantic_prefix_tail} {source_text[match.end() :]}".strip()
     if title_text_override is not None and tail_text_override is not None:
         title_text = title_text_override
         tail_text = tail_text_override
@@ -297,6 +303,7 @@ def parse_movie_identity(movie_path: Path) -> ParsedMovieIdentity:
         compact_heuristic = True
     tail_text = strip_redundant_parent_title_from_tail(movie_path.parent.name, year, title_text, tail_text)
     tail_text = strip_leading_site_credit(tail_text)
+    tail_text = protect_open_matte_tokens(tail_text)
     release_group = None
 
     if " - " in tail_text:
@@ -419,16 +426,17 @@ def is_probable_release_year_position(value: str, match: re.Match[str]) -> bool:
 
 
 def parse_year_leading_title_payload(source_text: str, match: re.Match[str]) -> tuple[str, str] | None:
-    if match.start() != 0:
+    if cleanup_title_text(source_text[: match.start()]):
         return None
     suffix = source_text[match.end() :].lstrip(" ._-)[](")
     if not suffix:
         return None
-    title_source, suffix_tail = split_title_prefix_tail(suffix)
+    semantic_title_source, semantic_tail = split_open_matte_title_claim(suffix)
+    title_source, suffix_tail = split_title_prefix_tail(semantic_title_source)
     title_text = cleanup_title_text(prefer_ascii_title_segment(title_source))
     if not title_text:
         return None
-    return title_text, suffix_tail.strip()
+    return title_text, f"{suffix_tail} {semantic_tail}".strip()
 
 
 def parse_leading_number_compact_payload(source_text: str, match: re.Match[str]) -> tuple[str, int, str] | None:

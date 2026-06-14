@@ -5,6 +5,7 @@ import unicodedata
 
 
 TOKEN_PATTERN = re.compile(r"[A-Za-z0-9]+")
+OPEN_MATTE_PATTERN = re.compile(r"(?i)(?<![A-Za-z0-9])open[._ -]*matte(?![A-Za-z0-9])")
 DOMAIN_CREDIT_TLD_PATTERN = r"(?:org|com|net|mx|to|am|cc|io)"
 LEADING_SITE_CREDIT_PATTERNS = (
     re.compile(
@@ -106,6 +107,7 @@ CANONICAL_TOKEN_MAP = {
     "atmos": "Atmos",
     "multisub": "MULTISUB",
     "remastered": "Remastered",
+    "openmatte": "Open Matte",
     "hybrid": "Hybrid",
     "commentary": "Commentary",
     "multi": "MULTI",
@@ -134,6 +136,8 @@ COMPACT_TECH_MARKERS = (
     "hdr10",
     "hdr",
     "sdr",
+    "openmatte",
+    "hybrid",
     "multisub",
     "eng",
     "ita",
@@ -328,6 +332,28 @@ def split_title_prefix_tail(prefix: str) -> tuple[str, str]:
         if is_title_boundary_token(token_match.group(0)):
             return prefix[: token_match.start()], prefix[token_match.start() :]
     return prefix, ""
+
+
+def split_open_matte_title_claim(value: str) -> tuple[str, str]:
+    match = OPEN_MATTE_PATTERN.search(value)
+    if match is None:
+        return value, ""
+    title_source = value[: match.start()]
+    title_token_count = len(TOKEN_PATTERN.findall(title_source))
+    bracketed_claim = (
+        match.start() > 0
+        and value[match.start() - 1] == "["
+        and match.end() < len(value)
+        and value[match.end()] == "]"
+    )
+    if title_token_count < 2 and not (title_token_count == 1 and bracketed_claim):
+        return value, ""
+    claim_tail = f"Open Matte {value[match.end() :]}"
+    return title_source, claim_tail.strip()
+
+
+def protect_open_matte_tokens(value: str) -> str:
+    return OPEN_MATTE_PATTERN.sub("Open_Matte", value)
 
 
 def is_title_boundary_token(token: str) -> bool:
