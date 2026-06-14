@@ -148,7 +148,11 @@ def delete_movie_junk_files(
 
 
 def handle_movies_junk(ctx: RequestContext, payload: dict[str, Any]) -> None:
-    source = ctx.resolve_source(payload.get("source"))
+    source = validate_source_for_operation(
+        ctx.resolve_source(payload.get("source")),
+        operation=Operation.HEAVY_SCAN,
+        approved_roots=ctx.approved_roots,
+    )
     with guarded_heavy_scan(source, "Movie junk scan"):
         with ctx.handler.activity_tracker.track(source, "Movie junk scan"):
             report = scan_movie_cleanup(

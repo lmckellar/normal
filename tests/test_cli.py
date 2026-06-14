@@ -84,6 +84,20 @@ class NormalCliTests(unittest.TestCase):
         self.assertEqual(stderr.getvalue(), "normal: Refusing apply on /\n")
         self.assertNotIn("Traceback", stderr.getvalue())
 
+    def test_recursive_commands_reject_drive_root_sources(self) -> None:
+        commands = (
+            ("movie-plan", "--plan", "/tmp/normal-plan.json"),
+            ("movie-scan", "--report", "/tmp/normal-scan.json"),
+            ("movie-profile", "--report", "/tmp/normal-profile.json"),
+            ("movie-junk", "--report", "/tmp/normal-junk.json"),
+        )
+        for command in commands:
+            with self.subTest(command=command[0]):
+                result = self.run_cli(command[0], "--source", "/", *command[1:])
+
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("drive_directory", result.stderr)
+
     def test_movie_scan_accepts_progress_flag(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "movies"

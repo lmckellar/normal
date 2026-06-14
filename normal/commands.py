@@ -45,7 +45,10 @@ def run_movie_output(report_path: Path, csv_path: Path, minimum_status: str) -> 
 
 
 def run_movie_plan(source: Path, plan_path: Path, summary_path: Path | None) -> int:
-    source_root = ensure_source_directory(source)
+    source_root = validate_source_for_operation(
+        ensure_source_directory(source),
+        operation=Operation.PLAN,
+    )
     plan = build_movie_plan(source_root)
     write_json(plan_path, plan.to_dict())
 
@@ -85,7 +88,10 @@ def run_movie_apply(source: Path, plan_path: Path, target: Path | None, in_place
 
 
 def run_movie_scan(source: Path, report_path: Path, progress: bool = False) -> int:
-    source_root = ensure_source_directory(source)
+    source_root = validate_source_for_operation(
+        ensure_source_directory(source),
+        operation=Operation.HEAVY_SCAN,
+    )
     progress_callback = build_movie_scan_progress_callback() if progress else None
     report = scan_movie_library(source_root, progress_callback=progress_callback)
     write_json(report_path, report.to_dict())
@@ -100,7 +106,10 @@ def run_movie_profile(
     histogram_path: Path | None = None,
     progress: bool = False,
 ) -> int:
-    source_root = ensure_source_directory(source)
+    source_root = validate_source_for_operation(
+        ensure_source_directory(source),
+        operation=Operation.HEAVY_SCAN,
+    )
     progress_callback = build_movie_scan_progress_callback() if progress else None
     report = scan_movie_profiles(source_root, progress_callback=progress_callback)
     write_json(report_path, report.to_dict())
@@ -123,7 +132,10 @@ def run_movie_inspect(path: Path, report_path: Path) -> int:
 
 
 def run_movie_junk(source: Path, report_path: Path) -> int:
-    source_root = ensure_source_directory(source)
+    source_root = validate_source_for_operation(
+        ensure_source_directory(source),
+        operation=Operation.HEAVY_SCAN,
+    )
     report = scan_movie_junk(source_root)
     write_json(report_path, report.to_dict())
     return 0

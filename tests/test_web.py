@@ -1619,6 +1619,23 @@ class WebApprovedRootTests(unittest.TestCase):
                         self.assertIn("not under an approved root", error)
                         self.assertIn("normal web --allow-root", error)
 
+    def test_recursive_routes_reject_drive_root_sources(self) -> None:
+        routes = (
+            "/api/movies/normalize",
+            "/api/movies/junk",
+            "/api/movies/profile",
+            "/api/movies/canonical-lists",
+            "/api/movies/register",
+        )
+        body = json.dumps({"source": "/"}).encode("utf-8")
+        with self.run_test_server(approved_roots=ApprovedRoots.from_paths([Path("/")])) as base_url:
+            for route in routes:
+                with self.subTest(route=route):
+                    with self.assertRaises(urllib.error.HTTPError) as ctx:
+                        self.post(base_url, route, body)
+                    self.assertEqual(ctx.exception.code, 400)
+                    self.assertIn("drive_directory", ctx.exception.read().decode("utf-8"))
+
     def test_scan_warning_rejects_unapproved_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "Movies"

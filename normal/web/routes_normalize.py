@@ -30,7 +30,11 @@ def _build_normalize_payload(source, movie_files, plan, parsed_movies):
 
 
 def handle_movies_normalize(ctx: RequestContext, payload: dict[str, Any]) -> None:
-    source = ctx.resolve_source(payload.get("source"))
+    source = validate_source_for_operation(
+        ctx.resolve_source(payload.get("source")),
+        operation=Operation.PLAN,
+        approved_roots=ctx.approved_roots,
+    )
     with guarded_heavy_scan(source, "Movie normalize plan"):
         with ctx.handler.activity_tracker.track(source, "Movie normalize plan"):
             movie_files = discover_video_files(source)

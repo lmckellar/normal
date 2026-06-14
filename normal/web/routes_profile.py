@@ -40,6 +40,7 @@ from normal.movie_profile import (
     update_movie_profile_definition,
 )
 from normal.movie_scan import MovieScanProgress, scan_movie_library
+from normal.source_policy import Operation, validate_source_for_operation
 from .activity import tracked_probe
 from .http import RequestContext
 from .routes_audit import (
@@ -65,7 +66,11 @@ def invalidate_policy_caches(source: Path | None, label: str) -> None:
 
 
 def handle_movies_profile(ctx: RequestContext, payload: dict[str, Any]) -> None:
-    source = ctx.resolve_source(payload.get("source"))
+    source = validate_source_for_operation(
+        ctx.resolve_source(payload.get("source")),
+        operation=Operation.HEAVY_SCAN,
+        approved_roots=ctx.approved_roots,
+    )
     standards = load_movie_standards()
     effective_standards = profile_request_standards(payload, standards)
     floor_overridden = replacement_candidate_quality_floor(effective_standards) != replacement_candidate_quality_floor(standards)
@@ -290,7 +295,11 @@ def handle_policy_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
 
 
 def handle_movies_canonical_lists(ctx: RequestContext, payload: dict[str, Any]) -> None:
-    source = ctx.resolve_source(payload.get("source"))
+    source = validate_source_for_operation(
+        ctx.resolve_source(payload.get("source")),
+        operation=Operation.HEAVY_SCAN,
+        approved_roots=ctx.approved_roots,
+    )
     standards = load_movie_standards()
     force_refresh = bool(payload.get("refresh"))
     if force_refresh:
@@ -368,7 +377,11 @@ def handle_movies_omdb_ratings(ctx: RequestContext, payload: dict[str, Any]) -> 
 def handle_movies_register(ctx: RequestContext, payload: dict[str, Any]) -> None:
     from normal.output import write_movie_register_xlsx
 
-    source = ctx.resolve_source(payload.get("source"))
+    source = validate_source_for_operation(
+        ctx.resolve_source(payload.get("source")),
+        operation=Operation.HEAVY_SCAN,
+        approved_roots=ctx.approved_roots,
+    )
     with guarded_heavy_scan(source, "Movie catalogue export"):
         with ctx.handler.activity_tracker.track(source, "Movie catalogue export"):
             scan_report = scan_movie_library(source, probe_media=tracked_probe(source, "ffprobe movie catalogue", cache=PROBE_CACHE))
