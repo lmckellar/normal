@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Iterable, Literal
+
+from normal.mounts import is_junction, is_mount_root
 
 Severity = Literal["ok", "warn", "block"]
 
@@ -110,9 +111,9 @@ def detect_source_flags(source: Path) -> tuple[str, ...]:
     resolved = candidate.resolve()
     if resolved == Path(resolved.anchor):
         flags.append(DRIVE_DIRECTORY)
-    elif os.path.ismount(resolved):
+    elif is_mount_root(resolved):
         flags.append(MOUNT_ROOT)
-    if hasattr(os.path, "isjunction") and os.path.isjunction(candidate):
+    if is_junction(candidate):
         flags.append(JUNCTION)
     return tuple(flags)
 
@@ -162,7 +163,7 @@ class SourcePolicyError(RuntimeError):
 def _is_link_or_junction(path: Path) -> bool:
     if path.is_symlink():
         return True
-    return bool(hasattr(os.path, "isjunction") and os.path.isjunction(path))
+    return is_junction(path)
 
 
 def validate_candidate_for_mutation(

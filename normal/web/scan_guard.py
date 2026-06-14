@@ -6,11 +6,11 @@ import shutil
 import socket
 import subprocess
 from contextlib import contextmanager
-from dataclasses import dataclass
 from pathlib import Path, PurePath, PureWindowsPath
 from typing import Any, Iterator
 
 from normal.source_policy import ApprovedRoots, path_is_under, resolve_source_path, source_paths_overlap
+from normal.mounts import MountDetails, is_mount_root, is_unc_share_root, mount_details
 from . import state
 
 
@@ -24,10 +24,7 @@ def client_disconnected(connection: socket.socket) -> bool:
         return True
 
 
-@dataclass(frozen=True, slots=True)
-class SourceMountDetails:
-    fstype: str | None
-    target: str | None
+SourceMountDetails = MountDetails
 
 
 RISKY_FSTYPES = frozenset(
@@ -120,11 +117,14 @@ def _proc_mounts_mount_details(source: Path) -> SourceMountDetails | None:
 
 def source_mount_details(source: Path) -> SourceMountDetails:
     resolved = source.resolve()
+    native = mount_details(resolved)
+    if native.target or native.fstype or native.kind:
+        return native
     details = _findmnt_mount_details(resolved)
     if details is None:
         details = _proc_mounts_mount_details(resolved)
     if details is None:
-        return SourceMountDetails(fstype=None, target=None)
+        return SourceMountDetails()
     return details
 
 
@@ -133,6 +133,8 @@ def risky_mount_flags(source: Path) -> list[str]:
     flags: list[str] = []
     if details.fstype in RISKY_FSTYPES:
         flags.append(f"mount:{details.fstype}")
+    if details.kind in {"network", "removable"} and not flags:
+        flags.append(f"mount:{details.kind}")
     return flags
 
 
@@ -148,7 +150,7 @@ def _looks_like_windows_root(path: PurePath) -> bool:
 def looks_like_drive_directory(path: PurePath) -> bool:
     if _looks_like_windows_root(path):
         return True
-    if isinstance(path, Path) and path.is_mount():
+    if isinstance(path, Path) and is_mount_root(path):
         return True
     parts = path.parts
     if len(parts) == 3 and parts[1] in {"mnt", "Volumes"}:
@@ -161,13 +163,7 @@ def looks_like_drive_directory(path: PurePath) -> bool:
 
 
 def looks_like_unc_share_root(path: PurePath) -> bool:
-    windows_path = PureWindowsPath(str(path))
-    drive = windows_path.drive.lower()
-    return (
-        windows_path.root == "\\"
-        and len(windows_path.parts) == 1
-        and (drive.startswith("\\\\") or drive.startswith("\\\\?\\unc\\"))
-    )
+    return is_unc_share_root(path)
 
 
 def format_storage_size(size_bytes: int) -> str:

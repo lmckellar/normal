@@ -113,7 +113,7 @@ The fuller stance on why these choices are adopted is in [docs/statement.md](doc
 
 `normal` runs on Python 3.12 through 3.14 and is Linux-first — developed and daily-driven on Ubuntu, where it has been perfectly stable through 200+ scans. Under the hood `normal` leans on a small set of bulletproof, battle-tested open-source libraries (`ffmpeg`, `ffprobe`, `mkvtoolnix`, `openpyxl`) and works hard to stay out of their way.
 
-macOS and Windows aren't hardened yet. They may already work, but they haven't been validated, and other mount and filesystem types are similarly untested. Treat them as "help wanted," not "you're on your own."
+macOS and Windows run in CI alongside Linux. Source safety uses native mount and volume detection on each platform, including macOS APFS/removable/network volumes and Windows drive roots, UNC shares, and junctions. Broader real-library validation remains welcome.
 
 **Requirements:** `ffprobe` for media-probing workflows (`movie-scan`, `movie-profile`, `movie-inspect`, `movie-register`, `web`); `ffmpeg` for remux repairs; and `mkvpropedit` (from `mkvtoolnix`) for the light touch subtitle swaps, falling back to `ffmpeg` when absent. These are external binaries — install them from your distro's packages. The sole Python dependency, `openpyxl`, installs into the active interpreter with `python -m pip install -e .` and powers the XLSX export; it loads lazily, so a missing or broken `openpyxl` only affects catalogue export — every other workflow keeps running and the export tells you the exact command to restore it.
 
@@ -123,7 +123,7 @@ The project is genuinely open to participation now, and a few kinds of help are 
 
 - **You speak a language other than English.** This is the big one. `normal`'s subtitle and audio-default logic has a heavy English bias baked deep into it, and I honestly don't know how a multilingual viewer actually wants their films configured — which audio track should win, which subtitles, and when. If you watch films across several languages and have a view on what "correct" defaults look like, please tell me. It is the single most valuable feedback this tool can get.
 - **You have a filthy library.** Huge, ugly, inconsistently-named collections are perfect material for corpus regression study and edge-case hardening. My library is now as pure as the driven snow so I lack new crud to harden the parser against. 
-- **You're on macOS or Windows.** Theoretical deployment hardening for both as real targets is being set up — the boring machinery around packaging, paths, mounts, and bundled binaries. Validation from people actually running those platforms would move it along far faster.
+- **You're on macOS or Windows.** Both platforms run in CI and have native mount safety checks; validation against real libraries, filesystems, and external media remains valuable.
 - **You found an edge case, hit a wall, or have feedback.** Open an issue. Anyone who wants to test, poke at, or break the tool is welcome.
 
 ## ⭐ 1 Star on Github that I definitely did not pay for
