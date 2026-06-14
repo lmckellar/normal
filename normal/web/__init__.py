@@ -4,6 +4,7 @@ from . import activity, scan_guard, state
 from .activity import ActivityTracker, build_activity_payload, find_external_activity
 from .routes_cleanup import delete_movie_junk_files
 from .scan_guard import (
+    ApprovedRoots,
     SourceMountDetails,
     build_source_scan_warning,
     format_storage_size,
@@ -20,6 +21,7 @@ ACTIVITY_TRACKER = state.ACTIVITY_TRACKER
 __all__ = [
     "ACTIVITY_TRACKER",
     "ActivityTracker",
+    "ApprovedRoots",
     "HEAVY_SCAN_REGISTRY",
     "RequestConflictError",
     "SourceMountDetails",

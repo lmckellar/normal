@@ -73,5 +73,5 @@ def handle_library_roots_post(ctx: RequestContext, payload: dict[str, Any]) -> N
 
 
 def handle_source_scan_warning(ctx: RequestContext, payload: dict[str, Any]) -> None:
-    source = ctx.resolve_source(payload.get("source"))
+    source = ctx.inspect_source(payload.get("source"))
     ctx.respond_json(build_source_scan_warning(source))

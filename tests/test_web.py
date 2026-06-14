@@ -13,6 +13,7 @@ from urllib.parse import quote
 from unittest.mock import patch
 
 from normal.web import (
+    ApprovedRoots,
     build_handler,
     delete_movie_junk_files,
     read_web_asset_text,
@@ -43,8 +44,9 @@ class WebTests(unittest.TestCase):
         return (Path(__file__).resolve().parent.parent / "normal" / "web_assets" / "normalize_lab.css").read_text(encoding="utf-8")
 
     @contextmanager
-    def run_test_server(self):
-        server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler())
+    def run_test_server(self, **handler_kwargs):
+        handler_kwargs.setdefault("approved_roots", ApprovedRoots.from_paths([Path(tempfile.gettempdir())]))
+        server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler(**handler_kwargs))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
@@ -1255,6 +1257,80 @@ class WebPostSecurityTests(unittest.TestCase):
                     headers={"Content-Type": "application/json", "Content-Length": str(MAX_JSON_BODY + 1)},
                 )
         self.assertEqual(ctx.exception.code, 403)
+
+
+class WebApprovedRootTests(unittest.TestCase):
+    @contextmanager
+    def run_test_server(self, **handler_kwargs):
+        server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler(**handler_kwargs))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            yield f"http://127.0.0.1:{server.server_address[1]}"
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    def post(self, base_url, path, body):
+        headers = {"Content-Type": "application/json", "X-Normal-Token": MUTATION_TOKEN}
+        req = urllib.request.Request(f"{base_url}{path}", data=body, headers=headers, method="POST")
+        return urllib.request.urlopen(req)
+
+    def test_mutating_route_with_unapproved_source_is_rejected_and_deletes_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "Movies"
+            source.mkdir()
+            movie = source / "Movie (2020).mkv"
+            movie.write_text("data", encoding="utf-8")
+            approved = Path(tmpdir) / "Approved"
+            approved.mkdir()
+            body = json.dumps({"source": str(source), "paths": [str(movie)]}).encode("utf-8")
+            with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    self.post(base_url, "/api/movies/delete", body)
+            self.assertEqual(ctx.exception.code, 400)
+            self.assertIn("not under an approved root", ctx.exception.read().decode("utf-8"))
+            self.assertTrue(movie.exists())
+
+    def test_scan_warning_inspects_unapproved_path_without_approving_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "Movies"
+            source.mkdir()
+            warn_body = json.dumps({"source": str(source)}).encode("utf-8")
+            mutate_body = json.dumps({"source": str(source), "paths": []}).encode("utf-8")
+            with self.run_test_server(approved_roots=ApprovedRoots.from_paths([])) as base_url:
+                with self.post(base_url, "/api/source/scan-warning", warn_body) as response:
+                    self.assertEqual(response.status, 200)
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(payload["source"], str(source.resolve()))
+                with self.assertRaises(urllib.error.HTTPError) as ctx:
+                    self.post(base_url, "/api/movies/delete", mutate_body)
+            self.assertEqual(ctx.exception.code, 400)
+
+    def test_source_under_approved_root_passes_at_route_level(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "Library"
+            child = root / "Movies"
+            child.mkdir(parents=True)
+            with self.run_test_server(approved_roots=ApprovedRoots.from_paths([root])) as base_url:
+                with urllib.request.urlopen(f"{base_url}/api/audit/stream?source={quote(str(child))}", timeout=2) as response:
+                    self.assertEqual(response.headers.get("Content-Type"), "text/event-stream; charset=utf-8")
+
+    def test_run_web_seeds_approved_roots_from_source_and_allow_root(self) -> None:
+        from normal import commands
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "Movies"
+            source.mkdir()
+            extra = Path(tmpdir) / "Archive"
+            extra.mkdir()
+            captured: dict = {}
+            with patch("normal.commands.serve_web_ui", lambda **kwargs: captured.update(kwargs)):
+                commands.run_web(host="127.0.0.1", port=0, source=source, allow_roots=[extra])
+            roots = captured["approved_roots"].roots
+            self.assertIn(source.resolve(), roots)
+            self.assertIn(extra.resolve(), roots)
 
 
 if __name__ == "__main__":

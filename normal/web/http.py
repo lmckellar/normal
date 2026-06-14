@@ -9,7 +9,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from normal.movie_omdb import resolve_original_language
-from .scan_guard import client_disconnected, resolve_source_path
+from .scan_guard import ApprovedRoots, client_disconnected, resolve_source_path
 from .security import MAX_JSON_BODY
 
 
@@ -19,6 +19,7 @@ class RequestContext:
     default_source: Path | None = None
     omdb_key: str | None = None
     tmdb_key: str | None = None
+    approved_roots: ApprovedRoots = ApprovedRoots()
 
     def language_resolver(self) -> Callable[[str, int | None], str | None] | None:
         omdb_key = self.omdb_key
@@ -63,6 +64,9 @@ class RequestContext:
         self.handler.wfile.write(body)
 
     def resolve_source(self, raw_source: Any) -> Path:
+        return self.approved_roots.resolve_approved(raw_source, default_source=self.default_source)
+
+    def inspect_source(self, raw_source: Any) -> Path:
         return resolve_source_path(raw_source, default_source=self.default_source)
 
     def client_disconnected(self) -> bool:

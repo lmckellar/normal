@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import os
 import socket
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from normal.web.scan_guard import (
+    ApprovedRoots,
     SourceMountDetails,
     build_source_scan_warning,
     client_disconnected,
@@ -106,6 +109,67 @@ class WebScanGuardTests(unittest.TestCase):
         self.assertEqual(format_storage_size(4_500_000_000_000), "4.5 TB")
         self.assertEqual(format_storage_size(4_500_000_000), "4.5 GB")
         self.assertEqual(format_storage_size(4_500_000), "4.5 MB")
+
+
+class ApprovedRootsTests(unittest.TestCase):
+    @contextmanager
+    def _library(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir).resolve()
+            movies = base / "Movies"
+            (movies / "sub").mkdir(parents=True)
+            (base / "Music").mkdir()
+            yield base, movies
+
+    def test_from_paths_resolves_and_dedupes(self) -> None:
+        with self._library() as (base, movies):
+            approved = ApprovedRoots.from_paths([movies, movies, str(movies) + "/"])
+            self.assertEqual(approved.roots, (movies,))
+
+    def test_equal_and_under_root_pass(self) -> None:
+        with self._library() as (base, movies):
+            approved = ApprovedRoots.from_paths([movies])
+            self.assertEqual(approved.resolve_approved(str(movies)), movies)
+            self.assertEqual(approved.resolve_approved(str(movies / "sub")), movies / "sub")
+
+    def test_multiple_roots_are_each_honored(self) -> None:
+        with self._library() as (base, movies):
+            other = base / "Music"
+            approved = ApprovedRoots.from_paths([movies, other])
+            self.assertEqual(approved.resolve_approved(str(other)), other)
+
+    def test_sibling_and_parent_are_rejected(self) -> None:
+        with self._library() as (base, movies):
+            approved = ApprovedRoots.from_paths([movies])
+            with self.assertRaises(PermissionError):
+                approved.resolve_approved(str(base / "Music"))
+            with self.assertRaises(PermissionError):
+                approved.resolve_approved(str(base))
+
+    def test_empty_roots_reject_everything(self) -> None:
+        with self._library() as (base, movies):
+            with self.assertRaises(PermissionError):
+                ApprovedRoots().resolve_approved(str(movies))
+
+    def test_approval_survives_trailing_slash_and_relative_segments(self) -> None:
+        with self._library() as (base, movies):
+            approved = ApprovedRoots.from_paths([movies])
+            self.assertEqual(approved.resolve_approved(str(movies) + "/"), movies)
+            self.assertEqual(approved.resolve_approved(str(movies / "sub" / "..")), movies)
+
+    def test_approval_survives_home_expansion(self) -> None:
+        with self._library() as (base, movies):
+            with patch.dict(os.environ, {"HOME": str(base)}):
+                approved = ApprovedRoots.from_paths([Path("~/Movies")])
+                self.assertEqual(approved.roots, (movies,))
+                self.assertEqual(approved.resolve_approved("~/Movies"), movies)
+
+    def test_approval_survives_symlinked_source(self) -> None:
+        with self._library() as (base, movies):
+            link = base / "MoviesLink"
+            link.symlink_to(movies)
+            approved = ApprovedRoots.from_paths([movies])
+            self.assertEqual(approved.resolve_approved(str(link)), movies)
 
 
 if __name__ == "__main__":

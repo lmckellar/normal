@@ -23,6 +23,7 @@ from .routes_cleanup import (
     handle_movies_subtitle_readiness_fix,
 )
 from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
+from .scan_guard import ApprovedRoots
 from .routes_normalize import handle_movies_apply, handle_movies_normalize
 from .routes_settings import (
     handle_settings_keys_update,
@@ -122,6 +123,7 @@ def serve_web_ui(
     omdb_key: str | None = None,
     tmdb_key: str | None = None,
     unsafe_remote: bool = False,
+    approved_roots: ApprovedRoots | None = None,
 ) -> None:
     state.CREDENTIAL_STORE.seed_from_boot(omdb_key=omdb_key, tmdb_key=tmdb_key)
     handler = build_handler(
@@ -129,6 +131,7 @@ def serve_web_ui(
         bound_host=host,
         bound_port=port,
         unsafe_remote=unsafe_remote,
+        approved_roots=approved_roots,
     )
     server = ThreadingHTTPServer((host, port), handler)
     source_hint = f" default source {default_source}" if default_source else ""
@@ -212,9 +215,11 @@ def build_handler(
     bound_host: str = "127.0.0.1",
     bound_port: int = 8765,
     unsafe_remote: bool = False,
+    approved_roots: ApprovedRoots | None = None,
 ):
     get_routes = build_get_routes()
     post_routes = build_post_routes()
+    roots = approved_roots if approved_roots is not None else ApprovedRoots()
 
     class Handler(BaseHTTPRequestHandler):
         activity_tracker = state.ACTIVITY_TRACKER
@@ -225,6 +230,7 @@ def build_handler(
                 default_source=default_source,
                 omdb_key=state.CREDENTIAL_STORE.omdb_key(),
                 tmdb_key=state.CREDENTIAL_STORE.tmdb_key(),
+                approved_roots=roots,
             )
 
         def do_GET(self) -> None:

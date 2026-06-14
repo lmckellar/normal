@@ -14,7 +14,7 @@ from normal.audit import AuditEvent, AuditFollowUpUpdate, AuditStore
 from normal.models import utc_now_iso
 from normal.movie_canonical_lists import CanonicalLibrarySummary, CanonicalListsReport
 from normal.movie_profile import MovieProfileReport
-from normal.web import build_handler
+from normal.web import ApprovedRoots, build_handler
 from normal.web.security import MUTATION_TOKEN
 from normal.web.state import MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE
 
@@ -294,7 +294,8 @@ class AuditStoreTests(unittest.TestCase):
 class AuditRouteTests(unittest.TestCase):
     @contextmanager
     def run_test_server(self):
-        server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler())
+        approved_roots = ApprovedRoots.from_paths([Path(tempfile.gettempdir())])
+        server = ThreadingHTTPServer(("127.0.0.1", 0), build_handler(approved_roots=approved_roots))
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:
