@@ -1,4 +1,18 @@
 (function () {
+  const bootElement = document.getElementById('normal-boot');
+  let bootData = {};
+  if (bootElement) {
+    try {
+      bootData = JSON.parse(bootElement.textContent || '{}') || {};
+    } catch (err) {
+      bootData = {};
+    }
+  }
+  window.NORMAL_BOOT = bootData;
+  window.DEFAULT_SOURCE = bootData.defaultSource;
+  window.OMDB_AVAILABLE = bootData.omdbAvailable;
+  window.NORMAL_TOKEN = bootData.token;
+
   const WORKFLOW_LABELS = {
     normalize: 'Normalize Movie Library Naming',
     'weak-encodes': 'Review Low-Quality Encodes',

@@ -67,10 +67,8 @@ class WebTests(unittest.TestCase):
         html = render_workbench_html(Path("/library/movies"), omdb_key="omdb-test", tmdb_key="tmdb-test")
         self.assertIn('<link rel="stylesheet" href="/assets/workbench.css?v=', html)
         self.assertIn('<script src="/assets/workbench.js?v=', html)
-        self.assertLess(html.index("window.NORMAL_BOOT"), html.index('<script src="/assets/workbench.js?v='))
-        self.assertIn('window.NORMAL_BOOT = {"defaultSource": "/library/movies"', html)
-        self.assertIn("window.DEFAULT_SOURCE = window.NORMAL_BOOT.defaultSource;", html)
-        self.assertIn("window.OMDB_AVAILABLE = window.NORMAL_BOOT.omdbAvailable;", html)
+        self.assertLess(html.index('id="normal-boot"'), html.index('<script src="/assets/workbench.js?v='))
+        self.assertIn('<script type="application/json" id="normal-boot">{"defaultSource": "/library/movies"', html)
         self.assertNotIn("omdb-test", html)
         self.assertNotIn("tmdb-test", html)
         self.assertIn('"tmdbAvailable": true', html)
@@ -92,6 +90,18 @@ class WebTests(unittest.TestCase):
                 self.assertEqual(response.headers.get_content_type(), "application/javascript")
                 self.assertEqual(response.headers.get("Cache-Control"), "no-store")
                 self.assertIn("/api/movies/apply", response.read().decode("utf-8"))
+
+    def test_workbench_response_sets_security_headers(self) -> None:
+        with self.run_test_server() as base_url:
+            with urllib.request.urlopen(base_url) as response:
+                csp = response.headers.get("Content-Security-Policy")
+                self.assertIn("script-src 'self'", csp)
+                self.assertIn("frame-ancestors 'none'", csp)
+                self.assertIn("style-src 'self' 'unsafe-inline'", csp)
+                self.assertEqual(response.headers.get("X-Frame-Options"), "DENY")
+                self.assertEqual(response.headers.get("Referrer-Policy"), "no-referrer")
+            with urllib.request.urlopen(f"{base_url}/assets/workbench.js") as response:
+                self.assertIn("script-src 'self'", response.headers.get("Content-Security-Policy"))
 
     def test_audit_stream_route_serves_sse_revision_notice(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -122,7 +132,7 @@ class WebTests(unittest.TestCase):
         html = render_workbench_html(Path("/library/movies"))
         self.assertIn('/assets/workbench.css?v=', html)
         self.assertIn('/assets/workbench.js?v=', html)
-        self.assertIn('window.NORMAL_BOOT = {"defaultSource": "/library/movies"', html)
+        self.assertIn('<script type="application/json" id="normal-boot">{"defaultSource": "/library/movies"', html)
         self.assertIn('id="policyToggle"', html)
         self.assertIn('id="placeholderToggle"', html)
         self.assertIn('id="placeholderDownloadToggle"', html)
@@ -1197,7 +1207,7 @@ class WebPostSecurityTests(unittest.TestCase):
 
         html = render_workbench_html(Path("/library/movies"))
         self.assertIn(f'"token": "{MUTATION_TOKEN}"', html)
-        self.assertIn("window.NORMAL_TOKEN = window.NORMAL_BOOT.token;", html)
+        self.assertIn('<script type="application/json" id="normal-boot">', html)
 
     def test_valid_token_and_json_passes_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

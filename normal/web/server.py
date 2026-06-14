@@ -54,6 +54,14 @@ WEB_STATIC_ASSETS = {
     "/assets/workbench.js": ("normalize_lab.js", "application/javascript; charset=utf-8"),
 }
 WEB_BOOTSTRAP_SENTINEL = "__NORMAL_BOOTSTRAP__"
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    ),
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
 
 
 def read_web_asset_text(name: str) -> str:
@@ -94,14 +102,7 @@ def render_web_bootstrap(default_source: Path | None = None, omdb_key: str | Non
         "onboarding": read_onboarding_bootstrap(omdb_key=omdb_key, tmdb_key=tmdb_key),
         "token": security.MUTATION_TOKEN,
     }
-    return "\n".join(
-        (
-            f"window.NORMAL_BOOT = {json.dumps(boot)};",
-            "window.DEFAULT_SOURCE = window.NORMAL_BOOT.defaultSource;",
-            "window.OMDB_AVAILABLE = window.NORMAL_BOOT.omdbAvailable;",
-            "window.NORMAL_TOKEN = window.NORMAL_BOOT.token;",
-        )
-    )
+    return json.dumps(boot).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
 
 
 def render_workbench_html(default_source: Path | None = None, omdb_key: str | None = None, tmdb_key: str | None = None) -> str:
@@ -154,7 +155,7 @@ def serve_web_ui(
 def serve_static_asset(ctx: RequestContext, route: str) -> None:
     asset_name, content_type = WEB_STATIC_ASSETS[route]
     body = read_web_asset_bytes(asset_name)
-    ctx.respond_bytes(body, content_type=content_type, headers={"Cache-Control": "no-store"})
+    ctx.respond_bytes(body, content_type=content_type, headers={"Cache-Control": "no-store", **SECURITY_HEADERS})
 
 
 def serve_workbench(ctx: RequestContext) -> None:
@@ -163,7 +164,7 @@ def serve_workbench(ctx: RequestContext) -> None:
         omdb_key=ctx.omdb_key,
         tmdb_key=ctx.tmdb_key,
     ).encode("utf-8")
-    ctx.respond_bytes(body, content_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store"})
+    ctx.respond_bytes(body, content_type="text/html; charset=utf-8", headers={"Cache-Control": "no-store", **SECURITY_HEADERS})
 
 
 def build_get_routes() -> dict[str, Callable[[RequestContext], None]]:
