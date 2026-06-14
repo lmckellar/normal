@@ -1589,6 +1589,36 @@ class WebApprovedRootTests(unittest.TestCase):
             self.assertIn("not under an approved root", ctx.exception.read().decode("utf-8"))
             self.assertTrue(movie.exists())
 
+    def test_source_operating_routes_reject_unapproved_source_before_work(self) -> None:
+        routes = {
+            "/api/source/scan-warning": {},
+            "/api/movies/apply": {"change_ids": []},
+            "/api/movies/delete": {"paths": []},
+            "/api/movies/junk/delete": {"paths": []},
+            "/api/movies/audio-packaging/fix": {"paths": []},
+            "/api/movies/subtitle-readiness/fix": {"paths": []},
+            "/api/movies/repair-defaults/fix": {
+                "paths": [],
+                "include_audio": True,
+                "include_subtitle": False,
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "Movies"
+            source.mkdir()
+            approved = Path(tmpdir) / "Approved"
+            approved.mkdir()
+            with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
+                for route, extra_payload in routes.items():
+                    with self.subTest(route=route):
+                        body = json.dumps({"source": str(source), **extra_payload}).encode("utf-8")
+                        with self.assertRaises(urllib.error.HTTPError) as ctx:
+                            self.post(base_url, route, body)
+                        self.assertEqual(ctx.exception.code, 400)
+                        error = ctx.exception.read().decode("utf-8")
+                        self.assertIn("not under an approved root", error)
+                        self.assertIn("normal web --allow-root", error)
+
     def test_scan_warning_rejects_unapproved_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "Movies"
