@@ -14,6 +14,8 @@ from normal.commands import (
     run_movie_profile,
     run_movie_register,
     run_movie_scan,
+    run_tv_apply,
+    run_tv_plan,
     run_web,
 )
 from normal.output import MissingDependencyError
@@ -53,6 +55,26 @@ def build_parser() -> argparse.ArgumentParser:
     movie_plan_parser.add_argument("--plan", type=Path, required=True)
     movie_plan_parser.add_argument("--summary", type=Path)
     movie_plan_parser.set_defaults(func=handle_movie_plan)
+
+    tv_plan_parser = subparsers.add_parser(
+        "tv-plan",
+        help="Generate a reviewable TV filename rename plan without restructuring folders.",
+    )
+    tv_plan_parser.add_argument("--source", type=Path, required=True)
+    tv_plan_parser.add_argument("--plan", type=Path, required=True)
+    tv_plan_parser.add_argument("--summary", type=Path)
+    tv_plan_parser.set_defaults(func=handle_tv_plan)
+
+    tv_apply_parser = subparsers.add_parser(
+        "tv-apply",
+        help="Apply an existing TV filename plan to a target or in place.",
+    )
+    tv_apply_parser.add_argument("--source", type=Path, required=True)
+    tv_apply_parser.add_argument("--plan", type=Path, required=True)
+    tv_apply_group = tv_apply_parser.add_mutually_exclusive_group(required=True)
+    tv_apply_group.add_argument("--target", type=Path)
+    tv_apply_group.add_argument("--in-place", action="store_true")
+    tv_apply_parser.set_defaults(func=handle_tv_apply)
 
     movie_apply_parser = subparsers.add_parser(
         "movie-apply",
@@ -126,6 +148,14 @@ def handle_movie_output(args: argparse.Namespace) -> int:
 
 def handle_movie_plan(args: argparse.Namespace) -> int:
     return run_movie_plan(source=args.source, plan_path=args.plan, summary_path=args.summary)
+
+
+def handle_tv_plan(args: argparse.Namespace) -> int:
+    return run_tv_plan(source=args.source, plan_path=args.plan, summary_path=args.summary)
+
+
+def handle_tv_apply(args: argparse.Namespace) -> int:
+    return run_tv_apply(source=args.source, plan_path=args.plan, target=args.target, in_place=args.in_place)
 
 
 def handle_movie_apply(args: argparse.Namespace) -> int:

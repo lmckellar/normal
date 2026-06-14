@@ -105,6 +105,22 @@ class MovieEnrichedTests(unittest.TestCase):
             cache.invalidate(source)
             self.assertIsNone(cache.get(source))
 
+    def test_enriched_cache_keeps_identity_lanes_separate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            cache = MovieEnrichedCache()
+            movie_report = scan_enriched_library(source, probe_media=lambda _: MediaFacts())
+            tv_report = scan_enriched_library(source, lane="tv", probe_media=lambda _: MediaFacts())
+
+            cache.put(source, movie_report)
+            cache.put(source, tv_report, lane="tv")
+
+            self.assertIs(cache.get(source), movie_report)
+            self.assertIs(cache.get(source, lane="tv"), tv_report)
+            cache.invalidate(source)
+            self.assertIsNone(cache.get(source))
+            self.assertIsNone(cache.get(source, lane="tv"))
+
     def test_profile_projection_reuses_enriched_facts_and_identity_without_serializing_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir)

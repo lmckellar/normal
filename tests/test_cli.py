@@ -197,6 +197,46 @@ class NormalCliTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unrecognized arguments: --naming-style concise", result.stderr)
 
+    def test_tv_plan_writes_filename_only_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "tv"
+            episode = source / "Show" / "Show.1x01.Pilot.mkv"
+            episode.parent.mkdir(parents=True)
+            episode.write_text("video", encoding="utf-8")
+            plan_path = Path(tmpdir) / "out" / "tv-plan.json"
+
+            result = self.run_cli("tv-plan", "--source", str(source), "--plan", str(plan_path))
+
+            self.assertEqual(result.returncode, 0, msg=result.stderr)
+            payload = json.loads(plan_path.read_text(encoding="utf-8"))
+            self.assertEqual(len(payload["proposed_changes"]), 1)
+            change = payload["proposed_changes"][0]
+            self.assertEqual(change["change_type"], "file_rename")
+            self.assertEqual(change["proposed_value"], "Show - S01E01 - Pilot.mkv")
+
+    def test_tv_apply_reuses_plan_executor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "tv"
+            episode = source / "Show" / "Show.1x01.Pilot.mkv"
+            episode.parent.mkdir(parents=True)
+            episode.write_text("video", encoding="utf-8")
+            plan_path = Path(tmpdir) / "tv-plan.json"
+
+            plan_result = self.run_cli("tv-plan", "--source", str(source), "--plan", str(plan_path))
+            apply_result = self.run_cli(
+                "tv-apply",
+                "--source",
+                str(source),
+                "--plan",
+                str(plan_path),
+                "--in-place",
+            )
+
+            self.assertEqual(plan_result.returncode, 0, msg=plan_result.stderr)
+            self.assertEqual(apply_result.returncode, 0, msg=apply_result.stderr)
+            self.assertTrue((episode.parent / "Show - S01E01 - Pilot.mkv").exists())
+            self.assertTrue((source / "normal-tv-apply-report.json").exists())
+
     def test_movie_profile_writes_report_and_histogram(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "movies"

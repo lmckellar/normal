@@ -119,21 +119,29 @@ class MovieEnrichedCache:
         self._lock = threading.Lock()
         self._entries: dict[str, _EnrichedCacheEntry] = {}
 
-    def get(self, source: Path) -> EnrichedLibraryReport | None:
-        key = str(source.resolve())
+    def get(self, source: Path, *, lane: str = "movie") -> EnrichedLibraryReport | None:
+        key = self._key(source, lane)
         with self._lock:
             entry = self._entries.get(key)
             return entry.report if entry is not None else None
 
-    def put(self, source: Path, report: EnrichedLibraryReport) -> None:
-        key = str(source.resolve())
+    def put(self, source: Path, report: EnrichedLibraryReport, *, lane: str = "movie") -> None:
+        key = self._key(source, lane)
         with self._lock:
             self._entries[key] = _EnrichedCacheEntry(report=report)
 
-    def invalidate(self, source: Path) -> None:
-        key = str(source.resolve())
+    def invalidate(self, source: Path, *, lane: str | None = None) -> None:
+        source_key = str(source.resolve())
         with self._lock:
-            self._entries.pop(key, None)
+            if lane is not None:
+                self._entries.pop(self._key(source, lane), None)
+                return
+            for key in [key for key in self._entries if key.startswith(source_key + "\0")]:
+                self._entries.pop(key, None)
+
+    @staticmethod
+    def _key(source: Path, lane: str) -> str:
+        return f"{source.resolve()}\0{lane}"
 
 
 ACTIVITY_TRACKER = None

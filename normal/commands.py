@@ -12,6 +12,7 @@ from normal.movie_profile import build_histogram_payload, scan_movie_profiles
 from normal.movie_scan import MovieScanProgress, scan_movie_library
 from normal.output import write_movie_register_xlsx, write_movie_review_csv
 from normal.source_policy import Operation, resolve_source_path, validate_source_for_operation
+from normal.tv_plan import build_tv_plan
 from normal.web import ApprovedRoots, parse_allowed_hosts, serve_web_ui
 from normal.web.security import is_loopback_bind
 
@@ -70,6 +71,30 @@ def run_movie_plan(source: Path, plan_path: Path, summary_path: Path | None) -> 
     return 0
 
 
+def run_tv_plan(source: Path, plan_path: Path, summary_path: Path | None) -> int:
+    source_root = validate_source_for_operation(
+        ensure_source_directory(source),
+        operation=Operation.PLAN,
+    )
+    plan = build_tv_plan(source_root)
+    write_json(plan_path, plan.to_dict())
+
+    if summary_path is not None:
+        ensure_parent_directory(summary_path)
+        safe_count = sum(1 for change in plan.proposed_changes if change.confidence == "safe")
+        review_count = sum(1 for change in plan.proposed_changes if change.confidence == "review")
+        summary_path.write_text(
+            "# normal TV plan summary\n\n"
+            f"- source: {source_root}\n"
+            f"- proposed_changes: {len(plan.proposed_changes)}\n"
+            f"- safe_changes: {safe_count}\n"
+            f"- review_changes: {review_count}\n"
+            f"- warnings: {len(plan.warnings)}\n",
+            encoding="utf-8",
+        )
+    return 0
+
+
 def run_movie_apply(source: Path, plan_path: Path, target: Path | None, in_place: bool) -> int:
     source_root = ensure_source_directory(source)
     if in_place:
@@ -84,6 +109,24 @@ def run_movie_apply(source: Path, plan_path: Path, target: Path | None, in_place
         target_root=target,
         in_place=in_place,
         report_filename="normal-movie-apply-report.json",
+    )
+    return 0
+
+
+def run_tv_apply(source: Path, plan_path: Path, target: Path | None, in_place: bool) -> int:
+    source_root = ensure_source_directory(source)
+    if in_place:
+        validate_source_for_operation(source_root, operation=Operation.APPLY)
+    resolved_plan = plan_path.expanduser().resolve()
+    if not resolved_plan.exists():
+        raise FileNotFoundError(f"plan does not exist: {resolved_plan}")
+
+    apply_plan(
+        source_root=source_root,
+        plan_path=resolved_plan,
+        target_root=target,
+        in_place=in_place,
+        report_filename="normal-tv-apply-report.json",
     )
     return 0
 

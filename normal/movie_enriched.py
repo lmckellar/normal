@@ -71,10 +71,17 @@ def scan_enriched_library(
     progress_callback: Callable[[MovieScanProgress], None] | None = None,
     should_cancel: Callable[[], bool] | None = None,
     lane: str = "movie",
-    parse_identity: Callable[[Path], ParsedMovieIdentity] = parse_movie_name_with_sidecar_fallback,
+    parse_identity: Callable[[Path], object] | None = None,
 ) -> EnrichedLibraryReport:
-    if lane != "movie":
+    if lane not in {"movie", "tv"}:
         raise ValueError(f"Unsupported identity lane: {lane}")
+    if parse_identity is None:
+        if lane == "movie":
+            parse_identity = parse_movie_name_with_sidecar_fallback
+        else:
+            from normal.tv_identity import parse_tv_identity
+
+            parse_identity = lambda path: parse_tv_identity(path, source_root=source_root)
 
     report = EnrichedLibraryReport(
         source_root=str(source_root.resolve()),
@@ -99,8 +106,8 @@ def scan_enriched_library(
         if should_cancel is not None and should_cancel():
             report.warnings.append(
                 WarningItem(
-                    code="movie_enriched_cancelled",
-                    message="Movie enriched scan was cancelled before completion.",
+                    code=f"{lane}_enriched_cancelled",
+                    message=f"{lane.upper()} enriched scan was cancelled before completion.",
                     path=str(source_root),
                 )
             )
@@ -116,13 +123,15 @@ def scan_enriched_library(
             junk_reasons = detect_movie_junk_reasons(movie_path)
             report.warnings.append(
                 WarningItem(
-                    code="movie_probe_error",
+                    code=f"{lane}_probe_error",
                     message=f"Unable to probe media metadata: {exc}",
                     path=str(movie_path),
                 )
             )
 
-        replacement_score, replacement_label, replacement_year = score_replacement_priority(movie_path)
+        replacement_score = replacement_label = replacement_year = None
+        if lane == "movie":
+            replacement_score, replacement_label, replacement_year = score_replacement_priority(movie_path)
         report.files.append(
             EnrichedFacts(
                 movie_id=movie_id_for(movie_path, source_root),
