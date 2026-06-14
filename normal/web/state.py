@@ -9,6 +9,7 @@ from typing import Iterator
 
 from normal.audit import AuditStore
 from .credentials import CredentialStore
+from normal.execution_queue import ExecutionQueueStore
 from normal.movie_canonical_lists import CanonicalListsReport
 from normal.movie_enriched import EnrichedLibraryReport
 from normal.movie_profile import MovieProfileReport
@@ -154,3 +155,4 @@ PROBE_CACHE = ProbeCache()
 atexit.register(PROBE_CACHE.flush)
 AUDIT_STORE = AuditStore()
 CREDENTIAL_STORE = CredentialStore()
+EXECUTION_QUEUE_STORE = ExecutionQueueStore()
