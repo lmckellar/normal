@@ -4,9 +4,9 @@
 
 ### Headline
 
-`normal` is in a semi-stable alpha with a default movie **workbench** at the root route and a narrower, more coherent product shape. Normalize, weak-encode triage, junk cleanup, repair defaults, canonical-list coverage, and export are all materially useful. Recent scan/cache work and the shell pivot make the product feel deliberate rather than exploratory — but it is still pre-`1.0` and still best suited to Linux users comfortable with alpha software.
+`normal` is in a semi-stable alpha with a default movie **workbench** at the root route and a narrower, more coherent product shape. Normalize, weak-encode triage, junk cleanup, repair defaults, canonical-list coverage, and export are all materially useful. Recent scan/cache work and the shell pivot make the product feel deliberate rather than exploratory, while deployment and source safety now have native CI coverage across Linux, macOS, and Windows. It remains pre-`1.0`, and real-library validation outside Linux is still limited.
 
-`v0.7.0-alpha.8` is the current tagged cut. Its centrepiece is **Format Upgrade Candidates** — the old Immersive Audio lane grown into an evidence-backed assessment of whether a *better release* of each title exists (immersive audio, UHD, Dolby Vision, Open Matte, Hybrid) and whether local copies already cover it. The same cut adds weak-encode **badges** (lopsided-encode detection plus known-bad-encoder verdicts) under a global **Fun Mode** toggle, and hardens the boring machinery: explicit Python 3.12–3.14 support with 3.15+ rejected, lazy XLSX loading, and a wheel-packaging fix that ships the web UI. It continues to favor one coherent workbench that is honest about what each action actually does. The preceding `alpha.7` introduced the Immersive Audio workflow, a **cold-start onboarding gate**, and a **weak-encodes triage score**, and routed weak-encode and audio deletes through the replacement queue under the unified audit ledger.
+`v0.7.0-alpha.9` is the current tagged cut: a hardening checkpoint after the `alpha.8` feature wave. It intentionally changes little in the visible product surface and consolidates native CI and installed-wheel checks, centralized user-data paths, cross-platform mount and source policy, mutation-time path validation, heavy-scan safety, and the remote web trust model. The result is a cleaner baseline before the next product-facing push.
 
 ### Concerns
 
@@ -87,7 +87,7 @@ Both lanes stable, with a clear, distinctive identity: folder and tagging qualit
 
 ## Disclaimer
 
-`normal` is pre-`1.0`. The current version story was reconstructed from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1` and the current release is `v0.7.0-alpha.8`; both carry matching prerelease intent. Earlier `CHANGELOG.md` sections remain reconstructed history rather than tagged releases.
+`normal` is pre-`1.0`. The current version story was reconstructed from commit history and diff/change logs. The first real release is `v0.7.0-alpha.1` and the current release is `v0.7.0-alpha.9`; both carry matching prerelease intent. Earlier `CHANGELOG.md` sections remain reconstructed history rather than tagged releases.
 
 ---
 

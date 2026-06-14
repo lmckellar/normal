@@ -1,7 +1,7 @@
 # normal
 
 ![Status](https://img.shields.io/badge/status-alpha-orange)
-![Version](https://img.shields.io/badge/version-0.7.0--alpha.8-blue)
+![Version](https://img.shields.io/badge/version-0.7.0--alpha.9-blue)
 ![Python](https://img.shields.io/badge/python-3.12%E2%80%933.14-blue)
 ![Platform](https://img.shields.io/badge/platform-Linux--first-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-green)

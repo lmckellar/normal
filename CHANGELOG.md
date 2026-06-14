@@ -4,6 +4,38 @@ This changelog was retroactively rebuilt from commit history and diff/change
 logs. Real release history starts at `v0.7.0-alpha.1`, with a matching git tag
 and GitHub prerelease. Earlier sections remain reconstructed history.
 
+## [0.7.0-alpha.9] — 2026-06-15
+
+### Changed
+
+- **Deployment and runtime assumptions are explicit.** Native CI now covers
+  Linux, macOS, and Windows, including an installed-wheel web-server smoke test,
+  while Python support remains bounded to the tested 3.12–3.14 range.
+- **User-owned state is centralized.** Credentials, policy, audit, cache,
+  replacement, history, and corpus data resolve through the shared user-data
+  path module instead of relying on working-directory or platform-specific
+  assumptions.
+- **Remote web access has one coherent trust model.** Non-loopback binding
+  requires explicit unsafe-remote intent, trusted host/origin configuration,
+  and an allowed peer network; host-local access remains the safe default.
+- **Source and mount policy is shared across CLI and web workflows.** Heavy
+  scans and mutations use the same approved-root, whole-drive, mount, network
+  share, symlink, junction, and containment rules across supported platforms.
+
+### Fixed
+
+- Mutating web requests now reject malformed routes, oversized or invalid
+  bodies, untrusted peers, hosts, and origins before dispatch; destructive
+  operations are serialized server-side.
+- Rename, move, merge, repair, and folder-cleanup paths are revalidated at
+  mutation time so stale plans and path escapes cannot cross the approved
+  source boundary.
+- Safe-only apply behavior is enforced by the server-owned plan rather than
+  trusted from client input, and persisted library roots must pass source
+  approval before reuse.
+- Installed wheels now exercise the packaged web server in CI, including its
+  bundled assets and runtime path assumptions.
+
 ## [0.7.0-alpha.8] — 2026-06-14
 
 ### Added

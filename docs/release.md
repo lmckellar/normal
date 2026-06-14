@@ -4,7 +4,7 @@ An internal guide for keeping versioning, the changelog, and the roadmap aligned
 
 ## Versioning
 
-The current package version is `0.7.0a8`, tagged `v0.7.0-alpha.8` and published as a GitHub **prerelease**. Earlier history in `CHANGELOG.md` is a planning aid — reconstructed, not a set of real tags or releases.
+The current package version is `0.7.0a9`, tagged `v0.7.0-alpha.9` and published as a GitHub **prerelease**. Earlier history in `CHANGELOG.md` is a planning aid — reconstructed, not a set of real tags or releases.
 
 Use the smallest bump that explains the work:
 
@@ -16,7 +16,7 @@ Use the smallest bump that explains the work:
 - `1.0.0` — reserved for the final refactor slice
 - `1.x` — refactor stabilization before the dashboard-led UI overhaul
 
-Only bump `pyproject.toml` and `normal.__version__` when cutting a real release. Here, **real release** means all four of: a version bump, a changelog section, a matching git tag, and a matching GitHub release object.
+Only bump `pyproject.toml` and visible version labels when cutting a real release. `normal.__version__` derives from installed package metadata. Here, **real release** means all four of: a version bump, a changelog section, a matching git tag, and a matching GitHub release object.
 
 ## Changelog
 
@@ -41,7 +41,7 @@ The roadmap tells the release story — it is not a dumping ground for every ide
 
 1. Update `CHANGELOG.md`.
 2. Update **Where we are now** in `docs/roadmap.md` for any current-state change.
-3. Bump `pyproject.toml` and `normal/__init__.py` to the release version.
+3. Bump `pyproject.toml` and visible version labels to the release version.
 4. Run `python3 -m unittest discover -s tests`.
 5. Create and push the matching git tag.
 6. Publish the matching GitHub release from that tag, marked as a prerelease for `alpha`-class cuts.
