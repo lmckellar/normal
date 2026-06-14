@@ -109,6 +109,28 @@ class WebScanGuardTests(unittest.TestCase):
                         with guarded_heavy_scan(source, "Movie canonical lists"):
                             self.fail("overlapping heavy scan should not be allowed")
 
+    def test_heavy_scan_registry_rejects_nested_child_of_active_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            parent = Path(tmpdir) / "lib"
+            (parent / "Sub").mkdir(parents=True)
+            registry = HeavyScanRegistry()
+
+            with registry.claim(parent, "heavy_scan", "Parent scan"):
+                with self.assertRaises(RequestConflictError):
+                    with registry.claim(parent / "Sub", "heavy_scan", "Child scan"):
+                        self.fail("scan of a child of an active scan should not be allowed")
+
+    def test_heavy_scan_registry_allows_non_overlapping_siblings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir) / "lib"
+            (base / "A").mkdir(parents=True)
+            (base / "B").mkdir()
+            registry = HeavyScanRegistry()
+
+            with registry.claim(base / "A", "heavy_scan", "Scan A"):
+                with registry.claim(base / "B", "heavy_scan", "Scan B"):
+                    pass
+
     def test_looks_like_drive_directory_covers_common_mount_roots(self) -> None:
         self.assertTrue(looks_like_drive_directory(Path("/mnt/media_storage")))
         self.assertTrue(looks_like_drive_directory(Path("/media/lachlan/Drive")))

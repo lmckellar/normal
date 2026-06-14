@@ -18,23 +18,34 @@ class RequestConflictError(RuntimeError):
     pass
 
 
+@dataclass
+class _ActiveScan:
+    category: str
+    source: Path
+    label: str
+
+
 class HeavyScanRegistry:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._active: set[tuple[str, str]] = set()
+        self._active: list[_ActiveScan] = []
 
     @contextmanager
     def claim(self, source: Path, category: str, label: str) -> Iterator[None]:
-        key = (category, str(source.resolve()))
+        from .scan_guard import source_paths_overlap
+
+        resolved = source.resolve()
+        entry = _ActiveScan(category=category, source=resolved, label=label)
         with self._lock:
-            if key in self._active:
-                raise RequestConflictError(f"{label} is already running for {key[1]}")
-            self._active.add(key)
+            for active in self._active:
+                if source_paths_overlap(active.source, resolved):
+                    raise RequestConflictError(f"{label} is already running for {active.source}")
+            self._active.append(entry)
         try:
             yield
         finally:
             with self._lock:
-                self._active.discard(key)
+                self._active.remove(entry)
 
 
 @dataclass
