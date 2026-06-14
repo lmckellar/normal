@@ -10,6 +10,7 @@ from typing import Iterator
 from normal.audit import AuditStore
 from .credentials import CredentialStore
 from normal.movie_canonical_lists import CanonicalListsReport
+from normal.movie_enriched import EnrichedLibraryReport
 from normal.movie_profile import MovieProfileReport
 from normal.probe_cache import ProbeCache
 
@@ -108,8 +109,36 @@ class MovieCanonicalCache:
             self._entries.pop(key, None)
 
 
+@dataclass
+class _EnrichedCacheEntry:
+    report: EnrichedLibraryReport
+
+
+class MovieEnrichedCache:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._entries: dict[str, _EnrichedCacheEntry] = {}
+
+    def get(self, source: Path) -> EnrichedLibraryReport | None:
+        key = str(source.resolve())
+        with self._lock:
+            entry = self._entries.get(key)
+            return entry.report if entry is not None else None
+
+    def put(self, source: Path, report: EnrichedLibraryReport) -> None:
+        key = str(source.resolve())
+        with self._lock:
+            self._entries[key] = _EnrichedCacheEntry(report=report)
+
+    def invalidate(self, source: Path) -> None:
+        key = str(source.resolve())
+        with self._lock:
+            self._entries.pop(key, None)
+
+
 ACTIVITY_TRACKER = None
 HEAVY_SCAN_REGISTRY = HeavyScanRegistry()
+MOVIE_ENRICHED_CACHE = MovieEnrichedCache()
 MOVIE_PROFILE_CACHE = MovieProfileCache()
 MOVIE_CANONICAL_CACHE = MovieCanonicalCache()
 PROBE_CACHE = ProbeCache()

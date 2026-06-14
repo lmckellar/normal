@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from normal.audit import AuditEffect, AuditEvent, AuditSubject, make_event_id
 from normal.models import utc_now_iso
 from normal.movie_apply import apply_changes_in_place
-from normal.movie_plan import build_movie_plan, parse_movie_name_with_sidecar_fallback
-from normal.movie_scan import discover_video_files
+from normal.movie_enriched import parsed_movies_from_enriched, scan_enriched_library
+from normal.movie_plan import build_movie_plan
 from normal.source_policy import Operation, validate_source_for_operation
 
+from .activity import tracked_probe
 from .http import RequestContext
 from .routes_audit import build_reversal_entries_for_normalize_effects, record_scan_event
 from .scan_guard import guarded_heavy_scan, guarded_mutation
 from .serializers import build_movie_normalize_results
-from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE
+from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_ENRICHED_CACHE, MOVIE_PROFILE_CACHE, PROBE_CACHE
 
 
 def _build_normalize_payload(source, movie_files, plan, parsed_movies):
@@ -37,8 +39,15 @@ def handle_movies_normalize(ctx: RequestContext, payload: dict[str, Any]) -> Non
     )
     with guarded_heavy_scan(source, "Movie normalize plan"):
         with ctx.handler.activity_tracker.track(source, "Movie normalize plan"):
-            movie_files = discover_video_files(source)
-            parsed_movies = {movie_path: parse_movie_name_with_sidecar_fallback(movie_path) for movie_path in movie_files}
+            enriched = MOVIE_ENRICHED_CACHE.get(source)
+            if enriched is None:
+                enriched = scan_enriched_library(
+                    source,
+                    probe_media=tracked_probe(source, "ffprobe movie library", cache=PROBE_CACHE),
+                )
+                MOVIE_ENRICHED_CACHE.put(source, enriched)
+            movie_files = [Path(item.path) for item in enriched.files]
+            parsed_movies = parsed_movies_from_enriched(enriched)
             plan = build_movie_plan(source, movie_files=movie_files, parsed_movies=parsed_movies)
             response = _build_normalize_payload(source, movie_files, plan, parsed_movies)
     record_scan_event(
@@ -62,8 +71,12 @@ def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
         raise ValueError("change_ids must be a list")
     requested_ids = {str(item_id) for item_id in raw_ids}
     with guarded_mutation(source, "Movie apply"), ctx.handler.activity_tracker.track(source, "Movie apply"):
-        plan_movie_files = discover_video_files(source)
-        plan_parsed_movies = {movie_path: parse_movie_name_with_sidecar_fallback(movie_path) for movie_path in plan_movie_files}
+        enriched = scan_enriched_library(
+            source,
+            probe_media=tracked_probe(source, "ffprobe movie library", cache=PROBE_CACHE),
+        )
+        plan_movie_files = [Path(item.path) for item in enriched.files]
+        plan_parsed_movies = parsed_movies_from_enriched(enriched)
         authoritative_plan = build_movie_plan(source, movie_files=plan_movie_files, parsed_movies=plan_parsed_movies)
         changes = [change for change in authoritative_plan.proposed_changes if change.item_id in requested_ids]
         validate_source_for_operation(
@@ -73,11 +86,17 @@ def handle_movies_apply(ctx: RequestContext, payload: dict[str, Any]) -> None:
             candidate_paths=[change.path for change in changes if change.path],
         )
         report = apply_changes_in_place(source, changes, approved_roots=ctx.approved_roots)
+        MOVIE_ENRICHED_CACHE.invalidate(source)
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
         _record_normalize_apply_event(source, changes, report.to_dict())
-        movie_files = discover_video_files(source)
-        parsed_movies = {movie_path: parse_movie_name_with_sidecar_fallback(movie_path) for movie_path in movie_files}
+        enriched = scan_enriched_library(
+            source,
+            probe_media=tracked_probe(source, "ffprobe movie library", cache=PROBE_CACHE),
+        )
+        MOVIE_ENRICHED_CACHE.put(source, enriched)
+        movie_files = [Path(item.path) for item in enriched.files]
+        parsed_movies = parsed_movies_from_enriched(enriched)
         plan = build_movie_plan(source, movie_files=movie_files, parsed_movies=parsed_movies)
     response = report.to_dict()
     remaining_payload = _build_normalize_payload(source, movie_files, plan, parsed_movies)

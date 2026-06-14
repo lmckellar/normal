@@ -15,11 +15,11 @@ from normal.audit import (
     make_follow_up_id,
 )
 from normal.models import utc_now_iso
+from normal.movie_enriched import build_movie_cleanup_from_enriched, scan_enriched_library
 from normal.movie_audio_fix import fix_english_audio_defaults
 from normal.movie_junk import (
     detect_movie_junk_document_reasons,
     detect_movie_junk_reasons,
-    scan_movie_cleanup,
 )
 from normal.movie_repair_fix import fix_movie_repair_defaults
 from normal.movie_subtitle_fix import fix_movie_subtitle_defaults
@@ -38,7 +38,7 @@ from .http import RequestContext
 from .routes_audit import normalize_subject_from_path, record_scan_event
 from .scan_guard import guarded_heavy_scan, guarded_mutation
 from .serializers import build_updated_profile_items
-from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_PROFILE_CACHE, PROBE_CACHE
+from .state import AUDIT_STORE, MOVIE_CANONICAL_CACHE, MOVIE_ENRICHED_CACHE, MOVIE_PROFILE_CACHE, PROBE_CACHE
 
 
 SAFE_MOVIE_SIDECAR_EXTENSIONS = {
@@ -155,10 +155,14 @@ def handle_movies_junk(ctx: RequestContext, payload: dict[str, Any]) -> None:
     )
     with guarded_heavy_scan(source, "Movie junk scan"):
         with ctx.handler.activity_tracker.track(source, "Movie junk scan"):
-            report = scan_movie_cleanup(
-                source,
-                probe_media=tracked_probe(source, "ffprobe movie junk", cache=PROBE_CACHE),
-            )
+            enriched = MOVIE_ENRICHED_CACHE.get(source)
+            if enriched is None:
+                enriched = scan_enriched_library(
+                    source,
+                    probe_media=tracked_probe(source, "ffprobe movie library", cache=PROBE_CACHE),
+                )
+                MOVIE_ENRICHED_CACHE.put(source, enriched)
+            report = build_movie_cleanup_from_enriched(source, enriched)
     document_junk_count = sum(1 for item in report.junk if Path(item.path).suffix.lower() in {".txt", ".html", ".htm"})
     record_scan_event(
         source,
@@ -191,6 +195,10 @@ def handle_movies_junk_delete(ctx: RequestContext, payload: dict[str, Any]) -> N
             approved_roots=ctx.approved_roots,
         )
     _record_junk_delete_event(source, result)
+    if result["deleted"]:
+        MOVIE_ENRICHED_CACHE.invalidate(source)
+        MOVIE_PROFILE_CACHE.invalidate(source)
+        MOVIE_CANONICAL_CACHE.invalidate(source)
     ctx.respond_json(result)
 
 
@@ -379,6 +387,7 @@ def handle_movies_delete(ctx: RequestContext, payload: dict[str, Any]) -> None:
         )
     _record_media_delete_event(source, result, issue_family=issue_family)
     if result["deleted"]:
+        MOVIE_ENRICHED_CACHE.invalidate(source)
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
     ctx.respond_json(result)
@@ -407,6 +416,7 @@ def handle_movies_audio_packaging_fix(ctx: RequestContext, payload: dict[str, An
             approved_roots=ctx.approved_roots,
         )
     if result["fixed"]:
+        MOVIE_ENRICHED_CACHE.invalidate(source)
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
     result["updated_items"] = build_updated_profile_items(source, result["fixed"], resolve_language=ctx.language_resolver())
@@ -455,6 +465,7 @@ def handle_movies_subtitle_readiness_fix(ctx: RequestContext, payload: dict[str,
         )
     result["updated_items"] = build_updated_profile_items(source, result["fixed"], resolve_language=ctx.language_resolver())
     if result["updated_items"]:
+        MOVIE_ENRICHED_CACHE.invalidate(source)
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
     _record_repair_event(
@@ -511,6 +522,7 @@ def handle_movies_repair_defaults_fix(ctx: RequestContext, payload: dict[str, An
         )
     result["updated_items"] = build_updated_profile_items(source, result["fixed"], resolve_language=ctx.language_resolver())
     if result["updated_items"]:
+        MOVIE_ENRICHED_CACHE.invalidate(source)
         MOVIE_PROFILE_CACHE.invalidate(source)
         MOVIE_CANONICAL_CACHE.invalidate(source)
     removed_audio = _summarize_removed_audio_from_fixed(result.get("fixed", []))
