@@ -17,7 +17,7 @@ User consensus is unanimous:
 
 ## 🧹 What It Does
 
-- 🎬 Normalises movie files and parent folders into `Title (Year)/Title (Year)` naming convention
+- 🎬 Normalizes movie files and parent folders into `Title (Year)/Title (Year)` naming convention
 - 🔍 Inspects the library and arranges it into a cross section of user editable quality profiles
 - 🗑️ Bulk Deletes shortlisted weak encodes, Samples, Featurettes, Extras, `.txt` spam and other junk ephemera freeing space immediately 
 - 📑 Creates and manages a local Universal Ledger & Replacement Queue that centralizes all deleted items and checks for a replacement 
@@ -25,10 +25,10 @@ User consensus is unanimous:
 - 🔊 Enforces logical subtitle and audio defaults across the board with `ffmpeg` remuxing and `mkvpropedit` subtitle swapping
 - 📤 One Click Export your entire library as a cleanly organized spreadsheet for a quick 💪
 - 🤝 Removes downstream frustrations with clients like Plex, Emby and Jellyfin and their oddly conflicting naming requirements
-- 🦀 Conceals its deep shame and embarrassment for being agent-coded in 2026 but not written in Rust
 - 🆙 Tells you whether a *better release* of a film even exists — UHD, Dolby Vision, object-based immersive audio (Atmos / DTS:X), Open Matte, or Hybrid — and whether your own copies already have it. A fact no scanner can read off a library and no public API will sell you
+- 🦀 Conceals its deep shame and embarrassment for being agent-coded in 2026 but not written in Rust
 - 📊 Lets you compare your collection directly against canonical movie lists and identify what's missing:
-  - IMDb Top 100 / 250 / 500 All Time
+  - IMDb Top 100 / 250 / 500 All Time Greatest Movies
   - Genre lists: Animation, Sci-Fi, Fantasy, Action, Thriller/Mystery, Drama/Romance, Documentary, Comedy
 - 🚨 It even does other stuff too 🔥
 
