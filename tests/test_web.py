@@ -1641,12 +1641,14 @@ class WebApprovedRootTests(unittest.TestCase):
                     self.assertEqual(ctx.exception.code, 400)
                     self.assertIn("drive_directory", ctx.exception.read().decode("utf-8"))
 
-    def test_scan_warning_rejects_unapproved_path(self) -> None:
+    def test_scan_warning_rejects_path_outside_configured_approved_roots(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             source = Path(tmpdir) / "Movies"
             source.mkdir()
+            approved = Path(tmpdir) / "Approved"
+            approved.mkdir()
             warn_body = json.dumps({"source": str(source)}).encode("utf-8")
-            with self.run_test_server(approved_roots=ApprovedRoots.from_paths([])) as base_url:
+            with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
                 with self.assertRaises(urllib.error.HTTPError) as ctx:
                     self.post(base_url, "/api/source/scan-warning", warn_body)
             self.assertEqual(ctx.exception.code, 400)
@@ -1754,6 +1756,19 @@ class WebApprovedRootTests(unittest.TestCase):
             roots = captured["approved_roots"].roots
             self.assertIn(source.resolve(), roots)
             self.assertIn(extra.resolve(), roots)
+
+    def test_run_web_uses_saved_default_source_when_cli_source_absent(self) -> None:
+        from normal import commands
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "Movies"
+            source.mkdir()
+            captured: dict = {}
+            with patch("normal.commands.load_operator_preferences", return_value={"default_source": str(source)}):
+                with patch("normal.commands.serve_web_ui", lambda **kwargs: captured.update(kwargs)):
+                    commands.run_web(host="127.0.0.1", port=0)
+            self.assertEqual(captured["default_source"], source.resolve())
+            self.assertIn(source.resolve(), captured["approved_roots"].roots)
 
     def test_run_web_requires_allowed_host_for_unspecified_bind(self) -> None:
         from normal import commands

@@ -8,7 +8,7 @@ from normal.movie_apply import apply_plan
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_junk import scan_movie_junk
 from normal.movie_plan import build_movie_plan
-from normal.movie_profile import build_histogram_payload, scan_movie_profiles
+from normal.movie_profile import build_histogram_payload, load_operator_preferences, scan_movie_profiles
 from normal.movie_scan import MovieScanProgress, scan_movie_library
 from normal.output import write_movie_register_xlsx, write_movie_review_csv
 from normal.source_policy import Operation, resolve_source_path, validate_source_for_operation
@@ -197,9 +197,7 @@ def run_web(
     parsed_allowed_hosts = parse_allowed_hosts(allowed_hosts or [])
     if not is_loopback_bind(host) and not parsed_allowed_hosts:
         raise ValueError("non-loopback --host requires at least one --allowed-host.")
-    default_source = None
-    if source is not None:
-        default_source = ensure_source_directory(source)
+    default_source = ensure_source_directory(source) if source is not None else load_saved_default_source()
     seed_roots: list[Path] = []
     if default_source is not None:
         seed_roots.append(default_source)
@@ -216,6 +214,16 @@ def run_web(
         allowed_hosts=parsed_allowed_hosts,
     )
     return 0
+
+
+def load_saved_default_source() -> Path | None:
+    raw_source = str(load_operator_preferences().get("default_source") or "").strip()
+    if not raw_source:
+        return None
+    try:
+        return ensure_source_directory(Path(raw_source))
+    except (OSError, ValueError):
+        return None
 
 
 def build_movie_scan_progress_callback():
