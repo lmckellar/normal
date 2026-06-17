@@ -199,9 +199,12 @@ def run_web(
     if not is_loopback_bind(host) and not parsed_allowed_hosts:
         raise ValueError("non-loopback --host requires at least one --allowed-host.")
     default_source = ensure_source_directory(source) if source is not None else load_saved_default_source()
+    tv_default_source = load_saved_tv_default_source() if source is None else None
     seed_roots: list[Path] = []
     if default_source is not None:
         seed_roots.append(default_source)
+    if tv_default_source is not None:
+        seed_roots.append(tv_default_source)
     for saved_root in iter_saved_library_root_paths():
         try:
             seed_roots.append(ensure_source_directory(saved_root))
@@ -223,7 +226,18 @@ def run_web(
 
 
 def load_saved_default_source() -> Path | None:
-    raw_source = str(load_operator_preferences().get("default_source") or "").strip()
+    preferences = load_operator_preferences()
+    raw_source = str(preferences.get("default_movie_source") or preferences.get("default_source") or "").strip()
+    if not raw_source:
+        return None
+    try:
+        return ensure_source_directory(Path(raw_source))
+    except (OSError, ValueError):
+        return None
+
+
+def load_saved_tv_default_source() -> Path | None:
+    raw_source = str(load_operator_preferences().get("default_tv_source") or "").strip()
     if not raw_source:
         return None
     try:

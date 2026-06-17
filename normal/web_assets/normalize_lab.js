@@ -1054,7 +1054,7 @@
     if (label === 'library_grade') return 'Library Grade';
     if (label === 'collector_grade') return 'Collector Grade';
     if (label === 'reference') return 'Reference';
-    if (label === 'default_source') return 'Default Library Directory';
+    if (label === 'default_source') return 'Default Library Directories';
     if (label === 'library_defaults') return 'Library Defaults';
     if (label === 'language_subtitle_defaults') return 'Language & Subtitles';
     if (label === 'delete_mode') return 'Delete Posture';
@@ -1253,8 +1253,35 @@
     }
   }
 
-  function preferredDefaultSource() {
-    return normalizeSourceKey(state.policyPayload?.operator_preferences?.default_source || '');
+  function workflowDefaultSourcePreferenceKey(workflow = state.workflow) {
+    return workflow === 'tv-normalize' ? 'default_tv_source' : 'default_movie_source';
+  }
+
+  function preferredDefaultSource(workflow = state.workflow) {
+    const preferences = state.policyPayload?.operator_preferences || {};
+    const key = workflowDefaultSourcePreferenceKey(workflow);
+    const direct = normalizeSourceKey(preferences[key] || '');
+    if (direct) return direct;
+    if (key === 'default_movie_source') {
+      return normalizeSourceKey(preferences.default_source || '');
+    }
+    return '';
+  }
+
+  function syncSourceToWorkflowDefault(nextWorkflow, previousWorkflow = '') {
+    const current = normalizeSourceKey(el.sourcePath.value);
+    const nextSource = preferredDefaultSource(nextWorkflow);
+    if (!nextSource) return false;
+    const previousSource = previousWorkflow ? preferredDefaultSource(previousWorkflow) : '';
+    const bootSource = normalizeSourceKey(window.DEFAULT_SOURCE || '');
+    if (!current || current === previousSource || current === bootSource) {
+      if (current !== nextSource) {
+        el.sourcePath.value = nextSource;
+        el.sourcePath.dispatchEvent(new Event('input'));
+      }
+      return true;
+    }
+    return false;
   }
 
   function qualityStanceRank(label) {
@@ -2462,7 +2489,10 @@
       delete state.policyDrafts[label];
       if (label === 'default_source') {
         const nextSource = preferredDefaultSource();
-        el.sourcePath.value = nextSource;
+        if (normalizeSourceKey(el.sourcePath.value) !== nextSource) {
+          el.sourcePath.value = nextSource;
+          el.sourcePath.dispatchEvent(new Event('input'));
+        }
         if (nextSource) {
           state.surfaceMode = 'audit';
           await refreshAuditPayload({ immediate: true });
@@ -6037,8 +6067,10 @@
   }
 
   function setWorkflow(workflow) {
+    const previousWorkflow = state.workflow;
     dismissAuditSurface();
     state.workflow = ['tv-normalize', 'weak-encodes', 'repair-defaults', 'canonical-lists', 'format-upgrades', 'junk'].includes(workflow) ? workflow : 'normalize';
+    syncSourceToWorkflowDefault(state.workflow, previousWorkflow);
     state.layoutMode = LAYOUT_MODES.default;
     state.surfaceMode = 'default';
     state.selected = new Set();
@@ -6335,6 +6367,7 @@
   (async () => {
     try {
       await ensurePolicyPayload();
+      syncSourceToWorkflowDefault(state.workflow);
       if (!normalizeSourceKey(el.sourcePath.value)) {
         const startupSource = preferredDefaultSource();
         if (startupSource) el.sourcePath.value = startupSource;

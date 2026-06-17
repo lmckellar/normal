@@ -353,8 +353,10 @@ class WebTests(unittest.TestCase):
 
     def test_library_switcher_remembers_music_and_movie_roots(self) -> None:
         self.assertIn("el.sourcePath.value = window.DEFAULT_SOURCE || '';", FRONTEND)
-        self.assertIn("function preferredDefaultSource()", FRONTEND)
-        self.assertIn("state.policyPayload?.operator_preferences?.default_source", FRONTEND)
+        self.assertIn("function preferredDefaultSource(workflow = state.workflow)", FRONTEND)
+        self.assertIn("preferences.default_source", FRONTEND)
+        self.assertIn("default_movie_source", FRONTEND)
+        self.assertIn("default_tv_source", FRONTEND)
         self.assertNotIn("Library Switcher", FRONTEND)
         self.assertNotIn("n_library_roots", FRONTEND)
 
@@ -664,9 +666,12 @@ class WebTests(unittest.TestCase):
         self.assertIn("return workflow;", NORMALIZE_LAB_FRONTEND)
         self.assertIn("/api/policy/read", NORMALIZE_LAB_FRONTEND)
         self.assertIn("/api/policy/update", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("if (label === 'default_source') return 'Default Library Directory';", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("function preferredDefaultSource()", NORMALIZE_LAB_FRONTEND)
-        self.assertIn("state.policyPayload?.operator_preferences?.default_source", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("if (label === 'default_source') return 'Default Library Directories';", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function preferredDefaultSource(workflow = state.workflow)", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("preferences.default_source", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("default_movie_source", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function workflowDefaultSourcePreferenceKey(workflow = state.workflow)", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("function syncSourceToWorkflowDefault(nextWorkflow, previousWorkflow = '')", NORMALIZE_LAB_FRONTEND)
         self.assertIn("source: normalizeSourceKey(el.sourcePath.value),", NORMALIZE_LAB_FRONTEND)
         self.assertIn("id=\"policyToggle\"", NORMALIZE_LAB_FRONTEND)
         self.assertIn("class=\"lab-sliver\"", NORMALIZE_LAB_FRONTEND)
@@ -709,6 +714,7 @@ class WebTests(unittest.TestCase):
         self.assertNotIn("<th>Effect</th>", NORMALIZE_LAB_FRONTEND)
         self.assertNotIn("lab-audit-sync-chip", NORMALIZE_LAB_FRONTEND)
         self.assertIn("await ensurePolicyPayload();", NORMALIZE_LAB_FRONTEND)
+        self.assertIn("syncSourceToWorkflowDefault(state.workflow);", NORMALIZE_LAB_FRONTEND)
         self.assertIn("if (startupSource) el.sourcePath.value = startupSource;", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Preview and action controls are suppressed while policy editing is active.", NORMALIZE_LAB_FRONTEND)
         self.assertIn("Preview and action controls are suppressed while dashboard view is open.", NORMALIZE_LAB_FRONTEND)
@@ -1796,6 +1802,25 @@ class WebApprovedRootTests(unittest.TestCase):
                     commands.run_web(host="127.0.0.1", port=0)
             self.assertEqual(captured["default_source"], source.resolve())
             self.assertIn(source.resolve(), captured["approved_roots"].roots)
+
+    def test_run_web_seeds_approved_roots_from_saved_tv_default_source(self) -> None:
+        from normal import commands
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_source = Path(tmpdir) / "Movies"
+            tv_source = Path(tmpdir) / "TV Shows"
+            movie_source.mkdir()
+            tv_source.mkdir()
+            captured: dict = {}
+            with patch(
+                "normal.commands.load_operator_preferences",
+                return_value={"default_source": str(movie_source), "default_movie_source": str(movie_source), "default_tv_source": str(tv_source)},
+            ):
+                with patch("normal.commands.serve_web_ui", lambda **kwargs: captured.update(kwargs)):
+                    commands.run_web(host="127.0.0.1", port=0)
+            self.assertEqual(captured["default_source"], movie_source.resolve())
+            self.assertIn(movie_source.resolve(), captured["approved_roots"].roots)
+            self.assertIn(tv_source.resolve(), captured["approved_roots"].roots)
 
     def test_run_web_requires_allowed_host_for_unspecified_bind(self) -> None:
         from normal import commands

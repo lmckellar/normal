@@ -230,6 +230,8 @@ WARNING_GATE_SAFETY_LEVELS = ("safe", "confident", "yolo")
 DEFAULT_OPERATOR_PREFERENCES = {
     "delete_mode": "recycle_all",
     "default_source": "",
+    "default_movie_source": "",
+    "default_tv_source": "",
     "fun_mode": False,
 }
 REMOVED_QUALITY_STANCE_KEYS = (
@@ -803,14 +805,27 @@ def save_library_policy(policy: dict[str, Any]) -> dict[str, Any]:
 def load_operator_preferences() -> dict[str, Any]:
     preferences = json.loads(json.dumps(DEFAULT_OPERATOR_PREFERENCES))
     if not OPERATOR_PREFERENCES_PATH.exists():
-        return preferences
+        return normalize_operator_preferences(preferences)
     try:
         payload = json.loads(OPERATOR_PREFERENCES_PATH.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return preferences
+        return normalize_operator_preferences(preferences)
     if not isinstance(payload, dict):
-        return preferences
-    return deep_merge_dicts(preferences, payload)
+        return normalize_operator_preferences(preferences)
+    return normalize_operator_preferences(deep_merge_dicts(preferences, payload))
+
+
+def normalize_operator_preferences(preferences: dict[str, Any] | None = None) -> dict[str, Any]:
+    active = deep_merge_dicts(DEFAULT_OPERATOR_PREFERENCES, preferences or {})
+    legacy_default_source = str(active.get("default_source") or "").strip()
+    movie_default_source = str(active.get("default_movie_source") or "").strip()
+    tv_default_source = str(active.get("default_tv_source") or "").strip()
+    if not movie_default_source and legacy_default_source:
+        movie_default_source = legacy_default_source
+    active["default_source"] = movie_default_source
+    active["default_movie_source"] = movie_default_source
+    active["default_tv_source"] = tv_default_source
+    return active
 
 
 def immersive_candidate_finding_enabled(preferences: dict[str, Any] | None = None) -> bool:
@@ -819,13 +834,13 @@ def immersive_candidate_finding_enabled(preferences: dict[str, Any] | None = Non
 
 
 def operator_preferences_revision(preferences: dict[str, Any] | None = None) -> str:
-    normalized = deep_merge_dicts(DEFAULT_OPERATOR_PREFERENCES, preferences or load_operator_preferences())
+    normalized = normalize_operator_preferences(preferences or load_operator_preferences())
     encoded = json.dumps(normalized, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
 def save_operator_preferences(preferences: dict[str, Any]) -> dict[str, Any]:
-    normalized = deep_merge_dicts(DEFAULT_OPERATOR_PREFERENCES, preferences)
+    normalized = normalize_operator_preferences(preferences)
     payload = json.dumps(normalized, indent=2) + "\n"
     OPERATOR_PREFERENCES_PATH.parent.mkdir(parents=True, exist_ok=True)
     temp_path: Path | None = None
@@ -1156,21 +1171,27 @@ def build_delete_mode_definition(preferences: dict[str, Any] | None = None) -> d
 
 
 def build_default_source_definition(preferences: dict[str, Any] | None = None) -> dict[str, Any]:
-    active = preferences or load_operator_preferences()
+    active = normalize_operator_preferences(preferences or load_operator_preferences())
     return {
         "label": "default_source",
-        "display_name": "Default Library Directory",
+        "display_name": "Default Library Directories",
         "scope": "operator_preferences",
         "group": "Operator Preference",
-        "summary": "User-local startup source for cold-load navigation.",
-        "rule_summary": "Used to prefill the source field and open Audit Ledger on cold start without scanning.",
+        "summary": "User-local default sources for movie and TV workflows.",
+        "rule_summary": "Movie lanes use the movie default. TV normalize uses the TV default. Cold-load audit opens against the active workflow source without scanning.",
         "fields": [
             {
-                "key": "default_source",
-                "label": "Preferred default library directory",
+                "key": "default_movie_source",
+                "label": "Preferred default movie library directory",
                 "type": "text",
-                "value": str(active.get("default_source") or ""),
-            }
+                "value": str(active.get("default_movie_source") or str(active.get("default_source") or "")),
+            },
+            {
+                "key": "default_tv_source",
+                "label": "Preferred default TV library directory",
+                "type": "text",
+                "value": str(active.get("default_tv_source") or ""),
+            },
         ],
     }
 
@@ -1247,11 +1268,15 @@ def update_policy_definition(
     operator_preferences: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     active_policy = deep_merge_dicts(default_library_policy(), library_policy or load_library_policy())
-    active_preferences = deep_merge_dicts(DEFAULT_OPERATOR_PREFERENCES, operator_preferences or load_operator_preferences())
+    active_preferences = normalize_operator_preferences(operator_preferences or load_operator_preferences())
     if label == "default_source":
         if expected_preferences_revision and expected_preferences_revision != operator_preferences_revision(active_preferences):
             raise MovieStandardsConflictError("Operator preferences changed since this view loaded. Refresh and retry.")
-        active_preferences["default_source"] = str(values.get("default_source") or "").strip()
+        active_preferences["default_movie_source"] = str(
+            values.get("default_movie_source", values.get("default_source")) or ""
+        ).strip()
+        active_preferences["default_tv_source"] = str(values.get("default_tv_source") or "").strip()
+        active_preferences["default_source"] = active_preferences["default_movie_source"]
         return active_policy, save_operator_preferences(active_preferences)
     if label == "delete_mode":
         if expected_preferences_revision and expected_preferences_revision != operator_preferences_revision(active_preferences):

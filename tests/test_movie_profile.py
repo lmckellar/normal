@@ -27,6 +27,7 @@ from normal.movie_profile import (
     looks_like_absolute_numbering,
     total_risk_score,
     evaluate_movie_standards,
+    load_operator_preferences,
     load_movie_standards,
     library_policy_revision,
     MovieStandardsConflictError,
@@ -676,7 +677,7 @@ class MovieProfileTests(unittest.TestCase):
     def test_policy_definitions_extend_quality_controls_with_library_and_operator_sections(self) -> None:
         definitions = build_policy_definitions(
             standards={},
-            preferences={"default_source": "", "delete_mode": "recycle_all"},
+            preferences={"default_source": "", "default_movie_source": "", "default_tv_source": "", "delete_mode": "recycle_all"},
         )
 
         labels = [definition["label"] for definition in definitions]
@@ -687,7 +688,11 @@ class MovieProfileTests(unittest.TestCase):
         self.assertIn("delete_mode", labels)
         default_source = next(definition for definition in definitions if definition["label"] == "default_source")
         self.assertEqual(default_source["scope"], "operator_preferences")
+        self.assertEqual(default_source["display_name"], "Default Library Directories")
+        self.assertEqual(default_source["fields"][0]["key"], "default_movie_source")
         self.assertEqual(default_source["fields"][0]["value"], "")
+        self.assertEqual(default_source["fields"][1]["key"], "default_tv_source")
+        self.assertEqual(default_source["fields"][1]["value"], "")
         library_defaults = next(definition for definition in definitions if definition["label"] == "library_defaults")
         self.assertEqual(library_defaults["fields"][0]["key"], "canonical_list_provider")
         self.assertEqual(library_defaults["fields"][0]["value"], "imdb")
@@ -842,14 +847,29 @@ class MovieProfileTests(unittest.TestCase):
             with patch("normal.movie_profile.OPERATOR_PREFERENCES_PATH", preferences_path):
                 policy, preferences = update_policy_definition(
                     "default_source",
-                    {"default_source": "~/Movies"},
+                    {"default_movie_source": "~/Movies", "default_tv_source": "~/TV Shows"},
                     expected_preferences_revision=operator_preferences_revision(),
                 )
                 saved = preferences_path.read_text(encoding="utf-8")
 
         self.assertEqual(preferences["default_source"], "~/Movies")
+        self.assertEqual(preferences["default_movie_source"], "~/Movies")
+        self.assertEqual(preferences["default_tv_source"], "~/TV Shows")
         self.assertEqual(policy["canonical_list_provider"], "imdb")
         self.assertIn('"default_source": "~/Movies"', saved)
+        self.assertIn('"default_movie_source": "~/Movies"', saved)
+        self.assertIn('"default_tv_source": "~/TV Shows"', saved)
+
+    def test_load_operator_preferences_promotes_legacy_default_source_to_movie_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preferences_path = Path(tmpdir) / "operator-preferences.json"
+            preferences_path.write_text(json.dumps({"default_source": "~/Movies"}) + "\n", encoding="utf-8")
+            with patch("normal.movie_profile.OPERATOR_PREFERENCES_PATH", preferences_path):
+                preferences = load_operator_preferences()
+
+        self.assertEqual(preferences["default_source"], "~/Movies")
+        self.assertEqual(preferences["default_movie_source"], "~/Movies")
+        self.assertEqual(preferences["default_tv_source"], "")
 
     def test_legacy_standards_file_loads_with_policy_defaults(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
