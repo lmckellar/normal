@@ -1661,21 +1661,29 @@ class WebApprovedRootTests(unittest.TestCase):
             root = Path(tmpdir)
             approved = root / "Movies"
             approved.mkdir()
+            tv = root / "TV Shows"
+            tv.mkdir()
             storage = root / "library-roots.json"
             body = json.dumps(
                 {
                     "movies": str(approved),
-                    "recent": [{"lane": "movies", "source": str(approved)}],
+                    "tv": str(tv),
+                    "recent": [
+                        {"lane": "movies", "source": str(approved)},
+                        {"lane": "tv", "source": str(tv)},
+                    ],
                 }
             ).encode("utf-8")
-            with patch("normal.web.routes_core.library_roots_path", return_value=storage):
-                with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
+            with patch("normal.library_roots.library_roots_path", return_value=storage):
+                with self.run_test_server(approved_roots=ApprovedRoots.from_paths([root])) as base_url:
                     with self.post(base_url, "/api/library-roots", body) as response:
                         payload = json.loads(response.read().decode("utf-8"))
-                reloaded = routes_core.load_library_roots(ApprovedRoots.from_paths([approved]))
+                reloaded = routes_core.load_library_roots(ApprovedRoots.from_paths([root]))
 
             self.assertEqual(payload["movies"], str(approved.resolve()))
+            self.assertEqual(payload["tv"], str(tv.resolve()))
             self.assertEqual(payload["recent"][0]["source"], str(approved.resolve()))
+            self.assertEqual(payload["recent"][0]["lane"], "movies")
             self.assertEqual(reloaded, payload)
 
     def test_library_roots_reject_unapproved_path_without_overwriting_saved_roots(self) -> None:
@@ -1686,11 +1694,11 @@ class WebApprovedRootTests(unittest.TestCase):
             approved.mkdir()
             unapproved.mkdir()
             storage = root / "library-roots.json"
-            saved = {"movies": str(approved), "recent": []}
+            saved = {"movies": str(approved), "tv": "", "recent": []}
             storage.write_text(json.dumps(saved), encoding="utf-8")
-            body = json.dumps({"movies": str(unapproved), "recent": []}).encode("utf-8")
+            body = json.dumps({"movies": str(unapproved), "tv": "", "recent": []}).encode("utf-8")
 
-            with patch("normal.web.routes_core.library_roots_path", return_value=storage):
+            with patch("normal.library_roots.library_roots_path", return_value=storage):
                 with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
                     with self.assertRaises(urllib.error.HTTPError) as ctx:
                         self.post(base_url, "/api/library-roots", body)
@@ -1711,16 +1719,18 @@ class WebApprovedRootTests(unittest.TestCase):
                 json.dumps(
                     {
                         "movies": str(unapproved),
+                        "tv": str(unapproved),
                         "recent": [
                             {"lane": "movies", "source": str(unapproved)},
                             {"lane": "movies", "source": str(approved)},
+                            {"lane": "tv", "source": str(unapproved)},
                         ],
                     }
                 ),
                 encoding="utf-8",
             )
 
-            with patch("normal.web.routes_core.library_roots_path", return_value=storage):
+            with patch("normal.library_roots.library_roots_path", return_value=storage):
                 with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
                     request = urllib.request.Request(
                         f"{base_url}/api/library-roots",
@@ -1730,6 +1740,7 @@ class WebApprovedRootTests(unittest.TestCase):
                         payload = json.loads(response.read().decode("utf-8"))
 
             self.assertEqual(payload["movies"], "")
+            self.assertEqual(payload["tv"], "")
             self.assertEqual(payload["recent"], [{"lane": "movies", "source": str(approved.resolve())}])
 
     def test_source_under_approved_root_passes_at_route_level(self) -> None:
@@ -1756,6 +1767,22 @@ class WebApprovedRootTests(unittest.TestCase):
             roots = captured["approved_roots"].roots
             self.assertIn(source.resolve(), roots)
             self.assertIn(extra.resolve(), roots)
+
+    def test_run_web_seeds_approved_roots_from_saved_library_roots(self) -> None:
+        from normal import commands
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            movie_root = Path(tmpdir) / "Movies"
+            tv_root = Path(tmpdir) / "TV Shows"
+            movie_root.mkdir()
+            tv_root.mkdir()
+            captured: dict = {}
+            with patch("normal.commands.iter_saved_library_root_paths", return_value=[movie_root, tv_root]):
+                with patch("normal.commands.serve_web_ui", lambda **kwargs: captured.update(kwargs)):
+                    commands.run_web(host="127.0.0.1", port=0)
+            roots = captured["approved_roots"].roots
+            self.assertIn(movie_root.resolve(), roots)
+            self.assertIn(tv_root.resolve(), roots)
 
     def test_run_web_uses_saved_default_source_when_cli_source_absent(self) -> None:
         from normal import commands

@@ -6,15 +6,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from normal import paths
+from normal import library_roots
 from normal.source_policy import ApprovedRoots, Operation, SourcePolicyError, validate_source_for_operation
 from .activity import build_activity_payload
 from .http import RequestContext
 from .scan_guard import build_source_scan_warning
 
 
-def library_roots_path() -> Path:
-    return paths.data_dir() / "library-roots.json"
+def library_roots_path():
+    return library_roots.library_roots_path()
 
 
 def _validated_library_root(source: str, approved_roots: ApprovedRoots) -> str:
@@ -27,57 +27,44 @@ def _validated_library_root(source: str, approved_roots: ApprovedRoots) -> str:
 
 
 def load_library_roots(approved_roots: ApprovedRoots) -> dict[str, Any]:
-    path = library_roots_path()
-    if not path.exists():
-        return {"movies": "", "recent": []}
+    data = library_roots.load_library_roots_payload()
+    movies = data["movies"]
+    tv = data["tv"]
+    recent = library_roots.normalize_recent_library_roots(data["recent"])
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            return {"movies": "", "recent": []}
-        movies = data.get("movies") if isinstance(data.get("movies"), str) else ""
-        recent = data.get("recent") if isinstance(data.get("recent"), list) else []
-        recent = [
-            r for r in recent
-            if isinstance(r, dict)
-            and r.get("lane") == "movies"
-            and isinstance(r.get("source"), str)
-            and r["source"]
-        ][:2]
+        movies = _validated_library_root(movies, approved_roots) if movies else ""
+    except (OSError, ValueError, SourcePolicyError):
+        movies = ""
+    try:
+        tv = _validated_library_root(tv, approved_roots) if tv else ""
+    except (OSError, ValueError, SourcePolicyError):
+        tv = ""
+    validated_recent = []
+    for item in recent:
         try:
-            movies = _validated_library_root(movies, approved_roots) if movies else ""
+            source = _validated_library_root(item["source"], approved_roots)
         except (OSError, ValueError, SourcePolicyError):
-            movies = ""
-        validated_recent = []
-        for item in recent:
-            try:
-                source = _validated_library_root(item["source"], approved_roots)
-            except (OSError, ValueError, SourcePolicyError):
-                continue
-            validated_recent.append({**item, "source": source})
-        recent = validated_recent
-        return {"movies": movies, "recent": recent}
-    except (OSError, json.JSONDecodeError):
-        return {"movies": "", "recent": []}
+            continue
+        validated_recent.append({**item, "source": source})
+    return {"movies": movies, "tv": tv, "recent": validated_recent}
 
 
 def save_library_roots(data: dict[str, Any], approved_roots: ApprovedRoots) -> None:
     movies = data.get("movies") if isinstance(data.get("movies"), str) else ""
-    recent = data.get("recent") if isinstance(data.get("recent"), list) else []
-    recent = [
-        r for r in recent
-        if isinstance(r, dict)
-        and r.get("lane") == "movies"
-        and isinstance(r.get("source"), str)
-        and r["source"]
-    ][:2]
+    tv = data.get("tv") if isinstance(data.get("tv"), str) else ""
+    recent = library_roots.normalize_recent_library_roots(data.get("recent"))
     movies = _validated_library_root(movies, approved_roots) if movies else ""
+    tv = _validated_library_root(tv, approved_roots) if tv else ""
     recent = [
         {**item, "source": _validated_library_root(item["source"], approved_roots)}
         for item in recent
     ]
     path = library_roots_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps({"movies": movies, "recent": recent}, indent=2) + "\n"
+    payload = json.dumps(
+        {**library_roots.empty_library_roots_payload(), "movies": movies, "tv": tv, "recent": recent},
+        indent=2,
+    ) + "\n"
     with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as handle:
         handle.write(payload)
         temp_path = Path(handle.name)

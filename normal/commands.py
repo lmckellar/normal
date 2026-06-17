@@ -7,6 +7,7 @@ import sys
 from normal.movie_apply import apply_plan
 from normal.movie_inspect import inspect_movie_file
 from normal.movie_junk import scan_movie_junk
+from normal.library_roots import iter_saved_library_root_paths
 from normal.movie_plan import build_movie_plan
 from normal.movie_profile import build_histogram_payload, load_operator_preferences, scan_movie_profiles
 from normal.movie_scan import MovieScanProgress, scan_movie_library
@@ -201,6 +202,11 @@ def run_web(
     seed_roots: list[Path] = []
     if default_source is not None:
         seed_roots.append(default_source)
+    for saved_root in iter_saved_library_root_paths():
+        try:
+            seed_roots.append(ensure_source_directory(saved_root))
+        except (OSError, ValueError):
+            continue
     for raw_root in allow_roots or []:
         seed_roots.append(ensure_source_directory(raw_root))
     approved_roots = ApprovedRoots.from_paths(seed_roots)
