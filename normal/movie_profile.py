@@ -669,17 +669,24 @@ def build_movie_profile_item(
     )
     active_standards = standards or load_movie_standards()
     legacy_label = classify_profile_label(facts)
-    domain_results = evaluate_movie_standards(movie_path, facts, active_standards)
-    lopsided_result = evaluate_lopsided_encode(facts, active_standards)
-    if lopsided_result is not None:
-        domain_results.append(lopsided_result)
     quality_label = classify_quality_stance(
         movie_path,
         facts,
-        domain_results,
+        [],
         active_standards,
         identity=movie_identity,
     )
+    weak_floor_label = replacement_candidate_quality_floor(active_standards)
+    domain_results = evaluate_quality_floor_domains(
+        movie_path,
+        facts,
+        active_standards,
+        weak_floor_label,
+        identity=movie_identity,
+    )
+    lopsided_result = evaluate_lopsided_encode(facts, active_standards)
+    if lopsided_result is not None:
+        domain_results.append(lopsided_result)
     diagnostics = detect_plex_diagnostics(
         movie_path,
         facts,
@@ -693,7 +700,7 @@ def build_movie_profile_item(
     weak_candidate = is_replacement_candidate_quality(quality_label, active_standards) and not is_audio_packaging_owned_movie(diagnostics)
     if lopsided_result is not None and lopsided_result.get("status") == "fail":
         weak_candidate = True
-    label = classify_standard_label(domain_results, active_standards, weak_candidate=weak_candidate)
+    label = classify_standard_label(domain_results, active_standards, weak_candidate=weak_candidate, quality_label=quality_label)
     diagnostics.extend(domain_results_to_diagnostics(domain_results))
     confidence = "low" if any(result["confidence"] == "low" for result in domain_results) else "high"
     return MovieProfileItem(
@@ -1620,6 +1627,22 @@ def evaluate_movie_standards(path: Path, facts: MediaFacts, standards: dict[str,
     ]
 
 
+def evaluate_quality_floor_domains(
+    path: Path,
+    facts: MediaFacts,
+    standards: dict[str, Any],
+    floor_label: str,
+    *,
+    identity: ParsedMovieIdentity | None = None,
+) -> list[dict[str, Any]]:
+    stances = standards.get("quality_stances") or {}
+    stance = stances.get(floor_label) or {}
+    return [
+        evaluate_video_floor_domain(facts, standards, floor_label, stance),
+        evaluate_audio_floor_domain(path, facts, standards, floor_label, stance, identity=identity),
+    ]
+
+
 def evaluate_video_domain(facts: MediaFacts, standards: dict[str, Any]) -> dict[str, Any]:
     resolution = facts.resolution_bucket or classify_resolution(
         facts.width,
@@ -1679,6 +1702,137 @@ def evaluate_audio_domain(facts: MediaFacts, standards: dict[str, Any]) -> dict[
     if reference_codecs and codec in reference_codecs and channels >= minimum_channels and bitrate >= minimum_bitrate:
         return standard_result("audio_minimum", "pass", "audio_reference", "Main audio meets the configured reference standard.", "high")
     return standard_result("audio_minimum", "pass", "audio_meets_minimum", "Main audio meets the configured minimum standard.", "high")
+
+
+def evaluate_video_floor_domain(
+    facts: MediaFacts,
+    standards: dict[str, Any],
+    floor_label: str,
+    stance: dict[str, Any],
+) -> dict[str, Any]:
+    resolution = facts.resolution_bucket or classify_resolution(
+        facts.width,
+        facts.height,
+        facts.sample_aspect_ratio,
+        facts.display_aspect_ratio,
+    ) or "unknown"
+    bitrate = facts.video_bitrate_kbps or 0
+    minimum = resolve_stance_video_floor(floor_label, stance, standards, resolution)
+    reference = int(((standards.get("video") or {}).get(resolution) or {}).get("reference_kbps") or 0)
+    if not bitrate or not minimum:
+        return standard_result("video_minimum", "review_low_confidence", "video_signal_missing", "Video bitrate is missing or incomplete.", "low")
+    if bitrate < minimum:
+        return standard_result(
+            "video_minimum",
+            "fail",
+            "video_below_minimum",
+            f"Video bitrate {bitrate:,} kbps is below the {floor_label.replace('_', ' ')} floor of {minimum:,} kbps.",
+            "high",
+        )
+    if reference and bitrate >= reference:
+        return standard_result("video_minimum", "pass", "video_reference", "Video bitrate meets the reference floor.", "high")
+    return standard_result("video_minimum", "pass", "video_meets_minimum", "Video bitrate meets the configured weak floor.", "high")
+
+
+def evaluate_audio_floor_domain(
+    path: Path,
+    facts: MediaFacts,
+    standards: dict[str, Any],
+    floor_label: str,
+    stance: dict[str, Any],
+    *,
+    identity: ParsedMovieIdentity | None = None,
+) -> dict[str, Any]:
+    allowed_codecs = resolve_stance_audio_codecs(floor_label, stance, standards)
+    return evaluate_audio_against_floor(
+        path,
+        facts,
+        minimum_channels=resolve_stance_audio_channels(floor_label, stance, standards),
+        minimum_bitrate=resolve_stance_audio_bitrate(floor_label, stance, standards),
+        allowed_codecs=allowed_codecs,
+        reference_codecs=[],
+        vintage_cutoff=int(stance.get("audio_channels_vintage_cutoff") or 0),
+        atmos_cutoff=int(stance.get("audio_channels_atmos_cutoff") or 0),
+        mono_cutoff=int(stance.get("audio_channels_mono_cutoff") or 0),
+        fail_summary_prefix="configured weak floor",
+        pass_summary="Main audio meets the configured weak floor.",
+        identity=identity,
+    )
+
+
+def evaluate_audio_against_floor(
+    path: Path,
+    facts: MediaFacts,
+    *,
+    minimum_channels: int,
+    minimum_bitrate: int,
+    allowed_codecs: list[str] | set[str],
+    reference_codecs: list[str] | set[str],
+    vintage_cutoff: int = 0,
+    atmos_cutoff: int = 0,
+    mono_cutoff: int = 0,
+    fail_summary_prefix: str,
+    pass_summary: str,
+    identity: ParsedMovieIdentity | None = None,
+) -> dict[str, Any]:
+    allowed = {str(codec).casefold() for codec in allowed_codecs}
+    reference = {str(codec).casefold() for codec in reference_codecs}
+    codec = (facts.audio_format_family or facts.audio_codec or "").casefold()
+    channels = facts.audio_channels or 0
+    bitrate = facts.audio_bitrate_kbps or 0
+
+    if not codec and not channels and not bitrate:
+        return standard_result("audio_minimum", "review_low_confidence", "audio_signal_missing", "Audio facts are too sparse to verify the minimum standard.", "low")
+    if allowed and codec and codec not in allowed:
+        return standard_result("audio_minimum", "fail", "audio_codec_below_minimum", f"Main audio codec `{codec}` is below the {fail_summary_prefix}.", "high")
+
+    channels_ok, mono_exempt = audio_channels_meet_floor(
+        path,
+        channels,
+        minimum_channels,
+        vintage_cutoff=vintage_cutoff,
+        atmos_cutoff=atmos_cutoff,
+        mono_cutoff=mono_cutoff,
+        identity=identity,
+    )
+    if not channels_ok:
+        return standard_result("audio_minimum", "fail", "audio_channels_below_minimum", f"Main audio layout is below the configured minimum of {minimum_channels} channels.", "high")
+
+    effective_bitrate = minimum_bitrate
+    if mono_exempt and effective_bitrate and minimum_channels > 1:
+        effective_bitrate = max(1, (effective_bitrate + 1) // 2)
+    if effective_bitrate and bitrate and bitrate < effective_bitrate:
+        return standard_result("audio_minimum", "fail", "audio_bitrate_below_minimum", f"Main audio bitrate {bitrate:,} kbps is below the configured minimum of {effective_bitrate:,} kbps.", "high")
+    if reference and codec in reference and channels >= minimum_channels and bitrate >= effective_bitrate:
+        return standard_result("audio_minimum", "pass", "audio_reference", "Main audio meets the configured reference standard.", "high")
+    return standard_result("audio_minimum", "pass", "audio_meets_minimum", pass_summary, "high")
+
+
+def audio_channels_meet_floor(
+    path: Path,
+    channels: int,
+    required_channels: int,
+    *,
+    vintage_cutoff: int = 0,
+    atmos_cutoff: int = 0,
+    mono_cutoff: int = 0,
+    identity: ParsedMovieIdentity | None = None,
+) -> tuple[bool, bool]:
+    if not required_channels or channels >= required_channels:
+        return True, False
+    exempt = False
+    mono_exempt = False
+    if vintage_cutoff or atmos_cutoff or mono_cutoff:
+        parsed_identity = identity or parse_movie_name(path)
+        year = parsed_identity.year
+        if vintage_cutoff and year and year < vintage_cutoff:
+            exempt = True
+        if not exempt and atmos_cutoff and required_channels > 6 and channels >= 6 and year and year < atmos_cutoff:
+            exempt = True
+        if not exempt and mono_cutoff and channels == 1 and year and year < mono_cutoff:
+            exempt = True
+            mono_exempt = True
+    return exempt, mono_exempt
 
 
 LOPSIDED_HEALTHY_RATIO = 1.0
@@ -1793,28 +1947,20 @@ def movie_matches_quality_stance(
     if required_video and (facts.video_bitrate_kbps or 0) < required_video:
         return False
 
-    codec = (facts.audio_format_family or facts.audio_codec or "").casefold()
     channels = facts.audio_channels or 0
     bitrate = facts.audio_bitrate_kbps or 0
     required_channels = resolve_stance_audio_channels(label, stance, standards)
-    mono_exempt = False
-    if required_channels and channels < required_channels:
-        vintage_cutoff = int(stance.get("audio_channels_vintage_cutoff") or 0)
-        atmos_cutoff = int(stance.get("audio_channels_atmos_cutoff") or 0)
-        mono_cutoff = int(stance.get("audio_channels_mono_cutoff") or 0)
-        exempt = False
-        if vintage_cutoff or atmos_cutoff or mono_cutoff:
-            parsed_identity = identity or parse_movie_name(path)
-            year = parsed_identity.year
-            if vintage_cutoff and year and year < vintage_cutoff:
-                exempt = True
-            if not exempt and atmos_cutoff and required_channels > 6 and channels >= 6 and year and year < atmos_cutoff:
-                exempt = True
-            if not exempt and mono_cutoff and channels == 1 and year and year < mono_cutoff:
-                exempt = True
-                mono_exempt = True
-        if not exempt:
-            return False
+    channels_ok, mono_exempt = audio_channels_meet_floor(
+        path,
+        channels,
+        required_channels,
+        vintage_cutoff=int(stance.get("audio_channels_vintage_cutoff") or 0),
+        atmos_cutoff=int(stance.get("audio_channels_atmos_cutoff") or 0),
+        mono_cutoff=int(stance.get("audio_channels_mono_cutoff") or 0),
+        identity=identity,
+    )
+    if not channels_ok:
+        return False
     required_bitrate = resolve_stance_audio_bitrate(label, stance, standards)
     if mono_exempt and required_bitrate and required_channels > 1:
         required_bitrate = max(1, (required_bitrate + 1) // 2)
@@ -1828,13 +1974,14 @@ def classify_standard_label(
     domain_results: list[dict[str, Any]],
     standards: dict[str, Any],
     weak_candidate: bool = False,
+    quality_label: str | None = None,
 ) -> str:
     if weak_candidate:
         return "replacement_candidate"
     statuses = {result["status"] for result in domain_results}
     if "fail" in statuses or "review_low_confidence" in statuses:
         return "needs_review"
-    if is_reference_standard(domain_results):
+    if quality_label == "reference" or is_reference_standard(domain_results):
         return "reference"
     return "meets_minimum"
 

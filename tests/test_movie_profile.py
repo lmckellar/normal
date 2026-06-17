@@ -526,6 +526,82 @@ class MovieProfileTests(unittest.TestCase):
 
         self.assertEqual(label, "standard_definition")
 
+    def test_build_movie_profile_item_does_not_emit_weak_audio_failure_for_exempt_legacy_surround(self) -> None:
+        standards = {
+            "audio": {
+                "minimum_channels": 6,
+                "minimum_bitrate_kbps": 384,
+                "minimum_codecs": ["dts", "ac3", "eac3", "dtshd", "truehd", "flac", "pcm"],
+                "reference_codecs": ["dtshd", "truehd", "flac", "pcm"],
+            },
+            "replacement_candidate_rules": {"quality_profile_floor": "compact_grade"},
+            "quality_stances": {
+                "compact_grade": {
+                    "video_custom": {"1080p": 4500, "2160p": 12000},
+                    "audio_channels": 2,
+                    "audio_bitrate_kbps": 320,
+                },
+                "library_grade": {
+                    "video_custom": {"1080p": 5500, "2160p": 15000},
+                    "audio_channels": 6,
+                    "audio_bitrate_kbps": 448,
+                    "audio_channels_vintage_cutoff": 1999,
+                },
+            },
+        }
+
+        item = build_movie_profile_item(
+            Path("/movies"),
+            Path("/movies/Ran (1985)/Ran (1985).mkv"),
+            MediaFacts(
+                width=1920,
+                height=1080,
+                video_bitrate_kbps=9000,
+                audio_codec="dts",
+                audio_channels=4,
+                audio_bitrate_kbps=512,
+            ),
+            standards=standards,
+        )
+
+        self.assertEqual(item.profile.quality_label, "library_grade")
+        self.assertEqual(item.profile.label, "meets_minimum")
+        self.assertFalse(item.profile.weak_candidate)
+        codes = {diag.code for diag in item.profile.diagnostics}
+        self.assertNotIn("audio_channels_below_minimum", codes)
+        self.assertNotIn("audio_bitrate_below_minimum", codes)
+
+    def test_build_movie_profile_item_emits_weak_audio_failure_when_floor_itself_is_missed(self) -> None:
+        standards = {
+            "replacement_candidate_rules": {"quality_profile_floor": "compact_grade"},
+            "quality_stances": {
+                "compact_grade": {
+                    "video_custom": {"1080p": 4500, "2160p": 12000},
+                    "audio_channels": 2,
+                    "audio_bitrate_kbps": 320,
+                },
+            },
+        }
+
+        item = build_movie_profile_item(
+            Path("/movies"),
+            Path("/movies/Movie (1984)/Movie (1984).mkv"),
+            MediaFacts(
+                width=1920,
+                height=1080,
+                video_bitrate_kbps=5000,
+                audio_codec="aac",
+                audio_channels=1,
+                audio_bitrate_kbps=192,
+            ),
+            standards=standards,
+        )
+
+        self.assertEqual(item.profile.quality_label, "standard_definition")
+        self.assertTrue(item.profile.weak_candidate)
+        codes = {diag.code for diag in item.profile.diagnostics}
+        self.assertIn("audio_channels_below_minimum", codes)
+
     def test_legacy_quality_stance_levers_no_longer_gate_reference_profile(self) -> None:
         standards = {
             "quality_stances": {
