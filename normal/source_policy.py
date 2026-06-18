@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+import threading
 from typing import Any, Iterable, Literal
 
 from normal.mounts import is_blocked_reparse_point, is_mount_root
@@ -87,7 +88,7 @@ class ApprovedRoots:
     def resolve_approved(self, raw_source: Any, default_source: Path | None = None) -> Path:
         source = resolve_source_path(raw_source, default_source=default_source)
         if not self.is_approved(source):
-            raise PermissionError(self.denial_message(source))
+            raise self.approval_required_error(source)
         return source
 
     def denial_message(self, source: Path) -> str:
@@ -98,6 +99,47 @@ class ApprovedRoots:
             "Restart with:\n"
             f"  normal web --allow-root {source}"
         )
+
+    def approval_required_error(self, source: Path) -> "ApprovedRootRequiredError":
+        resolved = source.expanduser().resolve()
+        return ApprovedRootRequiredError(
+            source=resolved,
+            approved_roots=self.roots,
+            message=self.denial_message(resolved),
+        )
+
+
+class MutableApprovedRoots:
+    def __init__(self, initial: ApprovedRoots | None = None) -> None:
+        self._lock = threading.Lock()
+        self._approved = initial or ApprovedRoots()
+
+    @property
+    def roots(self) -> tuple[Path, ...]:
+        with self._lock:
+            return self._approved.roots
+
+    def snapshot(self) -> ApprovedRoots:
+        with self._lock:
+            return ApprovedRoots(roots=self._approved.roots)
+
+    def is_approved(self, path: Path) -> bool:
+        return self.snapshot().is_approved(path)
+
+    def resolve_approved(self, raw_source: Any, default_source: Path | None = None) -> Path:
+        return self.snapshot().resolve_approved(raw_source, default_source=default_source)
+
+    def denial_message(self, source: Path) -> str:
+        return self.snapshot().denial_message(source)
+
+    def approval_required_error(self, source: Path) -> "ApprovedRootRequiredError":
+        return self.snapshot().approval_required_error(source)
+
+    def approve(self, path: Path) -> ApprovedRoots:
+        candidate = path.expanduser().resolve()
+        with self._lock:
+            self._approved = ApprovedRoots.from_paths([*self._approved.roots, candidate])
+            return self._approved
 
 
 def detect_source_flags(source: Path) -> tuple[str, ...]:
@@ -146,7 +188,7 @@ def validate_source_for_operation(
             "Point the source at a library folder inside the drive or mount."
         )
     if approved_roots is not None and not approved_roots.is_approved(risk.source):
-        raise SourcePolicyError(approved_roots.denial_message(risk.source))
+        raise approved_roots.approval_required_error(risk.source)
     for candidate in candidate_paths:
         if not path_is_under(candidate, risk.source):
             raise SourcePolicyError(
@@ -158,6 +200,14 @@ def validate_source_for_operation(
 
 class SourcePolicyError(RuntimeError):
     pass
+
+
+class ApprovedRootRequiredError(SourcePolicyError, PermissionError):
+    def __init__(self, *, source: Path, approved_roots: tuple[Path, ...], message: str) -> None:
+        super().__init__(message)
+        self.source = source
+        self.approved_roots = approved_roots
+        self.suggested_root = source
 
 
 def _is_link_or_blocked_reparse_point(path: Path) -> bool:
@@ -200,5 +250,5 @@ def validate_candidate_for_mutation(
             )
         current = parent
     if approved_roots is not None and not approved_roots.is_approved(resolved_candidate):
-        raise SourcePolicyError(approved_roots.denial_message(resolved_candidate))
+        raise approved_roots.approval_required_error(resolved_candidate)
     return resolved_candidate

@@ -223,6 +223,7 @@
     settingsStatus: null,
     settingsBusy: false,
     settingsRenderKey: '',
+    workflowError: null,
     policyBusy: false,
     policySectionLabel: '',
     policyDrafts: {},
@@ -1087,10 +1088,28 @@
 
   function mutationFetchError(response, payload, fallback) {
     const serverMessage = payload && payload.error ? payload.error : '';
-    if (response.status === 409) {
-      return new Error(serverMessage || 'Another operation is already running on this library. Wait for it to finish, then try again.');
+    const error = new Error(serverMessage || fallback);
+    if (payload && payload.approval_required) {
+      error.approvalRequired = true;
+      error.blockedSource = payload.source || '';
+      error.suggestedRoot = payload.suggested_root || '';
+      error.approvedRoots = Array.isArray(payload.approved_roots) ? payload.approved_roots : [];
     }
-    return new Error(serverMessage || fallback);
+    if (response.status === 409) {
+      error.message = serverMessage || 'Another operation is already running on this library. Wait for it to finish, then try again.';
+      return error;
+    }
+    return error;
+  }
+
+  function clearWorkflowError() {
+    if (!state.workflowError) return;
+    state.workflowError = null;
+  }
+
+  function setWorkflowError(error) {
+    state.workflowError = error || null;
+    renderSidePanel();
   }
 
   function auditSourceKey() {
@@ -2581,6 +2600,7 @@
       status: state.settingsStatus,
       funMode: state.funMode,
       busy: state.settingsBusy,
+      preferences: state.policyPayload?.operator_preferences || {},
     });
   }
 
@@ -2593,6 +2613,9 @@
     const renderKey = currentSettingsRenderKey();
     if (state.settingsRenderKey === renderKey) return;
     const keys = state.settingsStatus || {};
+    const preferences = state.policyPayload?.operator_preferences || {};
+    const movieDefault = String(preferences.default_movie_source || preferences.default_source || '');
+    const tvDefault = String(preferences.default_tv_source || '');
     const cards = SETTINGS_KEY_FIELDS.map(spec => {
       const status = keys[spec.field];
       const present = Boolean(status && status.present);
@@ -2622,9 +2645,33 @@
           <p>Manage workbench-wide preferences and optional API keys. Preferences and keys are stored server-side; only the last four key characters are ever shown.</p>
         </div>
       </div>
-      <div class="lab-policy-sections">${cards}</div>
+      <div class="lab-policy-sections">
+        <section class="lab-policy-card is-open">
+          <div class="lab-policy-meta"><span class="lab-kicker">Source defaults</span></div>
+          <h3>Default Library Directories</h3>
+          <p>Movie workflows use the movie default. TV normalize uses the TV default. Saving a path also approves that exact library path for this running session.</p>
+          <div class="lab-policy-fields">
+            <div class="lab-policy-field">
+              <label for="settings-default-movie-source">Preferred default movie library directory</label>
+              <input id="settings-default-movie-source" data-settings-source-field="default_movie_source" type="text" autocomplete="off" spellcheck="false" value="${escapeHtml(movieDefault)}" placeholder="/path/to/movie/library">
+            </div>
+            <div class="lab-policy-field">
+              <label for="settings-default-tv-source">Preferred default TV library directory</label>
+              <input id="settings-default-tv-source" data-settings-source-field="default_tv_source" type="text" autocomplete="off" spellcheck="false" value="${escapeHtml(tvDefault)}" placeholder="/path/to/tv/library">
+            </div>
+          </div>
+          <div class="lab-policy-actions">
+            <button class="lab-action-button is-primary" type="button" data-settings-save-sources ${state.settingsBusy ? 'disabled' : ''}>Save directories</button>
+          </div>
+        </section>
+        ${cards}
+      </div>
     `;
     state.settingsRenderKey = renderKey;
+    const saveSourcesButton = el.settingsPanel.querySelector('[data-settings-save-sources]');
+    if (saveSourcesButton) {
+      saveSourcesButton.addEventListener('click', () => saveSettingsSourceDefaults());
+    }
     el.settingsPanel.querySelectorAll('[data-settings-save]').forEach(button => {
       button.addEventListener('click', () => saveSettingsKey(button.dataset.settingsSave || ''));
     });
@@ -2681,6 +2728,49 @@
       state.settingsRenderKey = '';
       renderSidePanel();
     }
+  }
+
+  function settingsSourceValues() {
+    return {
+      default_movie_source: (el.settingsPanel.querySelector('[data-settings-source-field="default_movie_source"]')?.value || '').trim(),
+      default_tv_source: (el.settingsPanel.querySelector('[data-settings-source-field="default_tv_source"]')?.value || '').trim(),
+    };
+  }
+
+  async function saveSettingsSourceDefaults() {
+    if (state.settingsBusy) return;
+    state.settingsBusy = true;
+    state.settingsRenderKey = '';
+    renderSettingsPanel();
+    try {
+      const values = settingsSourceValues();
+      const result = await postJson('/api/policy/update', {
+        label: 'default_source',
+        values,
+        operator_preferences_revision: state.policyPayload?.operator_preferences_revision || '',
+      });
+      applyPolicyPayload(result);
+      applySettings(result);
+      const nextSource = preferredDefaultSource();
+      if (!normalizeSourceKey(el.sourcePath.value) || normalizeSourceKey(el.sourcePath.value) === normalizeSourceKey(window.DEFAULT_SOURCE || '')) {
+        el.sourcePath.value = nextSource;
+        el.sourcePath.dispatchEvent(new Event('input'));
+      }
+    } catch (error) {
+      setWorkflowError(error);
+    } finally {
+      state.settingsBusy = false;
+      state.settingsRenderKey = '';
+      renderSidePanel();
+    }
+  }
+
+  async function approveBlockedSourceAndRetry() {
+    const source = String(state.workflowError?.blockedSource || el.sourcePath.value || '').trim();
+    if (!source) return;
+    await postJson('/api/source/approve', { source });
+    clearWorkflowError();
+    await runActiveWorkflow();
   }
 
   async function saveSettingsPreference(field, enabled) {
@@ -5328,6 +5418,34 @@
   }
 
   function renderPreviewPane() {
+    if (state.workflowError?.approvalRequired) {
+      const approvedRoots = Array.isArray(state.workflowError.approvedRoots) ? state.workflowError.approvedRoots : [];
+      const blockedSource = state.workflowError.blockedSource || el.sourcePath.value || '—';
+      el.previewPane.innerHTML = `
+        <div class="lab-preview-empty">
+          <strong>This library path needs a safety check first.</strong>
+          <div>Normal only scans and changes folders you have explicitly approved for this session. That helps prevent accidental work on the wrong drive, mount, or top-level folder.</div>
+          <div><strong>Path you tried to use:</strong> ${escapeHtml(blockedSource)}</div>
+          <div><strong>Already approved:</strong> ${approvedRoots.length ? escapeHtml(approvedRoots.join(' | ')) : 'none yet'}</div>
+          <div>If this is the library you intended, approve it and Normal will retry immediately. Approving this path trusts it for this session, but does not save it as a default library. Media facts from this scan are still cached, so the next scan should be warmer and much faster.</div>
+          <div class="lab-policy-actions">
+            <button class="lab-action-button is-primary" type="button" data-approve-source>Approve path and retry</button>
+            <button type="button" data-open-settings>Open Settings</button>
+          </div>
+        </div>
+      `;
+      el.previewPane.querySelector('[data-approve-source]')?.addEventListener('click', () => {
+        approveBlockedSourceAndRetry().catch(setWorkflowError);
+      });
+      el.previewPane.querySelector('[data-open-settings]')?.addEventListener('click', () => {
+        toggleSettings().catch(setWorkflowError);
+      });
+      return;
+    }
+    if (state.workflowError) {
+      el.previewPane.textContent = state.workflowError.message || 'Workflow failed.';
+      return;
+    }
     if (isWeakMode()) {
       renderWeakPreviewPane();
       return;
@@ -6076,6 +6194,7 @@
     state.selected = new Set();
     state.activeRowId = '';
     state.previewMode = 'selected';
+    clearWorkflowError();
     state.repairAction = defaultRepairAction();
     state.repairActionNotice = '';
     state.sort = isCanonicalMode()
@@ -6304,12 +6423,12 @@
 
   el.runButton.addEventListener('click', () => {
     if (repairWorkflowBusy()) return;
-    runActiveWorkflow().catch(error => {
-      el.previewPane.textContent = error.message;
-    });
+    clearWorkflowError();
+    runActiveWorkflow().catch(setWorkflowError);
   });
 
   el.sourcePath.addEventListener('input', () => {
+    clearWorkflowError();
     state.auditPayload = null;
     state.auditNeedsRefresh = false;
     state.auditRefreshInFlight = false;
@@ -6344,18 +6463,16 @@
       }
       if (pendingQueueCount() > 0) {
         resumeDrainQueue().catch(error => {
-          el.previewPane.textContent = error.message;
+          setWorkflowError(error);
         });
         return;
       }
       stageAndDrainSelected().catch(error => {
-        el.previewPane.textContent = error.message;
+        setWorkflowError(error);
       });
       return;
     }
-    confirmSelected().catch(error => {
-      el.previewPane.textContent = error.message;
-    });
+    confirmSelected().catch(setWorkflowError);
   });
 
   if (el.onboardingGateClose) {

@@ -87,6 +87,20 @@ def handle_library_roots_post(ctx: RequestContext, payload: dict[str, Any]) -> N
     ctx.respond_json(load_library_roots(ctx.approved_roots))
 
 
+def handle_source_approve(ctx: RequestContext, payload: dict[str, Any]) -> None:
+    source = validate_source_for_operation(
+        ctx.inspect_source(payload.get("source")),
+        operation=Operation.HEAVY_SCAN,
+    )
+    ctx.approved_roots.approve(source)
+    ctx.respond_json(
+        {
+            "approved": str(source),
+            "approved_roots": [str(root) for root in ctx.approved_roots.roots],
+        }
+    )
+
+
 def handle_source_scan_warning(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source"))
     ctx.respond_json(build_source_scan_warning(source))

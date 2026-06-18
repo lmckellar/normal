@@ -23,8 +23,8 @@ from .routes_cleanup import (
     handle_movies_repair_defaults_fix,
     handle_movies_subtitle_readiness_fix,
 )
-from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_scan_warning
-from normal.source_policy import ApprovedRoots
+from .routes_core import handle_activity, handle_library_roots_get, handle_library_roots_post, handle_source_approve, handle_source_scan_warning
+from normal.source_policy import ApprovedRootRequiredError, ApprovedRoots, MutableApprovedRoots
 from .routes_normalize import handle_movies_apply, handle_movies_normalize, handle_tv_apply, handle_tv_normalize
 from .routes_queue import handle_queue_drain, handle_queue_stage, handle_queue_status
 from .routes_settings import (
@@ -196,6 +196,7 @@ def build_post_routes() -> dict[str, Callable[[RequestContext, dict], None]]:
         "/api/settings/read": handle_settings_read,
         "/api/settings/keys": handle_settings_keys_update,
         "/api/settings/preferences": handle_settings_preferences_update,
+        "/api/source/approve": handle_source_approve,
         "/api/source/scan-warning": handle_source_scan_warning,
         "/api/movies/register": handle_movies_register,
         "/api/movies/inspect": handle_movies_inspect,
@@ -223,7 +224,16 @@ def build_handler(
 ):
     get_routes = build_get_routes()
     post_routes = build_post_routes()
-    roots = approved_roots if approved_roots is not None else ApprovedRoots()
+    roots = MutableApprovedRoots(approved_roots if approved_roots is not None else ApprovedRoots())
+
+    def approval_error_payload(exc: ApprovedRootRequiredError) -> dict[str, object]:
+        return {
+            "error": str(exc),
+            "approval_required": True,
+            "source": str(exc.source),
+            "suggested_root": str(exc.suggested_root),
+            "approved_roots": [str(root) for root in exc.approved_roots],
+        }
 
     class Handler(BaseHTTPRequestHandler):
         activity_tracker = state.ACTIVITY_TRACKER
@@ -250,6 +260,8 @@ def build_handler(
                 handler(ctx)
             except PostRejected as exc:
                 ctx.respond_json({"error": exc.message}, status=exc.status)
+            except ApprovedRootRequiredError as exc:
+                ctx.respond_json(approval_error_payload(exc), status=HTTPStatus.BAD_REQUEST)
             except RequestConflictError as exc:
                 ctx.respond_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             except Exception as exc:
@@ -272,6 +284,8 @@ def build_handler(
                 handler(ctx, payload)
             except PostRejected as exc:
                 ctx.respond_json({"error": exc.message}, status=exc.status)
+            except ApprovedRootRequiredError as exc:
+                ctx.respond_json(approval_error_payload(exc), status=HTTPStatus.BAD_REQUEST)
             except RequestConflictError as exc:
                 ctx.respond_json({"error": str(exc)}, status=HTTPStatus.CONFLICT)
             except Exception as exc:

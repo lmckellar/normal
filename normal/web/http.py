@@ -9,7 +9,7 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from normal.movie_omdb import resolve_original_language
-from normal.source_policy import ApprovedRoots, resolve_source_path
+from normal.source_policy import ApprovedRoots, MutableApprovedRoots, resolve_source_path
 from .scan_guard import client_disconnected
 
 @dataclass(slots=True)
@@ -18,7 +18,7 @@ class RequestContext:
     default_source: Path | None = None
     omdb_key: str | None = None
     tmdb_key: str | None = None
-    approved_roots: ApprovedRoots = ApprovedRoots()
+    approved_roots: ApprovedRoots | MutableApprovedRoots = ApprovedRoots()
 
     def language_resolver(self) -> Callable[[str, int | None], str | None] | None:
         omdb_key = self.omdb_key

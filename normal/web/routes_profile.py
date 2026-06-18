@@ -275,6 +275,16 @@ def handle_policy_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
     source = ctx.resolve_source(payload.get("source")) if payload.get("source") else None
     if source is None and label not in {"default_source", "delete_mode"}:
         source = ctx.resolve_source(payload.get("source"))
+    if label == "default_source":
+        for key in ("default_movie_source", "default_tv_source", "default_source"):
+            raw_value = str(values.get(key) or "").strip()
+            if not raw_value:
+                continue
+            approved_source = validate_source_for_operation(
+                ctx.inspect_source(raw_value),
+                operation=Operation.HEAVY_SCAN,
+            )
+            ctx.approved_roots.approve(approved_source)
     try:
         standards, preferences = update_policy_definition(
             label,

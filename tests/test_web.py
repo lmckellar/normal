@@ -225,6 +225,17 @@ class WebTests(unittest.TestCase):
                     self.assertFalse(ctx.responses[-1]["keys"]["omdb"]["present"])
                     self.assertEqual(secrets.read_text(), "")
 
+    def test_settings_surface_exposes_movie_and_tv_default_source_fields(self) -> None:
+        self.assertIn('data-settings-source-field="default_movie_source"', WORKBENCH_JS)
+        self.assertIn('data-settings-source-field="default_tv_source"', WORKBENCH_JS)
+        self.assertIn("Save directories", WORKBENCH_JS)
+
+    def test_approval_required_preview_exposes_retry_and_settings_actions(self) -> None:
+        self.assertIn("data-approve-source", WORKBENCH_JS)
+        self.assertIn("Approve path and retry", WORKBENCH_JS)
+        self.assertIn("This library path needs a safety check first.", WORKBENCH_JS)
+        self.assertIn("helps prevent accidental work on the wrong drive, mount, or top-level folder", WORKBENCH_JS)
+
     def test_set_keys_rejects_newline_and_nul_values(self) -> None:
         from normal.web import credentials as credentials_module
 
@@ -1659,6 +1670,46 @@ class WebApprovedRootTests(unittest.TestCase):
                     self.post(base_url, "/api/source/scan-warning", warn_body)
             self.assertEqual(ctx.exception.code, 400)
             self.assertIn("not under an approved root", ctx.exception.read().decode("utf-8"))
+
+    def test_source_can_be_approved_for_current_session_without_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "TV Shows"
+            source.mkdir()
+            approved = Path(tmpdir) / "Approved"
+            approved.mkdir()
+            approve_body = json.dumps({"source": str(source)}).encode("utf-8")
+            warn_body = json.dumps({"source": str(source)}).encode("utf-8")
+            with self.run_test_server(approved_roots=ApprovedRoots.from_paths([approved])) as base_url:
+                with self.post(base_url, "/api/source/approve", approve_body) as response:
+                    payload = json.loads(response.read().decode("utf-8"))
+                self.assertEqual(payload["approved"], str(source.resolve()))
+                self.assertIn(str(source.resolve()), payload["approved_roots"])
+                with self.post(base_url, "/api/source/scan-warning", warn_body) as response:
+                    warning = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(warning["source"], str(source.resolve()))
+
+    def test_default_source_policy_update_approves_saved_tv_source(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            preferences_path = Path(tmpdir) / "operator-preferences.json"
+            tv_source = Path(tmpdir) / "TV Shows"
+            tv_source.mkdir()
+            body = json.dumps(
+                {
+                    "label": "default_source",
+                    "values": {
+                        "default_movie_source": "",
+                        "default_tv_source": str(tv_source),
+                    },
+                }
+            ).encode("utf-8")
+            with patch("normal.movie_profile.OPERATOR_PREFERENCES_PATH", preferences_path):
+                with self.run_test_server(approved_roots=ApprovedRoots()) as base_url:
+                    with self.post(base_url, "/api/policy/update", body) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                    with self.post(base_url, "/api/source/scan-warning", json.dumps({"source": str(tv_source)}).encode("utf-8")) as response:
+                        warning = json.loads(response.read().decode("utf-8"))
+            self.assertEqual(payload["operator_preferences"]["default_tv_source"], str(tv_source))
+            self.assertEqual(warning["source"], str(tv_source.resolve()))
 
     def test_library_roots_only_persist_approved_operation_safe_paths(self) -> None:
         from normal.web import routes_core
