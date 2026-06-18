@@ -1009,7 +1009,8 @@ class MovieProfileTests(unittest.TestCase):
                 ),
             }
 
-            report = scan_movie_profiles(source, probe_media=lambda path: fake_facts[path])
+            with patch("normal.movie_profile.load_movie_standards", return_value=DEFAULT_MOVIE_STANDARDS):
+                report = scan_movie_profiles(source, probe_media=lambda path: fake_facts[path])
 
             self.assertEqual(len(report.movies), 2)
             first_item = next(item for item in report.movies if item.path == str(first))
@@ -1031,11 +1032,12 @@ class MovieProfileTests(unittest.TestCase):
             second.write_text("video", encoding="utf-8")
             events = []
 
-            scan_movie_profiles(
-                source,
-                probe_media=lambda _: MediaFacts(width=1920, height=1080, video_bitrate_kbps=3500),
-                progress_callback=events.append,
-            )
+            with patch("normal.movie_profile.load_movie_standards", return_value=DEFAULT_MOVIE_STANDARDS):
+                scan_movie_profiles(
+                    source,
+                    probe_media=lambda _: MediaFacts(width=1920, height=1080, video_bitrate_kbps=3500),
+                    progress_callback=events.append,
+                )
 
             self.assertEqual(events[0].status, "starting")
             self.assertEqual(events[0].processed, 0)
@@ -1051,26 +1053,27 @@ class MovieProfileTests(unittest.TestCase):
             source = Path(tmpdir)
             movie = source / "Only.1999.1080p.mkv"
             movie.write_text("video", encoding="utf-8")
-            report = scan_movie_profiles(
-                source,
-                probe_media=lambda _: MediaFacts(
-                    runtime_seconds=7200,
-                    file_size_bytes=3_000 * 1024 * 1024,
-                    width=1920,
-                    height=1080,
-                    video_bitrate_kbps=3500,
-                    audio_bitrate_kbps=128,
-                ),
-            )
+            with patch("normal.movie_profile.load_movie_standards", return_value=DEFAULT_MOVIE_STANDARDS):
+                report = scan_movie_profiles(
+                    source,
+                    probe_media=lambda _: MediaFacts(
+                        runtime_seconds=7200,
+                        file_size_bytes=3_000 * 1024 * 1024,
+                        width=1920,
+                        height=1080,
+                        video_bitrate_kbps=3500,
+                        audio_bitrate_kbps=128,
+                    ),
+                )
 
-            payload = build_histogram_payload(report)
+                payload = build_histogram_payload(report)
 
-            self.assertEqual(payload["movie_count"], 1)
-            self.assertEqual(payload["profile_counts"]["replacement_candidate"], 1)
-            self.assertEqual(payload["quality_profile_counts"]["standard_definition"], 1)
-            self.assertEqual(sum(payload["quality_profile_counts"].values()), payload["movie_count"])
-            self.assertEqual(payload["video_bitrate_kbps"]["median"], 3500.0)
-            self.assertIn("risk_counts", payload)
+                self.assertEqual(payload["movie_count"], 1)
+                self.assertEqual(payload["profile_counts"]["replacement_candidate"], 1)
+                self.assertEqual(payload["quality_profile_counts"]["standard_definition"], 1)
+                self.assertEqual(sum(payload["quality_profile_counts"].values()), payload["movie_count"])
+                self.assertEqual(payload["video_bitrate_kbps"]["median"], 3500.0)
+                self.assertIn("risk_counts", payload)
 
     def test_build_histogram_payload_from_items_uses_payload_dicts(self) -> None:
         payload = build_histogram_payload_from_items(
@@ -1140,7 +1143,8 @@ class MovieProfileTests(unittest.TestCase):
                 calls += 1
                 return MediaFacts(width=1920, height=1080, video_bitrate_kbps=3500)
 
-            report = scan_movie_profiles(source, probe_media=probe, should_cancel=lambda: calls >= 1)
+            with patch("normal.movie_profile.load_movie_standards", return_value=DEFAULT_MOVIE_STANDARDS):
+                report = scan_movie_profiles(source, probe_media=probe, should_cancel=lambda: calls >= 1)
 
             self.assertEqual(calls, 1)
             self.assertEqual(len(report.movies), 1)
