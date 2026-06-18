@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from normal.movie_profile import scan_movie_profiles
 from normal.movie_profile import DEFAULT_MOVIE_STANDARDS, build_title_trait_assessments
@@ -316,26 +317,27 @@ class TitleTraitAggregationTests(unittest.TestCase):
             source.mkdir()
             movie.write_bytes(b"video")
 
-            report = scan_movie_profiles(
-                source,
-                probe_media=lambda _path: MediaFacts(
-                    width=1920,
-                    height=1080,
-                    video_stream_count=1,
-                    video_bitrate_kbps=5000,
-                    audio_stream_count=1,
-                    audio_codec="aac",
-                    audio_channels=2,
-                    audio_bitrate_kbps=320,
-                ),
-                trait_store_path=trait_store,
-                legacy_trait_store_path=legacy_store,
-            )
+            with patch("normal.movie_profile.load_movie_standards", return_value=DEFAULT_MOVIE_STANDARDS):
+                report = scan_movie_profiles(
+                    source,
+                    probe_media=lambda _path: MediaFacts(
+                        width=1920,
+                        height=1080,
+                        video_stream_count=1,
+                        video_bitrate_kbps=5000,
+                        audio_stream_count=1,
+                        audio_codec="aac",
+                        audio_channels=2,
+                        audio_bitrate_kbps=320,
+                    ),
+                    trait_store_path=trait_store,
+                    legacy_trait_store_path=legacy_store,
+                )
 
-            self.assertEqual(
-                {item["trait"] for item in report.trait_observations},
-                {"open_matte"},
-            )
+                self.assertEqual(
+                    {item["trait"] for item in report.trait_observations},
+                    {"open_matte"},
+                )
 
     def test_same_scan_duplicate_records_evidence_and_marks_missing_copy_actionable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -358,28 +360,29 @@ class TitleTraitAggregationTests(unittest.TestCase):
                     audio_immersive_extension="atmos" if path == carrying else None,
                 )
 
-            report = scan_movie_profiles(
-                source,
-                probe_media=probe,
-                trait_store_path=trait_store,
-                legacy_trait_store_path=legacy_store,
-            )
-            aggregate = next(
-                row for row in report.trait_assessments
-                if row["trait"] == "immersive_audio"
-            )
-            self.assertEqual(aggregate["status"], "owned")
-            self.assertEqual(aggregate["local_present_count"], 1)
-            self.assertEqual(aggregate["local_copy_count"], 2)
-            missing_item = next(item for item in report.movies if item.path == str(missing))
-            self.assertTrue(
-                any(
-                    finding.code == "immersive_audio_upgrade_available"
-                    for finding in missing_item.profile.diagnostics
+            with patch("normal.movie_profile.load_movie_standards", return_value=DEFAULT_MOVIE_STANDARDS):
+                report = scan_movie_profiles(
+                    source,
+                    probe_media=probe,
+                    trait_store_path=trait_store,
+                    legacy_trait_store_path=legacy_store,
                 )
-            )
-            stored = load_store(trait_store, legacy_path=legacy_store)
-            self.assertEqual(len(stored["evidence"]), 1)
+                aggregate = next(
+                    row for row in report.trait_assessments
+                    if row["trait"] == "immersive_audio"
+                )
+                self.assertEqual(aggregate["status"], "owned")
+                self.assertEqual(aggregate["local_present_count"], 1)
+                self.assertEqual(aggregate["local_copy_count"], 2)
+                missing_item = next(item for item in report.movies if item.path == str(missing))
+                self.assertTrue(
+                    any(
+                        finding.code == "immersive_audio_upgrade_available"
+                        for finding in missing_item.profile.diagnostics
+                    )
+                )
+                stored = load_store(trait_store, legacy_path=legacy_store)
+                self.assertEqual(len(stored["evidence"]), 1)
 
 
 if __name__ == "__main__":

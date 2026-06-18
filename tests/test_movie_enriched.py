@@ -14,7 +14,7 @@ from normal.movie_enriched import (
     scan_enriched_library,
 )
 from normal.movie_junk import scan_movie_cleanup
-from normal.movie_profile import scan_movie_profiles
+from normal.movie_profile import DEFAULT_MOVIE_STANDARDS, scan_movie_profiles
 from normal.movie_scan import scan_movie_library
 from normal.quality_review import MediaFacts
 from normal.web.state import MovieEnrichedCache
@@ -135,7 +135,8 @@ class MovieEnrichedTests(unittest.TestCase):
                 ),
             )
 
-            with patch("normal.movie_profile.parse_movie_name", side_effect=AssertionError("identity reparsed")):
+            with patch("normal.movie_profile.parse_movie_name", side_effect=AssertionError("identity reparsed")), \
+                 patch("normal.movie_profile.load_movie_standards", return_value=DEFAULT_MOVIE_STANDARDS):
                 report = scan_movie_profiles(
                     source,
                     probe_media=lambda _: (_ for _ in ()).throw(AssertionError("media reprobed")),
