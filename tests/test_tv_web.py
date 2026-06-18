@@ -102,8 +102,8 @@ class TvWebTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             source = root / "TV"
-            episode = source / "Show.S01E01.mkv"
-            source.mkdir()
+            episode = source / "Futurama" / "Movies" / "Benders.Game.2008.mkv"
+            episode.parent.mkdir(parents=True)
             episode.write_text("video", encoding="utf-8")
             cache = MovieEnrichedCache()
             audit_store = AuditStore(ledger_path=root / "audit-ledger.jsonl")
@@ -117,16 +117,11 @@ class TvWebTests(unittest.TestCase):
                 self.run_test_server(root) as base_url,
             ):
                 normalize_payload = self.post(base_url, "/api/tv/normalize", {"source": str(source)})
-                apply_payload = self.post(
-                    base_url,
-                    "/api/tv/apply",
-                    {
-                        "source": str(source),
-                        "change_ids": [normalize_payload["proposed_changes"][0]["item_id"]],
-                    },
-                )
+                apply_payload = self.post(base_url, "/api/tv/apply", {"source": str(source), "change_ids": []})
 
-            self.assertEqual(len(apply_payload["skipped"]), 1)
+            self.assertEqual(normalize_payload["proposed_changes"], [])
+            self.assertEqual(normalize_payload["tv_results"][0]["actionable"], False)
+            self.assertEqual(apply_payload["skipped"], [])
             self.assertTrue(episode.exists())
             invalidate.assert_not_called()
 
@@ -171,6 +166,12 @@ class TvWebTests(unittest.TestCase):
         self.assertIn("row.reason_messages", WORKBENCH_JS)
         self.assertIn("function tvChangesLabel(row)", WORKBENCH_JS)
         self.assertIn("row.linked_changes", WORKBENCH_JS)
+
+    def test_workbench_warns_before_tv_scan_on_movie_like_source(self) -> None:
+        self.assertIn("This source looks like a movie library, not a TV library.", WORKBENCH_JS)
+        self.assertIn("function confirmTvSourceIfNeeded()", WORKBENCH_JS)
+        self.assertIn("function sourceLooksLikeMovieLibrary(source)", WORKBENCH_JS)
+        self.assertIn("function normalizeRowSelectable(row)", WORKBENCH_JS)
 
 
 if __name__ == "__main__":

@@ -66,9 +66,6 @@ def append_tv_file_change(plan: ChangePlan, source_root: Path, path: Path, ident
         reason_codes.append("tv_filename_target_collision")
         warnings.append("The proposed filename already exists.")
 
-    if target_name == path.name and confidence == "safe":
-        return
-
     if warnings:
         plan.warnings.append(
             WarningItem(
@@ -78,6 +75,9 @@ def append_tv_file_change(plan: ChangePlan, source_root: Path, path: Path, ident
                 reason_codes=reason_codes,
             )
         )
+
+    if target_name == path.name:
+        return
 
     plan.proposed_changes.append(
         ProposedChange(

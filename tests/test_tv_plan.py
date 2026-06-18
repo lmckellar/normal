@@ -73,15 +73,15 @@ class TvPlanTests(unittest.TestCase):
         self.assertEqual(changes[special].confidence, "review")
         self.assertIn("tv_special_content_review", changes[special].reason_codes)
 
-    def test_ambiguous_file_emits_review_record_and_executor_skips_it(self) -> None:
+    def test_ambiguous_file_stays_review_only_without_emitting_noop_change(self) -> None:
         movie = self.add_video("Futurama/Movies/Benders.Game.2008.mkv")
 
         plan = build_tv_plan(self.source)
         report = apply_changes_in_place(self.source, plan.proposed_changes)
 
-        self.assertEqual(len(plan.proposed_changes), 1)
-        self.assertEqual(plan.proposed_changes[0].confidence, "review")
-        self.assertEqual(len(report.skipped), 1)
+        self.assertEqual(len(plan.proposed_changes), 0)
+        self.assertTrue(plan.warnings)
+        self.assertEqual(len(report.skipped), 0)
         self.assertTrue(movie.exists())
 
     def test_enriched_tv_lane_retains_identity_and_skips_movie_priority(self) -> None:

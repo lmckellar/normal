@@ -46,6 +46,7 @@ def build_movie_normalize_results(
         relative_path = movie_path.relative_to(source_root)
         linked_changes = movie_normalize_changes_for_file(relative_path, movie_path, change_index)
         serialized_linked_changes = [serialize_proposed_change(change) for change in linked_changes]
+        safe_linked_changes = [change for change in linked_changes if change.confidence == "safe"]
         projected_path = projected_movie_normalize_path(relative_path, movie_path, linked_changes)
         parsed = parsed_movies.get(movie_path) if parsed_movies is not None else None
         if parsed is None:
@@ -81,8 +82,8 @@ def build_movie_normalize_results(
                 "proposed_value": str(projected_path),
                 "projected_path": str(projected_path),
                 "confidence": confidence,
-                "actionable": bool(linked_changes),
-                "change_ids": [change.item_id for change in linked_changes],
+                "actionable": bool(safe_linked_changes),
+                "change_ids": [change.item_id for change in safe_linked_changes],
                 "linked_change_types": dedupe_strings([change.change_type for change in linked_changes]),
                 "linked_changes": serialized_linked_changes,
                 "reason_codes": reason_codes,
@@ -116,6 +117,7 @@ def build_tv_normalize_results(
     for tv_path in sorted(tv_files, key=lambda path: str(path.relative_to(source_root)).casefold()):
         relative_path = tv_path.relative_to(source_root)
         linked_changes = changes_by_path.get(str(tv_path), [])
+        safe_linked_changes = [change for change in linked_changes if change.confidence == "safe"]
         identity = parsed_tv.get(tv_path) if parsed_tv is not None else None
         if identity is None:
             from normal.tv_identity import parse_tv_identity
@@ -140,8 +142,8 @@ def build_tv_normalize_results(
                 "proposed_value": str(projected_path),
                 "projected_path": str(projected_path),
                 "confidence": confidence,
-                "actionable": bool(linked_changes),
-                "change_ids": [change.item_id for change in linked_changes],
+                "actionable": bool(safe_linked_changes),
+                "change_ids": [change.item_id for change in safe_linked_changes],
                 "linked_change_types": dedupe_strings([change.change_type for change in linked_changes]),
                 "linked_changes": [serialize_proposed_change(change) for change in linked_changes],
                 "reason_codes": dedupe_strings(

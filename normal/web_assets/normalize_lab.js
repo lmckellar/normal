@@ -262,6 +262,7 @@
     queueStatus: {},
     drainInFlight: false,
     drainController: null,
+    tvMovieSourceWarningsAccepted: new Set(),
   };
 
   const el = {
@@ -1285,6 +1286,33 @@
       return normalizeSourceKey(preferences.default_source || '');
     }
     return '';
+  }
+
+  function sourceLooksLikeMovieLibrary(source) {
+    const normalized = normalizeSourceKey(source);
+    if (!normalized) return false;
+    const movieDefault = preferredDefaultSource('normalize');
+    if (movieDefault && normalized === movieDefault) return true;
+    const lastSegment = normalized.split('/').filter(Boolean).pop() || '';
+    return /\b(movie|movies|film|films|cinema)\b/i.test(lastSegment.replace(/[_-]+/g, ' '));
+  }
+
+  async function confirmTvSourceIfNeeded() {
+    if (!isTvNormalizeMode()) return true;
+    const source = normalizeSourceKey(el.sourcePath.value);
+    if (!source) return true;
+    if (!sourceLooksLikeMovieLibrary(source)) return true;
+    if (state.tvMovieSourceWarningsAccepted.has(source)) return true;
+    const message = [
+      'This source looks like a movie library, not a TV library.',
+      '',
+      'TV Normalize expects episode-style content. If you scan movie files here, Normal will mostly surface review-only rows and may propose misleading TV-style interpretations.',
+      '',
+      'If this is intentional, continue. Otherwise switch to a TV source first.',
+    ].join('\n');
+    const accepted = window.confirm?.(message);
+    if (accepted) state.tvMovieSourceWarningsAccepted.add(source);
+    return Boolean(accepted);
   }
 
   function syncSourceToWorkflowDefault(nextWorkflow, previousWorkflow = '') {
@@ -3372,6 +3400,10 @@
     });
   }
 
+  function normalizeRowSelectable(row) {
+    return Boolean(row?.actionable);
+  }
+
   function tvEpisodeLabel(row) {
     if (row.numbering === 'absolute') return row.absolute_episode == null ? '—' : String(row.absolute_episode);
     if (row.episode_first == null) return '—';
@@ -3840,7 +3872,9 @@
       el.deselectAllButton.textContent = 'Deselect all';
       return;
     }
-    const selectableRows = usesSimpleSelectionShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
+    const selectableRows = usesSimpleSelectionShell()
+      ? state.filteredRows.filter(row => row.selectable)
+      : state.filteredRows.filter(row => normalizeRowSelectable(row));
     const filteredCount = selectableRows.length;
     const selectedVisibleCount = usesSimpleSelectionShell()
       ? state.filteredRows.filter(row => state.selected.has(row.row_id)).length
@@ -3882,7 +3916,7 @@
   }
 
   function selectedRows() {
-    return state.filteredRows.filter(row => state.selected.has(row.result_id));
+    return state.filteredRows.filter(row => state.selected.has(row.result_id) && normalizeRowSelectable(row));
   }
 
   function summarizeNormalizeRows(rows) {
@@ -4045,7 +4079,7 @@
     if (isTvNormalizeMode()) return renderTvNormalizeRow(row);
     return `
       <tr class="${state.activeRowId === row.result_id ? 'active' : ''}" data-row-id="${escapeHtml(row.result_id)}">
-        <td class="lab-cell-foundation lab-cell-select" data-priority="essential"><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
+        <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${normalizeRowSelectable(row) ? `<input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}>` : ''}</td>
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_value)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_value))}</span></td>
         <td class="lab-cell-path" data-priority="desktop" title="${escapeHtml(row.projected_path)}"><span class="lab-cell-text">${projectedPathMarkup(row.projected_path)}</span></td>
         <td class="lab-cell-status" data-priority="essential"><span class="lab-cell-pill ${normalizeConfidenceClass(row.confidence)}">${escapeHtml(row.confidence)}</span></td>
@@ -4059,7 +4093,7 @@
     const changes = tvChangesLabel(row);
     return `
       <tr class="${state.activeRowId === row.result_id ? 'active' : ''}" data-row-id="${escapeHtml(row.result_id)}">
-        <td class="lab-cell-foundation lab-cell-select" data-priority="essential"><input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}></td>
+        <td class="lab-cell-foundation lab-cell-select" data-priority="essential">${normalizeRowSelectable(row) ? `<input type="checkbox" data-row-check="${escapeHtml(row.result_id)}" ${state.selected.has(row.result_id) ? 'checked' : ''}>` : ''}</td>
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.current_value)}"><span class="lab-cell-text">${escapeHtml(fileNameFromPath(row.current_value))}</span></td>
         <td class="lab-cell-anchor" data-priority="essential" title="${escapeHtml(row.series || '—')}"><span class="lab-cell-text">${escapeHtml(row.series || '—')}</span></td>
         <td class="lab-cell-signal lab-cell-mono" data-priority="medium"><span class="lab-cell-text">${row.season == null ? '—' : escapeHtml(String(row.season))}</span></td>
@@ -5704,6 +5738,7 @@
 
   async function runActiveWorkflow() {
     if (repairWorkflowBusy()) return;
+    if (!await confirmTvSourceIfNeeded()) return;
     const surfaceDismissed = dismissActiveSurface();
     if (surfaceDismissed) {
       renderFilterVisibility();
@@ -6333,7 +6368,9 @@
   });
 
   el.selectAllButton.addEventListener('click', async () => {
-    const rows = usesSimpleSelectionShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
+    const rows = usesSimpleSelectionShell()
+      ? state.filteredRows.filter(row => row.selectable)
+      : state.filteredRows.filter(row => normalizeRowSelectable(row));
     rows.forEach(row => state.selected.add(usesSimpleSelectionShell() ? row.row_id : row.result_id));
     if (rows[0]) state.activeRowId = usesSimpleSelectionShell() ? rows[0].row_id : rows[0].result_id;
     state.previewMode = 'selected';
@@ -6351,7 +6388,9 @@
   });
 
   el.deselectAllButton.addEventListener('click', () => {
-    const rows = usesSimpleSelectionShell() ? state.filteredRows.filter(row => row.selectable) : state.filteredRows;
+    const rows = usesSimpleSelectionShell()
+      ? state.filteredRows.filter(row => row.selectable)
+      : state.filteredRows.filter(row => normalizeRowSelectable(row));
     rows.forEach(row => state.selected.delete(usesSimpleSelectionShell() ? row.row_id : row.result_id));
     clearDeletePreviewState();
     renderRows();

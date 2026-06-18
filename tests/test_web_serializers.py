@@ -57,6 +57,28 @@ class WebSerializersTests(unittest.TestCase):
         self.assertEqual(results[0]["change_ids"], [f"{episode.relative_to(source)}#file"])
         self.assertNotIn("title_source", results[0])
 
+    def test_build_tv_normalize_results_marks_review_only_noop_rows_as_non_actionable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir)
+            movie_like = source / "Movie.2000.mkv"
+            movie_like.write_text("video", encoding="utf-8")
+            enriched = scan_enriched_library(source, lane="tv", probe_media=lambda _: MediaFacts())
+            plan = build_tv_plan(source, enriched_report=enriched)
+
+            results = build_tv_normalize_results(
+                source,
+                [movie_like],
+                plan.proposed_changes,
+                plan.warnings,
+                parsed_tv=parsed_tv_from_enriched(enriched),
+            )
+
+        self.assertEqual(plan.proposed_changes, [])
+        self.assertEqual(results[0]["confidence"], "review")
+        self.assertFalse(results[0]["actionable"])
+        self.assertEqual(results[0]["change_ids"], [])
+        self.assertEqual(results[0]["projected_path"], "Movie.2000.mkv")
+
     def test_build_profile_response_adds_render_identity_and_imdb_id(self) -> None:
         source = Path("/library")
         movie = source / "Arrival.2016.mkv"
@@ -136,8 +158,8 @@ class WebSerializersTests(unittest.TestCase):
 
         self.assertEqual([item["current_value"] for item in results], ["A/Zulu.mkv", "B/Alpha.mkv"])
         self.assertEqual(results[0]["confidence"], "review")
-        self.assertTrue(results[0]["actionable"])
-        self.assertEqual(results[0]["change_ids"], ["rename-zulu"])
+        self.assertFalse(results[0]["actionable"])
+        self.assertEqual(results[0]["change_ids"], [])
         self.assertEqual(results[0]["projected_path"], "A/Zulu (2001).mkv")
         self.assertEqual(results[0]["linked_change_types"], ["file_rename"])
         self.assertEqual(results[1]["proposed_value"], "B Renamed/Alpha.mkv")
