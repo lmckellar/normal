@@ -280,10 +280,11 @@ def handle_policy_update(ctx: RequestContext, payload: dict[str, Any]) -> None:
             raw_value = str(values.get(key) or "").strip()
             if not raw_value:
                 continue
-            approved_source = validate_source_for_operation(
-                ctx.inspect_source(raw_value),
-                operation=Operation.HEAVY_SCAN,
-            )
+            try:
+                candidate_source = ctx.inspect_source(raw_value)
+            except FileNotFoundError:
+                continue
+            approved_source = validate_source_for_operation(candidate_source, operation=Operation.HEAVY_SCAN)
             ctx.approved_roots.approve(approved_source)
     try:
         standards, preferences = update_policy_definition(
