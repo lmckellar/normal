@@ -61,7 +61,7 @@ Then open `http://127.0.0.1:8765` in your browser. On first run, point `normal` 
 
 ## 🤓 Safety
 
-`normal` is aggressive by default and is actually safely architected, despite looking like it was zero shotted by Gemini Flash 🥴. 
+`normal` is aggressive by default but does seek to provide for user safety when scanning and performing actions. 
 
 It renames, moves, deletes and remuxes files, and it tries to get from mess to clean in as few drive read/write passes as possible. That's the whole point — but it also means you should not aim it at your real library cold.
 
