@@ -32,7 +32,9 @@ User consensus is unanimous:
   - Genre lists: Animation, Sci-Fi, Fantasy, Action, Thriller/Mystery, Drama/Romance, Documentary, Comedy
 - 🚨 It even does other stuff too 🔥
 
-All packaged with a stock standard GPT slop GUI, minimal dependencies and all core features are local only.
+All presented with a generic slop GUI, minimal dependencies and all core features are local only (except the ones that aren't). 
+
+`normal` packages only the bare minimum of CCP spyware required to phone home and fetch media information that cannot be attained locally.  
 
 <placeholder awaiting screenshot>
 
