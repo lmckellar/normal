@@ -32,7 +32,7 @@ User consensus is unanimous:
   - Genre lists: Animation, Sci-Fi, Fantasy, Action, Thriller/Mystery, Drama/Romance, Documentary, Comedy
 - 🚨 It even does other stuff too 🔥
 
-All packaged with a clean web GUI, minimal dependencies and all core features are local only.
+All packaged with a stock standard GPT slop GUI, minimal dependencies and all core features are local only.
 
 <placeholder awaiting screenshot>
 
