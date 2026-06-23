@@ -89,21 +89,19 @@ An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list vi
 
 ## 😤 The Opinionated Part
 
-`normal` is built around the following principles that lead to some loud claims:
+The core thesis of normal is this:
 
-**🏦 Physical Storage Economics**
+**🏦 Replicate Paid Software for the OSS Community**
 
-The bigger a file gets, the stronger the case it has to make for existing.
+Agentic Coding tools means the age of easily deployable, local, easily modifiable open source software has arrived.
 
-Conversely, beneath a certain perceptual threshold even small files are objectively not worth existing.
+**💽 Flattery Is Not Enough**
 
-**💽 Physical Scan Economics**
+Cloning a tool like Filebot could be done in several afternoon with Claude & Codex. It is not enough. The OSS serpent must consume the paid tail in such a way that it becomes greater, grander, and better in every way.
 
-Reading and writing to a physical hard drive repeatedly is not free. `normal` tries to know what it wants the library to look like at the outset and take the minimum number of actions required to reach that goal.
+**🧾 Create An Unsearchable, Unmarketable Name as a Joke Thereby Ensuring the Product Remains a "Hidden Gem" and Utterly Shoots Itself in the Foot Regardless of How Useful It Becomes**
 
-**🧾 Universal Naming Convention**
-
-The Best Solution to resolving the conflicting expectations of downstream clients such as Plex and Jellyfin is to define a Universal Naming Convention that translates as freely between media API databases like IMDB/TMDB as it does into other clients like Emby, etc.
+A name like normal is a digital camouflage suit. The most patient hunter often waits in plain sight. It doesn't even get the honour of a capital letter. Ouch. 
 
 ## 👑 The Holy Trinity Of Snobby Claims
 
@@ -137,7 +135,7 @@ The project is genuinely open to participation now, and a few kinds of help are 
 Find out what all the critics are **raving** about:
 
 > "WTF is this colostomy bag of vibe coded filth?"
-> — People
+> — People, who hurt my feelings deeply :(
 
 ## 📚 Docs
 
