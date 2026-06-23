@@ -79,27 +79,27 @@ An optional `OMDB_KEY` adds IMDb ratings to the movie list and canonical-list vi
 
 (`TMDB_KEY` is only offered as alternative if you switch Compare Against Canonical Lists back to the TMDb provider. See [docs/movies.md](docs/movies.md) for where these surface in the UI.)
 
-## 🙋 User F.A.Q's
+## 🙋🏻‍♀️ User F.A.Q's
 
 ❓ Q: How do you get internet access from the Asylum, and why did you make this application?
 
 ✅ A: Those are both fair questions.
 
-🤷‍♂️
+🤷🏼‍♂️
 
 ## 😤 The Opinionated Part
 
 The core thesis of normal is this:
 
-**🏦 Replicate Paid Software for the OSS Community**
+**📖 Replicate Paid Software for the OSS Community**
 
 Agentic Coding tools means the age of easily deployable, local, easily modifiable open source software has arrived.
 
-**💽 Flattery Is Not Enough**
+**💅 Flattery Is Not Enough**
 
 Cloning a tool like Filebot could be done in several afternoon with Claude & Codex. It is not enough. The OSS serpent must consume the paid tail in such a way that it becomes greater, grander, and better in every way.
 
-**🧾 Create An Unsearchable, Unmarketable Name as a Joke Thereby Ensuring the Product Remains a "Hidden Gem" and Utterly Shoots Itself in the Foot Regardless of How Useful It Becomes**
+**🤦🏽 Create An Unsearchable, Unmarketable Name as a Joke Thereby Ensuring the Product Remains a "Hidden Gem" and Utterly Shoots Itself in the Foot Regardless of How Useful It Becomes**
 
 A name like normal is a digital camouflage suit. The most patient hunter often waits in plain sight. It doesn't even get the honour of a capital letter. Ouch. 
 
