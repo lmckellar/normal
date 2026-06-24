@@ -101,7 +101,9 @@ Cloning a tool like Filebot could be done in several afternoon with Claude & Cod
 
 **🤦🏽 Create An Unsearchable, Unmarketable Name as a Joke Thereby Ensuring the Product Remains a "Hidden Gem" and Utterly Shoots Itself in the Foot Regardless of How Useful It Becomes**
 
-A name like normal is a digital camouflage suit. The most patient hunter often waits in plain sight. It doesn't even get the honour of a capital letter. Ouch. 
+A name like normal is a digital camouflage suit. It doesn't even get the honour of a capital letter. Ouch. 
+
+The most patient hunter often waits in plain sight.
 
 ## 👑 The Holy Trinity Of Snobby Claims
 
